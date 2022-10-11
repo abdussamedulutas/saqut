@@ -13,4 +13,5 @@
 |
 */
 
-$router->post('/v2', "ExampleController@home");
+$router->get('{url:.*}', "UserController@init");
+$router->post('/v2', "UserController@home");

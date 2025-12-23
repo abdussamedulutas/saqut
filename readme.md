@@ -1,3 +1,36 @@
+# Syntax
+
+Syntax modunda 2 seçenek bulunmaktadır
+    - JIR: Söz dizimi tamamen Java programlama diline uygun olarak parse edilmektedir. Compiling, transpiling desteklenir Interpreter desteklenmez
+    - CIR: Söz dizimi tamamen C programlama diline uygun olarak parse edilir. Compiling ve Interpreter desteklenir. transpiling desteklenmez
+
+# Compiler short options
+
+```
+sqt kaynak kodunu çallıştırır
+saqut file:sourcecode.sqt
+
+sqt kaynak kodunu C koduna sonrada makine koduna derler. GCC gereklidir
+saqut compile file:sourcecode.sqt output:program.exe
+
+Derleyicinin olduğu gibi çalıştırılması interpreter moduna alır, konsola yazılan kodları alır çalıştırır outputu loglar
+saqut 
+
+Derleyici kodu alır ve IR üretir
+saqut parse file:sourcecode.sqt output:program.ces
+
+Derleyici IRyi alır ve çalıştırır. Burda kaynak kodu veya IR olup olmadığını otomatik anlar
+saqut file:sourcecode.ces
+
+Derleyici IRyi veya kaynak kodunu alır C diline çevirir
+saqut transpile file:sourcecode.ces  output:program.c
+
+Derleyici kaynak kodu ASTsini çıkarır ve kaydeder
+saqut file:sourcecode.sqt ast:sourcecode.xml
+```
+
+
+
 # Compiler Structure
 
 ## 1 Source Code

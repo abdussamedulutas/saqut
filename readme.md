@@ -8,7 +8,7 @@
 
 Kaynak kodun içindeki tüm harflerin gezilip tek parça büyük bir token listesinin oluşturulması
 
-Bu işlemin sonucunda kaynak kodun içindeki tüm yapılar semboller, sayılar, stringler ve operatörler olarak 4 kategoriye ayrılır
+Bu işlemin sonucunda kaynak kodun içindeki tüm yapılar; semboller, sayılar, stringler ve operatörler olarak 4 kategoriye ayrılır
 
 # 3 Tokenning
 

@@ -1,0 +1,26 @@
+{
+    "name": "saqut-support",
+    "displayName": "saQut Language Support",
+    "version": "0.1.0",
+    "engines": { "vscode": "^1.60.0" },
+    "categories": ["Programming Languages"],
+    "contributes": {
+        "languages": [{
+            "id": "saqut",
+            "aliases": ["saQut", "saqut"],
+            "extensions": [".sqt"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "saqut",
+            "scopeName": "source.sqt",
+            "path": "./syntaxes/saqut.tmLanguage.json"
+        }],
+        "snippets": [
+            {
+                "language": "saqut",
+                "path": "./snippets/saqut.code-snippets"
+            }
+        ]
+    }
+}

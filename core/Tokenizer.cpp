@@ -6,18 +6,20 @@
 #include "./Lexer.cpp"
 
 class Token {
-    private:
+    protected:
         std::string type = "";
     public:
         int start = 0;
         int end = 0;
         std::string token;
+        std::string gettype(){
+            return this->type;
+        }
 };
 
 class StringToken : public Token {
-    private:
-        std::string type = "string";
     public:
+        StringToken() { this->type = "string"; }
         std::string context;
         int size = 0;
         void log()
@@ -26,9 +28,8 @@ class StringToken : public Token {
         }
 };
 class NumberToken : public Token {
-    private:
-        std::string type = "number";
     public:
+        NumberToken() { this->type = "number"; }
         bool isFloat = false;
         bool hasEpsilon = false;
         int base = 10;
@@ -37,31 +38,46 @@ class NumberToken : public Token {
             std::cout << "NumberToken "<< (this->isFloat ? "Float" : "Integer") <<"{" << this->token << "} HasExponent="<< (this->hasEpsilon ? "Yes" : "No") << " Base=" << this->base << " Start=" <<  this->start  << " End=" <<  this->end << "\n";
         }
 };
-class BoolToken : public Token {
-    private:
-        std::string type = "boolean";
-    public:
-        void log()
-        {
-            std::cout << "BoolToken Value{"<<this->token<<"} Start=" <<  this->start  << " End=" <<  this->end << " \n";
-        }
-};
+// class BoolToken : public Token {
+//     public:
+//         BoolToken() { this->type = "boolean"; }
+//         void log()
+//         {
+//             std::cout << "BoolToken Value{"<<this->token<<"} Start=" <<  this->start  << " End=" <<  this->end << " \n";
+//         }
+// };
 class OperatorToken : public Token {
-    private:
-        std::string type = "operator";
     public:
+        OperatorToken() { this->type = "operator"; }
         void log()
         {
             std::cout << "OperatorToken Context{"<<this->token<<"} Start=" <<  this->start  << " End=" <<  this->end << " \n";
         }
 };
 class DelimiterToken : public Token {
-    private:
-        std::string type = "delimiter";
     public:
+        DelimiterToken() { this->type = "delimiter"; }
         void log()
         {
             std::cout << "DelimiterToken Context{"<<this->token<<"} Start=" <<  this->start  << " End=" <<  this->end << " \n";
+        }
+};
+class KeywordToken : public Token {
+    public:
+        KeywordToken() { this->type = "keyword"; }
+        void log()
+        {
+            std::cout << "KeywordToken Context{"<<this->token<<"} Start=" <<  this->start  << " End=" <<  this->end << " \n";
+        }
+};
+class IdentifierToken : public Token {
+    public:
+        IdentifierToken() { this->type = "identifier"; }
+        std::string context;
+        int size = 0;
+        void log()
+        {
+            std::cout << "IdentifierToken Context{"<<this->token<<"} Start=" <<  this->start  << " End=" <<  this->end << " \n";
         }
 };
 
@@ -105,6 +121,38 @@ const constexpr std::string_view delimiters[] = {
     ".",
 };
 
+const constexpr std::string_view keywords[] = {
+    "implements",
+    "protected",
+    "interface",
+    "continue",
+    "private",
+    "finally",
+    "extends",
+    "default",
+    "throws",
+    "switch",
+    "return",
+    "public",
+    "assert",
+    "false",
+    "while",
+    "throw",
+    "class",
+    "catch",
+    "break",
+    "null",
+    "true",
+    "enum",
+    "else",
+    "case",
+    "new",
+    "try",
+    "for",
+    "if",
+    "do"
+};
+
 
 class Tokenizer {
 public:
@@ -112,17 +160,23 @@ public:
     void parse(std::string input)
     {
         this->hmx.setText(input);
-        this->scope();
+        while(1)
+        {
+            Token token = this->scope();
+            std::cout << token.gettype() << " -> " << token.token << "\n";
+            if(this->hmx.isEnd())
+            {
+                break;
+            }
+        }
     }
-    void scope()
+    Token scope()
     {
         this->hmx.skipWhiteSpace();
         // Stringler
         if(this->hmx.getchar() == '"')
         {
-            StringToken t = this->readString();
-            t.log();
-            return;
+            return this->readString();
         }
 
         // Sayılar
@@ -136,30 +190,19 @@ public:
             numberToken.hasEpsilon = lem.hasEpsilon;
             numberToken.isFloat = lem.isFloat;
             numberToken.token = lem.token;
-            numberToken.log();
-            return;
+            return numberToken;
         }
 
-        // Boolean
-        if(this->hmx.include("true",false))
-        {
-            BoolToken BoolToken;
-            BoolToken.token = "true";
-            BoolToken.start = this->hmx.getOffset();
-            this->hmx.toChar(+4);
-            BoolToken.end = this->hmx.getOffset();
-            BoolToken.log();
-            return;
-        }
-        if(this->hmx.include("false",false))
-        {
-            BoolToken BoolToken;
-            BoolToken.token = "false";
-            BoolToken.start = this->hmx.getOffset();
-            this->hmx.toChar(+5);
-            BoolToken.end = this->hmx.getOffset();
-            BoolToken.log();
-            return;
+        for (const std::string_view& keys : keywords) {
+            if(this->hmx.include(std::string(keys),false))
+            {
+                KeywordToken keytoken;
+                keytoken.start = this->hmx.getOffset();
+                this->hmx.toChar(+keys.size());
+                keytoken.end = this->hmx.getOffset();
+                keytoken.token = keys;
+                return keytoken;
+            }
         }
 
         for (const std::string_view& del : delimiters) {
@@ -170,8 +213,7 @@ public:
                 this->hmx.toChar(+del.size());
                 dtoken.end = this->hmx.getOffset();
                 dtoken.token = del;
-                dtoken.log();
-                return;
+                return dtoken;
             }
         }
 
@@ -183,10 +225,72 @@ public:
                 this->hmx.toChar(+op.size());
                 optoken.end = this->hmx.getOffset();
                 optoken.token = op;
-                optoken.log();
-                return;
+                return optoken;
             }
         }
+
+        return this->readIndetifier();
+    }
+    IdentifierToken readIndetifier()
+    {
+        this->hmx.beginPosition();
+        IdentifierToken idenditifierToken;
+        idenditifierToken.start = this->hmx.getOffset();
+
+        while(this->hmx.isEnd() == false)
+        {
+            bool readed = false;
+            char c = this->hmx.getchar();
+
+            if(c >= 'a' && c <= 'z')
+            {
+                readed = true;
+                idenditifierToken.token.push_back(c);
+                this->hmx.nextChar();
+                continue;
+            }
+
+            if(c >= 'A' && c <= 'Z')
+            {
+                readed = true;
+                idenditifierToken.token.push_back(c);
+                this->hmx.nextChar();
+                continue;
+            }
+
+
+            if(c >= '0' && c <= '9')
+            {
+                readed = true;
+                idenditifierToken.token.push_back(c);
+                this->hmx.nextChar();
+                continue;
+            }
+
+            switch(c)
+            {
+                case '_':{
+                    readed = true;
+                    idenditifierToken.token.push_back(c);
+                    this->hmx.nextChar();
+                    break;
+                }
+                case '$':{
+                    readed = true;
+                    idenditifierToken.token.push_back(c);
+                    this->hmx.nextChar();
+                    break;
+                }
+            }
+            if(readed == false)
+            {
+                break;
+            }
+        }
+        idenditifierToken.end = this->hmx.getOffset();
+        idenditifierToken.size = idenditifierToken.context.size();
+        this->hmx.acceptPosition();
+        return idenditifierToken;
     }
     StringToken readString()
     {

@@ -1,28 +1,29 @@
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <stdlib.h>
 #include "./core/Tokenizer.cpp"
+#include "./core/Parser.cpp"
 
 int main()
 {
-    std::string girdi; 
+    std::ifstream dosyaOku("source.sqt", std::ios::in | std::ios::binary);
+    std::string icerik;
 
-    std::cout << "\nsaQut Compiler\n\n";
-
-    while(true)
-    {
-        std::cout << ">> ";
-        std::getline(std::cin, girdi);
-
-        Tokenizer token;
-        token.parse(girdi);
-
-        if (girdi == ".exit")
-        {
-            exit(0);
-        };
-        std::cout << "\n";
+    if (dosyaOku.is_open()) {
+        std::stringstream buffer;
+        buffer << dosyaOku.rdbuf(); // Dosya içeriğini buffer'a boşalt
+        icerik = buffer.str();
+        dosyaOku.close();
     }
+
+    Tokenizer tokenizer;
+    Parser parser;
+    
+    auto tokens = tokenizer.scan(icerik);
+    parser.parse(tokens);
+
 
     return 0;
 }

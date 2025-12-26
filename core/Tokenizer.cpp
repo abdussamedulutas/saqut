@@ -2,8 +2,10 @@
 #include <string>
 #include <stdlib.h>
 #include <vector>
-
 #include "./Lexer.cpp"
+
+#ifndef TOKENIZER
+#define TOKENIZER
 
 class Token {
     protected:
@@ -157,22 +159,41 @@ const constexpr std::string_view keywords[] = {
 class Tokenizer {
 public:
     Lexer hmx;
-    void parse(std::string input)
+    std::vector<Token> scan(std::string input)
     {
+        std::vector<Token> tokens;
         this->hmx.setText(input);
         while(1)
         {
             Token token = this->scope();
-            std::cout << token.gettype() << " -> " << token.token << "\n";
+            tokens.push_back(token);
             if(this->hmx.isEnd())
             {
                 break;
             }
         }
+        return tokens;
     }
     Token scope()
     {
         this->hmx.skipWhiteSpace();
+
+        // Yorum satırları
+        if(this->hmx.include("//", true))
+        {
+            this->skipOneLineComment();
+        }
+        if(this->hmx.include("/*", true))
+        {
+            this->skipMultiLineComment();
+        }
+
+        if(this->hmx.isEnd()){
+            Token token;
+            token.token = "EOL";
+            return token;
+        };
+
         // Stringler
         if(this->hmx.getchar() == '"')
         {
@@ -338,4 +359,35 @@ public:
         this->hmx.acceptPosition();
         return stringToken;
     }
+    void skipOneLineComment()
+    {
+        std::cout << "SkipLineComment\n";
+        while(this->hmx.isEnd() == false)
+        {
+            if(this->hmx.getchar() == '\n')
+            {
+                this->hmx.nextChar();
+                this->hmx.skipWhiteSpace();
+                return;
+            }else{
+                this->hmx.nextChar();
+            }
+        }
+    }
+    void skipMultiLineComment()
+    {
+        std::cout << "SkipBlockComment\n";
+        while(this->hmx.isEnd() == false)
+        {
+            if(this->hmx.include("*/",true))
+            {
+                this->hmx.skipWhiteSpace();
+                return;
+            }else{
+                this->hmx.nextChar();
+            }
+        }
+    }
 };
+
+#endif

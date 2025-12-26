@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 
+#ifndef LEXER
+#define LEXER
 struct INumber {
     int start = 0;
     int end = 0;
@@ -386,3 +388,4 @@ public:
         return numberToken;
     }
 };
+#endif

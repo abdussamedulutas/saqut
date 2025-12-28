@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "cppdbg",
+      "request": "launch",
+      "args": [],
+      "preLaunchTask": "build saqut",
+      "stopAtEntry": true,
+      "externalConsole": false,
+      "cwd": "/home/saqut/Masaüstü/saqutcompiler",
+      "program": "/home/saqut/Masaüstü/saqutcompiler/saqut",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    }
+  ]
+}

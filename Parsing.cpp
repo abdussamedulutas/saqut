@@ -4,7 +4,7 @@
 #include <string>
 #include <stdlib.h>
 #include "./core/Tokenizer.cpp"
-#include "./core/Parser.cpp"
+#include "./core/Parser/Parser.cpp"
 
 int main()
 {

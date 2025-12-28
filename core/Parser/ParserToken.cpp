@@ -1,27 +1,21 @@
-#include <iostream>
-#include <string>
-#include <stdlib.h>
+#include "../Tokenizer.cpp"
+#include "../Tools.cpp"
+#include <cstdint>
 #include <unordered_map>
-#include <string_view>
-#include "./Tokenizer.cpp"
-#include "./Tools.cpp"
+#include <initializer_list>
 
-
-#ifndef PARSER
-#define PARSER
+#ifndef PARSER_TOKEN
+#define PARSER_TOKEN
 
 typedef std::vector<Token> TokenList;
 
-// token.h
-#pragma once
-#include <cstdint>
-#include <string_view>
 enum class TokenType : uint16_t
 {
     // --- Değerler ve Tanımlayıcılar ---
     IDENTIFIER,     // değişken/fonksiyon isimleri
     NUMBER,        // 42, 0xFF, 0b1010
     STRING,         // "merhaba"
+    SVR_VOID,
     
     // --- KEYWORD'ler (Alfabetik) ---
     KW_IF,          // if
@@ -310,77 +304,75 @@ uint16_t TokenPrecedence(TokenType type) {
         case TokenType::ARROW:
         case TokenType::LBRACKET:
         case TokenType::LPAREN:
-            return 170;
+            return 18;
             
         // Seviye 16: Postfix
         case TokenType::PLUS_PLUS:
         case TokenType::MINUS_MINUS:
-            return 160;
+            return 17;
             
         // Seviye 15: Unary/Prefix
-        case TokenType::PLUS:      // unary +
-        case TokenType::MINUS:     // unary -
         case TokenType::BANG:      // !
         case TokenType::TILDE:     // ~
-            return 150;
+            return 16;
             
         // Seviye 14: Üs alma
         case TokenType::STAR_STAR: // **
-        case TokenType::CARET:     // ^ (üs olarak)
-            return 140;
+        case TokenType::CARET:     // ^
+            return 15;
             
         // Seviye 13: Çarpma/bölme
         case TokenType::STAR:      // *
         case TokenType::SLASH:     // /
         case TokenType::PERCENT:   // %
-            return 130;
+            return 14;
             
-        // Seviye 12: Toplama/çıkarma (binary)
-        // PLUS ve MINUS'un binary kullanımı
-            return 120;
+        case TokenType::PLUS:      // +
+        case TokenType::MINUS:     // -
+            return 13;
             
         // Seviye 11: Bitsel kaydırma
         case TokenType::LSHIFT:    // <<
         case TokenType::RSHIFT:    // >>
-            return 110;
+            return 12;
             
         // Seviye 10: İlişkisel
         case TokenType::LESS:      // <
         case TokenType::LESS_EQUAL:// <=
         case TokenType::GREATER:   // >
         case TokenType::GREATER_EQUAL: // >=
-            return 100;
+            return 11;
             
         // Seviye 9: Eşitlik
         case TokenType::EQUAL_EQUAL:   // ==
         case TokenType::BANG_EQUAL:    // !=
-            return 90;
+            return 10;
             
         // Seviye 8: Bitsel VE
         case TokenType::AMPERSAND: // &
-            return 80;
+            return 9;
             
         // Seviye 7: Bitsel XOR
         // CARET burada binary XOR olarak
-            return 70;
+            return 8;
             
         // Seviye 6: Bitsel VEYA
         case TokenType::PIPE:      // |
-            return 60;
+            return 7;
             
         // Seviye 5: Mantıksal VE
         case TokenType::AMPERSAND_AMPERSAND: // &&
-            return 50;
+            return 6;
             
         // Seviye 4: Mantıksal VEYA
         case TokenType::PIPE_PIPE: // ||
-            return 40;
+            return 5;
             
         // Seviye 3: Ternary (özel işlem)
         case TokenType::TERNARY:  // ?
-            return 30;
+            return 4;
         case TokenType::COLON:     // : (ternary için)
-            return 35;             // özel değer
+            return 3;             // özel değer
             
         // Seviye 2: Atama
         case TokenType::EQUAL:     // =
@@ -394,18 +386,18 @@ uint16_t TokenPrecedence(TokenType type) {
         case TokenType::CARET_EQUAL:// ^=
         case TokenType::LSHIFT_EQUAL:// <<=
         case TokenType::RSHIFT_EQUAL:// >>=
-            return 20;
+            return 2;
             
         // Seviye 1: Virgül
         case TokenType::COMMA:     // ,
-            return 10;
+            return 1;
             
         default:
             return 0;  // Önceliksiz
     }
 }
 
-bool Token_is_right_associative(TokenType type)
+bool RightAssociative(TokenType type)
 {
     switch (type) {
         // Sağdan sola işleyen operatörler:
@@ -424,7 +416,6 @@ bool Token_is_right_associative(TokenType type)
         case TokenType::RSHIFT_EQUAL:// >>=
         case TokenType::TERNARY:   // ? (ternary)
             return true;
-            
         // Soldan sağa işleyenler:
         default:
             return false;
@@ -435,95 +426,25 @@ struct ParserToken
 {
     Token token;
     TokenType type;
+    bool is(TokenType type){
+        return this->type == type;
+    }
+    bool is(std::initializer_list<TokenType> types){
+        for (TokenType t : types) {
+            if (this->type == t) {
+                return true;
+            }
+        }
+        return false;
+    }
+    uint16_t getPowerOperator()
+    {
+        return TokenPrecedence(this->type);
+    }
+    bool isRightAssociative()
+    {
+        return RightAssociative(this->type);
+    }
 };
-
-class Parser {
-    public:
-        TokenList tokens;
-        void parse(TokenList tokens);
-        int current = 0;
-        ParserToken currentToken();
-        void nextToken();
-        bool lookehead(TokenType,uint32_t);
-        ParserToken parseToken(Token);
-        ParserToken getToken(int);
-};
-
-
-ParserToken Parser::parseToken(Token token){
-    ParserToken pToken;
-    pToken.token = token;
-    
-    if(token.gettype() == "string")
-    {
-        pToken.type = TokenType::STRING;
-    }
-    else if(token.gettype() == "number")
-    {
-        pToken.type = TokenType::NUMBER;
-    }
-    else if(token.gettype() == "operator")
-    {
-        pToken.type = OPERATOR_MAP.find(token.token)->second;
-    }
-    else if(token.gettype() == "delimiter")
-    {
-        pToken.type = OPERATOR_MAP.find(token.token)->second;
-    }
-    else if(token.gettype() == "keyword")
-    {
-        pToken.type = KEYWORD_MAP.find(token.token)->second;
-    }
-    else if(token.gettype() == "identifier")
-    {
-        pToken.type = KEYWORD_MAP.find(token.token)->second;
-    }
-
-    return pToken;
-}
-
-
-ParserToken Parser::getToken(int offset){
-    return this->parseToken(this->tokens[this->current + offset]);
-}
-
-void Parser::nextToken(){
-    this->current++;
-}
-
-bool Parser::lookehead(TokenType type, uint32_t forward){
-    ParserToken token = this->getToken(forward);
-    return token.type == type;
-}
-
-void Parser::parse(TokenList tokens){
-    this->tokens = tokens;
-    for(Token token : tokens)
-    {
-        std::cout << padRight(token.token,20) << token.gettype() << "\n";
-    }
-}
-
-
-
-/*
-1.  () [] . ->           // Gruplama, üye erişimi
-2.  ++ -- (postfix)      // Sonra artır/azalt
-3.  ++ -- + - ! ~ (type) // Önce artır/azalt, unary
-4.  ** ^                  // Üs alma
-5.  * / %                // Çarpma/bölme
-6.  + -                  // Toplama/çıkarma  
-7.  << >>                // Bitsel kaydırma
-8.  < <= > >=            // Karşılaştırma
-9.  == !=                // Eşitlik
-10. &                    // Bitsel VE
-11. ^                    // Bitsel XOR
-12. |                    // Bitsel VEYA
-13. &&                   // Mantıksal VE
-14. ||                   // Mantıksal VEYA
-15. ?:                   // Ternary (koşul)
-16. = += -= *= /= %= ... // Atama
-17. ,                    // Virgül
-*/
 
 #endif

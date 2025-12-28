@@ -350,7 +350,6 @@ StringToken Tokenizer::readString()
 }
 void Tokenizer::skipOneLineComment()
 {
-    std::cout << "SkipLineComment\n";
     while(this->hmx.isEnd() == false)
     {
         if(this->hmx.getchar() == '\n')
@@ -365,7 +364,6 @@ void Tokenizer::skipOneLineComment()
 }
 void Tokenizer::skipMultiLineComment()
 {
-    std::cout << "SkipBlockComment\n";
     while(this->hmx.isEnd() == false)
     {
         if(this->hmx.include("*/",true))

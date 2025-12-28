@@ -14,7 +14,7 @@
         "keywords": {
             "patterns": [{
                 "name": "keyword.control.saqut",
-                "match": "\\b(if|else|while|do|for|foreach|return|break|continue|switch|case|default)\\b"
+                "match": "\\b(implements|protected|interface|continue|private|finally|extends|default|throws|switch|return|public|assert|false|while|throw|class|catch|break|null|true|enum|else|case|new|try|for|if|do)\\b"
             }, {
                 "name": "storage.type.saqut",
                 "match": "\\b(int|float|double|string|bool|void|var|class|struct|enum|public|private|static|readonly|const)\\b"

@@ -78,18 +78,18 @@ ParserToken Parser::getToken(int offset){
 }
 
 void Parser::nextToken(){
-    if(this->tokens.size() <= this->current + 1)
+    if(this->tokens.size() >= this->current + 1)
     {
         this->current++;
     }
 }
 
 ParserToken Parser::lookehead(uint32_t forward){
-    return this->getToken(this->current + forward);
+    return this->getToken(forward);
 }
 
 ParserToken Parser::currentToken(){
-    return this->getToken(this->current);
+    return this->getToken(0);
 }
 
 void Parser::parse(TokenList tokens){
@@ -113,7 +113,8 @@ void Parser::primaryExpression()
         })
     )
     {
-        this->volumeExpression(0);
+        ASTNode * tree = this->volumeExpression(0);
+        tree->log(0);
     }
 }
 

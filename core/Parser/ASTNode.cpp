@@ -45,7 +45,7 @@ class BinaryExpressionNode : public ASTNode
         {
             std::cout
                 << padRight(" ",indent)
-                << "BinaryExpressionNode"
+                << "BinaryExpressionNode "
                 << OPERATOR_MAP_STRREV.find(this->Operator)->second
                 << "( "<< OPERATOR_MAP_REV.find(this->Operator)->second << " )"
                 << "\n";
@@ -71,5 +71,39 @@ class LiteralNode : public ASTNode
         Token lexerToken;
         ParserToken parserToken;
 };
+
+class IdentifierNode : public ASTNode
+{
+    protected:
+        ASTKind kind = ASTKind::Literal;
+        void log(int indent)
+        {
+            std::cout << padRight(" ",indent)  << "IdentifierNode {" << this->lexerToken.token << "}\n";
+        }
+    public:
+        Token lexerToken;
+        ParserToken parserToken;
+};
+class PostfixNode : public ASTNode
+{
+    protected:
+        ASTKind kind = ASTKind::Literal;
+        void log(int indent)
+        {
+            std::cout
+                << padRight(" ",indent)
+                << "Postfix "
+                << OPERATOR_MAP_STRREV.find(this->Operator)->second
+                << "( "<< OPERATOR_MAP_REV.find(this->Operator)->second << " )"
+                << "\n";
+            this->operand->log(indent + 4);
+        }
+    public:
+        ASTNode * operand;
+        TokenType Operator;
+};
+
+
+
 
 #endif

@@ -60,7 +60,7 @@ ParserToken Parser::parseToken(Token token){
     }
     else if(token.gettype() == "identifier")
     {
-        pToken.type = KEYWORD_MAP.find(token.token)->second;
+        pToken.type = TokenType::IDENTIFIER;
     }
 
     return pToken;
@@ -118,6 +118,10 @@ void Parser::primaryExpression()
     }
 }
 
+// Expresssionu tamamen okuyup bitiren kısım burası
+// Bir expressionda kendi içerisindeki operatörleri işler
+// Terimler ile ilgilenmez yanlızca ifadelerin önceliğini belirler
+// Sayılar, fonksionlar, tanımlamalar gibi şeyler burda işlenmez
 ASTNode * Parser::volumeExpression(uint16_t precedence)
 {
     if (this->currentToken().type == TokenType::SVR_VOID)
@@ -127,9 +131,17 @@ ASTNode * Parser::volumeExpression(uint16_t precedence)
 
     ASTNode* left = this->volumeNullDominatorExpression();
 
+    if (!left) {
+        return nullptr;
+    }
+
     while(1)
     {
         auto nextToken = this->lookehead(+1);
+        if (nextToken.type == TokenType::RPAREN) {
+            break;
+        }
+        nextToken = this->lookehead(+1);
         if(precedence < nextToken.getPowerOperator())
         {
             this->nextToken();
@@ -141,8 +153,9 @@ ASTNode * Parser::volumeExpression(uint16_t precedence)
     return left;
 }
 
-
-
+// Terimler burada işlenir tanımlamalar sayılar burada işlenir
+// işlem önceliği işlenmez
+// Tek yönlü operatörler !a b++ ++c burada işlenir 
 ASTNode * Parser::volumeNullDominatorExpression()
 {
     auto currentToken = this->currentToken();
@@ -151,7 +164,19 @@ ASTNode * Parser::volumeNullDominatorExpression()
         // Hata: "Beklenmedik dosya sonu, bir değer bekleniyordu!"
         return nullptr; 
     }
+
+    if (currentToken.type == TokenType::RPAREN) {
+        return nullptr;
+    }
     
+    if (currentToken.type == TokenType::LPAREN) {
+        this->nextToken();
+        ASTNode* expr = this->volumeExpression(0);
+
+        this->nextToken();
+        
+        return expr;
+    }
 
     if(currentToken.is({
         TokenType::PLUS_PLUS,
@@ -170,23 +195,40 @@ ASTNode * Parser::volumeNullDominatorExpression()
         return binNode;
     };
 
-    if(currentToken.is({
-        TokenType::NUMBER
-    })) {
+    if(currentToken.is(TokenType::NUMBER)) {
         LiteralNode * lNode = new LiteralNode();
         lNode->lexerToken = currentToken.token;
         lNode->parserToken = currentToken;
         return lNode;
     }
 
+    if(currentToken.is(TokenType::IDENTIFIER)) {
+        IdentifierNode * iNode = new IdentifierNode();
+        iNode->lexerToken = currentToken.token;
+        iNode->parserToken = currentToken;
+        return iNode;
+    }
+
     return nullptr;
 }
 
-
-
+// Çift yönlü matematiksel işlemler burada işlenir
+// [volume]+[volume] veya [volume] * [volume] gibi terimleri birbirine bağlayarak geri döner
 ASTNode * Parser::volumeLeftDominatorExpression(ASTNode * left)
 {
     auto currentToken = this->currentToken();
+
+    if (currentToken.is({
+        TokenType::PLUS_PLUS,
+        TokenType::MINUS_MINUS
+    })) {
+        this->nextToken();
+        PostfixNode* node = new PostfixNode();
+        node->operand = left;
+        node->Operator = currentToken.type;
+        return node;
+    }
+
     uint16_t precedence = currentToken.getPowerOperator();
     this->nextToken();
     auto right = this->volumeExpression(precedence);

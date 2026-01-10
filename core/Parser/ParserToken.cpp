@@ -7,7 +7,7 @@
 #ifndef PARSER_TOKEN
 #define PARSER_TOKEN
 
-typedef std::vector<Token> TokenList;
+typedef std::vector<Token *> TokenList;
 
 enum class TokenType : uint16_t
 {

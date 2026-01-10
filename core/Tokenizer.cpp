@@ -17,6 +17,7 @@ class Token {
         std::string gettype(){
             return this->type;
         }
+        virtual ~Token() = default;
 };
 
 class StringToken : public Token {
@@ -139,22 +140,26 @@ const constexpr std::string_view keywords[] = {
 class Tokenizer {
 public:
     Lexer hmx;
-    std::vector<Token> scan(std::string input);
-    Token scope();
-    IdentifierToken readIndetifier();
-    StringToken readString();
+    std::vector<Token *> scan(std::string input);
+    Token * scope();
+    IdentifierToken * readIndetifier();
+    StringToken * readString();
     void skipOneLineComment();
     void skipMultiLineComment();
 };
 
 
-std::vector<Token> Tokenizer::scan(std::string input)
+std::vector<Token *> Tokenizer::scan(std::string input)
 {
-    std::vector<Token> tokens;
+    std::vector<Token *> tokens;
     this->hmx.setText(input);
     while(1)
     {
-        Token token = this->scope();
+        Token * token = this->scope();
+        if(token->token == "EOL")
+        {
+            break;
+        }
         tokens.push_back(token);
         if(this->hmx.isEnd())
         {
@@ -163,7 +168,7 @@ std::vector<Token> Tokenizer::scan(std::string input)
     }
     return tokens;
 }
-Token Tokenizer::scope()
+Token * Tokenizer::scope()
 {
     this->hmx.skipWhiteSpace();
 
@@ -178,8 +183,8 @@ Token Tokenizer::scope()
     }
 
     if(this->hmx.isEnd()){
-        Token token;
-        token.token = "EOL";
+        Token * token = new Token();
+        token->token = "EOL";
         return token;
     };
 
@@ -193,24 +198,24 @@ Token Tokenizer::scope()
     if(this->hmx.isNumeric())
     {
         INumber lem = this->hmx.readNumeric();
-        NumberToken numberToken;
-        numberToken.base = lem.base;
-        numberToken.start = lem.start;
-        numberToken.end = lem.end;
-        numberToken.hasEpsilon = lem.hasEpsilon;
-        numberToken.isFloat = lem.isFloat;
-        numberToken.token = lem.token;
+        NumberToken * numberToken = new NumberToken();
+        numberToken->base = lem.base;
+        numberToken->start = lem.start;
+        numberToken->end = lem.end;
+        numberToken->hasEpsilon = lem.hasEpsilon;
+        numberToken->isFloat = lem.isFloat;
+        numberToken->token = lem.token;
         return numberToken;
     }
 
     for (const std::string_view& keys : keywords) {
         if(this->hmx.include(std::string(keys),false))
         {
-            KeywordToken keytoken;
-            keytoken.start = this->hmx.getOffset();
+            KeywordToken * keytoken = new KeywordToken();
+            keytoken->start = this->hmx.getOffset();
             this->hmx.toChar(+keys.size());
-            keytoken.end = this->hmx.getOffset();
-            keytoken.token = keys;
+            keytoken->end = this->hmx.getOffset();
+            keytoken->token = keys;
             return keytoken;
         }
     }
@@ -218,11 +223,11 @@ Token Tokenizer::scope()
     for (const std::string_view& del : delimiters) {
         if(this->hmx.include(std::string(del),false))
         {
-            DelimiterToken dtoken;
-            dtoken.start = this->hmx.getOffset();
+            DelimiterToken * dtoken = new DelimiterToken();;
+            dtoken->start = this->hmx.getOffset();
             this->hmx.toChar(+del.size());
-            dtoken.end = this->hmx.getOffset();
-            dtoken.token = del;
+            dtoken->end = this->hmx.getOffset();
+            dtoken->token = del;
             return dtoken;
         }
     }
@@ -230,22 +235,22 @@ Token Tokenizer::scope()
     for (const std::string_view& op : operators) {
         if(this->hmx.include(std::string(op),false))
         {
-            OperatorToken optoken;
-            optoken.start = this->hmx.getOffset();
+            OperatorToken* optoken = new OperatorToken();
+            optoken->start = this->hmx.getOffset();
             this->hmx.toChar(+op.size());
-            optoken.end = this->hmx.getOffset();
-            optoken.token = op;
+            optoken->end = this->hmx.getOffset();
+            optoken->token = op;
             return optoken;
         }
     }
 
     return this->readIndetifier();
 }
-IdentifierToken Tokenizer::readIndetifier()
+IdentifierToken * Tokenizer::readIndetifier()
 {
     this->hmx.beginPosition();
-    IdentifierToken idenditifierToken;
-    idenditifierToken.start = this->hmx.getOffset();
+    IdentifierToken * idenditifierToken = new IdentifierToken();
+    idenditifierToken->start = this->hmx.getOffset();
 
     while(this->hmx.isEnd() == false)
     {
@@ -255,7 +260,7 @@ IdentifierToken Tokenizer::readIndetifier()
         if(c >= 'a' && c <= 'z')
         {
             readed = true;
-            idenditifierToken.token.push_back(c);
+            idenditifierToken->token.push_back(c);
             this->hmx.nextChar();
             continue;
         }
@@ -263,7 +268,7 @@ IdentifierToken Tokenizer::readIndetifier()
         if(c >= 'A' && c <= 'Z')
         {
             readed = true;
-            idenditifierToken.token.push_back(c);
+            idenditifierToken->token.push_back(c);
             this->hmx.nextChar();
             continue;
         }
@@ -272,7 +277,7 @@ IdentifierToken Tokenizer::readIndetifier()
         if(c >= '0' && c <= '9')
         {
             readed = true;
-            idenditifierToken.token.push_back(c);
+            idenditifierToken->token.push_back(c);
             this->hmx.nextChar();
             continue;
         }
@@ -281,13 +286,13 @@ IdentifierToken Tokenizer::readIndetifier()
         {
             case '_':{
                 readed = true;
-                idenditifierToken.token.push_back(c);
+                idenditifierToken->token.push_back(c);
                 this->hmx.nextChar();
                 break;
             }
             case '$':{
                 readed = true;
-                idenditifierToken.token.push_back(c);
+                idenditifierToken->token.push_back(c);
                 this->hmx.nextChar();
                 break;
             }
@@ -297,23 +302,23 @@ IdentifierToken Tokenizer::readIndetifier()
             break;
         }
     }
-    idenditifierToken.end = this->hmx.getOffset();
-    idenditifierToken.size = idenditifierToken.context.size();
+    idenditifierToken->end = this->hmx.getOffset();
+    idenditifierToken->size = idenditifierToken->context.size();
     this->hmx.acceptPosition();
     return idenditifierToken;
 }
-StringToken Tokenizer::readString()
+StringToken * Tokenizer::readString()
 {
     this->hmx.beginPosition();
-    StringToken stringToken;
+    StringToken * stringToken = new StringToken();
     bool started = false;
     bool isended = false;
-    stringToken.start = this->hmx.getOffset();
+    stringToken->start = this->hmx.getOffset();
 
     while(this->hmx.isEnd() == false)
     {
         char c = this->hmx.getchar();
-        stringToken.token.push_back(c);
+        stringToken->token.push_back(c);
         switch(c)
         {
             case '"':{
@@ -329,12 +334,12 @@ StringToken Tokenizer::readString()
             case '\\':{
                 this->hmx.nextChar();
                 c = this->hmx.getchar();
-                stringToken.token.push_back(c);
-                stringToken.context.push_back(c);
+                stringToken->token.push_back(c);
+                stringToken->context.push_back(c);
                 break;
             }
             default:{
-                stringToken.context.push_back(c);
+                stringToken->context.push_back(c);
             }
         }
         this->hmx.nextChar();
@@ -343,8 +348,8 @@ StringToken Tokenizer::readString()
             break;
         }
     }
-    stringToken.end = this->hmx.getOffset();
-    stringToken.size = stringToken.context.size();
+    stringToken->end = this->hmx.getOffset();
+    stringToken->size = stringToken->context.size();
     this->hmx.acceptPosition();
     return stringToken;
 }

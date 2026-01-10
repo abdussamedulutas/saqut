@@ -20,45 +20,45 @@ class Parser {
         ASTNode astroot;
     public:
         TokenList tokens;
-        void parse(TokenList tokens);
+        ASTNode * parse(TokenList tokens);
         int current = 0;
         ParserToken currentToken();
         void nextToken();
         ParserToken lookehead(uint32_t);
-        ParserToken parseToken(Token);
+        ParserToken parseToken(Token *);
         ParserToken getToken(int);
-        void primaryExpression();
+        ASTNode * primaryExpression();
         ASTNode * volumeExpression(uint16_t precedence);
         ASTNode * volumeNullDominatorExpression();
         ASTNode * volumeLeftDominatorExpression(ASTNode * left);
 };
 
 
-ParserToken Parser::parseToken(Token token){
+ParserToken Parser::parseToken(Token * token){
     ParserToken pToken;
-    pToken.token = token;
+    pToken.token = *token;
     
-    if(token.gettype() == "string")
+    if(token->gettype() == "string")
     {
         pToken.type = TokenType::STRING;
     }
-    else if(token.gettype() == "number")
+    else if(token->gettype() == "number")
     {
         pToken.type = TokenType::NUMBER;
     }
-    else if(token.gettype() == "operator")
+    else if(token->gettype() == "operator")
     {
-        pToken.type = OPERATOR_MAP.find(token.token)->second;
+        pToken.type = OPERATOR_MAP.find(token->token)->second;
     }
-    else if(token.gettype() == "delimiter")
+    else if(token->gettype() == "delimiter")
     {
-        pToken.type = OPERATOR_MAP.find(token.token)->second;
+        pToken.type = OPERATOR_MAP.find(token->token)->second;
     }
-    else if(token.gettype() == "keyword")
+    else if(token->gettype() == "keyword")
     {
-        pToken.type = KEYWORD_MAP.find(token.token)->second;
+        pToken.type = KEYWORD_MAP.find(token->token)->second;
     }
-    else if(token.gettype() == "identifier")
+    else if(token->gettype() == "identifier")
     {
         pToken.type = TokenType::IDENTIFIER;
     }
@@ -92,15 +92,16 @@ ParserToken Parser::currentToken(){
     return this->getToken(0);
 }
 
-void Parser::parse(TokenList tokens){
+ASTNode * Parser::parse(TokenList tokens){
     this->tokens = tokens;
-    this->primaryExpression();
+    return this->primaryExpression();
 }
 
-void Parser::primaryExpression()
+ASTNode * Parser::primaryExpression()
 {
     auto currentToken = this->currentToken();
 
+    ASTNode * tree = nullptr;
     if(
         currentToken.is({
             TokenType::NUMBER,
@@ -113,9 +114,9 @@ void Parser::primaryExpression()
         })
     )
     {
-        ASTNode * tree = this->volumeExpression(0);
-        tree->log(0);
+        tree = this->volumeExpression(0);
     }
+    return tree;
 }
 
 // Expresssionu tamamen okuyup bitiren kısım burası
@@ -197,14 +198,14 @@ ASTNode * Parser::volumeNullDominatorExpression()
 
     if(currentToken.is(TokenType::NUMBER)) {
         LiteralNode * lNode = new LiteralNode();
-        lNode->lexerToken = currentToken.token;
+        lNode->lexerToken = &currentToken.token;
         lNode->parserToken = currentToken;
         return lNode;
     }
 
     if(currentToken.is(TokenType::IDENTIFIER)) {
         IdentifierNode * iNode = new IdentifierNode();
-        iNode->lexerToken = currentToken.token;
+        iNode->lexerToken = &currentToken.token;
         iNode->parserToken = currentToken;
         return iNode;
     }
@@ -237,6 +238,8 @@ ASTNode * Parser::volumeLeftDominatorExpression(ASTNode * left)
     binNode->Right = right;
     binNode->Left = left;
     binNode->Operator = currentToken.type;
+    binNode->Right->parent = binNode;
+    binNode->Left->parent = binNode;
     return binNode;
 }
 

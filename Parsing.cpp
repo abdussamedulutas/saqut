@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include "./core/Tokenizer.cpp"
 #include "./core/Parser/Parser.cpp"
+#include "./core/IR/IR.cpp"
 
 int main()
 {
@@ -20,10 +21,14 @@ int main()
 
     Tokenizer tokenizer;
     Parser parser;
+    CodeGenerator codeGenerator;
     
     auto tokens = tokenizer.scan(icerik);
-    parser.parse(tokens);
+    ASTNode * ast = parser.parse(tokens);
+    
+    codeGenerator.parse(ast);
 
+    codeGenerator.IROpDatas;
 
     return 0;
 }

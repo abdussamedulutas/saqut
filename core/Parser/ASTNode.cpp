@@ -34,15 +34,18 @@ class ASTNode
         {
             this->parent = children;
         }
+        virtual ~ASTNode() = default;
 };
 
 class BinaryExpressionNode : public ASTNode
 {
-    protected:
-        ASTKind Kind = ASTKind::BinaryExpression;
     public:
+        BinaryExpressionNode(){
+            this->kind = ASTKind::BinaryExpression;
+        }
         void log(int indent) override
         {
+            auto korku = OPERATOR_MAP_STRREV.find(this->Operator);
             std::cout
                 << padRight(" ",indent)
                 << "BinaryExpressionNode "
@@ -62,14 +65,16 @@ class BinaryExpressionNode : public ASTNode
 class LiteralNode : public ASTNode
 {
     protected:
-        ASTKind kind = ASTKind::Literal;
         void log(int indent)
         {
-            std::cout << padRight(" ",indent)  << "LiteralNode {" << this->lexerToken.token << "}\n";
+            std::cout << padRight(" ",indent)  << "LiteralNode {" << this->lexerToken->token << "}\n";
         }
     public:
-        Token lexerToken;
+        Token * lexerToken;
         ParserToken parserToken;
+        LiteralNode(){
+            this->kind = ASTKind::Literal;
+        }
 };
 
 class IdentifierNode : public ASTNode
@@ -78,10 +83,10 @@ class IdentifierNode : public ASTNode
         ASTKind kind = ASTKind::Literal;
         void log(int indent)
         {
-            std::cout << padRight(" ",indent)  << "IdentifierNode {" << this->lexerToken.token << "}\n";
+            std::cout << padRight(" ",indent)  << "IdentifierNode {" << this->lexerToken->token << "}\n";
         }
     public:
-        Token lexerToken;
+        Token * lexerToken;
         ParserToken parserToken;
 };
 class PostfixNode : public ASTNode

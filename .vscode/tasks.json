@@ -1,16 +1,32 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "build saqut",
-      "type": "shell",
-      "command": "g++",
-      "args": ["-g", "-O0", "Parsing.cpp", "-o", "saqut"],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": ["$gcc"]
-    }
-  ]
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "build saqut",
+            "command": "/usr/bin/g++",
+            "args": [
+                "-g", // Debug sembolleri açık kalsın
+                "-O0", // Debug sırasında optimizasyonu kapat (kodun satırları karışmasın)
+                "./Parsing.cpp", 
+                "${workspaceFolder}/lightning/lib/.libs/liblightning.a",
+                "-I${workspaceFolder}/lightning/include",
+                "-D_GNU_SOURCE",
+                "-ldl",
+                "-o",
+                "saqut" // Çıktı ismi sabit olsun (saqut)
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "saQut için özel JIT derleme görevi"
+        }
+    ]
 }

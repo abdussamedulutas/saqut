@@ -1,90 +1,39 @@
-extern "C" {
-    #include "lightning.h"
-}
-#include <iostream>
-#include <fstream>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <chrono>
-
-extern "C" int saqut_print(int value) {
-    return value + 1;
-}
+#include "llvm/include/llvm-c/Core.h"
+#include "llvm/include/llvm-c/Analysis.h"
+#include <stdio.h>
 
 int main() {
-    init_jit("saqut");
-    jit_state_t *_jit = jit_new_state();
+    // 1. LLVM Context Oluştur (Bellek yönetimi ve izolasyon için şart)
+    LLVMContextRef context = LLVMContextCreate();
 
-    jit_prolog();
+    // 2. Modülü bu context içinde oluştur
+    LLVMModuleRef mod = LLVMModuleCreateWithNameInContext("saqut_module", context);
 
-    jit_movi(JIT_V0, 0); // sum = 0 (V0 kayıtçısı sum olsun)
-    jit_movi(JIT_V1, 1); // a = 1 (V1 kayıtçısı a olsun)
+    // 3. Basit bir fonksiyon tipi oluştur: int32 f()
+    LLVMTypeRef ret_type = LLVMInt32TypeInContext(context);
+    LLVMTypeRef func_type = LLVMFunctionType(ret_type, NULL, 0, 0);
 
-    jit_node_t *loop_start = jit_label();
+    // 4. Fonksiyonu modüle ekle
+    LLVMValueRef main_func = LLVMAddFunction(mod, "saqut_main", func_type);
 
-    // sum += a (Kayıtçıdan kayıtçıya toplama - Işık hızında)
-    jit_addr(JIT_V0, JIT_V0, JIT_V1);
-
-    // a++
-    jit_addi(JIT_V1, JIT_V1, 1);
-    // a++
-    jit_addi(JIT_V1, JIT_V1, 1);
-    // a++
-    jit_addi(JIT_V1, JIT_V1, 1);
-    // a++
-    jit_addi(JIT_V1, JIT_V1, 1);
-
-    // a < 15000 kontrolü
-    jit_movi(JIT_R1, 15000);
-    jit_node_t *if_node = jit_bltr(JIT_V1, JIT_R1); // a < 15000 ise loop_start'a zıpla
-    jit_patch_at(if_node, loop_start);
-
-    jit_movr(JIT_R0, JIT_V0); // sonucu döndür
-    jit_retr(JIT_R0);
-    jit_epilog();
-
-    // --- ÇALIŞTIRMA VE KAYDETME ---
-    jit_realize();
+    // 5. Temel bir blok (Entry block) ekle
+    LLVMBasicBlockRef entry = LLVMAppendBasicBlockInContext(context, main_func, "entry");
     
-    jit_word_t size;
-    void* final_code = jit_emit(); 
-    jit_get_code(&size); 
+    // 6. Bir Builder oluştur ve fonksiyonun içine "return 0" ekle
+    LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
+    LLVMPositionBuilderAtEnd(builder, entry);
+    LLVMBuildRet(builder, LLVMConstInt(LLVMInt32TypeInContext(context), 0, 0));
 
-    void (*func)() = (void (*)())final_code;
-    
-    std::cout << "--- saQut Programı Başlıyor ---" << std::endl;
-    if (final_code) {
-        auto start = std::chrono::high_resolution_clock::now();
-        func(); 
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::micro> elapsed = end - start;
-        std::cout << "Süre: " << elapsed.count() << " mikrosaniye." << std::endl;
-    }
+    // 7. Oluşturulan IR kodunu terminale yazdır (Gözle kontrol için)
+    printf("--- Oluşturulan LLVM IR Kodu ---\n");
+    LLVMDumpModule(mod);
+    printf("--------------------------------\n");
+    printf("saQut: LLVM Modülü ve Fonksiyonu başarıyla oluşturuldu!\n");
 
+    // 8. Temizlik (Bellek sızıntısını önlemek için önemli)
+    LLVMDisposeBuilder(builder);
+    LLVMDisposeModule(mod);
+    LLVMContextDispose(context);
 
-    if (final_code) {
-        volatile int prevent_optimization = 0;
-        auto start = std::chrono::high_resolution_clock::now();
-        int sum = 0;
-        for(int a = 0; a < 15000; a++) {
-            sum += saqut_print(a); 
-        }
-        prevent_optimization = sum;
-
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::micro> elapsed = end - start;
-        std::cout << "Süre: " << elapsed.count() << " mikrosaniye." << prevent_optimization << std::endl;
-    }
-
-    std::cout << "--- saQut Programı Bitti ---" << std::endl;
-
-    std::cout << "Kod üretildi. Boyut: " << static_cast<signed long>(size) << " bayt." << std::endl;
-
-    std::ofstream outfile("calc.bin", std::ios::binary);
-    outfile.write(reinterpret_cast<const char*>(final_code), size);
-    outfile.close();
-
-    jit_destroy_state();
-    finish_jit();
     return 0;
 }

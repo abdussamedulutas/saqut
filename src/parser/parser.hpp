@@ -420,16 +420,14 @@ inline ASTNode* Parser::parseExpression(uint16_t precedence) {
     if (!left) return nullptr;
 
     while (true) {
-        auto next = lookahead(1);
+        auto next = currentToken();
         if (next.type == TokenType::RPAREN ||
             next.type == TokenType::SEMICOLON ||
             next.type == TokenType::RBRACE ||
             next.type == TokenType::COMMA)
             break;
 
-        next = lookahead(1);
         if (precedence < next.getPowerOperator()) {
-            nextToken();
             left = parseLeftDenotation(left);
         } else {
             break;
@@ -472,8 +470,9 @@ inline ASTNode* Parser::parseNullDenotation() {
         return bin;
     }
 
-    // Numeric literal — NUD does NOT advance; loop handles it
+    // Numeric literal
     if (ct.type == TokenType::NUMBER) {
+        nextToken();
         LiteralNode* lit = new LiteralNode();
         lit->lexerToken  = ct.token;
         lit->parserToken = ct;
@@ -482,6 +481,7 @@ inline ASTNode* Parser::parseNullDenotation() {
 
     // String literal
     if (ct.type == TokenType::STRING) {
+        nextToken();
         LiteralNode* lit = new LiteralNode();
         lit->lexerToken  = ct.token;
         lit->parserToken = ct;
@@ -490,6 +490,7 @@ inline ASTNode* Parser::parseNullDenotation() {
 
     // Boolean / null literals
     if (ct.is({TokenType::KW_TRUE, TokenType::KW_FALSE, TokenType::KW_NULL})) {
+        nextToken();
         LiteralNode* lit = new LiteralNode();
         lit->lexerToken  = ct.token;
         lit->parserToken = ct;
@@ -498,6 +499,7 @@ inline ASTNode* Parser::parseNullDenotation() {
 
     // Identifier
     if (ct.type == TokenType::IDENTIFIER) {
+        nextToken();
         IdentifierNode* id = new IdentifierNode();
         id->lexerToken     = ct.token;
         id->parserToken    = ct;

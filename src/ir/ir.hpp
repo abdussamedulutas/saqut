@@ -51,6 +51,7 @@ public:
     std::vector<IROpData> IROpDatas;
 
     int parse(ASTNode* ast) {
+        if (!ast) return 0;
         switch (ast->kind) {
             case ASTKind::BinaryExpression:
                 return parseBinaryExpr((BinaryExpressionNode*)ast);
@@ -131,8 +132,8 @@ public:
             default: return 0;
         }
 
-        int left  = parse(bin->Left);
-        int right = parse(bin->Right);
+        int left  = bin->Left  ? parse(bin->Left)  : 0;
+        int right = bin->Right ? parse(bin->Right) : 0;
 
         IROpDatas.push_back({
             op,

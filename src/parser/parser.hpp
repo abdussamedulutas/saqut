@@ -397,7 +397,15 @@ inline ASTNode* Parser::parseContinueStatement() {
 inline ASTNode* Parser::parseExpressionStatement() {
     ExpressionStatementNode* es = new ExpressionStatementNode();
     es->expression = parseExpression();
-
+    if (!es->expression) {
+        // Parsing failed — skip to next statement boundary
+        while (currentToken().type != TokenType::SEMICOLON &&
+               currentToken().type != TokenType::RBRACE &&
+               currentToken().type != TokenType::SVR_VOID)
+            nextToken();
+        if (currentToken().type == TokenType::SEMICOLON)
+            nextToken();
+    }
     if (currentToken().type == TokenType::SEMICOLON)
         nextToken();
 

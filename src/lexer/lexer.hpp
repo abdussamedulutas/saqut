@@ -201,27 +201,33 @@ INumber Lexer::readNumeric() {
         nextChar();
         char c = getchar();
         switch (c) {
-            case 'x':
+            case 'x': case 'X':
                 num.token.push_back(c);
                 num.base = 16;
+                nextChar();
                 break;
-            case 'b':
+            case 'b': case 'B':
                 num.token.push_back(c);
                 num.base = 2;
+                nextChar();
+                break;
+            case '.':
+                num.token.push_back(c);
+                num.base   = 10;
+                nextDot    = true;
+                num.isFloat = true;
+                nextChar();
+                break;
+            case '0': case '1': case '2': case '3': case '4':
+            case '5': case '6': case '7':
+                // Octal: continue reading in the main loop
+                num.base = 8;
                 break;
             default:
-                if (c != '.') {
-                    num.token.push_back(c);
-                    num.base = 8;
-                } else {
-                    num.token.push_back(c);
-                    num.base   = 10;
-                    nextDot    = true;
-                    num.isFloat = true;
-                }
-                break;
+                // Just "0" — stop here
+                num.end = getLastPosition();
+                return num;
         }
-        nextChar();
     } else {
         num.base = 10;
     }

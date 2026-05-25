@@ -82,14 +82,26 @@ inline constexpr std::string_view delimiters[] = {
 };
 
 inline constexpr std::string_view keywords[] = {
-    "implements", "protected", "interface",  "continue",
-    "private",    "finally",   "extends",    "default",
-    "throws",     "switch",    "return",     "public",
-    "assert",     "false",     "while",      "throw",
-    "class",      "catch",     "break",      "null",
-    "true",       "enum",      "else",       "case",
-    "new",        "try",       "for",        "if",
-    "do"
+    // Control flow
+    "if",       "else",     "for",      "while",    "do",
+    "switch",   "case",     "default",  "break",    "continue",
+    "return",   "try",      "catch",    "finally",  "throw",
+    "throws",   "assert",
+    // Types
+    "void",     "int",      "float",    "double",   "char",
+    "string",   "bool",
+    // Literals
+    "true",     "false",    "null",
+    // OOP
+    "class",    "interface","enum",     "extends",  "implements",
+    "new",      "public",   "private",  "protected",
+    "static",   "final",    "abstract",
+    // Modules
+    "import",   "package",
+    // C/C++
+    "const",    "extern",   "typedef",  "sizeof",
+    "auto",     "constexpr","noexcept",
+    "native",   "synchronized", "volatile", "transient"
 };
 
 // ============================================================
@@ -155,9 +167,14 @@ inline Token* Tokenizer::scope() {
         return nt;
     }
 
-    // Keywords
+    // Keywords (check boundary: keyword must not be prefix of longer identifier)
     for (const auto& kw : keywords) {
         if (hmx.include(std::string(kw), false)) {
+            char next = hmx.getchar(static_cast<int>(kw.size()));
+            if ((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') ||
+                (next >= '0' && next <= '9') || next == '_' || next == '$') {
+                continue;  // part of longer identifier, not a real keyword
+            }
             KeywordToken* kt = new KeywordToken();
             kt->start = hmx.getOffset();
             hmx.toChar(static_cast<int>(kw.size()));

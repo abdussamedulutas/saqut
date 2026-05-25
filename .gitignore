@@ -1,0 +1,11 @@
+# saQut Compiler
+saqut
+*.o
+*.exe
+*.out
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

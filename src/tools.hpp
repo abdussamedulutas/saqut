@@ -8,7 +8,6 @@
 //
 // AMAÇ:
 //   Tüm derleyici modüllerinin ihtiyaç duyduğu ortak yardımcı fonksiyonlar.
-//   Şu anda sadece padRight() içerir.
 //
 // ============================================================================
 
@@ -19,21 +18,38 @@
 
 // --------------------------------------------------------------------------
 // padRight: String'i sağdan boşluk ile belirtilen uzunluğa tamamla.
-//
-// KULLANIM: AST ağacını konsola yazdırırken girintileme (indent) için.
-//   padRight("", indent) → indent adet boşluk döndürür.
-//
-// ÖRNEK:
-//   padRight("", 4) → "    "
-//   padRight("abc", 6) → "abc   "
-//
-// NOT: std::setw + std::left ile de yapılabilirdi, ancak bu daha basit.
 // --------------------------------------------------------------------------
 inline std::string padRight(std::string str, size_t totalLen) {
     if (str.size() < totalLen) {
         str.append(totalLen - str.size(), ' ');
     }
     return str;
+}
+
+// --------------------------------------------------------------------------
+// jsonIndent: JSON çıktısı için girinti (her seviye 2 boşluk)
+// --------------------------------------------------------------------------
+inline std::string jsonIndent(int n) {
+    return std::string(static_cast<size_t>(n) * 2, ' ');
+}
+
+// --------------------------------------------------------------------------
+// jsonEscape: JSON string değerleri için kaçış karakterleri
+// --------------------------------------------------------------------------
+inline std::string jsonEscape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 4);
+    for (char c : s) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:   out += c;
+        }
+    }
+    return out;
 }
 
 #endif // SAQUT_TOOLS

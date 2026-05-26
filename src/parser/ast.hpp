@@ -76,6 +76,10 @@ enum class ASTKind {
     BreakStatement,       // break
     ContinueStatement,    // continue
     ExpressionStatement,  // ifade + ;
+    Call,                 // Fonksiyon çağrısı f(args)
+    MemberAccess,         // Üye erişimi a.b, a->b
+    IndexExpression,      // Dizi erişimi a[i]
+    StructDecl,           // struct tanımı
 };
 
 // ============================================================================
@@ -669,4 +673,149 @@ public:
     }
 };
 
+
+// ============================================================================
+// CallExpressionNode — Fonksiyon Çağrısı f(a, b, ...)
+// ============================================================================
+
+class CallExpressionNode : public ASTNode {
+public:
+    ASTNode* callee = nullptr;
+    std::vector<ASTNode*> arguments;
+
+    CallExpressionNode() { kind = ASTKind::Call; }
+
+    void log(int indent = 0) override {
+        std::cout << padRight("", indent) << "Call\n";
+        if (callee) {
+            std::cout << padRight("", indent + 2) << "Callee:\n";
+            callee->log(indent + 4);
+        }
+        std::cout << padRight("", indent + 2) << "Args (" << arguments.size() << "):\n";
+        for (auto* a : arguments) a->log(indent + 4);
+    }
+
+    std::string toJson(int depth = 0) override {
+        std::string in = jsonIndent(depth);
+        std::ostringstream ss;
+        ss << in << "{\n"
+           << in << "  \"kind\": \"Call\"";
+        if (callee) {
+            ss << ",\n" << in << "  \"callee\":\n"
+               << callee->toJson(depth + 2);
+        }
+        ss << ",\n" << in << "  \"arguments\": [\n";
+        for (size_t i = 0; i < arguments.size(); i++) {
+            ss << arguments[i]->toJson(depth + 3);
+            if (i + 1 < arguments.size()) ss << ",";
+            ss << "\n";
+        }
+        ss << in << "  ]\n" << in << "}";
+        return ss.str();
+    }
+};
+
+// ============================================================================
+// MemberAccessNode — Üye Erişimi a.b veya a->b
+// ============================================================================
+
+class MemberAccessNode : public ASTNode {
+public:
+    ASTNode*   object = nullptr;
+    std::string member;
+    bool       arrow = false;
+
+    MemberAccessNode() { kind = ASTKind::MemberAccess; }
+
+    void log(int indent = 0) override {
+        std::cout << padRight("", indent) << "MemberAccess "
+                  << (arrow ? "->" : ".") << " " << member << "\n";
+        if (object) object->log(indent + 2);
+    }
+
+    std::string toJson(int depth = 0) override {
+        std::string in = jsonIndent(depth);
+        std::ostringstream ss;
+        ss << in << "{\n"
+           << in << "  \"kind\": \"MemberAccess\",\n"
+           << in << "  \"member\": \"" << jsonEscape(member) << "\",\n"
+           << in << "  \"arrow\": " << (arrow ? "true" : "false");
+        if (object) {
+            ss << ",\n" << in << "  \"object\":\n"
+               << object->toJson(depth + 2);
+        }
+        ss << "\n" << in << "}";
+        return ss.str();
+    }
+};
+
+// ============================================================================
+// IndexExpressionNode — Dizi Erişimi a[i]
+// ============================================================================
+
+class IndexExpressionNode : public ASTNode {
+public:
+    ASTNode* object = nullptr;
+    ASTNode* index  = nullptr;
+
+    IndexExpressionNode() { kind = ASTKind::IndexExpression; }
+
+    void log(int indent = 0) override {
+        std::cout << padRight("", indent) << "IndexExpression\n";
+        if (object) {
+            std::cout << padRight("", indent + 2) << "Object:\n";
+            object->log(indent + 4);
+        }
+        if (index) {
+            std::cout << padRight("", indent + 2) << "Index:\n";
+            index->log(indent + 4);
+        }
+    }
+
+    std::string toJson(int depth = 0) override {
+        std::string in = jsonIndent(depth);
+        std::ostringstream ss;
+        ss << in << "{\n"
+           << in << "  \"kind\": \"IndexExpression\"";
+        if (object) {
+            ss << ",\n" << in << "  \"object\":\n"
+               << object->toJson(depth + 2);
+        }
+        if (index) {
+            ss << ",\n" << in << "  \"index\":\n"
+               << index->toJson(depth + 2);
+        }
+        ss << "\n" << in << "}";
+        return ss.str();
+    }
+};
+
+// ============================================================================
+// StructDeclNode — struct Tanımı
+// ============================================================================
+
+class StructDeclNode : public ASTNode {
+public:
+    std::string name;
+
+    StructDeclNode() { kind = ASTKind::StructDecl; }
+
+    void log(int indent = 0) override {
+        std::cout << padRight("", indent) << "StructDecl " << name << "\n";
+        for (auto* c : getChildren()) c->log(indent + 2);
+    }
+
+    std::string toJson(int depth = 0) override {
+        std::string in = jsonIndent(depth);
+        std::ostringstream ss;
+        ss << in << "{\n"
+           << in << "  \"kind\": \"StructDecl\",\n"
+           << in << "  \"name\": \"" << jsonEscape(name) << "\",\n"
+           << in << "  \"children\": [\n"
+           << childrenToJson(this, depth + 3)
+           << in << "  ]\n"
+           << in << "}";
+        return ss.str();
+    }
+};
 #endif // SAQUT_AST

@@ -1,0 +1,89 @@
+int fibonacci(int n) {
+    if (n <= 1)
+        return n;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+void fibonacciIterative(int n) {
+    int first = 0, second = 1, next;
+    
+    for (int i = 0; i < n; i++) {
+        if (i <= 1)
+            next = i;
+        else {
+            next = first + second;
+            first = second;
+            second = next;
+        }
+        printf("%d ", next);
+    }
+    printf("\n");
+}
+
+int main() {
+    int n = 10;
+    
+    // Formatlı ifade kullanmadan, string concatenation mantığı ile
+    printf("");
+    printf(n);
+    printf(" elemanlı Fibonacci dizisi (iterative):\n");
+    fibonacciIterative(n);
+    
+    printf("\n");
+    printf("");
+    printf(n);
+    printf(". Fibonacci sayısı (recursive): ");
+    printf(fibonacci(n - 1));
+    printf("\n");
+    
+    return 0;
+}
+
+struct List {
+    int arr[100];
+    int length;
+};
+
+struct List createList() {
+    struct List list;
+    list.length = 0;
+    return list;
+}
+
+void push(struct List* list, int value) {
+    if (list->length < 100) {
+        list->arr[list->length] = value;
+        list->length++;
+    }
+}
+
+int get(struct List* list, int index) {
+    if (index < list->length) {
+        return list->arr[index];
+    }
+    return -1;
+}
+
+void printList(struct List* list) {
+    for (int i = 0; i < list->length; i++) {
+        // println yerine direkt yaz
+        int val = list->arr[i];
+        // sayıyı göster
+    }
+    // yeni satır
+}
+
+int main() {
+    struct List myList = createList();
+    
+    push(myList, 5);
+    push(myList, 10);
+    push(myList, 15);
+    
+    // JavaScript benzeri kullanım
+    // myList[0] gibi düşün
+    
+    printList(myList);
+    
+    return 0;
+}

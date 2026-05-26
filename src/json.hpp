@@ -49,6 +49,10 @@ inline const char* astKindName(ASTKind k) {
         case ASTKind::BreakStatement:      return "BreakStatement";
         case ASTKind::ContinueStatement:   return "ContinueStatement";
         case ASTKind::ExpressionStatement: return "ExpressionStatement";
+        case ASTKind::Call:                return "Call";
+        case ASTKind::MemberAccess:        return "MemberAccess";
+        case ASTKind::IndexExpression:     return "IndexExpression";
+        case ASTKind::StructDecl:          return "StructDecl";
         default: return "Unknown";
     }
 }
@@ -158,6 +162,27 @@ inline void analyzeRecursive(ASTNode* node, int currentDepth, AstAnalysis& a) {
             if (es->expression) analyzeRecursive(es->expression, currentDepth + 1, a);
             break;
         }
+        case ASTKind::Call: {
+            auto* call = (CallExpressionNode*)node;
+            if (call->callee) analyzeRecursive(call->callee, currentDepth + 1, a);
+            for (auto* arg : call->arguments) analyzeRecursive(arg, currentDepth + 1, a);
+            break;
+        }
+        case ASTKind::MemberAccess: {
+            auto* ma = (MemberAccessNode*)node;
+            if (ma->object) analyzeRecursive(ma->object, currentDepth + 1, a);
+            break;
+        }
+        case ASTKind::IndexExpression: {
+            auto* ie = (IndexExpressionNode*)node;
+            if (ie->object) analyzeRecursive(ie->object, currentDepth + 1, a);
+            if (ie->index)  analyzeRecursive(ie->index,  currentDepth + 1, a);
+            break;
+        }
+        case ASTKind::StructDecl: {
+            for (auto* child : node->getChildren()) analyzeRecursive(child, currentDepth + 1, a);
+            break;
+        }
         default: break; // Literal, Identifier, Break, Continue — yaprak düğüm
     }
 }
@@ -204,6 +229,9 @@ inline void collectSymbolsRecursive(ASTNode* node, std::vector<SymbolEntry>& sym
     if (node->kind == ASTKind::FunctionDecl) {
         auto* fn = (FunctionDeclNode*)node;
         symbols.push_back({fn->name, "function", fn->returnType});
+    } else if (node->kind == ASTKind::StructDecl) {
+        auto* st = (StructDeclNode*)node;
+        symbols.push_back({st->name, "struct", ""});
     } else if (node->kind == ASTKind::VariableDecl) {
         auto* vd = (VariableDeclNode*)node;
         symbols.push_back({vd->name, "variable", vd->varType});
@@ -268,6 +296,27 @@ inline void collectSymbolsRecursive(ASTNode* node, std::vector<SymbolEntry>& sym
         case ASTKind::ExpressionStatement: {
             auto* es = (ExpressionStatementNode*)node;
             if (es->expression) collectSymbolsRecursive(es->expression, symbols);
+            break;
+        }
+        case ASTKind::Call: {
+            auto* call = (CallExpressionNode*)node;
+            if (call->callee) collectSymbolsRecursive(call->callee, symbols);
+            for (auto* arg : call->arguments) collectSymbolsRecursive(arg, symbols);
+            break;
+        }
+        case ASTKind::MemberAccess: {
+            auto* ma = (MemberAccessNode*)node;
+            if (ma->object) collectSymbolsRecursive(ma->object, symbols);
+            break;
+        }
+        case ASTKind::IndexExpression: {
+            auto* ie = (IndexExpressionNode*)node;
+            if (ie->object) collectSymbolsRecursive(ie->object, symbols);
+            if (ie->index)  collectSymbolsRecursive(ie->index,  symbols);
+            break;
+        }
+        case ASTKind::StructDecl: {
+            for (auto* child : node->getChildren()) collectSymbolsRecursive(child, symbols);
             break;
         }
         default: break;

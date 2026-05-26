@@ -73,124 +73,7 @@
 #include <vector>
 #include "lexer/lexer.hpp"
 
-// ============================================================================
-// Token Temel Sınıfı
-// ============================================================================
-//
-// Tüm token tiplerinin ortak atası. Polimorfik kullanım için virtual destructor
-// içerir. type alanı, token'ın hangi alt sınıfa ait olduğunu string olarak tutar
-// (RTTI'ye alternatif, daha hafif).
-//
-// ALANLAR:
-//   type  : Token tipi ("number", "string", "operator", "delimiter", "keyword", "identifier")
-//   token : Token'ın ham metin hali (örn: "42", "+", "if", "myVar")
-//   start : Kaynak koddaki başlangıç offset'i (Lexer offset'i)
-//   end   : Kaynak koddaki bitiş offset'i
-//
-class Token {
-protected:
-    std::string type;    // Alt sınıf tarafından constructor'da atanır
-public:
-    int start = 0;       // Kaynak koddaki başlangıç konumu
-    int end   = 0;       // Kaynak koddaki bitiş konumu
-    std::string token;   // Token'ın ham metin gösterimi
-
-    std::string gettype() { return type; }
-    virtual ~Token() = default;
-};
-
-// ============================================================================
-// StringToken — String Literal'ları ("...")
-// ============================================================================
-//
-// Örnek: "merhaba dünya", "satır\niki", "tırnak \" içinde"
-//
-// context: Escape sequence'ler çözümlenmiş gerçek string içeriği.
-//          Örn: token="\"a\\nb\"" ise context="a\nb"
-// size:    context'in uzunluğu (token'dan farklı olabilir)
-// token:   Tırnak işaretleri ve escape sequence'ler dahil ham hali
-//
-class StringToken : public Token {
-public:
-    StringToken()             { type = "string"; }
-    std::string context;     // İşlenmiş string içeriği (escape'ler açılmış)
-    int size = 0;            // context uzunluğu
-};
-
-// ============================================================================
-// NumberToken — Sayısal Literal'lar (42, 0xFF, 3.14)
-// ============================================================================
-//
-// Sayı tabanı, float/整数 ayrımı, bilimsel gösterim bilgisi taşır.
-// Lexer'ın INumber yapısından dönüştürülür.
-//
-// isFloat:    true ise float/double literal (nokta veya epsilon içerir)
-// hasEpsilon: true ise bilimsel gösterim (örn: 1e10)
-// base:       Sayı tabanı: 2, 8, 10, 16
-// token:      Sayının ham string hali (örn: "0xFF", "3.14e-2")
-//
-class NumberToken : public Token {
-public:
-    NumberToken()             { type = "number"; }
-    bool isFloat    = false;  // Ondalıklı sayı mı?
-    bool hasEpsilon = false;  // Bilimsel gösterim (e/E) içeriyor mu?
-    int base        = 10;     // Sayı tabanı
-};
-
-// ============================================================================
-// OperatorToken — Operatörler (+, -, *, /, ==, ++, vb.)
-// ============================================================================
-//
-// Aritmetik, karşılaştırma, mantıksal, bitsel, atama operatörleri.
-// Token değeri doğrudan operatörün string halidir: "+", "-", "==", "++".
-//
-class OperatorToken : public Token {
-public:
-    OperatorToken()           { type = "operator"; }
-};
-
-// ============================================================================
-// DelimiterToken — Sınırlandırıcılar ({, }, (, ), [, ], ;, ,, ., ->, ::)
-// ============================================================================
-//
-// Kod yapısını belirleyen karakterler. Bloklar, parametre listeleri,
-// dizi indeksleri, ifade sonlandırma.
-//
-class DelimiterToken : public Token {
-public:
-    DelimiterToken()          { type = "delimiter"; }
-};
-
-// ============================================================================
-// KeywordToken — Anahtar Kelimeler (if, for, while, int, void, ...)
-// ============================================================================
-//
-// Dilin rezerve edilmiş kelimeleri. Identifier olarak kullanılamazlar.
-// Tokenizer scope() fonksiyonu, keyword'leri identifier'lardan önce kontrol
-// eder. Keyword boundary check sayesinde "double" "do" olarak yanlış
-// eşleşmez.
-//
-class KeywordToken : public Token {
-public:
-    KeywordToken()            { type = "keyword"; }
-};
-
-// ============================================================================
-// IdentifierToken — Tanımlayıcılar (değişken/fonksiyon isimleri)
-// ============================================================================
-//
-// Harf, rakam, _ ve $ karakterlerinden oluşan, keyword olmayan isimler.
-// Değişkenler, fonksiyonlar, sınıflar, metotlar için kullanılır.
-//
-// context: Şu anda token ile aynı (genişleme için ayrıldı)
-// size:    Tanımlayıcının karakter uzunluğu
-//
-class IdentifierToken : public Token {
-public:
-    IdentifierToken()         { type = "identifier"; }
-    std::string context;     // Şu anda token ile aynı
-    int size = 0;            // Tanımlayıcı uzunluğu
-};
+#include "tokenizer/token.hpp"
 
 // ============================================================================
 // Token Tanıma Tabloları (Derleme Zamanı Sabitleri)
@@ -265,7 +148,7 @@ inline constexpr std::string_view keywords[] = {
     // Literals
     "true",     "false",    "null",
     // OOP
-    "class",    "interface","enum",     "extends",  "implements",
+    "class",    "struct",   "interface","enum",     "extends",  "implements",
     "new",      "public",   "private",  "protected",
     "static",   "final",    "abstract",
     // Modules
@@ -361,8 +244,8 @@ inline Token* Tokenizer::scope() {
     hmx.skipWhiteSpace();
 
     // Yorum satırları: sessizce atla, token üretme
-    if (hmx.include("//", true))  skipOneLineComment();
-    if (hmx.include("/*", true))  skipMultiLineComment();
+    if (hmx.include("//", true))  { skipOneLineComment(); return scope(); }
+    if (hmx.include("/*", true))  { skipMultiLineComment(); return scope(); }
 
     // EOF kontrolü
     if (hmx.isEnd()) {
@@ -471,7 +354,7 @@ inline IdentifierToken* Tokenizer::readIdentifier() {
         if (read) {
             hmx.nextChar();
         } else {
-            break;  // Tanımlayıcı karakteri değil → dur
+            if (it->token.empty()) { hmx.nextChar(); } break;
         }
     }
 

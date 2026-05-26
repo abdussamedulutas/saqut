@@ -115,6 +115,7 @@ private:
     // --- Deklarasyonlar ---
     ASTNode* parseDeclaration();
     ASTNode* parseFunctionDecl();
+    ASTNode* parseStructDecl();
     ASTNode* parseVariableDecl();
 
     // --- Statement'lar ---
@@ -267,7 +268,11 @@ inline ASTNode* Parser::parseDeclaration() {
         return parseVariableDecl();
     }
 
-    // Tip keyword'ü değil → statement (veya REPL ifadesi)
+    // struct
+    if (ct.type == TokenType::KW_STRUCT)
+        return parseStructDecl();
+
+    // Tip keyword'ü değil → statement
     return parseStatement();
 }
 
@@ -308,6 +313,29 @@ inline ASTNode* Parser::parseFunctionDecl() {
 
     return fn;
 }
+// --------------------------------------------------------------------------
+// parseStructDecl: struct tanimi.
+// --------------------------------------------------------------------------
+inline ASTNode* Parser::parseStructDecl() {
+    StructDeclNode* st = new StructDeclNode();
+    nextToken();
+    if (currentToken().type == TokenType::IDENTIFIER) {
+        st->name = currentToken().token->token;
+        nextToken();
+    }
+    if (currentToken().type == TokenType::LBRACE) {
+        nextToken();
+        while (currentToken().type != TokenType::RBRACE && currentToken().type != TokenType::SVR_VOID) {
+            ASTNode* field = parseDeclaration();
+            if (field) st->addChild(field);
+            else break;
+        }
+        if (currentToken().type == TokenType::RBRACE) nextToken();
+    }
+    if (currentToken().type == TokenType::SEMICOLON) nextToken();
+    return st;
+}
+
 
 // --------------------------------------------------------------------------
 // parseVariableDecl: Değişken tanımı.
@@ -805,9 +833,8 @@ inline ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     auto ct = currentToken();
 
     // --- Postfix: expr++, expr-- ---
-    // Operatör operand'dan SONRA gelir, sağ operand yok.
     if (ct.is({TokenType::PLUS_PLUS, TokenType::MINUS_MINUS})) {
-        nextToken();  // Operatörü tüket
+        nextToken();
         PostfixNode* pf = new PostfixNode();
         pf->operand  = left;
         pf->Operator = ct.type;
@@ -815,13 +842,60 @@ inline ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         return pf;
     }
 
-    // --- Binary infix: expr OP expr ---
-    // OP'nin önceliğine göre sağ operand'ı ayrıştır.
-    uint16_t prec = ct.getPowerOperator();
-    nextToken();  // Operatörü tüket
+    // --- Fonksiyon cagrisi: expr(args) ---
+    if (ct.type == TokenType::LPAREN) {
+        nextToken();
+        CallExpressionNode* call = new CallExpressionNode();
+        call->callee = left;
+        left->parent = call;
 
-    // Sağ operand. prec parametresi, daha yüksek öncelikli operatörlerin
-    // sağ operand içinde gruplanmasını sağlar.
+        if (currentToken().type != TokenType::RPAREN) {
+            call->arguments.push_back(parseExpression(0));
+            while (currentToken().type == TokenType::COMMA) {
+                nextToken();
+                call->arguments.push_back(parseExpression(0));
+            }
+        }
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken();
+        return call;
+    }
+
+    // --- Dizi erisimi: expr[index] ---
+    if (ct.type == TokenType::LBRACKET) {
+        nextToken();
+        IndexExpressionNode* idx = new IndexExpressionNode();
+        idx->object = left;
+        left->parent = idx;
+        idx->index = parseExpression(0);
+        if (currentToken().type == TokenType::RBRACKET)
+            nextToken();
+        return idx;
+    }
+
+    // --- Uye erisimi: expr.member / expr->member ---
+    if (ct.type == TokenType::DOT || ct.type == TokenType::ARROW) {
+        bool arrow = (ct.type == TokenType::ARROW);
+        nextToken();
+
+        if (currentToken().type != TokenType::IDENTIFIER) {
+            std::cerr << "Parser hatasi: uye ismi bekleniyor\n";
+            return left;
+        }
+
+        MemberAccessNode* ma = new MemberAccessNode();
+        ma->object = left;
+        ma->member = currentToken().token->token;
+        ma->arrow  = arrow;
+        left->parent = ma;
+        nextToken();
+        return ma;
+    }
+
+    // --- Binary infix: expr OP expr ---
+    uint16_t prec = ct.getPowerOperator();
+    nextToken();
+
     ASTNode* right = parseExpression(prec);
 
     BinaryExpressionNode* bin = new BinaryExpressionNode();

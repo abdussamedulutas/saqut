@@ -129,6 +129,7 @@ enum class TokenType : uint16_t {
 
     // --- OOP Keyword'leri ---
     KW_CLASS,        // class
+    KW_STRUCT,       // struct
     KW_INTERFACE,    // interface
     KW_ENUM,         // enum
     KW_EXTENDS,      // extends
@@ -302,6 +303,7 @@ inline const std::unordered_map<std::string_view, TokenType> KEYWORD_MAP = {
 
     // --- OOP ---
     {"class",       TokenType::KW_CLASS},
+    {"struct",      TokenType::KW_STRUCT},
     {"interface",   TokenType::KW_INTERFACE},
     {"enum",        TokenType::KW_ENUM},
     {"extends",     TokenType::KW_EXTENDS},

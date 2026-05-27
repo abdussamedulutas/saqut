@@ -1,0 +1,16 @@
+# ninja log v7
+1	1875	1779866878396024286	CMakeFiles/saqut.dir/src/parser/nodes/identifier.cpp.o	eb96bb4b1eb4ad80
+1	1743	1779866878396133191	CMakeFiles/saqut.dir/src/parser/nodes/literal.cpp.o	78f2c4da7c9b2281
+1	1835	1779866851291850429	CMakeFiles/saqut.dir/src/parser/nodes/binary_expr.cpp.o	d2e2bb2f8a63c6d2
+3	1976	1779866851293202930	CMakeFiles/saqut.dir/src/parser/nodes/program.cpp.o	ac5bbcd74d87561a
+1	1828	1779866851291959426	CMakeFiles/saqut.dir/src/parser/nodes/declarations.cpp.o	b6c56f04a257f685
+1	1991	1779866851292085983	CMakeFiles/saqut.dir/src/parser/nodes/expressions.cpp.o	4057e3d63c63a1ab
+6	2108	1779866851296202934	CMakeFiles/saqut.dir/src/parser/nodes/statements.cpp.o	b5c20724bbf3648c
+1	2478	1779866878395241768	CMakeFiles/saqut.dir/src/main.cpp.o	110c26cb1d0c3a23
+2967	3100	1779866359829193015	saqut	78d8bacf305cfc59
+1	1450	1779866851291202927	CMakeFiles/saqut.dir/src/lexer/lexer.cpp.o	90eeec811f2137e6
+0	1481	1779866851290202926	CMakeFiles/saqut.dir/src/core/sourcefile.cpp.o	da6f5fc90e87e6b1
+1	1410	1779866878396365249	CMakeFiles/saqut.dir/src/tokenizer/tokenizer.cpp.o	a01677f8bb4f4dbc
+1	1579	1779866878396233551	CMakeFiles/saqut.dir/src/parser/parser.cpp.o	2c65b7be26cead32
+1	1163	1779866916763301383	CMakeFiles/saqut.dir/src/parser/parser.cpp.o	2c65b7be26cead32
+1163	1283	1779866917925303269	saqut	89052e51305cb697

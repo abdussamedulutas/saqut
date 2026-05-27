@@ -1,0 +1,3 @@
+/home/saqut/Masaüstü/saqutcompiler/build/CMakeFiles/saqut.dir
+/home/saqut/Masaüstü/saqutcompiler/build/CMakeFiles/edit_cache.dir
+/home/saqut/Masaüstü/saqutcompiler/build/CMakeFiles/rebuild_cache.dir

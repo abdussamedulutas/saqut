@@ -287,6 +287,7 @@ inline ASTNode* Parser::parseDeclaration() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseFunctionDecl() {
     FunctionDeclNode* fn = new FunctionDeclNode();
+    fn->loc = currentToken().token->loc;
     fn->returnType = currentToken().token->token;  // "int", "void", ...
     nextToken();  // Dönüş tipini tüket
 
@@ -318,6 +319,7 @@ inline ASTNode* Parser::parseFunctionDecl() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseStructDecl() {
     StructDeclNode* st = new StructDeclNode();
+    st->loc = currentToken().token->loc;
     nextToken();
     if (currentToken().type == TokenType::IDENTIFIER) {
         st->name = currentToken().token->token;
@@ -340,29 +342,82 @@ inline ASTNode* Parser::parseStructDecl() {
 // --------------------------------------------------------------------------
 // parseVariableDecl: Değişken tanımı.
 //
-// Sözdizimi: Type Identifier [= Expression] ;
+// Sözdizimi: Type Identifier [= Expression] {, Identifier [= Expression]} ;
 // Örnek:     int x = 10;
-//            float y;         (initExpr = nullptr)
+//            float y;              (initExpr = nullptr)
+//            int first = 0, second = 1, next;
 //
-// TODO: Çoklu değişken: int x = 1, y = 2;
+// Çoklu değişken:
+//   İlk değişken ana düğüm olur. Virgülle ayrılmış ek değişkenler
+//   ana düğümün children vektörüne eklenir. JSON çıktısında "declarators"
+//   dizisi olarak görünür.
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseVariableDecl() {
+    // --- Tip ve ilk değişken adı ---
     VariableDeclNode* vd = new VariableDeclNode();
+    vd->loc = currentToken().token->loc;
     vd->varType = currentToken().token->token;  // "int", "float", ...
     nextToken();  // Tipi tüket
 
     if (currentToken().type != TokenType::IDENTIFIER) {
         std::cerr << "Parser hatası: değişken ismi bekleniyor\n";
-        return vd;  // Hatalı düğüm, çağıran kontrol etmeli
+        return vd;
     }
 
-    vd->name = currentToken().token->token;  // "x", "counter", ...
+    vd->name = currentToken().token->token;
     nextToken();  // İsmi tüket
 
-    // Opsiyonel başlangıç değeri: = expression
+    // Opsiyonel array boyutu: [expr]
+    if (currentToken().type == TokenType::LBRACKET) {
+        nextToken();  // '['
+        while (currentToken().type != TokenType::RBRACKET &&
+               currentToken().type != TokenType::SEMICOLON &&
+               currentToken().type != TokenType::SVR_VOID)
+            nextToken();
+        if (currentToken().type == TokenType::RBRACKET)
+            nextToken();  // ']'
+    }
+
+    // İlk değişkenin başlangıç değeri
     if (currentToken().type == TokenType::EQUAL) {
         nextToken();  // '=' tüket
         vd->initExpr = parseExpression();
+    }
+
+    // --- Çoklu değişken: , identifier [= expr] ---
+    while (currentToken().type == TokenType::COMMA) {
+        nextToken();  // ',' tüket
+
+        if (currentToken().type != TokenType::IDENTIFIER) {
+            std::cerr << "Parser hatası: virgülden sonra değişken ismi bekleniyor\n";
+            break;
+        }
+
+        VariableDeclNode* sibling = new VariableDeclNode();
+        sibling->loc = currentToken().token->loc;
+        sibling->varType = vd->varType;  // Aynı tip
+        sibling->name = currentToken().token->token;
+        nextToken();  // İsmi tüket
+
+        // Opsiyonel array boyutu: [expr]
+        if (currentToken().type == TokenType::LBRACKET) {
+            nextToken();  // '['
+            while (currentToken().type != TokenType::RBRACKET &&
+                   currentToken().type != TokenType::SEMICOLON &&
+                   currentToken().type != TokenType::SVR_VOID)
+                nextToken();
+            if (currentToken().type == TokenType::RBRACKET)
+                nextToken();  // ']'
+        }
+
+        // Başlangıç değeri
+        if (currentToken().type == TokenType::EQUAL) {
+            nextToken();  // '=' tüket
+            sibling->initExpr = parseExpression();
+        }
+
+        // Kardeş düğümü ana düğüme ekle
+        vd->addChild(sibling);
     }
 
     // Noktalı virgül (opsiyonel — parser hoşgörülü)
@@ -418,6 +473,10 @@ inline ASTNode* Parser::parseStatement() {
         return parseVariableDecl();
     }
 
+    // struct tanımı: struct Name { ... }
+    if (ct.type == TokenType::KW_STRUCT)
+        return parseStructDecl();
+
     // Hiçbiri değilse → ifade statement'ı (atama, fonksiyon çağrısı, ...)
     return parseExpressionStatement();
 }
@@ -427,6 +486,7 @@ inline ASTNode* Parser::parseStatement() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseBlock() {
     BlockNode* block = new BlockNode();
+    block->loc = currentToken().token ? currentToken().token->loc : SourceLocation{};
 
     if (currentToken().type == TokenType::LBRACE)
         nextToken();  // '{' tüket
@@ -459,6 +519,7 @@ inline ASTNode* Parser::parseBlock() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseIfStatement() {
     IfStatementNode* ifNode = new IfStatementNode();
+    ifNode->loc = currentToken().token->loc;
     nextToken();  // 'if' tüket
 
     // Koşul: ( expression )
@@ -486,6 +547,7 @@ inline ASTNode* Parser::parseIfStatement() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseWhileStatement() {
     WhileStatementNode* ws = new WhileStatementNode();
+    ws->loc = currentToken().token->loc;
     nextToken();  // 'while' tüket
 
     if (currentToken().type == TokenType::LPAREN) {
@@ -513,6 +575,7 @@ inline ASTNode* Parser::parseWhileStatement() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseForStatement() {
     ForStatementNode* fs = new ForStatementNode();
+    fs->loc = currentToken().token->loc;
     nextToken();  // 'for' tüket
 
     if (currentToken().type == TokenType::LPAREN)
@@ -547,6 +610,7 @@ inline ASTNode* Parser::parseForStatement() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseDoWhileStatement() {
     DoWhileStatementNode* dw = new DoWhileStatementNode();
+    dw->loc = currentToken().token->loc;
     nextToken();  // 'do' tüket
 
     // Gövde
@@ -576,6 +640,7 @@ inline ASTNode* Parser::parseDoWhileStatement() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseReturnStatement() {
     ReturnStatementNode* rs = new ReturnStatementNode();
+    rs->loc = currentToken().token->loc;
     nextToken();  // 'return' tüket
 
     // Opsiyonel dönüş değeri
@@ -596,6 +661,7 @@ inline ASTNode* Parser::parseReturnStatement() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseBreakStatement() {
     BreakStatementNode* bs = new BreakStatementNode();
+    bs->loc = currentToken().token->loc;
     nextToken();  // 'break' tüket
     if (currentToken().type == TokenType::SEMICOLON)
         nextToken();
@@ -604,6 +670,7 @@ inline ASTNode* Parser::parseBreakStatement() {
 
 inline ASTNode* Parser::parseContinueStatement() {
     ContinueStatementNode* cs = new ContinueStatementNode();
+    cs->loc = currentToken().token->loc;
     nextToken();  // 'continue' tüket
     if (currentToken().type == TokenType::SEMICOLON)
         nextToken();
@@ -625,6 +692,7 @@ inline ASTNode* Parser::parseContinueStatement() {
 // --------------------------------------------------------------------------
 inline ASTNode* Parser::parseExpressionStatement() {
     ExpressionStatementNode* es = new ExpressionStatementNode();
+    es->loc = currentToken().token ? currentToken().token->loc : SourceLocation{};
     es->expression = parseExpression();
     if (!es->expression) {
         // Hata kurtarma: sonraki güvenli noktaya atla
@@ -769,6 +837,7 @@ inline ASTNode* Parser::parseNullDenotation() {
         // Sağ operand'ı ayrıştır. Unary prefix sağdan sola bağlanır.
         ASTNode* right = parseExpression(ct.getPowerOperator());
         BinaryExpressionNode* bin = new BinaryExpressionNode();
+        bin->loc    = ct.token ? ct.token->loc : SourceLocation{};
         bin->Right    = right;
         bin->Left     = nullptr;  // Unary işaretçisi
         bin->Operator = ct.type;
@@ -780,8 +849,15 @@ inline ASTNode* Parser::parseNullDenotation() {
     if (ct.type == TokenType::NUMBER) {
         nextToken();  // Token'ı tüket
         LiteralNode* lit = new LiteralNode();
+        lit->loc       = ct.token ? ct.token->loc : SourceLocation{};
         lit->lexerToken  = ct.token;
         lit->parserToken = ct;
+        // NumberToken'a cast edip base/isFloat bilgisini al
+        if (auto* nt = dynamic_cast<NumberToken*>(ct.token)) {
+            lit->literalBase  = nt->base;
+            lit->isFloatValue = nt->isFloat;
+            lit->literalType  = nt->isFloat ? LiteralType::FLOAT : LiteralType::INTEGER;
+        }
         return lit;
     }
 
@@ -789,6 +865,8 @@ inline ASTNode* Parser::parseNullDenotation() {
     if (ct.type == TokenType::STRING) {
         nextToken();
         LiteralNode* lit = new LiteralNode();
+        lit->literalType = LiteralType::STRING;
+        lit->loc       = ct.token ? ct.token->loc : SourceLocation{};
         lit->lexerToken  = ct.token;
         lit->parserToken = ct;
         return lit;
@@ -798,6 +876,12 @@ inline ASTNode* Parser::parseNullDenotation() {
     if (ct.is({TokenType::KW_TRUE, TokenType::KW_FALSE, TokenType::KW_NULL})) {
         nextToken();
         LiteralNode* lit = new LiteralNode();
+        // Token içeriğine göre boolean/null ayrımı
+        if (ct.is({TokenType::KW_TRUE, TokenType::KW_FALSE}))
+            lit->literalType = LiteralType::BOOLEAN;
+        else
+            lit->literalType = LiteralType::BOŞ;
+        lit->loc       = ct.token ? ct.token->loc : SourceLocation{};
         lit->lexerToken  = ct.token;
         lit->parserToken = ct;
         return lit;
@@ -807,6 +891,7 @@ inline ASTNode* Parser::parseNullDenotation() {
     if (ct.type == TokenType::IDENTIFIER) {
         nextToken();
         IdentifierNode* id = new IdentifierNode();
+        id->loc          = ct.token ? ct.token->loc : SourceLocation{};
         id->lexerToken     = ct.token;
         id->parserToken    = ct;
         return id;
@@ -836,6 +921,7 @@ inline ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     if (ct.is({TokenType::PLUS_PLUS, TokenType::MINUS_MINUS})) {
         nextToken();
         PostfixNode* pf = new PostfixNode();
+        pf->loc     = ct.token ? ct.token->loc : SourceLocation{};
         pf->operand  = left;
         pf->Operator = ct.type;
         left->parent = pf;
@@ -846,6 +932,7 @@ inline ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     if (ct.type == TokenType::LPAREN) {
         nextToken();
         CallExpressionNode* call = new CallExpressionNode();
+        call->loc    = ct.token ? ct.token->loc : SourceLocation{};
         call->callee = left;
         left->parent = call;
 
@@ -865,6 +952,7 @@ inline ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     if (ct.type == TokenType::LBRACKET) {
         nextToken();
         IndexExpressionNode* idx = new IndexExpressionNode();
+        idx->loc     = ct.token ? ct.token->loc : SourceLocation{};
         idx->object = left;
         left->parent = idx;
         idx->index = parseExpression(0);
@@ -884,6 +972,7 @@ inline ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         }
 
         MemberAccessNode* ma = new MemberAccessNode();
+        ma->loc     = ct.token ? ct.token->loc : SourceLocation{};
         ma->object = left;
         ma->member = currentToken().token->token;
         ma->arrow  = arrow;
@@ -899,6 +988,7 @@ inline ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     ASTNode* right = parseExpression(prec);
 
     BinaryExpressionNode* bin = new BinaryExpressionNode();
+    bin->loc      = ct.token ? ct.token->loc : SourceLocation{};
     bin->Left     = left;
     bin->Right    = right;
     bin->Operator = ct.type;

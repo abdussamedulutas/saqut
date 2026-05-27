@@ -207,7 +207,7 @@ private:
 // --------------------------------------------------------------------------
 inline std::vector<Token*> Tokenizer::scan(std::string input) {
     std::vector<Token*> tokens;
-    hmx.setText(input);
+    hmx.setSourceText("", input);  // Kaynak kodu hem Lexer'a yükle hem SourceFile'ı hazırla
     while (true) {
         Token* token = scope();
         if (token->token == "EOL") break;  // Dosya sonu sinyali
@@ -262,6 +262,7 @@ inline Token* Tokenizer::scope() {
     if (hmx.isNumeric()) {
         INumber lem = hmx.readNumeric();
         NumberToken* nt = new NumberToken();
+        nt->loc        = lem.startLoc;
         nt->base       = lem.base;
         nt->start      = lem.start;
         nt->end        = lem.end;
@@ -284,6 +285,7 @@ inline Token* Tokenizer::scope() {
             }
             KeywordToken* kt = new KeywordToken();
             kt->start = hmx.getOffset();
+            kt->loc   = hmx.getLocation();
             hmx.toChar(static_cast<int>(kw.size()));
             kt->end   = hmx.getOffset();
             kt->token = kw;
@@ -296,6 +298,7 @@ inline Token* Tokenizer::scope() {
         if (hmx.include(std::string(del), false)) {
             DelimiterToken* dt = new DelimiterToken();
             dt->start = hmx.getOffset();
+            dt->loc   = hmx.getLocation();
             hmx.toChar(static_cast<int>(del.size()));
             dt->end   = hmx.getOffset();
             dt->token = del;
@@ -308,6 +311,7 @@ inline Token* Tokenizer::scope() {
         if (hmx.include(std::string(op), false)) {
             OperatorToken* ot = new OperatorToken();
             ot->start = hmx.getOffset();
+            ot->loc   = hmx.getLocation();
             hmx.toChar(static_cast<int>(op.size()));
             ot->end   = hmx.getOffset();
             ot->token = op;
@@ -360,6 +364,7 @@ inline IdentifierToken* Tokenizer::readIdentifier() {
 
     it->end  = hmx.getOffset();
     it->size = static_cast<int>(it->context.size());
+    it->loc  = hmx.sourceFile.offsetToLocation(it->start);
     hmx.acceptPosition();  // Başarılı okuma → konumu kalıcı yap
     return it;
 }
@@ -425,6 +430,7 @@ inline StringToken* Tokenizer::readString() {
 
     st->end  = hmx.getOffset();
     st->size = static_cast<int>(st->context.size());
+    st->loc  = hmx.sourceFile.offsetToLocation(st->start);
     hmx.acceptPosition();
     return st;
 }

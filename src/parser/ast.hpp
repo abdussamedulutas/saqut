@@ -51,6 +51,7 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include "core/location.hpp"
 #include "parser/token.hpp"
 #include "tools.hpp"
 
@@ -90,6 +91,7 @@ class ASTNode {
 public:
     ASTKind kind;
     ASTNode* parent = nullptr;
+    SourceLocation loc;  // Bu düğümün kaynak koddaki konumu
 
     virtual void log(int indent = 0) {
         (void)indent;
@@ -179,6 +181,7 @@ public:
            << in << "  \"kind\": \"FunctionDecl\",\n"
            << in << "  \"name\": \"" << jsonEscape(name) << "\",\n"
            << in << "  \"returnType\": \"" << jsonEscape(returnType) << "\",\n"
+           << in << "  \"location\": " << loc.toJson() << ",\n"
            << in << "  \"children\": [\n"
            << childrenToJson(this, depth + 3)
            << in << "  ]\n"
@@ -225,6 +228,32 @@ public:
 
     VariableDeclNode() { kind = ASTKind::VariableDecl; }
 
+    std::string toJson(int depth = 0) override {
+        std::string in = jsonIndent(depth);
+        std::ostringstream ss;
+        ss << in << "{\n"
+           << in << "  \"kind\": \"VariableDecl\",\n"
+           << in << "  \"name\": \"" << jsonEscape(name) << "\",\n"
+           << in << "  \"varType\": \"" << jsonEscape(varType) << "\",\n"
+           << in << "  \"location\": " << loc.toJson() << "";
+        if (initExpr) {
+            ss << ",\n" << in << "  \"initExpr\":\n"
+               << initExpr->toJson(depth + 2);
+        }
+        // Çoklu değişken bildirimindeki kardeşler (int a, b, c;)
+        if (!getChildren().empty()) {
+            ss << ",\n" << in << "  \"declarators\": [\n";
+            for (size_t i = 0; i < getChildren().size(); i++) {
+                ss << ((VariableDeclNode*)getChildren()[i])->toJson(depth + 2);
+                if (i + 1 < getChildren().size()) ss << ",";
+                ss << "\n";
+            }
+            ss << in << "  ]";
+        }
+        ss << "\n" << in << "}";
+        return ss.str();
+    }
+
     void log(int indent = 0) override {
         std::cout << padRight("", indent)
                   << "VariableDecl " << varType << " " << name;
@@ -234,21 +263,10 @@ public:
         } else {
             std::cout << "\n";
         }
-    }
-
-    std::string toJson(int depth = 0) override {
-        std::string in = jsonIndent(depth);
-        std::ostringstream ss;
-        ss << in << "{\n"
-           << in << "  \"kind\": \"VariableDecl\",\n"
-           << in << "  \"name\": \"" << jsonEscape(name) << "\",\n"
-           << in << "  \"varType\": \"" << jsonEscape(varType) << "\"";
-        if (initExpr) {
-            ss << ",\n" << in << "  \"initExpr\":\n"
-               << initExpr->toJson(depth + 2);
+        // Kardeş değişkenleri de logla
+        for (auto* child : getChildren()) {
+            child->log(indent);
         }
-        ss << "\n" << in << "}";
-        return ss.str();
     }
 };
 
@@ -286,7 +304,8 @@ public:
         std::ostringstream ss;
         ss << in << "{\n"
            << in << "  \"kind\": \"BinaryExpression\",\n"
-           << in << "  \"operator\": \"" << jsonEscape(opSym) << "\"";
+           << in << "  \"operator\": \"" << jsonEscape(opSym) << "\",\n"
+           << in << "  \"location\": " << loc.toJson() << "";
         if (Left) {
             ss << ",\n" << in << "  \"left\":\n"
                << Left->toJson(depth + 2);
@@ -304,16 +323,44 @@ public:
 // LiteralNode — Sabit Değer
 // ============================================================================
 
+// Literal tipleri
+enum class LiteralType : uint8_t {
+    INTEGER,   // Tamsayı (decimal, hex, octal, binary)
+    FLOAT,     // Ondalıklı sayı (3.14, 1e-5)
+    STRING,    // Metin ("hello")
+    BOOLEAN,   // true / false
+    BOŞ        // null
+};
+
+inline const char* literalTypeToString(LiteralType t) {
+    switch (t) {
+        case LiteralType::INTEGER: return "integer";
+        case LiteralType::FLOAT:   return "float";
+        case LiteralType::STRING:  return "string";
+        case LiteralType::BOOLEAN: return "boolean";
+        case LiteralType::BOŞ:     return "null";
+    }
+    return "?";
+}
+
 class LiteralNode : public ASTNode {
 public:
     Token*       lexerToken  = nullptr;
     ParserToken  parserToken;
 
+    LiteralType literalType  = LiteralType::INTEGER;
+    int         literalBase  = 10;     // 10, 16, 8, 2 (sadece INTEGER/FLOAT için)
+    bool        isFloatValue = false;  // Ondalıklı mı? (sadece INTEGER/FLOAT için)
+
     LiteralNode() { kind = ASTKind::Literal; }
 
     void log(int indent = 0) override {
         std::cout << padRight("", indent)
-                  << "Literal {" << parserToken.token->token << "}\n";
+                  << "Literal {" << parserToken.token->token << "} "
+                  << literalTypeToString(literalType);
+        if (literalType == LiteralType::INTEGER && literalBase != 10)
+            std::cout << " (base " << literalBase << ")";
+        std::cout << "\n";
     }
 
     std::string toJson(int depth = 0) override {
@@ -322,7 +369,15 @@ public:
         std::ostringstream ss;
         ss << in << "{\n"
            << in << "  \"kind\": \"Literal\",\n"
-           << in << "  \"value\": \"" << jsonEscape(val) << "\"\n"
+           << in << "  \"literalType\": \"" << literalTypeToString(literalType) << "\",\n"
+           << in << "  \"value\": \"" << jsonEscape(val) << "\"";
+        if (literalType == LiteralType::INTEGER && literalBase != 10) {
+            ss << ",\n" << in << "  \"base\": " << literalBase;
+        }
+        if (literalType == LiteralType::FLOAT) {
+            ss << ",\n" << in << "  \"isFloat\": true";
+        }
+        ss << ",\n" << in << "  \"location\": " << loc.toJson() << "\n"
            << in << "}";
         return ss.str();
     }
@@ -350,7 +405,8 @@ public:
         std::ostringstream ss;
         ss << in << "{\n"
            << in << "  \"kind\": \"Identifier\",\n"
-           << in << "  \"name\": \"" << jsonEscape(name) << "\"\n"
+           << in << "  \"name\": \"" << jsonEscape(name) << "\",\n"
+           << in << "  \"location\": " << loc.toJson() << "\n"
            << in << "}";
         return ss.str();
     }
@@ -663,7 +719,8 @@ public:
         std::string in = jsonIndent(depth);
         std::ostringstream ss;
         ss << in << "{\n"
-           << in << "  \"kind\": \"ExpressionStatement\"";
+           << in << "  \"kind\": \"ExpressionStatement\",\n"
+           << in << "  \"location\": " << loc.toJson() << "";
         if (expression) {
             ss << ",\n" << in << "  \"expression\":\n"
                << expression->toJson(depth + 2);

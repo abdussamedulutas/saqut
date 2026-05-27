@@ -17,6 +17,7 @@
 #define SAQUT_TOKENIZER_TOKEN
 
 #include <string>
+#include "core/location.hpp"
 
 class Token {
 protected:
@@ -24,6 +25,7 @@ protected:
 public:
     int start = 0;
     int end   = 0;
+    SourceLocation loc;  // Token'ın kaynak koddaki konumu
     std::string token;
     std::string gettype() { return type; }
     virtual ~Token() = default;

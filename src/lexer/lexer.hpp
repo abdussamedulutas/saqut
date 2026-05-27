@@ -63,6 +63,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include "core/location.hpp"
+#include "core/sourcefile.hpp"
 
 // ============================================================================
 // INumber — Ara Sayısal Veri Yapısı
@@ -89,6 +91,8 @@
 struct INumber {
     int start = 0;           // Kaynak koddaki başlangıç offset'i
     int end   = 0;           // Kaynak koddaki bitiş offset'i
+    SourceLocation startLoc; // Kaynak koddaki başlangıç konumu (line, column)
+    SourceLocation endLoc;   // Kaynak koddaki bitiş konumu
     std::string token;       // Sayının ham metni (örn: "42", "0xFF", "3.14e-2")
     bool isFloat    = false; // true ise float/double literal
     bool hasEpsilon = false; // true ise bilimsel gösterim (örn: 1e10)
@@ -160,6 +164,11 @@ public:
     void toChar(int n);      // offset'i n kadar ilerlet
 
     // --- Üst Seviye İşlemler ---
+    // --- Konum Bilgisi (SourceFile üzerinden) ---
+    SourceFile sourceFile;             // Kaynak kod ve satır başı offset'leri
+    SourceLocation getLocation();      // Mevcut offset'in SourceLocation'ını döndür
+    void setSourceText(const std::string& path, const std::string& text);
+
     void setText(std::string input); // Yeni kaynak kodu yükle
     void skipWhiteSpace();   // Boşluk/sekme/satırsonu karakterlerini atla
     bool isNumeric();        // Mevcut karakter 0-9 aralığında mı?
@@ -338,6 +347,23 @@ inline void Lexer::toChar(int n) {
 }
 
 // --------------------------------------------------------------------------
+// getLocation: Mevcut offset'in SourceLocation'ını döndür.
+// sourceFile bağlı değilse offset+dosya adı olmadan temel bilgi döndür.
+// --------------------------------------------------------------------------
+inline SourceLocation Lexer::getLocation() {
+    return sourceFile.offsetToLocation(getOffset());
+}
+
+// --------------------------------------------------------------------------
+// setSourceText: Yeni kaynak kodu yükle ve SourceFile'ı güncelle.
+// Aynı anda Lexer ve SourceFile'ı hazırlar.
+// --------------------------------------------------------------------------
+inline void Lexer::setSourceText(const std::string& path, const std::string& text) {
+    sourceFile.setText(path, text);
+    setText(text);
+}
+
+// --------------------------------------------------------------------------
 // setText: Yeni kaynak kodu yükle. input ve size'ı günceller.
 // --------------------------------------------------------------------------
 inline void Lexer::setText(std::string text) {
@@ -402,6 +428,7 @@ inline bool Lexer::isNumeric() {
 inline INumber Lexer::readNumeric() {
     INumber num;
     num.start = getLastPosition();
+    num.startLoc = getLocation();
 
     // --- Adım 1: İsteğe bağlı işaret ---
     if (getchar() == '-') {
@@ -450,6 +477,7 @@ inline INumber Lexer::readNumeric() {
                 // token'a ekleniyor ve base=8 yapılıyordu. Bu, "0;" durumunda
                 // ';' karakterinin sayıya eklenmesine neden oluyordu.
                 num.end = getLastPosition();
+                num.endLoc = getLocation();
                 return num;
         }
     } else {
@@ -478,6 +506,7 @@ inline INumber Lexer::readNumeric() {
                     num.token.push_back(c);
                 else {
                     num.end = getLastPosition();
+                    num.endLoc = getLocation();
                     return num;
                 }
                 break;
@@ -486,6 +515,7 @@ inline INumber Lexer::readNumeric() {
                     num.token.push_back(c);
                 else {
                     num.end = getLastPosition();
+                    num.endLoc = getLocation();
                     return num;
                 }
                 break;
@@ -496,6 +526,7 @@ inline INumber Lexer::readNumeric() {
                     num.token.push_back(c);
                 else {
                     num.end = getLastPosition();
+                    num.endLoc = getLocation();
                     return num;
                 }
                 break;
@@ -512,6 +543,7 @@ inline INumber Lexer::readNumeric() {
                 } else {
                     // İkinci nokta → sayı bitti
                     num.end = getLastPosition();
+                    num.endLoc = getLocation();
                     return num;
                 }
                 break;
@@ -541,12 +573,14 @@ inline INumber Lexer::readNumeric() {
                             nextChar();
                         } else {
                             num.end = getLastPosition();
+                            num.endLoc = getLocation();
                             return num;
                         }
                     }
                     break;
                 }
                 num.end = getLastPosition();
+                num.endLoc = getLocation();
                 return num;
             default:
                 // Tanınmayan karakter → sayı bitti
@@ -556,6 +590,7 @@ inline INumber Lexer::readNumeric() {
         nextChar();
     }
     num.end = getLastPosition();
+    num.endLoc = getLocation();
     return num;
 }
 

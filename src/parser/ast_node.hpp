@@ -3,12 +3,23 @@
 // ============================================================================
 //
 // DİZİN:   src/parser/ast_node.hpp
-// KATMAN:  Katman 3 — Parser
-// BAĞIMLI: core/location.hpp, parser/token.hpp, tools.hpp
+// KATMAN:  Katman 3 — Parser (Ayrıştırıcı)
+// AMAÇ:    Tüm AST düğümlerinin taban sınıfını ve temel enum'ları tanımlamak
 //
-// Bu dosya: ASTNode taban sınıfını, ASTKind enum'unu, LiteralType enum'unu
-// ve çocuk düğümleri JSON olarak yazdırmak için childrenToJson yardımcısını
-// içerir. Diğer tüm düğüm sınıfları bu dosyayı include eder.
+// BAĞIMLILIKLAR:
+//   - core/location.hpp:   Kaynak kod konum bilgisi (SourceLocation)
+//   - parser/token.hpp:    Token tipleri (TokenType, ParserToken)
+//   - tools.hpp:           Yardımcı fonksiyonlar (jsonIndent vb.)
+//
+// MİMARİ KARARLAR:
+//   1. ASTNode, tüm düğümlerin ortak davranışını (log, toJson, children)
+//      tek bir yerde tanımlar. NVI (Non-Virtual Interface) pattern'i.
+//   2. virtual log() ve toJson() — her düğüm kendi çıktısını kendisi üretir.
+//   3. parent pointer — AST'de yukarı doğru gezinme (ör: sembol çözümleme).
+//   4. children vector — aşağı doğru gezinme (ör: tüm düğümleri ziyaret).
+//   5. ASTKind enum — switch/case ile tip kontrolü (dynamic_cast yerine).
+//      Performans: dynamic_cast < switch/case < virtual method çağrısı
+//      Ama switch/case ile yeni tip eklemek derleyici uyarısı verir (eksik case).
 //
 // ============================================================================
 
@@ -26,43 +37,112 @@
 // ============================================================================
 // ASTKind — Düğüm Tipi Enum
 // ============================================================================
+//
+// Tüm AST düğüm tiplerini tanımlar. Her düğüm sınıfı bu enum'dan bir değer
+// alır. enum class olması sayesinde isim çakışması olmaz (ASTKind::Program).
+//
+// NEDEN enum class, neden inheritance'daki typeid kullanılmıyor?
+//   - typeid().name() derleyiciye bağlıdır (g++: "4Program", MSVC: "class Program").
+//   - enum class her derleyicide aynıdır, string dönüşümü kolaydır.
+//   - static_cast<uint16_t> ile serileştirilebilir.
+//
+// ============================================================================
 
 enum class ASTKind {
-    Program,              // Kök düğüm
-    FunctionDecl,         // Fonksiyon tanımı
-    Block,                // { } bloğu
-    VariableDecl,         // Değişken tanımı
-    BinaryExpression,     // İkili işlem (a + b)
-    UnaryExpression,      // Tekli işlem (-a, !a)
-    Literal,              // Sabit değer
-    Identifier,           // İsim referansı
-    Postfix,              // Son ek (a++)
-    IfStatement,          // if/else
-    ForStatement,         // for
-    WhileStatement,       // while
-    DoWhileStatement,     // do-while
-    ReturnStatement,      // return
-    BreakStatement,       // break
-    ContinueStatement,    // continue
-    ExpressionStatement,  // ifade + ;
-    Call,                 // Fonksiyon çağrısı f(args)
-    MemberAccess,         // Üye erişimi a.b, a->b
-    IndexExpression,      // Dizi erişimi a[i]
-    StructDecl,           // struct tanımı
+    /* ====== En üst seviye ====== */
+    Program,              // Kök düğüm — tüm programı kapsar.
+                          //   İçindeki children: FunctionDecl, StructDecl, VariableDecl.
+                          //   Tüm .cpp/.sqt dosyası tek bir Program düğümüdür.
+
+    /* ====== Tanımlar (Declarations) ====== */
+    FunctionDecl,         // Fonksiyon tanımı.
+                          //   children: [returnType?], [name], [params...], [body: Block]
+                          //   Örn: int main() { ... }
+    StructDecl,           // struct tanımı.
+                          //   children: [name], [members: VariableDecl...]
+                          //   Örn: struct Point { int x; int y; };
+    VariableDecl,         // Değişken tanımı.
+                          //   children: [type?], [name], [initializer?]
+                          //   Örn: int x = 5; veya string name;
+
+    /* ====== Kontrol Akışı (Statements) ====== */
+    Block,                // { } bloğu — birleşik ifade.
+                          //   children: [statements...]
+                          //   Kapsam (scope) oluşturur. Yerel değişkenler burada tanımlanır.
+    IfStatement,          // if (koşul) gövde [else gövde].
+                          //   children: [condition], [thenBranch], [elseBranch?]
+    ForStatement,         // for (init; koşul; artım) gövde.
+                          //   children: [init?], [condition?], [increment?], [body]
+    WhileStatement,       // while (koşul) gövde.
+                          //   children: [condition], [body]
+    DoWhileStatement,     // do gövde while (koşul);
+                          //   children: [body], [condition]
+    ReturnStatement,      // return [ifade?];
+                          //   children: [value?]
+    BreakStatement,       // break;
+                          //   children: yok. Sadece döngü/switch içinde geçerli.
+    ContinueStatement,    // continue;
+                          //   children: yok. Sadece döngü içinde geçerli.
+    ExpressionStatement,  // ifade + noktalı virgül (;)
+                          //   children: [expression]
+                          //   Örn: x = 5; veya foo();
+
+    /* ====== İfadeler (Expressions) ====== */
+    BinaryExpression,     // İkili işlem: sol OP sağ.
+                          //   children: [left], [right]
+                          //   OP bilgisi: exprType alanında saklanır.
+    UnaryExpression,      // Tekli işlem: OP operand.
+                          //   children: [operand]
+                          //   prefix (++x) veya postfix (x++) olabilir.
+    Literal,              // Sabit değer: 42, 3.14, "hello", true, null.
+                          //   children: yok. Değer düğümün kendi alanında.
+    Identifier,           // İsim referansı: x, PI, main.
+                          //   children: yok. İsim string olarak saklanır.
+    Postfix,              // Postfix işlem: operand++.
+                          //   children: [operand]
+    Call,                 // Fonksiyon/metot çağrısı: f(args).
+                          //   children: [callee], [args...]
+    MemberAccess,         // Üye erişimi: a.b veya a->b.
+                          //   children: [object], [member]
+    IndexExpression,      // Dizi/indeks erişimi: a[i].
+                          //   children: [object], [index]
 };
 
 // ============================================================================
 // LiteralType — Sabit Değer Alt Tipleri
 // ============================================================================
+//
+// Literal düğümünün hangi türde bir sabit değer taşıdığını belirler.
+// uint8_t tabanlı — 256 farklı literal tipi yeterli.
+//
+// KULLANIM:
+//   Literal düğümü oluşturulurken tip belirtilir:
+//     Literal lit(LiteralType::INTEGER, "42");
+//
+// ============================================================================
 
 enum class LiteralType : uint8_t {
-    INTEGER,   // Tamsayı (decimal, hex, octal, binary)
-    FLOAT,     // Ondalıklı sayı (3.14, 1e-5)
-    STRING,    // Metin ("hello")
-    BOOLEAN,   // true / false
-    BOŞ        // null
+    INTEGER,   // Tamsayı sabiti: 42, 0xFF, 0b1010, 0777
+               //   Decimal, hexadecimal (0x), octal (0), binary (0b) desteklenir.
+               //   Tokenizer NumberToken ile iletilir.
+    FLOAT,     // Ondalıklı sayı: 3.14, 1e-5, 2.0f
+               //   Nokta veya üs (e/E) içeren sayılar.
+    STRING,    // Metin sabiti: "merhaba dünya"
+               //   Çift tırnak içinde. Kaçış dizileri (\n, \t, \") desteklenir.
+    BOOLEAN,   // Mantıksal değer: true / false
+               //   KW_TRUE veya KW_FALSE token'ından gelir.
+    BOŞ        // null sabiti (Türkçe "boş").
+               //   KW_NULL token'ından gelir. Nesne/referans türleri için kullanılır.
 };
 
+// ============================================================================
+// literalTypeToString — LiteralType'ı string'e çevir (log için)
+// ============================================================================
+//
+// PARAMETRE:  t — LiteralType enum değeri
+// DÖNÜŞ:     const char* — insan tarafından okunabilir string
+// KARMAŞIKLIK: O(1) — switch/case (derleyici jump table üretir)
+//
 inline const char* literalTypeToString(LiteralType t) {
     switch (t) {
         case LiteralType::INTEGER: return "integer";
@@ -79,53 +159,119 @@ inline const char* literalTypeToString(LiteralType t) {
 // ============================================================================
 //
 // Tüm AST düğümleri bu sınıftan türetilir. Her düğüm:
-//   - kind:  Tipini bilir (ASTKind enum)
-//   - parent: Ebeveynine işaret eder
-//   - loc:    Kaynak koddaki konumunu bilir
-//   - log():  Konsola yazdırılabilir
-//   - toJson: JSON olarak serileştirilebilir
+//   - kind:       ASTKind enum — tipini bilir (switch/case için)
+//   - parent:     Ebeveyn düğüme işaretçi (ağaçta yukarı gezinme)
+//   - loc:        Kaynak koddaki satır/sütun konumu (hata mesajları için)
+//   - children:   Alt düğümler (ağaçta aşağı gezinme)
+//   - log():      Konsola hiyerarşik yazdırma
+//   - toJson():   JSON formatında serileştirme
+//
+// KALITIM:
+//   Program : ASTNode          — Kök düğüm
+//   FunctionDecl : ASTNode     — Fonksiyon tanımı
+//   BinaryExpression : ASTNode — İkili işlem
+//   ... (her düğüm tipi ayrı sınıf)
+//
+// BELLEK YÖNETİMİ:
+//   Düğümler new ile oluşturulur, delete ile yok edilir.
+//   Sahiplik: Parser oluşturur, çağıran (main/CLI) yok eder.
+//   TODO(Büyük yeniden düzenleme): std::unique_ptr ile RAII.
 //
 // ============================================================================
 
 class ASTNode {
 public:
-    ASTKind kind;
-    ASTNode* parent = nullptr;
-    SourceLocation loc;
+    /* ====== Her düğümün tipi ====== */
+    ASTKind kind;                    // Düğüm tipi (Program, FunctionDecl, ...)
+                                     //   switch(kind) ile tip kontrolü.
+                                     //   Set edilir ve bir daha değişmez.
 
+    /* ====== Ağaç bağlantıları ====== */
+    ASTNode* parent = nullptr;       // Ebeveyn düğüm pointerı.
+                                     //   addChild() tarafından otomatik set edilir.
+                                     //   Kullanım: semantic analizde kapsam bulma.
+                                     //   Örn: değişkenin tanımlandığı fonksiyonu bulmak
+                                     //   için parent->parent->... şeklinde yukarı çıkılır.
+
+    /* ====== Kaynak konumu ====== */
+    SourceLocation loc;              // Tokenizer'dan gelen satır/sütun bilgisi.
+                                     //   Hata mesajlarında: "satır 5, sütun 12"
+                                     //   TODO: Şu anda tüm düğümlerde dolu değil.
+
+    /* ====== Sanal Metotlar ====== */
+
+    // log() — Düğümü ve alt düğümlerini konsola yazdırır.
+    // PARAMETRE: indent — girinti seviyesi (her seviyede 2 boşluk artar)
+    // KULLANIM:  ast->log(0); // tüm ağacı yazdır
+    // KARMAŞIKLIK: O(n) — tüm alt ağacı dolaşır
     virtual void log(int indent = 0) {
         (void)indent;
         std::cout << "<Unknown>\n";
     }
 
+    // toJson() — Düğümü ve alt düğümlerini JSON formatında döndürür.
+    // PARAMETRE: indent — JSON girinti seviyesi
+    // DÖNÜŞ:    JSON stringi
+    // KULLANIM:  std::string json = ast->toJson(0);
+    // KARMAŞIKLIK: O(n) — tüm alt ağacı dolaşır, string birleştirme maliyeti
     virtual std::string toJson(int indent = 0) {
         (void)indent;
         return "{\"kind\":\"Unknown\"}";
     }
 
+    /* ====== Yardımcı Metotlar ====== */
+
+    // addChild() — Alt düğüm ekler ve parent pointer'ını set eder.
+    // PARAMETRE: child — eklenecek alt düğüm (nullptr olmamalı)
+    // YAN ETKİ:  child->parent = this (otomatik)
+    // KARMAŞIKLIK: O(1) amortize — vector push_back
     void addChild(ASTNode* child) {
         children.push_back(child);
         child->parent = this;
     }
 
+    // getChildren() — Alt düğüm vektörüne erişim.
+    // DÖNÜŞ:     std::vector<ASTNode*>& — çocuk düğümler listesi
+    // KARMAŞIKLIK: O(1) — referans döndürür
     std::vector<ASTNode*>& getChildren() { return children; }
+
+    // ~ASTNode() — Sanal yıkıcı (polimorfik silme için)
+    //   delete ASTNode* yapıldığında doğru alt sınıf yıkıcısı çağrılır.
+    //   Bu olmazsa türetilmiş sınıfların kaynakları sızdırılır.
     virtual ~ASTNode() = default;
 
 protected:
+    // children — Alt düğümlerin vektörü.
+    //   protected: doğrudan erişim yerine addChild/getChildren kullanılır.
+    //   Türetilmiş sınıflar erişebilir (ör: log() içinde çocukları gezme).
     std::vector<ASTNode*> children;
 };
 
 // ============================================================================
 // childrenToJson — Düğümün çocuklarını JSON array olarak yaz
 // ============================================================================
-
+//
+// Bir düğümün tüm alt düğümlerini dolaşır ve her birinin toJson() çıktısını
+// virgülle ayrılmış şekilde birleştirir.
+//
+// PARAMETRELER:
+//   node  — çocukları yazdırılacak düğüm
+//   depth — JSON girinti seviyesi
+//
+// DÖNÜŞ:  JSON array içeriği (köşeli parantezler HARİÇ)
+//
+// KULLANIM:
+//   std::string json = childrenToJson(this, depth + 1);
+//
+// KARMAŞIKLIK: O(n) — n = çocuk sayısı
+//
 inline std::string childrenToJson(ASTNode* node, int depth) {
     std::ostringstream ss;
     std::string in = jsonIndent(depth);
     auto& ch = node->getChildren();
     for (size_t i = 0; i < ch.size(); i++) {
         ss << ch[i]->toJson(depth);
-        if (i + 1 < ch.size()) ss << ",";
+        if (i + 1 < ch.size()) ss << ",";  // son elemandan sonra virgül yok
         ss << "\n";
     }
     return ss.str();

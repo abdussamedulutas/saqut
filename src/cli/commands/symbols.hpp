@@ -16,7 +16,7 @@ inline int cmdSymbols(const CliArgs& args) {
     if (source.empty()) return 1;
 
     Tokenizer tokenizer;
-    auto tokens = tokenizer.scan(source);
+    auto tokens = tokenizer.scan(source, inputFilePath(args));
 
     Parser parser;
     ASTNode* ast = parser.parse(tokens);

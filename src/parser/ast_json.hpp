@@ -3,7 +3,8 @@
 // ============================================================================
 //
 // DİZİN:   src/parser/ast_json.hpp
-// KATMAN:  AST — Sadece AST düğümlerinin toJson() metotları için
+// KATMAN:  Katman 3 — Parser (AST JSON serileştirme)
+// AMAÇ:    AST düğümlerinin toJson() metotlarında kullanılan builder pattern
 // BAĞIMLI: Yok (sadece <string>, <sstream>)
 //
 // AMAÇ:
@@ -17,6 +18,15 @@
 //   obj.add("location", loc.toJson());  // ham JSON gömme
 //   return obj.str();
 //
+// TASARIM KARARLARI:
+//   1. Builder pattern: add() çağrıları zincirlenemez ama okunabilirlik kazanır.
+//      Zincirleme için: return obj.add("a",1).add("b",2).str() — tercih edilmedi.
+//   2. addRaw(): Önceden formatlanmış JSON (alt düğüm çıktısı) gömmek için.
+//   3. addArray(): Callback ile dizi oluşturma — C++ lambda'ları sayesinde temiz.
+//   4. addIfNotEmpty/addIfNot: Koşullu alanlar — null alanları JSON'da göstermemek için.
+//      JSON çıktısını temiz tutar.
+//   5. JSON_INDENT = 2: Standart JSON girinti (4 değil, 2 okunabilir).
+//
 // ============================================================================
 
 #ifndef SAQUT_AST_JSON
@@ -25,7 +35,11 @@
 #include <string>
 #include <sstream>
 
-// Girinti sabiti (tools.hpp'deki jsonIndent ile uyumlu)
+// ============================================================================
+// JSON_INDENT — JSON girinti miktarı (boşluk sayısı)
+// ============================================================================
+// tools.hpp'deki jsonIndent() ile uyumlu olmalıdır.
+// Her seviyede 2 boşluk içe kaydırılır.
 #define JSON_INDENT 2
 
 // jsonEscape ve jsonIndent tools.hpp'de tanımlıdır.
@@ -33,6 +47,10 @@
 // ============================================================================
 // JsonObject — JSON Nesne Builder
 // ============================================================================
+//
+// AST düğümlerini JSON formatına dönüştürmek için kullanılır.
+// Her çağrıda yeni bir JsonObject oluşturulur, alanlar eklenir ve str() ile
+// JSON stringi alınır.
 //
 // KULLANIM:
 //   JsonObject obj(depth);
@@ -46,59 +64,128 @@
 //   });
 //   return obj.str();
 //
+// ÖRNEK ÇIKTI (depth=0):
+//   {
+//     "kind": "FunctionDecl",
+//     "name": "main",
+//     "returnType": "int",
+//     "children": [ ... ]
+//   }
+//
 // ============================================================================
 
 class JsonObject {
 public:
+    // JsonObject — Yapıcı
+    // PARAMETRE: depth — JSON girinti seviyesi (0 = en dış)
+    // YAN ETKİ:  m_ss'e açılış süslü parantezi yazar
+    // NOT: Açılış süslü parantezi kasıtlı olarak girintisiz yazılır.
+    // str() çıktısı her zaman bir "key": ya da dizi elemanı konumuna
+    // gömülür ve o konum zaten kendi girintisini sağlar; burada ayrıca
+    // m_indent eklenirse aynı boşluklar iki kez yazılır (bkz. addRaw/addItem).
     JsonObject(int depth)
         : m_indent(jsonIndent(depth)),
           m_indentInner(jsonIndent(depth + 1))
     {
-        m_ss << m_indent << "{\n";
+        m_ss << "{\n";
     }
 
-    // String alan ekle (değer tırnak içinde yazılır)
+    // add() — String alan ekle
+    // PARAMETRELER:
+    //   key   — JSON anahtarı (tırnak içinde yazılır)
+    //   value — string değer (otomatik tırnaklanır ve escape edilir)
+    // YAN ETKİ: m_hasFields true olur
+    // ÖRN:   obj.add("name", "main") → "name": "main"
     void add(const std::string& key, const std::string& value) {
         addRaw(key, "\"" + jsonEscape(value) + "\"");
     }
 
-    // Sayısal alan ekle (değer olduğu gibi yazılır)
+    // add() — C string alanı ekle
+    // const char* literalleri (örn. "Block") bool overload'a kaymasın diye
+    // ayrı bir overload gerekir; aksi halde örtük const char* -> bool
+    // dönüşümü std::string'e öncelikli olur ve "kind": true gibi hatalı
+    // çıktı üretir.
+    void add(const std::string& key, const char* value) {
+        add(key, std::string(value));
+    }
+
+    // add() — Sayısal alan ekle
+    // PARAMETRELER:
+    //   key   — JSON anahtarı
+    //   value — tamsayı değer (tırnaklanmaz, olduğu gibi yazılır)
+    // ÖRN:   obj.add("line", 42) → "line": 42
     void add(const std::string& key, int value) {
         addRaw(key, std::to_string(value));
     }
 
-    // Boolean alan ekle
+    // add() — Boolean alan ekle
+    // PARAMETRELER:
+    //   key   — JSON anahtarı
+    //   value — true/false
+    // ÖRN:   obj.add("isPublic", true) → "isPublic": true
     void add(const std::string& key, bool value) {
         addRaw(key, value ? "true" : "false");
     }
 
-    // Ham JSON değeri ekle (önceden formatlanmış, tırnaklanmamış)
+    // addRaw() — Ham JSON değeri ekle (önceden formatlanmış)
+    // PARAMETRELER:
+    //   key       — JSON anahtarı
+    //   jsonValue — önceden JSON'a çevrilmiş değer (tırnaklanmaz!)
+    // KULLANIM:   Alt düğüm toJson() çıktısını gömmek için.
+    //             addRaw("location", loc.toJson());
     void addRaw(const std::string& key, const std::string& jsonValue) {
         if (m_hasFields) m_ss << ",\n";
         m_ss << m_indentInner << "\"" << jsonEscape(key) << "\": " << jsonValue;
         m_hasFields = true;
     }
 
-    // Alt nesne ekle (bir alt seviyede JSON nesnesi)
+    // addNested() — Alt nesne ekle (addRaw alias)
+    // PARAMETRELER: addRaw ile aynı
+    // KULLANIM: addRaw ile aynı. Sadece okunabilirlik için.
     void addNested(const std::string& key, const std::string& nestedJson) {
         addRaw(key, nestedJson);
     }
 
-    // Koşullu string alan (value boş değilse ekle)
+    // addIfNotEmpty() — Koşullu string alan
+    // PARAMETRELER:
+    //   key   — JSON anahtarı
+    //   value — string değer (sadece boş DEĞİLSE eklenir)
+    // KULLANIM: Opsiyonel alanlar için. JSON çıktısını temiz tutar.
+    //           obj.addIfNotEmpty("defaultValue", defaultVal);
     void addIfNotEmpty(const std::string& key, const std::string& value) {
         if (!value.empty()) add(key, value);
     }
 
-    // Koşullu sayı alan (value varsayılandan farklıysa ekle)
+    // addIfNot() — Koşullu sayı alan
+    // PARAMETRELER:
+    //   key          — JSON anahtarı
+    //   value        — mevcut değer
+    //   defaultValue — varsayılan değer
+    // EKLEME KOŞULU: value != defaultValue
+    // KULLANIM: Varsayılan değerler JSON'da tekrarlanmaz.
+    //           obj.addIfNot("precedence", 0, 14);
     void addIfNot(const std::string& key, int value, int defaultValue) {
         if (value != defaultValue) add(key, value);
     }
 
-    // Dizi alanı (callback içinde addItem çağrılır)
+    // addArray() — Dizi alanı (callback ile)
+    // PARAMETRELER:
+    //   key      — JSON anahtarı
+    //   callback — dizi elemanlarını addItem ile ekleyen lambda/fonksiyon
+    // KULLANIM:
+    //   obj.addArray("children", [&] {
+    //       for (auto* child : children)
+    //           obj.addItem(child->toJson(depth + 2));
+    //   });
+    // ÖRNEK ÇIKTI:
+    //   "children": [
+    //     { "kind": "Literal", ... },
+    //     { "kind": "Identifier", ... }
+    //   ]
     template<typename Fn>
     void addArray(const std::string& key, Fn callback) {
         if (m_hasFields) m_ss << ",\n";
-        m_ss << m_indentInner << "\"" << jsonEscape(key) << "\": [\n";
+        m_ss << m_indentInner << "\"" << jsonEscape(key) << "\": [";
         m_arrayDepth++;
         callback();
         m_arrayDepth--;
@@ -106,7 +193,10 @@ public:
         m_hasFields = true;
     }
 
-    // Diziye eleman ekle (addArray callback'i içinde kullanılır)
+    // addItem() — Diziye eleman ekle
+    // PARAMETRE: itemJson — JSON formatında dizi elemanı
+    // KULLANIM:  Sadece addArray callback'i içinde kullanılır.
+    // YAN ETKİ:  m_hasArrayItem true olur (virgül kontrolü için)
     void addItem(const std::string& itemJson) {
         if (m_hasArrayItem) m_ss << ",";
         // Öğeler m_indentInner'in bir seviye altında (depth + 2)
@@ -116,19 +206,36 @@ public:
         m_hasArrayItem = true;
     }
 
-    // Nesneyi kapat ve string olarak döndür
+    // str() — JSON nesnesini kapat ve string olarak döndür
+    // DÖNÜŞ:  Tam JSON stringi ({"key": "value", ...})
+    // YAN ETKİ: Kapanış süslü parantezini ekler.
+    // KULLANIM:
+    //   JsonObject obj(depth);
+    //   obj.add("kind", "FunctionDecl");
+    //   return obj.str();
     std::string str() {
         m_ss << "\n" << m_indent << "}";
         return m_ss.str();
     }
 
 private:
-    std::ostringstream m_ss;
-    std::string m_indent;       // Bu nesnenin girintisi
-    std::string m_indentInner;  // Bir alt seviye girinti
-    bool m_hasFields = false;
-    int m_arrayDepth = 0;       // İç içe dizi seviyesi
-    bool m_hasArrayItem = false;
+    /* ====== Builder State ====== */
+    std::ostringstream m_ss;      // JSON çıktısının biriktirildiği string stream
+
+    std::string m_indent;         // Bu nesnenin girinti seviyesi (depth * 2 boşluk)
+                                  //   Örn: depth=0 → "", depth=1 → "  "
+
+    std::string m_indentInner;    // Bir alt seviye girinti ((depth+1) * 2 boşluk)
+                                  //   Örn: depth=0 → "  ", depth=1 → "    "
+
+    bool m_hasFields = false;     // Alan eklendi mi? (virgül kontrolü için)
+                                  //   true ise bir sonraki alandan önce virgül + newline
+
+    int m_arrayDepth = 0;         // İç içe dizi seviyesi (şu anda kullanılmıyor,
+                                  //   ileride çok boyutlu diziler için)
+
+    bool m_hasArrayItem = false;  // Diziye eleman eklendi mi? (virgül kontrolü)
+                                  //   true ise bir sonraki elemandan önce virgül
 };
 
 #endif // SAQUT_AST_JSON

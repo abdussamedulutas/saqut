@@ -17,7 +17,7 @@ inline int cmdAst(const CliArgs& args) {
     if (source.empty()) return 1;
 
     Tokenizer tokenizer;
-    auto tokens = tokenizer.scan(source);
+    auto tokens = tokenizer.scan(source, inputFilePath(args));
 
     Parser parser;
     ASTNode* ast = parser.parse(tokens);
@@ -40,7 +40,7 @@ inline int cmdAst(const CliArgs& args) {
 
     *out << "{\n"
          << "  \"ast\":\n"
-         << astToJson(ast, 2) << ",\n\n"
+         << jsonIndent(2) << astToJson(ast, 2) << ",\n"
          << "  \"analysis\": {\n"
          << analysisToJson(analysis) << "\n"
          << "  }\n"

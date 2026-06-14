@@ -21,7 +21,7 @@ inline int cmdRun(const CliArgs& args) {
     if (source.empty()) return 1;
 
     Tokenizer tokenizer;
-    auto tokens = tokenizer.scan(source);
+    auto tokens = tokenizer.scan(source, inputFilePath(args));
 
     std::cout << "=== saQut Compiler ===\n";
     std::cout << "Kaynak kod:\n" << source << "\n\n";

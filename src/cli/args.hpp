@@ -125,4 +125,12 @@ inline std::string readSource(const CliArgs& args) {
     return buffer.str();
 }
 
+// ============================================================================
+// inputFilePath: Kaynak dosyanın yolunu döndür (stdin modunda boş string)
+// ============================================================================
+inline std::string inputFilePath(const CliArgs& args) {
+    if (args.stdinMode || args.positional.empty()) return "";
+    return args.positional[0];
+}
+
 #endif // SAQUT_CLI_ARGS

@@ -1,0 +1,599 @@
+#include "parser/parser.hpp"
+#include "parser/nodes/program.hpp"
+#include "parser/nodes/binary_expr.hpp"
+#include "parser/nodes/literal.hpp"
+#include "parser/nodes/identifier.hpp"
+#include "parser/nodes/expressions.hpp"
+#include "parser/nodes/statements.hpp"
+#include "parser/nodes/declarations.hpp"
+
+// --------------------------------------------------------------------------
+// parseToken: Ham Token'ı ParserToken'a dönüştür.
+// --------------------------------------------------------------------------
+ParserToken Parser::parseToken(Token* token) {
+    ParserToken pt;
+    pt.token = token;
+
+    std::string t = token->gettype();
+    if (t == "string")
+        pt.type = TokenType::STRING;
+    else if (t == "number")
+        pt.type = TokenType::NUMBER;
+    else if (t == "operator")
+        pt.type = OPERATOR_MAP.find(pt.token->token)->second;
+    else if (t == "delimiter")
+        pt.type = OPERATOR_MAP.find(pt.token->token)->second;
+    else if (t == "keyword")
+        pt.type = KEYWORD_MAP.find(pt.token->token)->second;
+    else if (t == "identifier")
+        pt.type = TokenType::IDENTIFIER;
+
+    return pt;
+}
+
+ParserToken Parser::getToken(int offset) {
+    if ((int)tokens.size() - 1 < current + offset) {
+        ParserToken pt;
+        pt.type = TokenType::SVR_VOID;
+        return pt;
+    }
+    return parseToken(tokens[current + offset]);
+}
+
+void Parser::nextToken() {
+    if ((int)tokens.size() >= current + 1)
+        current++;
+}
+
+ParserToken Parser::lookahead(uint32_t forward) {
+    return getToken(forward);
+}
+
+ParserToken Parser::currentToken() {
+    return getToken(0);
+}
+
+ASTNode* Parser::parse(TokenList toks) {
+    tokens  = toks;
+    current = 0;
+    return parseProgram();
+}
+
+ASTNode* Parser::parseProgram() {
+    ProgramNode* program = new ProgramNode();
+
+    while (currentToken().type != TokenType::SVR_VOID) {
+        ASTNode* decl = parseDeclaration();
+        if (decl)
+            program->addChild(decl);
+        else
+            break;
+    }
+
+    return program;
+}
+
+ASTNode* Parser::parseDeclaration() {
+    auto ct = currentToken();
+
+    if (ct.is({
+        TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+        TokenType::KW_DOUBLE, TokenType::KW_BOOL, TokenType::KW_CHAR,
+        TokenType::KW_STRING_TYPE, TokenType::KW_AUTO
+    })) {
+        auto la1 = lookahead(1);
+        auto la2 = lookahead(2);
+        if (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN)
+            return parseFunctionDecl();
+        return parseVariableDecl();
+    }
+
+    if (ct.type == TokenType::KW_STRUCT)
+        return parseStructDecl();
+
+    return parseStatement();
+}
+
+ASTNode* Parser::parseExpression() {
+    return parseExpression(0);
+}
+
+ASTNode* Parser::parseExpression(uint16_t precedence) {
+    if (currentToken().type == TokenType::SVR_VOID)
+        return nullptr;
+
+    ASTNode* left = parseNullDenotation();
+    if (!left) return nullptr;
+
+    while (true) {
+        auto next = currentToken();
+        if (next.type == TokenType::RPAREN ||
+            next.type == TokenType::SEMICOLON ||
+            next.type == TokenType::RBRACE ||
+            next.type == TokenType::COMMA)
+            break;
+
+        if (precedence < next.getPowerOperator()) {
+            left = parseLeftDenotation(left);
+        } else {
+            break;
+        }
+    }
+    return left;
+}
+
+ASTNode* Parser::parseNullDenotation() {
+    auto ct = currentToken();
+
+    if (ct.type == TokenType::SVR_VOID) {
+        std::cerr << "Parser hatası: beklenmeyen dosya sonu\n";
+        return nullptr;
+    }
+
+    if (ct.type == TokenType::LPAREN) {
+        nextToken();
+        ASTNode* expr = parseExpression(0);
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken();
+        return expr;
+    }
+
+    if (ct.is({
+        TokenType::PLUS_PLUS, TokenType::MINUS_MINUS,
+        TokenType::PLUS, TokenType::MINUS,
+        TokenType::BANG, TokenType::TILDE
+    })) {
+        nextToken();
+        ASTNode* right = parseExpression(ct.getPowerOperator());
+        BinaryExpressionNode* bin = new BinaryExpressionNode();
+        bin->loc    = ct.token ? ct.token->loc : SourceLocation{};
+        bin->Right    = right;
+        bin->Left     = nullptr;
+        bin->Operator = ct.type;
+        if (right) right->parent = bin;
+        return bin;
+    }
+
+    if (ct.type == TokenType::NUMBER) {
+        nextToken();
+        LiteralNode* lit = new LiteralNode();
+        lit->loc       = ct.token ? ct.token->loc : SourceLocation{};
+        lit->lexerToken  = ct.token;
+        lit->parserToken = ct;
+        if (auto* nt = dynamic_cast<NumberToken*>(ct.token)) {
+            lit->literalBase  = nt->base;
+            lit->isFloatValue = nt->isFloat;
+            lit->literalType  = nt->isFloat ? LiteralType::FLOAT : LiteralType::INTEGER;
+        }
+        return lit;
+    }
+
+    if (ct.type == TokenType::STRING) {
+        nextToken();
+        LiteralNode* lit = new LiteralNode();
+        lit->literalType = LiteralType::STRING;
+        lit->loc       = ct.token ? ct.token->loc : SourceLocation{};
+        lit->lexerToken  = ct.token;
+        lit->parserToken = ct;
+        return lit;
+    }
+
+    if (ct.is({TokenType::KW_TRUE, TokenType::KW_FALSE, TokenType::KW_NULL})) {
+        nextToken();
+        LiteralNode* lit = new LiteralNode();
+        if (ct.is({TokenType::KW_TRUE, TokenType::KW_FALSE}))
+            lit->literalType = LiteralType::BOOLEAN;
+        else
+            lit->literalType = LiteralType::BOŞ;
+        lit->loc       = ct.token ? ct.token->loc : SourceLocation{};
+        lit->lexerToken  = ct.token;
+        lit->parserToken = ct;
+        return lit;
+    }
+
+    if (ct.type == TokenType::IDENTIFIER) {
+        nextToken();
+        IdentifierNode* id = new IdentifierNode();
+        id->loc          = ct.token ? ct.token->loc : SourceLocation{};
+        id->lexerToken     = ct.token;
+        id->parserToken    = ct;
+        return id;
+    }
+
+    return nullptr;
+}
+
+ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
+    auto ct = currentToken();
+
+    if (ct.is({TokenType::PLUS_PLUS, TokenType::MINUS_MINUS})) {
+        nextToken();
+        PostfixNode* pf = new PostfixNode();
+        pf->loc     = ct.token ? ct.token->loc : SourceLocation{};
+        pf->operand  = left;
+        pf->Operator = ct.type;
+        left->parent = pf;
+        return pf;
+    }
+
+    if (ct.type == TokenType::LPAREN) {
+        nextToken();
+        CallExpressionNode* call = new CallExpressionNode();
+        call->loc    = ct.token ? ct.token->loc : SourceLocation{};
+        call->callee = left;
+        left->parent = call;
+
+        if (currentToken().type != TokenType::RPAREN) {
+            call->arguments.push_back(parseExpression(0));
+            while (currentToken().type == TokenType::COMMA) {
+                nextToken();
+                call->arguments.push_back(parseExpression(0));
+            }
+        }
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken();
+        return call;
+    }
+
+    if (ct.type == TokenType::LBRACKET) {
+        nextToken();
+        IndexExpressionNode* idx = new IndexExpressionNode();
+        idx->loc     = ct.token ? ct.token->loc : SourceLocation{};
+        idx->object = left;
+        left->parent = idx;
+        idx->index = parseExpression(0);
+        if (currentToken().type == TokenType::RBRACKET)
+            nextToken();
+        return idx;
+    }
+
+    if (ct.type == TokenType::DOT || ct.type == TokenType::ARROW) {
+        bool arrow = (ct.type == TokenType::ARROW);
+        nextToken();
+
+        if (currentToken().type != TokenType::IDENTIFIER) {
+            std::cerr << "Parser hatasi: uye ismi bekleniyor\n";
+            return left;
+        }
+
+        MemberAccessNode* ma = new MemberAccessNode();
+        ma->loc     = ct.token ? ct.token->loc : SourceLocation{};
+        ma->object = left;
+        ma->member = currentToken().token->token;
+        ma->arrow  = arrow;
+        left->parent = ma;
+        nextToken();
+        return ma;
+    }
+
+    uint16_t prec = ct.getPowerOperator();
+    nextToken();
+
+    ASTNode* right = parseExpression(prec);
+
+    BinaryExpressionNode* bin = new BinaryExpressionNode();
+    bin->loc      = ct.token ? ct.token->loc : SourceLocation{};
+    bin->Left     = left;
+    bin->Right    = right;
+    bin->Operator = ct.type;
+    if (left)  left->parent  = bin;
+    if (right) right->parent = bin;
+    return bin;
+}
+
+ASTNode* Parser::parseFunctionDecl() {
+    FunctionDeclNode* fn = new FunctionDeclNode();
+    fn->loc = currentToken().token->loc;
+    fn->returnType = currentToken().token->token;
+    nextToken();
+
+    fn->name = currentToken().token->token;
+    nextToken();
+
+    if (currentToken().type == TokenType::LPAREN) {
+        nextToken();
+        while (currentToken().type != TokenType::RPAREN &&
+               currentToken().type != TokenType::SVR_VOID)
+            nextToken();
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken();
+    }
+
+    if (currentToken().type == TokenType::LBRACE) {
+        ASTNode* body = parseBlock();
+        fn->addChild(body);
+    }
+
+    return fn;
+}
+
+ASTNode* Parser::parseStructDecl() {
+    StructDeclNode* st = new StructDeclNode();
+    st->loc = currentToken().token->loc;
+    nextToken();
+    if (currentToken().type == TokenType::IDENTIFIER) {
+        st->name = currentToken().token->token;
+        nextToken();
+    }
+    if (currentToken().type == TokenType::LBRACE) {
+        nextToken();
+        while (currentToken().type != TokenType::RBRACE && currentToken().type != TokenType::SVR_VOID) {
+            ASTNode* field = parseDeclaration();
+            if (field) st->addChild(field);
+            else break;
+        }
+        if (currentToken().type == TokenType::RBRACE) nextToken();
+    }
+    if (currentToken().type == TokenType::SEMICOLON) nextToken();
+    return st;
+}
+
+ASTNode* Parser::parseVariableDecl() {
+    VariableDeclNode* vd = new VariableDeclNode();
+    vd->loc = currentToken().token->loc;
+    vd->varType = currentToken().token->token;
+    nextToken();
+
+    if (currentToken().type != TokenType::IDENTIFIER) {
+        std::cerr << "Parser hatası: değişken ismi bekleniyor\n";
+        return vd;
+    }
+
+    vd->name = currentToken().token->token;
+    nextToken();
+
+    if (currentToken().type == TokenType::LBRACKET) {
+        nextToken();
+        while (currentToken().type != TokenType::RBRACKET &&
+               currentToken().type != TokenType::SEMICOLON &&
+               currentToken().type != TokenType::SVR_VOID)
+            nextToken();
+        if (currentToken().type == TokenType::RBRACKET)
+            nextToken();
+    }
+
+    if (currentToken().type == TokenType::EQUAL) {
+        nextToken();
+        vd->initExpr = parseExpression();
+    }
+
+    while (currentToken().type == TokenType::COMMA) {
+        nextToken();
+
+        if (currentToken().type != TokenType::IDENTIFIER) {
+            std::cerr << "Parser hatası: virgülden sonra değişken ismi bekleniyor\n";
+            break;
+        }
+
+        VariableDeclNode* sibling = new VariableDeclNode();
+        sibling->loc = currentToken().token->loc;
+        sibling->varType = vd->varType;
+        sibling->name = currentToken().token->token;
+        nextToken();
+
+        if (currentToken().type == TokenType::LBRACKET) {
+            nextToken();
+            while (currentToken().type != TokenType::RBRACKET &&
+                   currentToken().type != TokenType::SEMICOLON &&
+                   currentToken().type != TokenType::SVR_VOID)
+                nextToken();
+            if (currentToken().type == TokenType::RBRACKET)
+                nextToken();
+        }
+
+        if (currentToken().type == TokenType::EQUAL) {
+            nextToken();
+            sibling->initExpr = parseExpression();
+        }
+
+        vd->addChild(sibling);
+    }
+
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
+
+    return vd;
+}
+
+ASTNode* Parser::parseStatement() {
+    auto ct = currentToken();
+
+    if (ct.type == TokenType::LBRACE)
+        return parseBlock();
+
+    if (ct.type == TokenType::KW_IF)
+        return parseIfStatement();
+
+    if (ct.type == TokenType::KW_WHILE)
+        return parseWhileStatement();
+
+    if (ct.type == TokenType::KW_FOR)
+        return parseForStatement();
+
+    if (ct.type == TokenType::KW_DO)
+        return parseDoWhileStatement();
+
+    if (ct.type == TokenType::KW_RETURN)
+        return parseReturnStatement();
+
+    if (ct.type == TokenType::KW_BREAK)
+        return parseBreakStatement();
+
+    if (ct.type == TokenType::KW_CONTINUE)
+        return parseContinueStatement();
+
+    if (ct.is({
+        TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+        TokenType::KW_DOUBLE, TokenType::KW_BOOL, TokenType::KW_CHAR,
+        TokenType::KW_STRING_TYPE
+    })) {
+        return parseVariableDecl();
+    }
+
+    if (ct.type == TokenType::KW_STRUCT)
+        return parseStructDecl();
+
+    return parseExpressionStatement();
+}
+
+ASTNode* Parser::parseBlock() {
+    BlockNode* block = new BlockNode();
+    block->loc = currentToken().token ? currentToken().token->loc : SourceLocation{};
+
+    if (currentToken().type == TokenType::LBRACE)
+        nextToken();
+
+    while (currentToken().type != TokenType::RBRACE &&
+           currentToken().type != TokenType::SVR_VOID) {
+        ASTNode* stmt = parseStatement();
+        if (stmt)
+            block->addChild(stmt);
+        else
+            break;
+    }
+
+    if (currentToken().type == TokenType::RBRACE)
+        nextToken();
+
+    return block;
+}
+
+ASTNode* Parser::parseIfStatement() {
+    IfStatementNode* ifNode = new IfStatementNode();
+    ifNode->loc = currentToken().token->loc;
+    nextToken();
+
+    if (currentToken().type == TokenType::LPAREN) {
+        nextToken();
+        ifNode->condition = parseExpression();
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken();
+    }
+
+    ifNode->thenBranch = parseStatement();
+
+    if (currentToken().type == TokenType::KW_ELSE) {
+        nextToken();
+        ifNode->elseBranch = parseStatement();
+    }
+
+    return ifNode;
+}
+
+ASTNode* Parser::parseWhileStatement() {
+    WhileStatementNode* ws = new WhileStatementNode();
+    ws->loc = currentToken().token->loc;
+    nextToken();
+
+    if (currentToken().type == TokenType::LPAREN) {
+        nextToken();
+        ws->condition = parseExpression();
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken();
+    }
+
+    ws->body = parseStatement();
+    return ws;
+}
+
+ASTNode* Parser::parseForStatement() {
+    ForStatementNode* fs = new ForStatementNode();
+    fs->loc = currentToken().token->loc;
+    nextToken();
+
+    if (currentToken().type == TokenType::LPAREN)
+        nextToken();
+
+    if (currentToken().type != TokenType::SEMICOLON)
+        fs->init = parseStatement();
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
+
+    if (currentToken().type != TokenType::SEMICOLON)
+        fs->condition = parseExpression();
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
+
+    if (currentToken().type != TokenType::RPAREN)
+        fs->update = parseExpression();
+    if (currentToken().type == TokenType::RPAREN)
+        nextToken();
+
+    fs->body = parseStatement();
+
+    return fs;
+}
+
+ASTNode* Parser::parseDoWhileStatement() {
+    DoWhileStatementNode* dw = new DoWhileStatementNode();
+    dw->loc = currentToken().token->loc;
+    nextToken();
+
+    dw->body = parseStatement();
+
+    if (currentToken().type == TokenType::KW_WHILE) {
+        nextToken();
+        if (currentToken().type == TokenType::LPAREN) {
+            nextToken();
+            dw->condition = parseExpression();
+            if (currentToken().type == TokenType::RPAREN)
+                nextToken();
+        }
+        if (currentToken().type == TokenType::SEMICOLON)
+            nextToken();
+    }
+
+    return dw;
+}
+
+ASTNode* Parser::parseReturnStatement() {
+    ReturnStatementNode* rs = new ReturnStatementNode();
+    rs->loc = currentToken().token->loc;
+    nextToken();
+
+    if (currentToken().type != TokenType::SEMICOLON &&
+        currentToken().type != TokenType::RBRACE) {
+        rs->value = parseExpression();
+    }
+
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
+
+    return rs;
+}
+
+ASTNode* Parser::parseBreakStatement() {
+    BreakStatementNode* bs = new BreakStatementNode();
+    bs->loc = currentToken().token->loc;
+    nextToken();
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
+    return bs;
+}
+
+ASTNode* Parser::parseContinueStatement() {
+    ContinueStatementNode* cs = new ContinueStatementNode();
+    cs->loc = currentToken().token->loc;
+    nextToken();
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
+    return cs;
+}
+
+ASTNode* Parser::parseExpressionStatement() {
+    ExpressionStatementNode* es = new ExpressionStatementNode();
+    es->loc = currentToken().token ? currentToken().token->loc : SourceLocation{};
+    es->expression = parseExpression();
+    if (!es->expression) {
+        while (currentToken().type != TokenType::SEMICOLON &&
+               currentToken().type != TokenType::RBRACE &&
+               currentToken().type != TokenType::SVR_VOID)
+            nextToken();
+        if (currentToken().type == TokenType::SEMICOLON)
+            nextToken();
+    }
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
+
+    return es;
+}

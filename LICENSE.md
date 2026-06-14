@@ -53,10 +53,32 @@ Aşağıdaki kullanımlar, Yazılımın bizzat kendisinden gelir elde edilmesi a
 Bölüm 5'te sayılan kısıtlamaların tamamı yalnızca telif hakkı sahibine aittir ve istisna tanıma yetkisi münhasıran ona aittir. Bu kullanımlardan herhangi birini gerçekleştirmek isteyen kişi veya kurum, telif hakkı sahibinden (Abdussamed ULUTAŞ) önceden yazılı izin talep edebilir; izin verildiği takdirde ilgili kullanım serbest hâle gelir.
 İletişim (ticari lisans talepleri): saqutsoftware+gitea@gmail.com
 
-#### 7. Atıf Şartı
+#### 7. Katkılar (Contributions)
+saQut'a katkı herkese açık bir öneri sürecidir; ancak nihai karar münhasıran telif hakkı sahibine aittir.
+- Herhangi biri değişiklik önerisi (Pull Request / PR) açabilir. Bir katkının projeye dâhil edilip edilmeyeceğine ve birleştirilip (merge) birleştirilmeyeceğine **yalnızca Abdussamed ULUTAŞ karar verir.** Hiç kimsenin, bir katkısını projeye dâhil ettirme yönünde bir hakkı yoktur.
+- Bir katkıyı (kod, belge, tasarım veya başka bir materyal) gönderen kişi, bu katkıyı göndermekle telif hakkı sahibine (Abdussamed ULUTAŞ); katkı üzerinde **dünya çapında, süresiz, geri alınamaz, ücretsiz ve alt-lisans verilebilir** bir kullanma, çoğaltma, değiştirme, dağıtma ve **ticari olarak lisanslama** hakkı tanır. Bu hak, telif hakkı sahibinin katkıyı içeren Yazılımı Bölüm 6 kapsamında ticari olarak lisanslayabilmesini güvence altına alır.
+- Katkıda bulunan; gönderdiği materyalin kendi eseri olduğunu veya gerekli haklara sahip bulunduğunu ve bu izni vermeye yetkili olduğunu beyan eder. Katkıda bulunanlar, kendi katkıları üzerindeki telif haklarını korur; yukarıdaki izin bu haklara ek olarak verilir.
+
+#### 8. Patent Hakları
+- **Patent lisansı:** İşbu lisans kapsamında Yazılımı kullanma hakkına sahip olan her kişiye; telif hakkı sahibi ve katkıda bulunanlar tarafından sahip olunan ve Yazılımın bu lisansça izin verilen biçimde kullanılması için zorunlu olarak ihlal edilen patent istemleri bakımından, ücretsiz ve (aşağıdaki fesih hükmü saklı kalmak kaydıyla) geri alınamaz bir patent lisansı tanınır.
+- **Patent misillemesi (otomatik fesih):** Eğer bir kişi veya kurum, Yazılımın bu lisansça izin verilen kullanımının bir patenti ihlal ettiğini ileri sürerek telif hakkı sahibine veya herhangi bir katkıda bulunana karşı **patent davası** açarsa, işbu lisans kapsamında o kişiye/kuruma tanınan tüm haklar (patent lisansı dâhil) **otomatik olarak sona erer.**
+
+#### 9. Marka ve İsim Hakları
+İşbu lisans; "saQut" adı, logosu veya ilgili marka unsurları üzerinde **hiçbir hak tanımaz.** Özellikle:
+- Yazılımın değiştirilmiş bir sürümünü dağıtırsanız, bu sürümü "saQut" adıyla veya bu adı çağrıştıracak ya da karıştırılmaya yol açabilecek bir adla adlandıramazsınız.
+- Telif hakkı sahibinin önceden yazılı izni olmadan, "saQut" adını ürünlerinizde, hizmetlerinizde veya tanıtımlarınızda bir onay/destek ima edecek biçimde kullanamazsınız.
+- Yazılımın kaynağına ve telif hakkı sahibine yapılan dürüst ve tanımlayıcı atıflar (örneğin "saQut tabanlıdır") bu maddenin kapsamı dışındadır.
+
+#### 10. Atıf Şartı
 Orijinal telif hakkı bildirimi ile işbu izin bildirimi, Yazılımın tüm kopyalarına veya önemli parçalarına dâhil edilmelidir.
 
-#### 8. Garanti Reddi
+#### 11. Fesih (Termination)
+- İşbu lisansın koşullarından herhangi birini ihlal etmeniz hâlinde, lisans kapsamında size tanınan tüm haklar **otomatik olarak sona erer.**
+- İhlaliniz düzeltilebilir nitelikteyse ve ihlali öğrendikten sonra **30 (otuz) gün** içinde giderirseniz — telif hakkı sahibi bu süre içinde lisansı açıkça feshetmemiş olmak kaydıyla — haklarınız yeniden yürürlüğe girer. Aynı kişinin tekrarlayan ihlallerinde bu düzeltme imkânı uygulanmaz.
+- Haklarınızın sona ermesi, daha önce işbu lisansa uygun olarak edindiğiniz Çıktı (Bölüm 4) üzerindeki haklarınızı etkilemez.
+- Garanti reddi ve sorumluluk sınırlamaları, fesihten sonra da yürürlükte kalmaya devam eder.
+
+#### 12. Garanti Reddi
 YAZILIM "OLDUĞU GİBİ" SUNULMAKTADIR; TİCARETE UYGUNLUK, BELİRLİ BİR AMACA UYGUNLUK VE İHLAL ETMEME GARANTİLERİ DAHİL ANCAK BUNLARLA SINIRLI OLMAMAK ÜZERE, AÇIK VEYA ZIMNİ HİÇBİR GARANTİ VERİLMEMEKTEDİR. YAZARLAR VEYA TELİF HAKKI SAHİPLERİ, YAZILIMLA VEYA YAZILIMIN KULLANIMIYLA YA DA DİĞER İŞLEMLERLE BAĞLANTILI OLARAK ORTAYA ÇIKAN SÖZLEŞME, HAKSIZ FİİL VEYA DİĞER DURUMLARDAKİ HİÇBİR TALEP, TAZMİNAT VEYA DİĞER YÜKÜMLÜLÜKLERDEN SORUMLU TUTULAMAZ.
 
 ---
@@ -107,10 +129,32 @@ Because the following uses amount to deriving revenue from the Software itself, 
 All restrictions listed in Section 5 belong solely to the copyright holder, who has the exclusive authority to grant exceptions. Any person or organization wishing to carry out any of these uses may request prior written permission from the copyright holder (Abdussamed ULUTAŞ); once granted, the relevant use becomes permitted.
 Contact (commercial-license requests): saqutsoftware+gitea@gmail.com
 
-#### 7. Attribution Requirement
+#### 7. Contributions
+Contributing to saQut is an open proposal process; however, the final decision rests solely with the copyright holder.
+- Anyone may open a change proposal (a Pull Request / PR). Whether a contribution is included in the project and whether it is merged is decided **solely by Abdussamed ULUTAŞ.** No one has any right to have their contribution included in the project.
+- By submitting a contribution (code, documentation, design, or other material), the contributor grants the copyright holder (Abdussamed ULUTAŞ) a **worldwide, perpetual, irrevocable, royalty-free, and sublicensable** right to use, reproduce, modify, distribute, and **license commercially** that contribution. This right ensures that the copyright holder may license the Software including the contribution on a commercial basis under Section 6.
+- The contributor represents that the submitted material is their own work or that they hold the necessary rights, and that they are authorized to grant this permission. Contributors retain copyright in their own contributions; the permission above is granted in addition to those rights.
+
+#### 8. Patent Rights
+- **Patent license:** Subject to this license, each person who has the right to use the Software is granted a royalty-free and (except as stated in the termination provision below) irrevocable patent license, under those patent claims owned by the copyright holder and contributors that are necessarily infringed by using the Software in the manner permitted by this license.
+- **Patent retaliation (automatic termination):** If any person or entity initiates **patent litigation** against the copyright holder or any contributor, alleging that the use of the Software as permitted by this license infringes a patent, then all rights granted to that person or entity under this license (including the patent license) **terminate automatically.**
+
+#### 9. Trademark and Name Rights
+This license grants **no rights** in the "saQut" name, logo, or related trademark elements. In particular:
+- If you distribute a modified version of the Software, you may not name that version "saQut" or use a name that evokes or is confusingly similar to it.
+- You may not use the "saQut" name in your products, services, or promotions in a way that implies endorsement, without the prior written permission of the copyright holder.
+- Honest, descriptive references to the origin of the Software and to the copyright holder (for example, "based on saQut") fall outside the scope of this section.
+
+#### 10. Attribution Requirement
 The original copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-#### 8. Disclaimer of Warranty
+#### 11. Termination
+- Upon your breach of any of the terms of this license, all rights granted to you under it **terminate automatically.**
+- If your breach is curable and you cure it within **30 (thirty) days** of becoming aware of it — provided the copyright holder has not expressly terminated the license during that period — your rights are reinstated. This cure opportunity does not apply to repeated breaches by the same person.
+- Termination of your rights does not affect your rights in any Output (Section 4) you previously obtained in compliance with this license.
+- The disclaimer of warranty and the limitations of liability survive termination.
+
+#### 12. Disclaimer of Warranty
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
@@ -161,8 +205,30 @@ Da die folgenden Nutzungen darauf hinauslaufen, Einnahmen aus der Software selbs
 Alle in Abschnitt 5 aufgeführten Beschränkungen stehen ausschließlich dem Urheberrechtsinhaber zu, der allein befugt ist, Ausnahmen zu gewähren. Jede Person oder Organisation, die eine dieser Nutzungen vornehmen möchte, kann beim Urheberrechtsinhaber (Abdussamed ULUTAŞ) eine vorherige schriftliche Genehmigung beantragen; nach deren Erteilung wird die betreffende Nutzung gestattet.
 Kontakt (Anfragen für kommerzielle Lizenzen): saqutsoftware+gitea@gmail.com
 
-#### 7. Namensnennung-Bedingung
+#### 7. Beiträge (Contributions)
+Das Beitragen zu saQut ist ein offener Vorschlagsprozess; die endgültige Entscheidung liegt jedoch ausschließlich beim Urheberrechtsinhaber.
+- Jede Person kann einen Änderungsvorschlag (einen Pull Request / PR) einreichen. Ob ein Beitrag in das Projekt aufgenommen und ob er zusammengeführt (gemerged) wird, entscheidet **allein Abdussamed ULUTAŞ.** Niemand hat ein Recht darauf, dass sein Beitrag in das Projekt aufgenommen wird.
+- Mit der Einreichung eines Beitrags (Code, Dokumentation, Entwurf oder sonstiges Material) gewährt der Beitragende dem Urheberrechtsinhaber (Abdussamed ULUTAŞ) ein **weltweites, unbefristetes, unwiderrufliches, gebührenfreies und unterlizenzierbares** Recht, diesen Beitrag zu nutzen, zu vervielfältigen, zu verändern, zu verbreiten und **kommerziell zu lizenzieren.** Dieses Recht stellt sicher, dass der Urheberrechtsinhaber die Software einschließlich des Beitrags gemäß Abschnitt 6 kommerziell lizenzieren kann.
+- Der Beitragende sichert zu, dass das eingereichte Material sein eigenes Werk ist oder dass er über die erforderlichen Rechte verfügt und befugt ist, diese Genehmigung zu erteilen. Die Beitragenden behalten das Urheberrecht an ihren eigenen Beiträgen; die obige Genehmigung wird zusätzlich zu diesen Rechten erteilt.
+
+#### 8. Patentrechte
+- **Patentlizenz:** Im Rahmen dieser Lizenz wird jeder Person, die zur Nutzung der Software berechtigt ist, eine gebührenfreie und (vorbehaltlich der nachstehenden Kündigungsbestimmung) unwiderrufliche Patentlizenz an denjenigen Patentansprüchen gewährt, die im Eigentum des Urheberrechtsinhabers und der Beitragenden stehen und die durch die nach dieser Lizenz gestattete Nutzung der Software notwendigerweise verletzt werden.
+- **Patentvergeltung (automatische Kündigung):** Leitet eine Person oder Organisation einen **Patentrechtsstreit** gegen den Urheberrechtsinhaber oder einen Beitragenden ein und macht dabei geltend, dass die nach dieser Lizenz gestattete Nutzung der Software ein Patent verletzt, so **erlöschen automatisch** alle dieser Person oder Organisation nach dieser Lizenz gewährten Rechte (einschließlich der Patentlizenz).
+
+#### 9. Marken- und Namensrechte
+Diese Lizenz gewährt **keinerlei Rechte** an dem Namen „saQut", dem Logo oder verwandten Markenbestandteilen. Insbesondere:
+- Wenn Sie eine veränderte Version der Software verbreiten, dürfen Sie diese Version nicht „saQut" nennen oder einen Namen verwenden, der daran erinnert oder verwechslungsfähig ähnlich ist.
+- Sie dürfen den Namen „saQut" ohne vorherige schriftliche Genehmigung des Urheberrechtsinhabers nicht in Ihren Produkten, Diensten oder Werbemaßnahmen in einer Weise verwenden, die eine Billigung suggeriert.
+- Ehrliche, beschreibende Hinweise auf den Ursprung der Software und auf den Urheberrechtsinhaber (zum Beispiel „basiert auf saQut") fallen nicht unter diesen Abschnitt.
+
+#### 10. Namensnennung-Bedingung
 Der ursprüngliche Urheberrechtshinweis und dieser Genehmigungshinweis müssen in allen Kopien oder wesentlichen Teilen der Software enthalten sein.
 
-#### 8. Haftungsausschluss
+#### 11. Kündigung (Termination)
+- Bei einem Verstoß gegen eine der Bedingungen dieser Lizenz **erlöschen automatisch** alle Ihnen darunter gewährten Rechte.
+- Ist Ihr Verstoß heilbar und beheben Sie ihn innerhalb von **30 (dreißig) Tagen**, nachdem Sie davon Kenntnis erlangt haben — sofern der Urheberrechtsinhaber die Lizenz in diesem Zeitraum nicht ausdrücklich gekündigt hat —, so werden Ihre Rechte wiederhergestellt. Diese Heilungsmöglichkeit gilt nicht für wiederholte Verstöße derselben Person.
+- Das Erlöschen Ihrer Rechte berührt nicht Ihre Rechte an einer Ausgabe (Abschnitt 4), die Sie zuvor in Übereinstimmung mit dieser Lizenz erlangt haben.
+- Der Haftungsausschluss und die Haftungsbeschränkungen gelten auch nach der Kündigung fort.
+
+#### 12. Haftungsausschluss
 DIE SOFTWARE WIRD „WIE BESEHEN" (AS IS) OHNE JEGLICHE AUSDRÜCKLICHE ODER STILLSCHWEIGENDE GEWÄHRLEISTUNG ZUR VERFÜGUNG GESTELLT, EINSCHLIESSLICH, ABER NICHT BESCHRÄNKT AUF DIE GEWÄHRLEISTUNG DER MARKTGÄNGIGKEIT, DER EIGNUNG FÜR EINEN BESTIMMTEN ZWECK UND DER NICHTVERLETZUNG VON RECHTEN DRITTER. IN KEINEM FALL SIND DIE AUTOREN ODER URHEBERRECHTSINHABER FÜR ANSPRÜCHE, SCHÄDEN ODER ANDERE HAFTUNGEN HAFTBAR, SEI ES IN FOLGE EINES VERTRAGES, EINER UNERLAUBTEN HANDLUNG ODER AUF ANDERE WEISE, DIE SICH AUS ODER IM ZUSAMMENHANG MIT DER SOFTWARE ODER DER NUTZUNG ODER DEM UMGANG MIT DER SOFTWARE ERGEBEN.

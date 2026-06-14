@@ -1,127 +1,185 @@
-# Syntax
+# saQut
 
-Syntax modunda 2 seçenek bulunmaktadır
-    - JIR: Söz dizimi tamamen Java programlama diline uygun olarak parse edilmektedir. Compiling, transpiling desteklenir Interpreter desteklenmez
-    - CIR: Söz dizimi tamamen C programlama diline uygun olarak parse edilir. Compiling ve Interpreter desteklenir. transpiling desteklenmez
+**Programlanabilir, incelenebilir bir derleyici — bir "alet çantası" (toolbox).**
 
-# Compiler short options
+saQut'un asıl varlık sebebi dilin kendisinden çok, **derleme sürecinin her
+aşamasının dışarıdan görülebilir ve müdahale edilebilir olmasıdır.** Token'lar,
+AST, sembol tablosu, optimizasyonun öncesi/sonrası ve IR — hepsi ayrı ayrı
+incelenebilir. Dil, bu aletin üzerinde çalıştığı küçük, prosedürel bir
+örnektir; vitrin değil, alet.
+
+Uygulama dili **C++**'tır (header-only eğilimli, bkz. `docs/fikirler.md` ADR-003).
+
+---
+
+## Şu an ne çalışıyor, ne çalışmıyor
+
+Belgeler **planlanan** ile **yapılan**ı net ayırır. Bugünkü gerçek durum:
+
+### ✅ Çalışıyor (built)
+- **Lexer** — karakter seviyesi tarama, konum takibi.
+- **Tokenizer** — token üretimi (6 token tipi), yorum satırı desteği.
+- **Pratt parser** — ifade (Pratt) + statement (recursive descent) ayrıştırma.
+- **AST** — fonksiyon, blok, değişken tanımı, if/for/while/do-while/return,
+  ifade node'ları.
+- **AST'nin JSON serileştirmesi** — `saqut ast` ile incelenebilir.
+- **CLI komut yapısı** — `tokens`, `ast`, `symbols`, `run` iskeletleri.
+- **Kaynak konum takibi** (SourceLocation) — offset → (satır, sütun).
+- **Minimal IR deneyi** — basit aritmetiği düşürür (örn. `1 + (7/3)` → kısa
+  doğrusal komut dizisi). Henüz tam bir backend değil, bir deneydir.
+
+### 🚧 Henüz yok (planned)
+- Sembol tablosu
+- Semantik analiz
+- Tip sistemi
+- Diagnostic (hata raporlama) motoru
+- Optimizasyon
+- IR + bytecode VM ile çalıştırma
+
+> `feature/frontend-analysis` dalı şu an yalnızca bu yapılmamış işin **tasarım
+> belgelerini** içerir, kodunu değil.
+
+**Birinci kilometre taşı ("bitti" tanımı):** derleyici **fibonacci'yi**
+(recursive + iterative) ve basit matematik/döngü programlarını **derleyip
+çalıştırabilmeli.** Referans program: `examples/fibonacci.sqt`.
+
+---
+
+## Dil kimliği (kilitli)
+
+Prosedürel, **C ailesi sözdizimi**, **value semantics**. İlk ifade doğrudan bir
+işlem/tanım olabilir; zorunlu class/`main` boilerplate'i yoktur (Java'nın aksine).
+
+| Özellik | Karar |
+|---|---|
+| Class / OOP / kalıtım | **Yok** |
+| Closure | **Yok** |
+| Generic | **Yok** |
+| Kullanıcıya açık pointer (`*` / `&`) | **Yok** — derleyici/runtime içeride pointer'ı serbestçe kullanır |
+| `struct` | **Var** |
+| Tipli fonksiyonlar (dönüş + parametre) | **Var** |
+| Array (`int[]`) | **Var** |
+| `interface` | **Ertelendi** (v0 değil — gerekçe ADR-018) |
+| `auto` / tip çıkarımı | **Yok** |
+| Gizli int↔float dönüşümü | **Yok** (tek istisna: sabit folding) |
+
+Gerekçe: prosedürel tasarım semantik karmaşıklığı en aza indirir ve hedeflerle
+(fibonacci, matematik, sıralama, ayrıştırma) örtüşür. Standart C'de `class`
+yoktur (o C++'tır); C, struct + fonksiyonun yettiğini kanıtlar.
+
+---
+
+## Çalıştırma modeli (kilitli): IR + bytecode VM
+
+saQut, kendi **IR**'sine derler ve bu IR'yi bir **yorumlayıcı döngü (bytecode
+VM)** ile çalıştırır.
+
+- **Tree-walker DEĞİL** (çok yavaş).
+- **Gerçek makine-kodu JIT DEĞİL.** Makine kodu üretimi (register allocation,
+  ABI/çağırma sözleşmeleri, çalıştırılabilir `mmap` bellek) **kapsam dışıdır** —
+  tek faydası ham hızdır ve hız burada öncelik değildir. Öncelikler
+  **determinizm** ve **incelenebilirliktir**; bytecode VM ikisini de doğrudan
+  sağlar.
+- **Bellek bu modelde kolaydır:** host (C++) heap'i kullanılır; v0 için özel
+  runtime allocator gerekmez.
+- **C'ye transpile, geçerli bir İKİNCİ backend olarak ileride kalır** (frontend
+  backend-bağımsızdır — middle-end ayrımının amacı budur, ADR-006). İleride
+  makine kodu istenirse elle code generator yazmak yerine **libgccjit / LLVM'e
+  bağlanılır** — ama bu çok uzak gelecektir.
+
+> Eski belge/konuşmalarda geçen "JIT" terimi yanlış yönlendiricidir; doğru
+> çerçeve **IR + VM**'dir.
+
+---
+
+## Mimari hatlar
 
 ```
-sqt kaynak kodunu çallıştırır
-saqut file:sourcecode.sqt
-
-sqt kaynak kodunu C koduna sonrada makine koduna derler. GCC gereklidir
-saqut compile file:sourcecode.sqt output:program.exe
-
-Derleyicinin olduğu gibi çalıştırılması interpreter moduna alır, konsola yazılan kodları alır çalıştırır outputu loglar
-saqut 
-
-Derleyici kodu alır ve IR üretir
-saqut parse file:sourcecode.sqt output:program.ces
-
-Derleyici IRyi alır ve çalıştırır. Burda kaynak kodu veya IR olup olmadığını otomatik anlar
-saqut file:sourcecode.ces
-
-Derleyici IRyi veya kaynak kodunu alır C diline çevirir
-saqut transpile file:sourcecode.ces  output:program.c
-
-Derleyici kaynak kodu ASTsini çıkarır ve kaydeder
-saqut file:sourcecode.sqt ast:sourcecode.xml
+KAYNAK KOD
+   │  lexer
+   ▼
+TOKEN'LAR ──────────────  saqut tokens
+   │  parser (Pratt + recursive descent)
+   ▼
+AST ────────────────────  saqut ast
+   │  sembol toplama (iki geçişli)        ┐
+   ▼                                       │
+SEMBOL TABLOSU ─────────  saqut symbols    │  FRONTEND
+   │  semantik analiz (annotation)         │  (yapı + anlam)
+   ▼                                       │
+ANNOTATE EDİLMİŞ AST ───  saqut ast        ┘
+   │  optimizasyon (opsiyonel, klon üstünde)   ── MIDDLE-END
+   ▼
+IR ─────────────────────  (planlanan)      ┐
+   │  bytecode VM / yorumlayıcı döngü       │  BACKEND
+   ▼                                        │  (çalıştırma + FFI seam)
+ÇALIŞTIRMA / ÇIKTI ─────  saqut run        ┘
 ```
 
+- **Frontend** yapıyı ve anlamı modeller (tip, scope, dataflow).
+- **"Hangi çekirdek, hangi cihaz, ne zaman, hangi çıktı formatı"** runtime/backend
+  meselesidir — frontend'e yüklenmez.
 
+---
 
-# Compiler Structure
+## CLI (mevcut + planlanan)
 
-## 1 Source Code
+```
+# --- çalışıyor ---
+saqut tokens   file:kaynak.sqt      # token listesi
+saqut ast      file:kaynak.sqt      # AST (JSON)
+saqut symbols  file:kaynak.sqt      # sembol tablosu (iskelet)
 
-- Yazılan kaynak kodun derleyiciye aktarılması
-- Derleyici için belirlenen seçenekler ile derleyici yapısının yeniden yapılandırılması
-- Derleyicinin outputlarının ayarlanması ve çıkışlarının aktarılması
+# --- planlanan ---
+saqut run      file:kaynak.sqt      # IR üret + bytecode VM ile çalıştır
+saqut ast      file:kaynak.sqt --optimized   # klon, optimize edilmiş AST (öncesi/sonrası)
+saqut transpile file:kaynak.sqt -o prog.c    # ikinci backend (ileride)
+```
 
-## 2 Lexing
+Tasarım gereği her aşamanın çıktısı erken bir noktada dosyalanabilir/loglanabilir
+(programlanabilir derleyici). Token, ham AST, optimize AST ve IR ayrı ayrı
+kaydedilebilir.
 
-Kaynak kodun içindeki tüm harflerin gezilip tek parça büyük bir token listesinin oluşturulması
+---
 
-Bu işlemin sonucunda kaynak kodun içindeki tüm yapılar; semboller, sayılar, stringler ve operatörler olarak 4 kategoriye ayrılır
+## Batteries / stdlib — kuzey yıldızı, ertelendi
 
-## 3 Tokenning
+Gerçek bir genel sürüm pil ile gelmeli (sıralama, sıkıştırma, kripto,
+JSON/XML/HTML ayrıştırma). Ama bu **bugünün işi ve v0.1 değildir.**
 
-Tüm tokenler gezilerek bir Abstract Syntax Tree ağacı (AST) oluşturulur. Tek düze tokenler bu aşamada hiyerarşik olarak
+Mimari çerçeve (monolit korkusunu önler): derleyici pilleri çekirdeğine
+gömmez. Bunun yerine **küçük bir gerçek builtin kümesi** (`print`, temel
+zorunlular) + **gerisi kütüphane/FFI** ile gelir. "Batteries" sorunu aslında
+bir **sınır (FFI/link seam) sorunudur**, "zlib'i yeniden yaz" sorunu değil.
+Sınır bir kez çizilir, piller üstünde sonsuza dek birikir.
 
-File -> Class -> Methods -> Expressions / Statements -> Volumes -> Values
+- **JSON/XML/HTML ayrıştırıcıları saQut'un kendisinde yazılabilir** (string +
+  struct + fonksiyon + kontrol akışı yeter). İlk gerçek demo programları.
+- **Sıkıştırma/kripto:** denenmiş C kütüphanelerine FFI ile bağlan. **Kripto
+  asla elle yazılmaz.**
+- **Bugüne tek yansıması:** IR/runtime tasarlanırken **bilinçli bir FFI seam**
+  ("host fonksiyonu çağır" deliği) bırakılır. `print` bunu zaten zorlar — bunu
+  kaza değil, **kasıtlı bir mekanizma** yapıyoruz (ADR-016).
 
-Şeklinde bir ağaç yapısına kavuşur. Böylece yazılan kaynak kodu anlaşılır ilk yapısına kavuşur
+---
 
-## 4 Parsing
+## Belge haritası
 
-Oluşturulan AST ağacı anlamlaştırılır ve zenginleştirilir. Tanımlanan değerler, fonksiyonlar, classler ve değişkenler belirlenir. Tip kontrolleri ve Syntax hataları burada keşfedilir. Ayrıca Ulaşılamayan kod alanları, sınıfların ulaşılamayan (private) accessorları kontrol edilir, tüm bir kod boyunca class, tipleme, değişken ve döngülerin kullanım adetleri analiz edilir. Sistem içinde kullanılan tüm yapılar için geniş kapsamlı bir Symbol tablosu oluşturulur
+| Belge | İçerik |
+|---|---|
+| `docs/fikirler.md` | ADR-001…005: backend stratejisi, parser, header-only, token, IR |
+| `docs/adr-frontend-analiz.md` | ADR-006…019: frontend, analiz/optimizasyon, çalıştırma modeli, FFI, interface, bellek |
+| `docs/roadmap-frontend.md` | Faz-faz uygulama planı (sembol tablosu → fibonacci) |
+| `docs/transkript-frontend-tasarim.md` | Tasarım oturumunun transkripti |
+| `examples/fibonacci.sqt` | Geçerli referans program (semantik + kod üretimi fixture'ı) |
+| `examples/parser-stress/` | Yalnızca parser'ı zorlayan, **geçerli olmayan** fixture'lar |
 
-## 5 Optimizing
+---
 
-Zenginleştirilmiş AST üzerindeki analizler üzerinden bazı AST dalları silinir, değiştirilir veya yeni dallar eklenebilir
+## İlke
 
-- Constant Folding : 4 + 1 gibi sonucu belli olan ifadeler 5 olarak tutulur
-- Dead Code Elimination : returnden sonraki kod bloğunun silinmesi veya if(false) ve dengi statementlerin yapıdan kaldırılması
-- Matematiksel olarak değişmez kodların kaldırılması x * 1, x+0, x * 1 gibi valuelerin direkt x olarak değiştirilmesi
-- Hiç kullanılmayan değişkenlerin kaldırılması
-- Sabit (const) değerlerin döngülerin dışına çıkarılması veya programın globaline taşınması
-- Null Check Elimination : Daha önce nullcheck yapılmış bir değişkenin tekrar nullcheck yapılan kontrollerini devredışı bırakmak
-- Type Check Elimination : Daha önce typecheck yapılmış bir değişkenin tekrar typecheck yapılan kontrollerini devredışı bırakmak
-
-## 6 Compiling
-
-Oluşturulmuş tüm AST ağacını tamamen aynı işi yapan daha alt bir veri kümesine indirgeme işidir. Bellekteki AST yapısı ardışık komutlar dizisine çevrilir (Intermediate Representation) IR daha sonra tekrar okunup çalıştırılabilir.
-
-Daha sonra IR ile kurulacak yapı ile bazen HeavyIR bazende LightIR üretilir.
-LightIR, en temiz ve hızlı ancak hiç bir ayrıntı içermeyen koddur. Kaynak kodun çalıştırılması için mükemmel veridir ancak debug verilerinden yoksundur
-HeavyIR, kaynak kodu verilerinin yanı sıra orjinal AST üzerinde tanımlanmış değişken isimleri ayrıntıları ve tiplemeleride içerir. LightIRye göre daha ayrıntılı ve büyüktür ancak debugging ve kaynak kodun parça parça okunduğu durumlar için (örneğin interpreter) kullanışlıdır
-
-## 7 Interpreting
-
-Derleyici HeavyIR üretir ve Symbol tablosunu silmez.
-Optimizasyonların çoğu kapatılır.
-Oluşturulmuş HeavyIR kodu çalıştırılır çalışma bittikten sonra stackframe kapatılmaz yeni girişler beklenir. Yeni kaynak kodu girişleri yapıldığında yine derlenir ve anında çalıştırılır. Yeni çalıştırılan kaynak kodu bir önceki stackframe içersinde symbol tablosu dikkate alınarak output üretir böylece önceki değerler halen kullanılabilir
-
-## or 7 Executing
-
-Derleyici LightIR üretir IR oluşturulduktan sonra symbol tablosu silinir.
-Üretilen IR otomatize edilmiş bellekte yüksek performans ile çalıştırılır.
-
-Derleyici o an ürettiği kaynak kodu anında çalıştırdığı (JIT) gibi
-Daha önce üretilmiş ve depolanmış IR kodunuda çalıştırabilir
-
-## or 7 Transpiling
-
-Derleyici HeavyIR üretir ve Symbol tablosunu silmez.
-Derleyici IR üretmez bunun yerine AST Üzerinden yeni bir dile çevrilir.
-Duruma göre daha üst bir seviye dile dönüşüm yapıldığı gibi daha alt bir dile dönüşüm yapılabilir. IR üretilmez bunun yerine alınan kaynak kodu farklı bir kaynak koduna çevrilir
-
-# programmable compiler
-
-Derleyici tek seferde kaynak kodu alıp okuyup çalıştırabilir veya derleyebilir.
-Ayrıca debug ortamlarında veya daha ayrıntılı projelerde derleme anına müdehale edilebilir
-
-## Stage Session
-
-Derleyiciye verilen bazı parametreler ile Lexer ve Tokenizer anında bazı işlemlerin yapılması engellenebilir
-Örneğin accessorler kapatılabilir, hexedecimal sayılar kapatılabilir. Veya class olmadan globale yazılmış kodlar engellenebilir
-
-## AST Session
-
-Derleyiciye verilen bazı parametreler ile class yapılarına müdehale edilebilir, tipleme sistemleri sabitlenebilir, tek bir metot içerisine yazılacak kod sınırlanabilir veya for içerisinde for döngüsü kısıtlanabilir. Yazılan kod için analizler sonucunda bazı bloklar görmezden gelinebilir veya manipüle edilebilir
-
-## Optimizing Session
-
-Optimizasyon aşamaları parametreler ile tek tek açılabilir veya kapatılabilir
-
-## Output Session
-
-Derleyici ürettiği veriyi erken bir aşamada dosyalayabilir ve loglayabilir.
-Derleyicinin oluşturduğui token, Pure AST, Optimized AST, LightIR veya HeavyIR ayrı ayrı kaydedilebilir
-
-## Compiling Session
-
-AST ağacını IRye dönüştürürken neleri aktaracağı derleyici parametre şeklinde verilebilir.
-IR, yanlızca JIT ve Compiling modunda değiştirilebilir. Interpreter modunda değiştirilmesine izin verilmez
-IR olarak tipleme, sınıflar, değişken isimleri, tekrarlama kayıtları, işlemler ve statementlerin hangilerinin eklenebileceği değiştirilebilir
+Bir şey çalışmadan önce çerçeve inşa etmekten kaçın. Önce **uçtan uca tek bir
+dikey dilim** çalıştır (kaynak → IR → çalıştır; tamsayı aritmetiği + değişken +
+kontrol akışı + tek bir `print`). Modülerlik bir kuzey yıldızıdır, v0.1
+gereksinimi değil; ihtiyaç doğmadan eklenen her soyutlama **daha az değil, daha
+çok** karmaşıklıktır.

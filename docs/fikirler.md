@@ -4,6 +4,23 @@
 > gelecek yol haritası hakkında kapsamlı analizleri içerir.
 > Her kararın **neden** alındığı, alternatiflerin neden elendiği ve
 > gelecekte hangi koşullarda tekrar değerlendirileceği belirtilmiştir.
+>
+> ⚠️ **Hizalama notu (sonraki oturum):** Aşağıdaki ADR-001 ve ADR-005, backend
+> kod-üretimi seçeneklerini (LLVM/QBE/custom/C-transpile) ve "JIT" terimini
+> tartışır. Sonradan **çalıştırma modeli netleşti** ve bazı ifadeler güncellendi:
+>
+> - **Birincil çalıştırma modeli = IR + bytecode VM** (yorumlayıcı döngü).
+>   Bkz. `docs/adr-frontend-analiz.md` **ADR-015**.
+> - **Gerçek makine-kodu JIT kapsam DIŞIDIR** (tek faydası ham hız; öncelik
+>   determinizm + incelenebilirlik). Buradaki "JIT" geçişleri bu ışıkta okunmalı.
+> - **C-transpile**, ileride geçerli bir **ikinci backend**'tir; QBE/custom/LLVM
+>   ise "makine kodu gerçekten gerekirse libgccjit/LLVM'e bağlan" çerçevesinde
+>   **çok uzak gelecektir**. ADR-001'deki karşılaştırmalar o gün için geçerli.
+> - "HeavyIR/LightIR" ikiliği (ADR-005) bir **gelecek fikri** olarak durur; v0'ın
+>   IR+VM hedefi tek, basit bir IR'dir + **FFI seam** (ADR-016).
+> - **Yapılan vs planlanan:** ADR-001'deki "mevcut durum" listesi hâlâ doğrudur
+>   (lexer/tokenizer/parser/AST + minimal IR deneyi çalışır); kod üretimi ve VM
+>   **henüz yoktur.**
 
 ---
 

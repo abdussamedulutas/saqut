@@ -47,7 +47,7 @@ class Tokenizer {
 public:
     Lexer hmx;
 
-    std::vector<Token*> scan(std::string input);
+    std::vector<Token*> scan(std::string input, std::string filePath = "");
 
 private:
     Token*           scope();

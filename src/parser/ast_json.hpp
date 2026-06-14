@@ -79,11 +79,15 @@ public:
     // JsonObject — Yapıcı
     // PARAMETRE: depth — JSON girinti seviyesi (0 = en dış)
     // YAN ETKİ:  m_ss'e açılış süslü parantezi yazar
+    // NOT: Açılış süslü parantezi kasıtlı olarak girintisiz yazılır.
+    // str() çıktısı her zaman bir "key": ya da dizi elemanı konumuna
+    // gömülür ve o konum zaten kendi girintisini sağlar; burada ayrıca
+    // m_indent eklenirse aynı boşluklar iki kez yazılır (bkz. addRaw/addItem).
     JsonObject(int depth)
         : m_indent(jsonIndent(depth)),
           m_indentInner(jsonIndent(depth + 1))
     {
-        m_ss << m_indent << "{\n";
+        m_ss << "{\n";
     }
 
     // add() — String alan ekle
@@ -94,6 +98,15 @@ public:
     // ÖRN:   obj.add("name", "main") → "name": "main"
     void add(const std::string& key, const std::string& value) {
         addRaw(key, "\"" + jsonEscape(value) + "\"");
+    }
+
+    // add() — C string alanı ekle
+    // const char* literalleri (örn. "Block") bool overload'a kaymasın diye
+    // ayrı bir overload gerekir; aksi halde örtük const char* -> bool
+    // dönüşümü std::string'e öncelikli olur ve "kind": true gibi hatalı
+    // çıktı üretir.
+    void add(const std::string& key, const char* value) {
+        add(key, std::string(value));
     }
 
     // add() — Sayısal alan ekle
@@ -172,7 +185,7 @@ public:
     template<typename Fn>
     void addArray(const std::string& key, Fn callback) {
         if (m_hasFields) m_ss << ",\n";
-        m_ss << m_indentInner << "\"" << jsonEscape(key) << "\": [\n";
+        m_ss << m_indentInner << "\"" << jsonEscape(key) << "\": [";
         m_arrayDepth++;
         callback();
         m_arrayDepth--;

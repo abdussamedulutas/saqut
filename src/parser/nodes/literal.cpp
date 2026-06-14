@@ -18,7 +18,7 @@ std::string LiteralNode::toJson(int depth) {
     std::string in = jsonIndent(depth);
     std::string val = parserToken.token ? parserToken.token->token : "?";
     std::ostringstream ss;
-    ss << in << "{\n"
+    ss << "{\n"
        << in << "  \"kind\": \"Literal\",\n"
        << in << "  \"literalType\": \"" << literalTypeToString(literalType) << "\",\n"
        << in << "  \"value\": \"" << jsonEscape(val) << "\"";

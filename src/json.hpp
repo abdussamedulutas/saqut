@@ -195,20 +195,20 @@ inline AstAnalysis analyzeAst(ASTNode* root) {
 
 inline std::string analysisToJson(const AstAnalysis& a) {
     std::ostringstream ss;
-    ss << "  \"totalNodes\": " << a.totalNodes << ",\n"
-       << "  \"maxDepth\": " << a.maxDepth << ",\n"
-       << "  \"functionCount\": " << a.functionCount << ",\n"
-       << "  \"variableCount\": " << a.variableCount << ",\n"
-       << "  \"ifCount\": " << a.ifCount << ",\n"
-       << "  \"loopCount\": " << a.loopCount << ",\n"
-       << "  \"nodeTypes\": {\n";
+    ss << "    \"totalNodes\": " << a.totalNodes << ",\n"
+       << "    \"maxDepth\": " << a.maxDepth << ",\n"
+       << "    \"functionCount\": " << a.functionCount << ",\n"
+       << "    \"variableCount\": " << a.variableCount << ",\n"
+       << "    \"ifCount\": " << a.ifCount << ",\n"
+       << "    \"loopCount\": " << a.loopCount << ",\n"
+       << "    \"nodeTypes\": {\n";
     bool first = true;
     for (auto& [name, count] : a.nodeTypeCounts) {
         if (!first) ss << ",\n";
-        ss << "    \"" << name << "\": " << count;
+        ss << "      \"" << name << "\": " << count;
         first = false;
     }
-    ss << "\n  }";
+    ss << "\n    }";
     return ss.str();
 }
 

@@ -14,7 +14,7 @@ inline int cmdTokens(const CliArgs& args) {
     if (source.empty()) return 1;
 
     Tokenizer tokenizer;
-    auto tokens = tokenizer.scan(source);
+    auto tokens = tokenizer.scan(source, inputFilePath(args));
 
     std::cout << "Tokenler (" << tokens.size() << " adet):\n";
     for (auto* t : tokens) {

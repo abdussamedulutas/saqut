@@ -1,8 +1,8 @@
 #include "tokenizer/tokenizer.hpp"
 
-std::vector<Token*> Tokenizer::scan(std::string input) {
+std::vector<Token*> Tokenizer::scan(std::string input, std::string filePath) {
     std::vector<Token*> tokens;
-    hmx.setSourceText("", input);
+    hmx.setSourceText(filePath, input);
     while (true) {
         Token* token = scope();
         if (token->token == "EOL") break;

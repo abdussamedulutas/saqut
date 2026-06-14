@@ -14,7 +14,7 @@ std::string IdentifierNode::toJson(int depth) {
     std::string in = jsonIndent(depth);
     std::string name = parserToken.token ? parserToken.token->token : "?";
     std::ostringstream ss;
-    ss << in << "{\n"
+    ss << "{\n"
        << in << "  \"kind\": \"Identifier\",\n"
        << in << "  \"name\": \"" << jsonEscape(name) << "\",\n"
        << in << "  \"location\": " << loc.toJson() << "\n"

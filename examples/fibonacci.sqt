@@ -1,0 +1,33 @@
+// saQut — geçerli örnek program (semantik analiz + kod üretimi fixture'ı)
+//
+// Kilitlenmiş tasarıma uyar: prosedürel, value semantics, kullanıcıya açık
+// pointer yok, tek main, struct/array gerektirmez. Birinci kilometre taşının
+// ("fibonacci'yi derle ve çalıştır") referans programıdır.
+//
+// İlk ifade doğrudan bir fonksiyon tanımı olabilir; zorunlu class/main
+// boilerplate'i yoktur (Java'nın aksine).
+
+int fibonacci(int n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+int fibonacciIterative(int n) {
+    int first = 0;
+    int second = 1;
+    for (int i = 0; i < n; i = i + 1) {
+        int next = first + second;
+        first = second;
+        second = next;
+    }
+    return first;
+}
+
+int main() {
+    int n = 10;
+    print(fibonacci(n));           // recursive
+    print(fibonacciIterative(n));  // iterative
+    return 0;
+}

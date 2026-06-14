@@ -9,6 +9,13 @@
 > Bu kararlar bir tasarım oturumunda (kullanıcı + asistan) tartışılarak alındı.
 > Tartışmanın tam akışı için bkz. `docs/transkript-frontend-tasarim.md`.
 > Uygulama planı için bkz. `docs/roadmap-frontend.md`.
+>
+> ⚠️ **Yapılan vs planlanan:** Bu belgedeki ADR-006…019 **tasarım kararlarıdır**;
+> tarif edilen makine (sembol tablosu, semantik analiz, tip sistemi, diagnostic,
+> optimizasyon, IR+VM) **henüz kodlanmamıştır.** Bugün çalışan: lexer, tokenizer,
+> Pratt parser, AST, AST'nin JSON serileştirmesi, CLI iskeleti, konum takibi ve
+> basit aritmetiği düşüren minimal bir IR deneyi. Hiçbir ADR, var olmayan bir
+> mekanizmayı varmış gibi anlatmaz.
 
 ---
 
@@ -48,10 +55,10 @@ mimarisi):
 ```
 FRONTEND                 MIDDLE-END               BACKEND
 lexer → token →          optimizasyon             IR lowering →
-parser → AST →           (opsiyonel, iteratif,    kod üretimi
-symbol table →           toggle'lı, ortak         (C transpile /
-semantic analiz          gösterim üstünde)        QBE / JIT)
-(annotated AST)
+parser → AST →           (opsiyonel, iteratif,    bytecode VM (birincil)
+symbol table →           toggle'lı, ortak         + ileride C transpile
+semantic analiz          gösterim üstünde)        (makine kodu = uzak
+(annotated AST)                                    gelecek; ADR-015)
 ```
 
 - **Pass 1 (Syntax):** token → ham AST. (Büyük ölçüde mevcut.)
@@ -62,9 +69,10 @@ semantic analiz          gösterim üstünde)        QBE / JIT)
 "Parser ve symbol hikayesini bitirmek" = **frontend'i bitirmek.** Optimizasyon
 ayrı bir katmandır (middle-end), backend'ler bu ortak çıktıdan beslenir.
 
-**Neden bu katmanlama?** Birden çok backend (C transpile, QBE, JIT) planlandığı
-için, ortak işler (analiz, optimizasyon) **bir kez** ortak katmanda yapılmalı;
-yoksa her backend aynı optimizasyonu yeniden yazar.
+**Neden bu katmanlama?** Birden çok backend (birincil: IR+bytecode VM, ADR-015;
+ileride: C transpile; çok uzak: makine kodu) hedeflendiği için, ortak işler
+(analiz, optimizasyon) **bir kez** ortak katmanda yapılmalı; yoksa her backend
+aynı optimizasyonu yeniden yazar.
 
 ---
 
@@ -109,6 +117,35 @@ saqut ast file.sqt              → ham + annotate edilmiş AST (1+2 burada duru
 saqut ast file.sqt --optimized  → klon, folding uygulanmış (3 var)
 ```
 
+### Güncelleme — Klon maliyeti yük taşır (load-bearing)
+
+İlk metin "ağaç klonlamak ucuz ve basittir" diyordu; bu **klon maliyetini hafife
+alıyor** ve bir **tutarlılık (coherence) problemini** atlıyordu. Düzeltme:
+
+`ASTNode::clone()` "belki gerekir" değil, **merkezi ve spesifiye edilmesi
+zorunlu** bir bileşendir; tüm öncesi/sonrası hikâyesi ona dayanır (bkz. roadmap
+Faz 4'te clone() yükseltildi).
+
+**Klonlanırken karar verilmesi gereken iki nokta (açıkça belgele):**
+
+1. **Parent pointer'lar yeniden bağlanmalı.** Klon node'larının `parent`'ı
+   orijinali değil, klonu göstermeli; yoksa yapısal doğrulama ve dönüşümler
+   yanlış ağaçta gezinir.
+
+2. **`IdentifierNode → Symbol` bağları: paylaş mı, yeniden eşle mi?**
+   - **Paylaş** (klon ve orijinal aynı sembol tablosuna işaret eder): ucuz, ama
+     klonu optimize etmek orijinalin **referans sayımlarını bozar** (DCE klonda
+     bir kullanımı silince orijinalin Symbol ref-count'u da düşer).
+   - **Yeniden eşle** (klona ait bir sembol tablosu kopyası): doğru, ama ucuz
+     değil.
+   - **Karar:** `--optimized` istendiğinde sembol tablosu da **klonlanır ve
+     yeniden eşlenir** (remap). Doğruluk, ucuzluğa tercih edilir; klon zaten
+     yalnızca optimizasyon istendiğinde üretilir, sıcak yol değildir. "Ucuz"
+     iddiası kaldırıldı.
+
+Bu, ADR-013'teki "ref-count Symbol'da yaşar" kararıyla tutarlıdır: ref-count
+Symbol'da olduğu için, klonun kendi Symbol'larına sahip olması şarttır.
+
 ---
 
 ## ADR-008: Optimizasyon Konumu — AST mı, IR mı?
@@ -129,7 +166,7 @@ sorusu tartışıldı. İki uç yaklaşım var:
 - **Kaynak-seviyesi, ağaç-yerel optimizasyonlar** (constant folding, ölü kod
   işaretleme, unused variable) → **AST'de** yapılır. Çünkü:
   1. Dil JS gibi basit; ağır optimizasyona ihtiyaç yok.
-  2. Backend-bağımsız → C transpile, QBE, JIT üçü birden faydalanır.
+  2. Backend-bağımsız → bytecode VM ve ileride C transpile birden faydalanır.
   3. İncelenebilir kalır (`saqut ast --optimized`) — projenin varlık sebebi.
 
 - **CFG/dataflow gerektiren optimizasyonlar** ("bir kez atanıp bir kez
@@ -169,6 +206,39 @@ belki 7 — kodun kendisi belirler.
 > her **tur** daha az değişiklik yapar. Analiz pass'leri (symbol table, type check)
 > "kolaylaşmaz"; onlar bir kez çalışır.
 
+### Güncelleme — Sonlanma değişmezi (termination invariant)
+
+Fixpoint döngüsünün **sonlanacağı garanti edilmeli**. İki seçenekten en az biri
+zorunludur:
+
+1. **Monotonluk:** havuzdaki tüm pass'ler **monoton** olmalı — yalnızca
+   küçültür/sadeleştirir, asla büyütmez. Constant folding ve dead code
+   elimination bugün monotondur, dolayısıyla fixpoint sonlanır.
+2. **Sert iterasyon tavanı (cap):** bir üst sınır (örn. `maxFixpointRounds`).
+
+**Neden gerekli:** ileride **büyüten** pass'ler (inlining, loop unrolling)
+eklenirse, naif fixpoint **salınabilir** (A büyütür, B küçültür, sonsuz döngü).
+Büyüten bir pass eklendiği an, monotonluk bozulur ve **iterasyon tavanı zorunlu
+hale gelir.** Bu değişmez şimdiden yazıya geçirildi ki ileride unutulmasın.
+
+### Güncelleme — "Analiz bir kez çalışır" çelişkisinin çözümü
+
+ADR-013 "analiz bir kez çalışır" diyor; ama folding **erişilebilirliği**
+(`if(false)`) ve **referans sayımlarını** değiştirir, DCE de tam bunlara
+dayanır. Eğer analiz gerçekten yalnızca bir kez çalışırsa, fixpoint'in ikinci
+turundaki DCE **bayat (stale) veriyle** çalışır ve zincirleme fırsatları kaçırır.
+
+**Çözüm — iki analiz sınıfını ayır:**
+
+- **Kaynağa-bağlı analiz** (her ifadenin tipi, sembol bağları): kaynak değişmediği
+  sürece sabittir → **bir kez** çalışır, klona taşınır.
+- **Türetilmiş/akışa-bağlı analiz** (erişilebilirlik `isReachable`, referans
+  sayıları): bir dönüşüm bunları geçersizleştirir → **fixpoint döngüsünün her
+  turunda, klon üzerinde yeniden hesaplanır.**
+
+Yani "analiz bir kez çalışır" ifadesi yalnızca **kaynağa-bağlı** analiz için
+geçerlidir; akışa-bağlı analiz tur başına tazelenir. ADR-013 buna göre okunmalı.
+
 ---
 
 ## ADR-010: Tip Sistemi Tasarımı
@@ -204,6 +274,33 @@ boyut tip eşitliğine girmez (JS gibi). Tip kontrolü basit kalır.
 **Neden genişletilebilir?** "Bu dilin geleceğini bilmiyoruz; beklenenden popüler
 de olabilir, yıllarca repolarda tozlanabilir de." Temel sağlam ve büyümeye açık
 olmalı.
+
+### Güncelleme — Sayısal literal tipleme kuralı
+
+"Gizli dönüşüm yok + tip çıkarımı yok" altında `float x = 1;` ifadesi
+**tanımsızdı**. Bu açıkça karara bağlanmalı, çünkü tip denetleyicisini (Faz 3)
+doğrudan yönlendirir.
+
+**Değerlendirilen iki kural:**
+
+- **(a) Literal her zaman `int`:** `1` daima `int`'tir. `float x = 1;` bir tip
+  hatasıdır; `float x = 1.0;` yazmak zorunludur. En katı, en öngörülebilir; ama
+  rahatsız edici ve "gizli dönüşüm yok" ilkesini literallere kadar gereksiz yere
+  zorlar.
+- **(b) Tamsayı literali bağlama-göre tiplenir (context-typed / polymorphic):**
+  tipsiz bir tamsayı sabiti, beklenen tip ona **kayıpsız** sığıyorsa o tipe
+  uyarlanır. `float x = 1;` çalışır (`1` → `1.0`); `int y = 1.5;` ise hata
+  (kayıp olur).
+
+**Karar:** ✅ **(b) Bağlama-göre tiplenen tamsayı literalleri.**
+
+- Gerekçe: bu bir **değişken-değer dönüşümü değil, bir derleme-zamanı sabitinin
+  uygun tipte yorumlanmasıdır** — tam olarak ADR-010'un zaten tanıdığı "sabit
+  istisnası" (`int a = 5/2 → 2`) ruhuyla aynı kapıya çıkar. Çalışma zamanı
+  `int` değişkenini `float`'a gizlice çevirmek hâlâ **yasaktır**; istisna
+  yalnızca **literal/sabit** içindir.
+- Kural net: *değişken→değişken* gizli dönüşüm yok; *literal→beklenen tip*
+  kayıpsızsa serbest. `float x = anInt;` hata; `float x = 1;` serbest.
 
 ---
 
@@ -268,6 +365,44 @@ Her katman bir namespace tutar; değişken bulunamazsa bir üst katmanda aranır
 - **Fonksiyon içi tek geçiş yeter** (lokal'de forward ref yok). "Öncesi/sonrası"
   derdi yalnızca global'ler içindir, onu da Geçiş 1 çözer (global'ler en baştan
   tamamen doludur).
+
+### Güncelleme — Global "tam forward reference" çok genişti: üç-parçalı kural
+
+İlk metin "global = her zaman forward-reference güvenli" diyordu; bu **fazla
+geniş**. Global bir değişkenin **başlatıcısının (initializer) bir çalışma
+sırası vardır** (tıpkı lokaller gibi). Düzeltme — üç ayrı kural:
+
+1. **Global fonksiyonlar / struct'lar → tam hoisting.** Tanım anında çalışmazlar,
+   sıradan bağımsız her yerde görünür. (Güvenli; değişmedi.)
+2. **Global değişken isimleri → hoist edilir.** İsim her yerde görünür.
+3. **Global değişken başlatıcıları → değer sırasına tabidir** (lokaller gibi) →
+   **declare-before-use** VEYA bir **definite-assignment (kesin-atama) analizi**
+   gerektirir.
+
+**Neden:** `int a = b; int b = 5;` global scope'ta, isim-hoisting'e güvenilirse,
+`a`'ya **sessizce çöp değer** verir — kaçınmaya çalıştığımız tam o JS `var`
+durumu. Java da aynı sebeple bunu kısıtlar. Karar: global başlatıcılar için de
+**declare-before-use** uygulanır (en basit, definite-assignment'a gerek
+bırakmaz). Yani isim görünür ama **kendinden önceki** bir global başlatıcıda
+kullanılabilir.
+
+### Güncelleme — Döngüsel / karşılıklı-özyinelemeli struct tespiti
+
+Pointer olmadığı için tüm struct iç içeliği **değer (by-value)** ile olur →
+herhangi bir kapsama döngüsü sonsuz boyut demektir:
+
+```
+struct A { B b }   // A, B'yi değer olarak içerir
+struct B { A a }   // B, A'yı değer olarak içerir → sonsuz boyut
+```
+
+Bu **derleme hatası olmak zorunda** ve hata kataloğunda **eksikti**. Eklendi:
+**`E010` — özyinelemeli/döngüsel struct tanımı.** Symbol toplama sonrası bir
+**topolojik / kapsama-döngüsü kontrolü** çalışır (struct'ları düğüm, "alan
+olarak içerir" kenarını çevrim arayan bir DFS ile). Çevrim bulunursa `E010`.
+
+(Karşılaştır: `struct A { B b }` + `struct B { int x }` geçerlidir; yalnızca
+**çevrim** yasaktır. Pointer olsaydı çevrim mümkün olurdu — ama pointer yok.)
 
 ---
 
@@ -351,12 +486,14 @@ Sebep: kullanım sayısı **değişkene** aittir, tek bir kullanım node'una de�
 |---|---|---|
 | Pointer (kullanıcı syntax'ı `*`/`&`) | ❌ Yok | Ama derleyici/runtime **içeride** pointer'ı sonuna kadar kullanır |
 | Tuple / Generic (`<T,U>`) | ❌ Yok | |
-| Class / OOP | ❌ Yok (başta) | `class` keyword'ü yok sayılır |
-| Struct | ✅ Var | `struct A { B bVar }` olur (B başka yerde tanımlı); recursive define yok |
+| Class / OOP / kalıtım | ❌ Yok (başta) | `class` keyword'ü yok sayılır |
+| Closure | ❌ Yok | Bkz. ADR-019 (bellek bağımlılığı) |
+| Struct | ✅ Var | `struct A { B bVar }` olur (B başka yerde tanımlı); **çevrim yasak → `E010`** |
+| `interface` | ⏸️ Ertelendi | Reddedilmedi; v0 değil — gerekçe aşağıda + ADR-018 |
 | Array | ✅ `int[]` | Dinamik yönde; runtime bellek modeli ertelendi |
 | Fonksiyonlar | ✅ Tipli | Dönüş + parametre tipleri zorunlu |
 | `auto` / tip çıkarımı | ❌ Yok | Her şey açık tipli |
-| Gizli int↔float dönüşümü | ❌ Yok | Sadece sabit folding'de istisna |
+| Gizli int↔float dönüşümü | ❌ Yok | Sadece sabit/literal folding'de istisna (ADR-010) |
 
 ### Dinamik Array'in Bellek Yükümlülüğü (Gelecek Notu)
 
@@ -364,13 +501,164 @@ Sebep: kullanım sayısı **değişkene** aittir, tek bir kullanım node'una de�
 bir yükümlülüktür ama **frontend'i bloklamaz** ve kolay yolu vardır:
 
 - **Frontend:** yalnızca "bu int dizisi" bilgisini ister; bellek modelinden habersiz.
-- **C transpile backend (ilk backend):** `int[]` → C'de `struct {int* data; size_t len, cap;}`,
-  `malloc/realloc/free` ile yönetilir. Bellek yönetimi C'den hazır gelir.
-- **JIT backend:** bellek yönetimini kendi yapmaz; minik bir runtime kütüphanesi
-  (`array_new`, `array_push`, `array_free`) olur, JIT bunlara **call** emit eder.
-- **Yönetim stratejisi (ne zaman free):** en basiti scope-tabanlı ownership
-  (array'i tutan değişken scope'tan çıkınca free). GC gerekmez. Runtime'a
-  gelince kararlaştırılır.
+- **IR + bytecode VM (ilk çalıştırma modeli, ADR-015):** bellek host (C++)
+  heap'idir; array'ler host tarafında `std::vector` benzeri bir yapıyla tutulur.
+  VM, array işlemleri için **host fonksiyonlarına** (FFI seam, ADR-016) çağrı
+  yapar. v0 için özel allocator gerekmez.
+- **C transpile backend (ileride, ikinci backend):** `int[]` → C'de
+  `struct {int* data; size_t len, cap;}`, `malloc/realloc/free` ile yönetilir.
+- **Yönetim stratejisi (ne zaman free):** scope-tabanlı ownership (array'i tutan
+  değişken scope'tan çıkınca free). GC gerekmez — **neden gerekmediği aşağıda
+  gerekçelendirildi.**
+
+### Güncelleme — Scope-tabanlı bellek artık GEREKÇELİ (bağımlılığı belgele)
+
+Önceki kaygı ("scope çıkışında free, aliasing/escape altında bozulur") kilitli
+dil kimliğiyle **lehte çözüldü:**
+
+> prosedürel + value semantics + kullanıcı pointer'ı yok + closure yok + kaçan
+> referans yok → array/string'ler tanımlandıkları scope'tan **kaçamaz** →
+> scope-tabanlı ownership (scope çıkışında free) **gerçekten çalışır, GC
+> gerekmez.**
+
+**Bağımlılık açıkça yazılır:** scope-tabanlı bellek, *yalnızca* no-pointer /
+value-semantics seçimi sayesinde geçerlidir. `interface` değerleri veya kaçan
+referanslar eklenirse bu sorun **yeniden açılır**. (Bu, `interface`'i ertelemenin
+ikinci sebebidir — bkz. ADR-018, ADR-019.)
+
+---
+
+## ADR-015: Çalıştırma Modeli — IR + Bytecode VM (Makine-Kodu JIT Kapsam Dışı)
+
+### Bağlam
+
+Daha önceki belge/konuşmalarda çalıştırma için "JIT" terimi geçiyordu. Hangi
+çalıştırma modeli? Üç uç var: tree-walker, bytecode VM, gerçek makine-kodu JIT.
+
+### Değerlendirilen Yaklaşımlar
+
+- **Tree-walker (AST'yi doğrudan gez-çalıştır):** en basit, ama **çok yavaş**;
+  her çalıştırmada ağaç gezilir.
+- **Makine-kodu JIT** (register allocation, ABI/çağırma sözleşmeleri,
+  çalıştırılabilir `mmap` bellek): en hızlı; ama **tek faydası ham hızdır**, ki
+  burada öncelik değil. Determinizmi ve incelenebilirliği zorlaştırır, devasa
+  mühendislik yükü getirir.
+- **IR + bytecode VM** (kendi IR'imize derle, yorumlayıcı döngü ile çalıştır):
+  determinizm ve incelenebilirliği **doğrudan** sağlar; tree-walker'dan hızlı;
+  bellek host heap'iyle kolay.
+
+### Karar
+
+✅ **IR + bytecode VM.** saQut kendi IR'sine derler ve bir yorumlayıcı döngüyle
+çalıştırır.
+
+- ❌ **Makine-kodu JIT kapsam dışıdır** (terminoloji düzeltmesi: "JIT" demeyi
+  bırak). Öncelikler **determinizm + incelenebilirlik** (toolbox), ham hız değil.
+- **Bellek kolaydır:** host (C++) heap'i; özel runtime allocator yok (v0).
+- **C'ye transpile, geçerli bir İKİNCİ backend olarak ileride kalır** (frontend
+  backend-bağımsız, ADR-006).
+- İleride makine kodu **gerçekten** istenirse: elle code generator yazmak yerine
+  **libgccjit / LLVM'e bağlan** (ADR-001'deki QBE/custom değerlendirmeleri o gün
+  için geçerli). Bu **çok uzak gelecektir.**
+
+---
+
+## ADR-016: FFI Seam — Host Fonksiyon Çağırma Deliği
+
+### Bağlam
+
+`print` bile bir "dış dünya" çağrısıdır; VM tek başına ekrana yazamaz, host'tan
+bir fonksiyon çağırmalıdır. Bu ihtiyaç ya **kaza eseri** tek bir özel-durum
+olarak gömülür, ya da **kasıtlı bir mekanizma** olarak tasarlanır.
+
+### Karar
+
+✅ **IR/runtime tasarımına bilinçli bir FFI seam konur:** "host fonksiyonu çağır"
+için tek, genel bir IR mekanizması (örn. `callhost <id>, args...`).
+
+- `print` bu seam'in **ilk müşterisidir**, özel-durum değil.
+- İleride tüm "batteries" (bkz. ADR-017) bu sınır üzerinden gelir: sıkıştırma/
+  kripto C kütüphaneleri buraya bağlanır.
+- **Neden şimdi:** seam'i sonradan eklemek IR ve VM'i baştan değiştirmeyi
+  gerektirir; deliği bir kez doğru açmak ucuzdur. Mekanizmayı **şimdi** doğru
+  tasarla, içini sonra doldur.
+
+---
+
+## ADR-017: Batteries / Stdlib — Sınır Problemi (Ertelendi)
+
+### Bağlam
+
+Gerçek bir genel sürüm pil ile gelmeli (sıralama, sıkıştırma, kripto,
+JSON/XML/HTML, ileride runtime/donanım, ses/görüntü/video). JSON/string
+ergonomisi olmayan bir dil benimsenmez — bu doğru. Ama korku: pilleri çekirdeğe
+gömmek **monolit** yaratır.
+
+### Karar
+
+✅ **Pil = sınır (boundary) problemi, "zlib'i yeniden yaz" problemi değil.**
+
+- Çekirdek: **küçük bir gerçek builtin kümesi** (`print`, temel zorunlular) +
+  **gerisi kütüphane/FFI.**
+- **JSON/XML/HTML ayrıştırıcıları saQut'ta yazılabilir** (string + struct +
+  fonksiyon + kontrol akışı yeter) — ilk "gerçek program" demoları.
+- **Sıkıştırma/kripto:** denenmiş C kütüphanelerine **FFI** ile bağlan. **Kripto
+  asla elle yazılmaz.**
+- **Bugüne tek yansıması:** FFI seam'i (ADR-016) bırak. Gerisi **v0 kapsamı
+  dışıdır.** Sınır bir kez çizilir, piller üstünde sonsuza dek birikir.
+
+---
+
+## ADR-018: `interface` Ertelemesi (Reddedilmedi)
+
+### Bağlam
+
+Kullanıcı struct'ın yanında `interface` de istedi (crypto, compression, custom
+data types, JSON, string için). `interface` alınmalı mı, ne zaman?
+
+### Karar
+
+✅ **Şimdi `struct`, `interface` ise ertelenir (reddedilmez).**
+
+**Neden ertelendi:** `interface`, `struct`'tan kategorik olarak ağırdır.
+- Struct yalnızca alan yerleşimidir (field layout).
+- Interface "bu metotları sağlayan herhangi bir tip" demektir → çağrı yerinde
+  somut tip **bilinmez** → **dinamik dispatch** → vtable / fat pointer (içsel
+  pointer, izinli) → ve bir interface değeri **herhangi bir tipi tutabilir**, bu
+  da **kaçma/yaşam-süresi (escape/lifetime) problemini yeniden açar** (ADR-019).
+- Go bunu fat pointer + GC ile çözer; saQut **GC istemiyor.**
+
+Kullanıcının saydığı her şey (crypto, compression, custom data, JSON, string)
+**yalnızca struct + fonksiyonla** yapılabilir (C bunu kanıtlar). Dolayısıyla:
+şimdi struct'ı al, interface'i ertele.
+
+**Metot-çağrı şekeri** (`list.push(5)` → `push(list, 5)`) ileride **parser
+seviyesinde, sıfır semantik maliyetli** bir desugaring olarak eklenebilir —
+şimdi değil.
+
+---
+
+## ADR-019: Frontend ↔ Runtime Sorumluluk Ayrımı
+
+### Bağlam
+
+"Hangi CPU çekirdeği, hangi cihaz, ne zaman tetiklenir, hangi çıktı formatı"
+gibi sorular nereye ait? Frontend'e mi, runtime'a mı?
+
+### Karar
+
+✅ **Net ayrım, frontend'i runtime kaygılarıyla yükleme:**
+
+- **Frontend:** **yapı ve anlam** — tip, scope, dataflow. (Bu yol haritasının
+  konusu.)
+- **Runtime/backend:** çekirdek/cihaz/tetikleme/çıktı formatı.
+
+**Neden:** bu ayrım, kullanıcının önem verdiği **modülerliği korur**; frontend
+backend-bağımsız kalır (ADR-006), böylece IR+VM ve ileride C-transpile aynı
+frontend'den beslenir. Ayrıca **value-semantics + no-escape** kararının (kaçan
+referans/closure yok) bağımlılığı buradadır: bu sayede scope-tabanlı bellek
+çalışır (ADR-014). Closure veya interface değerleri eklemek bu ayrımı ve bellek
+modelini birlikte zorlar — ikisi de bu yüzden ertelendi.
 
 ---
 
@@ -379,11 +667,16 @@ bir yükümlülüktür ama **frontend'i bloklamaz** ve kolay yolu vardır:
 | ADR | Konu | Karar |
 |---|---|---|
 | 006 | Frontend mimarisi | Çok-aşamalı; frontend/middle-end/backend katmanları |
-| 007 | Analiz vs optimizasyon | Analiz yerinde işaretler; optimizasyon klonda dönüştürür |
+| 007 | Analiz vs optimizasyon | Analiz yerinde işaretler; optimizasyon klonda dönüştürür; `clone()` merkezi, sembol tablosu remap edilir |
 | 008 | Optimizasyon konumu | Basitler AST'de, dataflow gerektirenler IR'de |
-| 009 | Pass yönetimi | Fixpoint döngüsü, toggle'lı |
-| 010 | Tip sistemi | Minimal+genişletilebilir Type; gizli dönüşüm yok; Error tipi |
-| 011 | Scope/forward ref | Global'de forward ref, lokal'de declare-before-use (Java gibi) |
+| 009 | Pass yönetimi | Fixpoint döngüsü, toggle'lı; monotonluk/iterasyon-tavanı değişmezi; akışa-bağlı analiz tur başına tazelenir |
+| 010 | Tip sistemi | Minimal+genişletilebilir Type; gizli dönüşüm yok; Error tipi; tamsayı literali bağlama-göre tiplenir |
+| 011 | Scope/forward ref | Global'de forward ref (fonksiyon/struct), ama global başlatıcı declare-before-use; lokal declare-before-use; döngüsel struct → `E010` |
 | 012 | Node hiyerarşisi | ExpressionNode / StatementNode ara tabanları |
 | 013 | Analiz verisi yeri | Her şey AST'de; ref-count Symbol'da |
-| 014 | Dil kapsamı | Pointer/class/generic yok; struct+array+tipli fonksiyon var |
+| 014 | Dil kapsamı | Pointer/class/generic/closure yok; struct+array+tipli fonksiyon var; scope-tabanlı bellek gerekçeli |
+| 015 | Çalıştırma modeli | IR + bytecode VM; makine-kodu JIT kapsam dışı |
+| 016 | FFI seam | Kasıtlı "host fonksiyonu çağır" mekanizması; `print` ilk müşteri |
+| 017 | Batteries/stdlib | Sınır problemi; küçük builtin + FFI/kütüphane; ertelendi |
+| 018 | `interface` | Ertelendi (reddedilmedi); struct+fonksiyon yeter |
+| 019 | Frontend↔runtime | Frontend yapı+anlam; çekirdek/cihaz/çıktı runtime'a ait |

@@ -1,14 +1,30 @@
 # saQut Frontend Yol Haritası — Symbol Table + Semantic Analiz + Optimizasyon
 
 > Bu belge, frontend'i tamamlamaya yönelik dosya-dosya uygulama planıdır.
-> Kararların gerekçeleri: `docs/adr-frontend-analiz.md` (ADR-006…014).
+> Kararların gerekçeleri: `docs/adr-frontend-analiz.md` (ADR-006…019).
 > Tartışma akışı: `docs/transkript-frontend-tasarim.md`.
 >
 > **İlke:** Sıralama katıdır — her faz bir öncekine dayanır. Her faz sonunda
-> mevcut örneklerle (`examples/Final.sqt`, `examples/source.sqt`) ve CLI
+> geçerli örnekle (`examples/fibonacci.sqt`, `examples/source.sqt`) ve CLI
 > komutlarıyla doğrulama yapılır; regresyon olmamalıdır. Kod temiz, anlaşılır ve
 > yorum satırlarıyla takip edilebilir olmalıdır (header-only tarzı korunur,
 > bkz. ADR-003).
+>
+> ⚠️ **Yapılan vs planlanan:** Bugün çalışan = lexer, tokenizer, Pratt parser,
+> AST, AST'nin JSON serileştirmesi, CLI iskeleti, konum takibi, basit aritmetiği
+> düşüren minimal IR deneyi. Bu yol haritasındaki **her şey planlıdır** (sembol
+> tablosu, semantik analiz, tip sistemi, diagnostic, optimizasyon).
+>
+> 🎯 **Bu haftanın işi:** **sembol tablosu + iki-geçişli toplayıcı** (Faz 2),
+> hedef **"fibonacci'yi derle ve çalıştır"** (`examples/fibonacci.sqt`). Faz 0–1
+> bunun önkoşuludur.
+>
+> 🧭 **Önce dikey dilim, sonra çerçeve.** Bir şey çalışmadan önce genel pass
+> manager / evrensel config / ağır soyutlama inşa etme. Uçtan uca tek bir dilim
+> (kaynak → IR → çalıştır; tamsayı + değişken + kontrol akışı + tek `print`)
+> önce çalışsın. Faz 4'ün framework'ü (OptimizationManager, fixpoint, config)
+> ancak Faz 0–3 fibonacci'yi geçirdikten **sonra** anlam kazanır — erken
+> soyutlama daha az değil, daha çok karmaşıklıktır.
 
 ---
 
@@ -25,7 +41,8 @@ Faz 4  Optimizasyon    Pass manager (fixpoint) + constant folding + dead code
 Katman eşlemesi (ADR-006):
 - **Frontend:** Faz 0–3
 - **Middle-end:** Faz 4
-- **Backend:** bu yol haritasının dışında (C transpile → QBE → JIT, ADR-001)
+- **Backend:** bu yol haritasının dışında (birincil: IR + bytecode VM, ADR-015;
+  ileride: C transpile; makine kodu uzak gelecek — "JIT" kapsam dışı)
 
 ---
 
@@ -46,20 +63,27 @@ Katman eşlemesi (ADR-006):
 
 | Kod | Anlam | Hangi fazda üretilir |
 |---|---|---|
-| `E001` | Tanımsız değişken/isim | Faz 2/3 |
+| `E001` | Tanımsız değişken/isim (declare-before-use ihlali dahil — lokal ve **global başlatıcı**, ADR-011) | Faz 2/3 |
 | `E002` | Aynı scope'ta çift tanım | Faz 2 |
-| `E003` | Tip uyuşmazlığı | Faz 3 |
+| `E003` | Tip uyuşmazlığı (gizli dönüşüm yok; literal için bağlama-göre kural, ADR-010) | Faz 3 |
 | `E004` | Döngü/switch dışı `break`/`continue` | Faz 3 |
 | `E005` | Fonksiyon dışı `return` | Faz 3 |
 | `E006` | Return tipi imzaya uymuyor | Faz 3 |
 | `E007` | Tanımsız tip (bilinmeyen tip adı) | Faz 2/3 |
 | `E008` | Fonksiyon çağrısı argüman sayısı/tipi uyuşmuyor | Faz 3 |
 | `E009` | Array boyutu sabit değil / geçersiz | Faz 3 |
+| `E010` | **Özyinelemeli/döngüsel struct tanımı** (by-value çevrim → sonsuz boyut, ADR-011) | Faz 2/3 |
 | `W001` | Kullanılmayan değişken | Faz 4 |
 | `W002` | Sıfıra bölme (sabit folding) | Faz 4 |
 | `W003` | Erişilemez (ölü) kod | Faz 4 |
 
 *(Liste uygulamada genişleyebilir; yeni hatalar buraya eklenir.)*
+
+**Literal / başlatıcı kuralları (ADR-010/011) hata kataloğunu nasıl etkiler:**
+- `float x = 1;` → **hata değil** (tamsayı literali bağlama-göre tiplenir,
+  kayıpsız). `int y = 1.5;` → `E003` (kayıp). `float x = anInt;` → `E003`
+  (değişken→değişken gizli dönüşüm yok).
+- `int a = b; int b = 5;` (global) → `E001` (global başlatıcı declare-before-use).
 
 ### Doğrulama
 - `Type::equals` / `toString` birim testleri.
@@ -83,7 +107,11 @@ ayır, analiz alanlarını ekle. İlgili ADR: 012, 013.
 | `src/parser/nodes/*.cpp` | `toJson()`/`log()`'a yeni alanları (tip, isReachable) ekle — boş cpp'ler doluyor. |
 
 ### Doğrulama
-- `saqut ast examples/Final.sqt` hâlâ geçerli JSON (regresyon yok, `python3 -m json.tool` ile).
+- `saqut ast examples/fibonacci.sqt` hâlâ geçerli JSON (regresyon yok,
+  `python3 -m json.tool` ile). Parser regresyonu için ayrıca
+  `examples/parser-stress/Final.sqt` de geçerli JSON üretmeye devam etmeli (bu
+  dosya **geçerli program değildir**, yalnızca parser/AST stres fixture'ıdır —
+  semantik fazlarda fixture olarak kullanılmaz).
 - Derleme uyarısız (`-Wall -Wextra`).
 
 ---
@@ -105,12 +133,20 @@ ayır, analiz alanlarını ekle. İlgili ADR: 012, 013.
 ### Notlar
 - Scope oluşturan node'lar: Program, FunctionDecl (parametreler), Block, for/while.
 - `src/json.hpp`'deki eski `collectSymbolsRecursive` bu sistemle değiştirilir.
-- Tanımsız isim → `E001`; bilinmeyen tip → `E007`.
+- Tanımsız isim → `E001`; bilinmeyen tip → `E007`; çift tanım → `E002`.
+- **Döngüsel struct kontrolü (`E010`):** Geçiş 1'den sonra struct'lar düğüm,
+  "alanı olarak içerir" kenarıyla bir çevrim-arama (DFS) çalıştır; çevrim →
+  `E010` (ADR-011). Pointer olmadığı için tüm kapsama by-value'dur; çevrim =
+  sonsuz boyut.
+- **Global başlatıcı declare-before-use (ADR-011):** fonksiyon/struct tam hoist
+  edilir, global değişken **ismi** hoist edilir, ama global değişken
+  **başlatıcısı** kendinden önce tanımlı isimleri kullanabilir; aksi → `E001`.
 
 ### Doğrulama
-- `saqut symbols examples/Final.sqt` → zengin tablo (her sembolün tipi, tanım yeri,
-  referansları). Forward reference çalışır (sonra tanımlı fonksiyon çağrılabilir).
-- Hatalı örnekler → `E001`/`E002`/`E007` diagnostic'leri.
+- `saqut symbols examples/fibonacci.sqt` → zengin tablo (her sembolün tipi, tanım
+  yeri, referansları). Forward reference çalışır (sonra tanımlı fonksiyon
+  çağrılabilir — `main`, `fibonacci`'yi çağırır).
+- Hatalı örnekler → `E001`/`E002`/`E007`/`E010` diagnostic'leri.
 
 ---
 
@@ -123,7 +159,7 @@ doğrula. İlgili ADR: 010, 013.
 
 | Dosya | İçerik |
 |---|---|
-| `src/sema/type_checker.hpp/.cpp` | İfadeleri alttan üste gez, her `ExpressionNode`'a `resolvedType` ata. Gizli dönüşüm yok (ADR-010) → uyuşmazlıkta `E003`. Kontrol noktaları: atama (`=`), binary op operand tipleri, fonksiyon çağrısı argümanları (`E008`), array index, return değeri (`E006`), variable init tip uyumu. Hata olunca node'a `Type::error()` → ardışık sahte hata yok. |
+| `src/sema/type_checker.hpp/.cpp` | İfadeleri alttan üste gez, her `ExpressionNode`'a `resolvedType` ata. Gizli **değişken→değişken** dönüşüm yok (ADR-010) → uyuşmazlıkta `E003`. **Tamsayı literali bağlama-göre tiplenir** (kayıpsızsa beklenen tipe uyar; `float x = 1;` geçerli, `int y = 1.5;` → `E003`). Kontrol noktaları: atama (`=`), binary op operand tipleri, fonksiyon çağrısı argümanları (`E008`), array index, return değeri (`E006`), variable init tip uyumu. Hata olunca node'a `Type::error()` → ardışık sahte hata yok. |
 | `src/sema/structural_validator.hpp/.cpp` | Parent pointer ile ağaç-tırmanma kontrolleri: `break`/`continue` döngü/switch içinde mi (`E004`), `return` fonksiyon içinde mi (`E005`), array boyutu sabit mi (`E009`). |
 
 ### Notlar
@@ -148,7 +184,7 @@ optimizasyon. **Orijinali bozmaz — klon üstünde** (ADR-007). İlgili ADR: 00
 |---|---|
 | `src/core/config.hpp` | `CompilerConfig`: pass toggle'ları (`optConstantFolding`, `optDeadCodeElim`, …), `outputFormat`, `mode`, `optimized` bayrağı. |
 | `src/opt/optimization_pass.hpp` | Soyut `OptimizationPass`: `virtual bool run(ASTNode* root, SymbolTable* table) = 0;` (değişiklik yaptıysa true). `name()`. |
-| `src/opt/optimization_manager.hpp` | Pass listesi; `CompilerConfig`'e göre seçim; **fixpoint döngüsü** (hiçbir pass değişiklik yapmayana kadar). Çalışmadan önce AST'yi **klonlar** (`ASTNode::clone()` gerekebilir). |
+| `src/opt/optimization_manager.hpp` | Pass listesi; `CompilerConfig`'e göre seçim; **fixpoint döngüsü** (hiçbir pass değişiklik yapmayana kadar + **sert iterasyon tavanı** `maxFixpointRounds`, ADR-009). **Sonlanma değişmezi:** havuzdaki pass'ler monoton (yalnızca küçültür); büyüten pass (inlining) eklenirse tavan zorunlu. Çalışmadan önce AST'yi **klonlar** — `ASTNode::clone()` **merkezi bir bileşendir** (ADR-007): parent pointer'lar yeniden bağlanır, sembol tablosu klonlanıp `IdentifierNode→Symbol` bağları **remap** edilir. **Her turda**, klon üzerinde akışa-bağlı analiz (`isReachable`, ref-count) **yeniden hesaplanır** (ADR-009); aksi halde zincirleme fırsatlar bayat veriyle kaçar. |
 | `src/opt/constant_folding.hpp/.cpp` | `BinaryExpression` operandları sabitse hesapla, sonucu sabit `Literal` ile değiştir (klonda). Tipe saygılı (`5/2`→int `2`, ADR-010). Sıfıra bölme → `W002`, katlama yapma. |
 | `src/opt/dead_code_elim.hpp/.cpp` | `isReachable` (Faz 3) işaretine göre: `return`/`break`/`continue` sonrası statement'lar, `if(false)`, sıfır-referanslı değişken (`W001`/`W003`). |
 
@@ -174,6 +210,17 @@ Bu yol haritası bittiğinde frontend tamamlanmış olur:
 - Opsiyonel, incelenebilir optimizasyon.
 
 Sonraki adım (ayrı yol haritası): **IR güçlendirme** (kontrol akışı/fonksiyon/
-bellek opcode'ları, ADR-005/Issue 5.1) → **C transpile backend** → QBE → JIT
-(ADR-001 sırası). Dinamik array'in runtime bellek modeli (ADR-014) backend
-fazında kararlaştırılır.
+bellek opcode'ları + **FFI seam** `callhost`, ADR-016) → **bytecode VM ile
+çalıştırma** (ADR-015) → hedef: **`examples/fibonacci.sqt` derlenir ve çalışır.**
+
+- **Çalıştırma modeli IR + bytecode VM'dir** (ADR-015). **Makine-kodu JIT
+  açıkça kapsam dışıdır;** öncelik determinizm + incelenebilirlik, ham hız değil.
+- **C transpile**, ileride geçerli bir **ikinci** backend olarak kalır (frontend
+  backend-bağımsız). Makine kodu gerçekten istenirse libgccjit/LLVM'e bağlanılır
+  — çok uzak gelecek.
+- IR/VM tasarlanırken **FFI seam'i şimdiden bırak** (ADR-016); `print` ilk
+  müşteridir. Bellek host (C++) heap'idir; özel allocator yok. Dinamik array'in
+  runtime modeli (ADR-014) bu fazda netleşir.
+
+> Çerçeve uyarısı: bu sonraki adım da **önce dikey dilim** ilkesine tabidir —
+> genel VM/optimizasyon altyapısı kurmadan önce fibonacci uçtan uca çalışsın.

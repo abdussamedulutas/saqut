@@ -12,3 +12,6 @@ saqut
 
 # Parola içerebilen yerel API istemcisi - asla commit edilmez
 scripts/gitea.py
+
+# Python bytecode cache
+__pycache__/

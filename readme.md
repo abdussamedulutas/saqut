@@ -92,6 +92,46 @@ VM)** ile çalıştırır.
 
 ---
 
+## Tasarım felsefesi — neden saQut farklı?
+
+saQut "daha iyi bir dil" iddiasında değil. Farkı, **derleyiciyi bir platform**
+olarak ele almasında. İki taahhüt üstüne kuruludur:
+
+**1. Cam (gör + sorgula + içine müdahale et).** Her aşama — token, AST, sembol
+tablosu, tip, IR — kararlı, makine-okur ve **çift yönlü** bir arayüzden
+erişilebilir olmalıdır. Sadece "dök ve göster" değil: kendi AST'ini verip tip
+kontrolü isteyebilmeli, IR verip çalıştırabilmelisin. **Turnusol testi:** bir
+yabancı, yalnızca `saqut ast` + `saqut symbols` çıktısından, bizden habersiz bir
+LSP yazabiliyor mu? Cevap "evet" ise platform gerçektir.
+
+**2. Kafes (deterministik + yetenek-güvenli çalıştırma).** Pointer yok, value
+semantics, scope-tabanlı bellek ve **tek dış-dünya kapısı olan FFI seam**
+(ADR-016) sayesinde saQut kodu, host'un açıkça izin verdiği fonksiyonlar dışında
+dünyaya dokunamaz. Bytecode VM deterministiktir (ADR-015): aynı girdi → aynı
+çıktı → aynı çalışma. "Sadelik" diye tasarlanan bu kararlar aslında bir
+**yetenek-güvenliği (capability sandbox)** kurar — güvenilmeyen veya
+AI-üretimi kodu güvenle çalıştırmak için biçilmiş kaftan.
+
+**Bu ikisinin ödülü — kayıt & tekrar (record-replay).** 🚧 *(vizyon, v0 değil;
+bkz. issue #94.)* Belirsizliğin tek kaynağı (kullanıcı girdisi, zaman, IO,
+GC/thread kararları) FFI kapısından geçtiği için, mükemmel tekrar oynatma için
+**her değişkeni her adımda kaydetmek gerekmez** — yalnızca kapıdan geçen değerler
+kaydedilir, gerisi VM deterministik olarak yeniden çalıştırılarak üretilir. Boyut
+gigabayttan kilobayta düşer. Replay modunda FFI çağrıları gerçekten çalışmaz,
+kaydedilmiş değeri döndürür (dosyayı tekrar silmez, sunucuya tekrar istek atmaz).
+Böylece "benim makinemde çalışıyor, müşteride patlıyor" sorunu: müşteri bir dump
+yollar, sen çöküşü adım adım, aynı verilerle geri sararsın.
+
+> Log, önceden sormayı akıl ettiğin sorulara cevap verir; **tekrar-oynatma,
+> çöküşten *sonra* aklına gelen sorulara.** Zaman-yolculuğu hata ayıklama ayrı
+> bir altyapı değildir — cam sorgularına bir **zaman koordinatı** eklemektir.
+
+⚠️ Bu ödülün bedeli v0'da ödenir: **determinizm kutsaldır ve her belirsizlik
+kaynağı kayıt-altına-alınabilir tek kapıdan geçmelidir.** Sonradan eklenemez;
+baştan korunur.
+
+---
+
 ## Mimari hatlar
 
 ```

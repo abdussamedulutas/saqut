@@ -3,14 +3,14 @@
 
 #include "parser/ast_node.hpp"
 
-class BlockNode : public ASTNode {
+class BlockNode : public StatementNode {
 public:
     BlockNode();
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };
 
-class IfStatementNode : public ASTNode {
+class IfStatementNode : public StatementNode {
 public:
     ASTNode* condition  = nullptr;
     ASTNode* thenBranch = nullptr;
@@ -20,7 +20,7 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-class WhileStatementNode : public ASTNode {
+class WhileStatementNode : public StatementNode {
 public:
     ASTNode* condition = nullptr;
     ASTNode* body      = nullptr;
@@ -29,7 +29,7 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-class ForStatementNode : public ASTNode {
+class ForStatementNode : public StatementNode {
 public:
     ASTNode* init      = nullptr;
     ASTNode* condition = nullptr;
@@ -40,7 +40,7 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-class DoWhileStatementNode : public ASTNode {
+class DoWhileStatementNode : public StatementNode {
 public:
     ASTNode* condition = nullptr;
     ASTNode* body      = nullptr;
@@ -49,7 +49,7 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-class ReturnStatementNode : public ASTNode {
+class ReturnStatementNode : public StatementNode {
 public:
     ASTNode* value = nullptr;
     ReturnStatementNode();
@@ -57,21 +57,21 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-class BreakStatementNode : public ASTNode {
+class BreakStatementNode : public StatementNode {
 public:
     BreakStatementNode();
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };
 
-class ContinueStatementNode : public ASTNode {
+class ContinueStatementNode : public StatementNode {
 public:
     ContinueStatementNode();
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };
 
-class ExpressionStatementNode : public ASTNode {
+class ExpressionStatementNode : public StatementNode {
 public:
     ASTNode* expression = nullptr;
     ExpressionStatementNode();

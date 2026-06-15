@@ -18,6 +18,7 @@ std::string BinaryExpressionNode::toJson(int depth) {
     obj.add("operator", std::string(OPERATOR_MAP_REV.count(Operator) ? OPERATOR_MAP_REV.at(Operator) : "?"));
     if (Left)  obj.addRaw("left", Left->toJson(depth + 1));
     if (Right) obj.addRaw("right", Right->toJson(depth + 1));
+    obj.addRaw("resolvedType", resolvedTypeJson());
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }

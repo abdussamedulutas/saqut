@@ -17,6 +17,7 @@ std::string IdentifierNode::toJson(int depth) {
     ss << "{\n"
        << in << "  \"kind\": \"Identifier\",\n"
        << in << "  \"name\": \"" << jsonEscape(name) << "\",\n"
+       << in << "  \"resolvedType\": " << resolvedTypeJson() << ",\n"
        << in << "  \"location\": " << loc.toJson() << "\n"
        << in << "}";
     return ss.str();

@@ -12,7 +12,7 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-class VariableDeclNode : public ASTNode {
+class VariableDeclNode : public StatementNode {
 public:
     std::string varType;
     std::string name;

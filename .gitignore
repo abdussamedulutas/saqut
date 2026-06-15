@@ -9,3 +9,6 @@ saqut
 *.swp
 *.swo
 *~
+
+# Parola içerebilen yerel API istemcisi - asla commit edilmez
+scripts/gitea.py

@@ -13,6 +13,7 @@ std::string BlockNode::toJson(int depth) {
     obj.addArray("children", [&]() {
         for (auto* child : children) obj.addItem(child->toJson(depth + 2));
     });
+    obj.add("isReachable", isReachable);
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -31,6 +32,7 @@ std::string IfStatementNode::toJson(int depth) {
     if (condition) obj.addRaw("condition", condition->toJson(depth + 1));
     if (thenBranch) obj.addRaw("then", thenBranch->toJson(depth + 1));
     if (elseBranch) obj.addRaw("else", elseBranch->toJson(depth + 1));
+    obj.add("isReachable", isReachable);
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -47,6 +49,7 @@ std::string WhileStatementNode::toJson(int depth) {
     obj.add("kind", "WhileStatement");
     if (condition) obj.addRaw("condition", condition->toJson(depth + 1));
     if (body) obj.addRaw("body", body->toJson(depth + 1));
+    obj.add("isReachable", isReachable);
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -67,6 +70,7 @@ std::string ForStatementNode::toJson(int depth) {
     if (condition) obj.addRaw("condition", condition->toJson(depth + 1));
     if (update) obj.addRaw("update", update->toJson(depth + 1));
     if (body) obj.addRaw("body", body->toJson(depth + 1));
+    obj.add("isReachable", isReachable);
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -83,6 +87,7 @@ std::string DoWhileStatementNode::toJson(int depth) {
     obj.add("kind", "DoWhileStatement");
     if (condition) obj.addRaw("condition", condition->toJson(depth + 1));
     if (body) obj.addRaw("body", body->toJson(depth + 1));
+    obj.add("isReachable", isReachable);
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -97,6 +102,7 @@ std::string ReturnStatementNode::toJson(int depth) {
     JsonObject obj(depth);
     obj.add("kind", "ReturnStatement");
     if (value) obj.addRaw("value", value->toJson(depth + 1));
+    obj.add("isReachable", isReachable);
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -109,6 +115,7 @@ void BreakStatementNode::log(int indent) {
 std::string BreakStatementNode::toJson(int depth) {
     JsonObject obj(depth);
     obj.add("kind", "BreakStatement");
+    obj.add("isReachable", isReachable);
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -121,6 +128,7 @@ void ContinueStatementNode::log(int indent) {
 std::string ContinueStatementNode::toJson(int depth) {
     JsonObject obj(depth);
     obj.add("kind", "ContinueStatement");
+    obj.add("isReachable", isReachable);
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -135,6 +143,7 @@ std::string ExpressionStatementNode::toJson(int depth) {
     JsonObject obj(depth);
     obj.add("kind", "ExpressionStatement");
     if (expression) obj.addRaw("expression", expression->toJson(depth + 1));
+    obj.add("isReachable", isReachable);
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }

@@ -31,6 +31,7 @@
 #include <string>
 #include <vector>
 #include "core/location.hpp"
+#include "core/type.hpp"
 #include "parser/token.hpp"
 #include "tools.hpp"
 
@@ -245,6 +246,47 @@ protected:
     //   protected: doğrudan erişim yerine addChild/getChildren kullanılır.
     //   Türetilmiş sınıflar erişebilir (ör: log() içinde çocukları gezme).
     std::vector<ASTNode*> children;
+};
+
+// ============================================================================
+// ExpressionNode — Değer Üreten Düğümlerin Tabanı (Faz 1, ADR-012)
+// ============================================================================
+//
+// Bir DEĞER üreten her düğüm (Literal, Identifier, BinaryExpression, Call,
+// Postfix, MemberAccess, IndexExpression) buradan türer. Bir ifadenin bir
+// TİPİ vardır; analiz/optimizasyon alanları burada toplanır.
+//
+class ExpressionNode : public ASTNode {
+public:
+    // TODO(faz-3): tip denetleyici doldurur. Şimdilik Error = "henüz çözülmedi".
+    Type resolvedType;
+
+    // TODO(faz-4): sabit katlama (constant folding) bayrağı.
+    bool isConstant = false;
+    // TODO(faz-4): foldedValue — katlanmış sabit değer (temsil Faz 4'te netleşir).
+
+    // resolvedType'ın JSON karşılığı (henüz çözülmemişse null gösterilir).
+    std::string resolvedTypeJson() const {
+        return resolvedType.isError() ? std::string("null") : resolvedType.toJson();
+    }
+};
+
+// ============================================================================
+// StatementNode — Eylem/Kontrol Akışı Yürüten Düğümlerin Tabanı (Faz 1)
+// ============================================================================
+//
+// Değer üretmeyen, bir iş/kontrol akışı yürüten her düğüm (Block, If, For,
+// While, DoWhile, Return, Break, Continue, ExpressionStatement ve şimdilik
+// VariableDecl) buradan türer. Tipi yoktur; akış-analizi alanları taşır.
+//
+// TODO(faz-1 gözden geçirme): VariableDecl/FunctionDecl/StructDecl'in tam
+// sınıflandırması provizyonel — VariableDecl burada (blok içinde erişilebilirliğe
+// tabi), Function/StructDecl doğrudan ASTNode altında kaldı.
+//
+class StatementNode : public ASTNode {
+public:
+    // TODO(faz-3/4): erişilebilirlik (dead-code) analizi günceller.
+    bool isReachable = true;
 };
 
 // ============================================================================

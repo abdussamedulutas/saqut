@@ -12,6 +12,7 @@ std::string PostfixNode::toJson(int depth) {
     obj.add("kind", "Postfix");
     obj.add("operator", std::string(OPERATOR_MAP_REV.count(Operator) ? OPERATOR_MAP_REV.at(Operator) : "?"));
     if (operand) obj.addRaw("operand", operand->toJson(depth + 1));
+    obj.addRaw("resolvedType", resolvedTypeJson());
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -30,6 +31,7 @@ std::string CallExpressionNode::toJson(int depth) {
     obj.addArray("arguments", [&]() {
         for (auto* arg : arguments) obj.addItem(arg->toJson(depth + 2));
     });
+    obj.addRaw("resolvedType", resolvedTypeJson());
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -46,6 +48,7 @@ std::string MemberAccessNode::toJson(int depth) {
     obj.add("member", member);
     obj.add("arrow", arrow);
     if (object) obj.addRaw("object", object->toJson(depth + 1));
+    obj.addRaw("resolvedType", resolvedTypeJson());
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
@@ -62,6 +65,7 @@ std::string IndexExpressionNode::toJson(int depth) {
     obj.add("kind", "IndexExpression");
     if (object) obj.addRaw("object", object->toJson(depth + 1));
     if (index) obj.addRaw("index", index->toJson(depth + 1));
+    obj.addRaw("resolvedType", resolvedTypeJson());
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }

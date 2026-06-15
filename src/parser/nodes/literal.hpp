@@ -3,7 +3,7 @@
 
 #include "parser/ast_node.hpp"
 
-class LiteralNode : public ASTNode {
+class LiteralNode : public ExpressionNode {
 public:
     Token*       lexerToken  = nullptr;
     ParserToken  parserToken;

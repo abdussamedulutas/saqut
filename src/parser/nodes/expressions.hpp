@@ -3,7 +3,7 @@
 
 #include "parser/ast_node.hpp"
 
-class PostfixNode : public ASTNode {
+class PostfixNode : public ExpressionNode {
 public:
     ASTNode*  operand  = nullptr;
     TokenType Operator;
@@ -12,7 +12,7 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-class CallExpressionNode : public ASTNode {
+class CallExpressionNode : public ExpressionNode {
 public:
     ASTNode* callee = nullptr;
     std::vector<ASTNode*> arguments;
@@ -21,7 +21,7 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-class MemberAccessNode : public ASTNode {
+class MemberAccessNode : public ExpressionNode {
 public:
     ASTNode*   object = nullptr;
     std::string member;
@@ -31,7 +31,7 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-class IndexExpressionNode : public ASTNode {
+class IndexExpressionNode : public ExpressionNode {
 public:
     ASTNode* object = nullptr;
     ASTNode* index  = nullptr;

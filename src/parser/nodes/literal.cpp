@@ -28,6 +28,7 @@ std::string LiteralNode::toJson(int depth) {
     if (literalType == LiteralType::FLOAT) {
         ss << ",\n" << in << "  \"isFloat\": true";
     }
+    ss << ",\n" << in << "  \"resolvedType\": " << resolvedTypeJson();
     ss << ",\n" << in << "  \"location\": " << loc.toJson() << "\n"
        << in << "}";
     return ss.str();

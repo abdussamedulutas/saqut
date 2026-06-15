@@ -3,7 +3,7 @@
 
 #include "parser/ast_node.hpp"
 
-class BinaryExpressionNode : public ASTNode {
+class BinaryExpressionNode : public ExpressionNode {
 public:
     TokenType Operator;
     ASTNode*  Left  = nullptr;

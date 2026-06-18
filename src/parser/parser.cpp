@@ -91,6 +91,16 @@ ASTNode* Parser::parseDeclaration() {
     if (ct.type == TokenType::KW_STRUCT)
         return parseStructDecl();
 
+    // Kullanıcı tanımlı tip adı (struct tipi) ile değişken/fonksiyon bildirimi
+    if (ct.type == TokenType::IDENTIFIER) {
+        auto la1 = lookahead(1);
+        auto la2 = lookahead(2);
+        if (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN)
+            return parseFunctionDecl();
+        if (la1.type == TokenType::IDENTIFIER)
+            return parseVariableDecl();
+    }
+
     return parseStatement();
 }
 
@@ -293,8 +303,26 @@ ASTNode* Parser::parseFunctionDecl() {
     if (currentToken().type == TokenType::LPAREN) {
         nextToken();
         while (currentToken().type != TokenType::RPAREN &&
-               currentToken().type != TokenType::SVR_VOID)
+               currentToken().type != TokenType::SVR_VOID) {
+            auto typeTok = currentToken();
+            bool isTypeKw = typeTok.is({
+                TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+                TokenType::KW_DOUBLE, TokenType::KW_BOOL, TokenType::KW_CHAR,
+                TokenType::KW_STRING_TYPE, TokenType::KW_AUTO
+            }) || typeTok.type == TokenType::IDENTIFIER;
+            if (!isTypeKw || !typeTok.token) break;
+            std::string paramType = typeTok.token->token;
             nextToken();
+            if (currentToken().type != TokenType::IDENTIFIER || !currentToken().token) break;
+            VariableDeclNode* param = new VariableDeclNode();
+            param->loc = currentToken().token->loc;
+            param->varType = paramType;
+            param->name = currentToken().token->token;
+            nextToken();
+            fn->params.push_back(param);
+            if (currentToken().type == TokenType::COMMA)
+                nextToken();
+        }
         if (currentToken().type == TokenType::RPAREN)
             nextToken();
     }

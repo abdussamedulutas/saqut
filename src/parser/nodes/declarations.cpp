@@ -12,6 +12,9 @@ std::string FunctionDeclNode::toJson(int depth) {
     obj.add("kind", "FunctionDecl");
     obj.add("name", name);
     obj.add("returnType", returnType);
+    obj.addArray("params", [&]() {
+        for (auto* p : params) obj.addItem(p->toJson(depth + 2));
+    });
     obj.addArray("children", [&]() {
         for (auto* child : children) obj.addItem(child->toJson(depth + 2));
     });

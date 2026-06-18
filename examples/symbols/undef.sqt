@@ -1,0 +1,5 @@
+// E001 — tanımsız isim
+int main() {
+    int x = y + 1;
+    return 0;
+}

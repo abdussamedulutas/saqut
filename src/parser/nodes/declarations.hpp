@@ -3,10 +3,13 @@
 
 #include "parser/ast_node.hpp"
 
+class VariableDeclNode; // fwd — FunctionDeclNode::params için
+
 class FunctionDeclNode : public ASTNode {
 public:
     std::string name;
     std::string returnType;
+    std::vector<VariableDeclNode*> params; // TODO(faz2): parametreler
     FunctionDeclNode();
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;

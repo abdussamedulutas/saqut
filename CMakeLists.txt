@@ -33,24 +33,42 @@ add_test(
     COMMAND bash "${CMAKE_SOURCE_DIR}/tests/run.sh"
 )
 
-# Golden testleri — tests/golden/**/*.sqt + .expected çiftlerini otomatik keşfet
+# Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
+# Her .sqt için iki olası expected dosyası kontrol edilir:
+#   BASE.expected      → saqut run  (siyah-kutu çıktı testi)
+#   BASE.ir_opt.expected → saqut ir --optimized (beyaz-kutu IR testi)
 file(GLOB_RECURSE ALL_GOLDEN_SQT CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/tests/golden/*.sqt"
 )
 foreach(SQT_FILE ${ALL_GOLDEN_SQT})
-    # Göreli yoldan test adı üret: fibonacci/fib.sqt → golden_fibonacci_fib
     file(RELATIVE_PATH REL "${CMAKE_SOURCE_DIR}/tests/golden" "${SQT_FILE}")
     string(REPLACE ".sqt" "" BASE "${REL}")
     string(REPLACE "/" "_" TNAME "${BASE}")
-    set(EXPECTED_FILE "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.expected")
 
-    if(EXISTS "${EXPECTED_FILE}")
+    # Siyah-kutu: saqut run çıktısı
+    set(RUN_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.expected")
+    if(EXISTS "${RUN_EXPECTED}")
         add_test(
             NAME "golden_${TNAME}"
             COMMAND ${CMAKE_COMMAND}
                 -DBINARY=${SAQUT_BINARY}
                 -DSOURCE=${SQT_FILE}
-                -DEXPECTED=${EXPECTED_FILE}
+                -DEXPECTED=${RUN_EXPECTED}
+                -P "${GOLDEN_SCRIPT}"
+        )
+    endif()
+
+    # Beyaz-kutu: saqut ir --optimized çıktısı
+    set(IR_OPT_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.ir_opt.expected")
+    if(EXISTS "${IR_OPT_EXPECTED}")
+        add_test(
+            NAME "golden_${TNAME}_ir_opt"
+            COMMAND ${CMAKE_COMMAND}
+                -DBINARY=${SAQUT_BINARY}
+                -DSOURCE=${SQT_FILE}
+                -DEXPECTED=${IR_OPT_EXPECTED}
+                -DCOMMAND=ir
+                -DOPTIMIZED=1
                 -P "${GOLDEN_SCRIPT}"
         )
     endif()

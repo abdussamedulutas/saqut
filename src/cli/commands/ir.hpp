@@ -11,6 +11,8 @@
 #include "semantic/structural_validator.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
 #include "ir/ir_generator.hpp"
+#include "core/config.hpp"
+#include "opt/optimization_manager.hpp"
 
 inline int cmdIr(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
@@ -41,11 +43,23 @@ inline int cmdIr(const CliArgs& args) {
         return 1;
     }
 
-    IRGenerator irGenerator;
-    IRProgram   program = irGenerator.generate(ast, symbolTable);
+    // --optimized: optimize edilmiş AST klonu üzerinden IR üret
+    ASTNode* activeAst   = ast;
+    ASTNode* optimizedAst = nullptr;
+    if (args.optimized) {
+        CompilerConfig   cfg;
+        DiagnosticEngine optDiag;
+        OptimizationManager mgr(cfg, optDiag);
+        optimizedAst = mgr.optimize(ast, &symbolTable);
+        activeAst    = optimizedAst;
+        optDiag.printAll(std::cerr); // W002 vb. uyarılar stderr'e
+    }
 
+    IRGenerator irGenerator;
+    IRProgram   program = irGenerator.generate(activeAst, symbolTable);
     program.dump();
 
+    delete optimizedAst; // nullptr ise no-op
     delete ast;
     for (auto* t : tokens) delete t;
     return 0;

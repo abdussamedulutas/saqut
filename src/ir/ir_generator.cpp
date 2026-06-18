@@ -271,13 +271,19 @@ int IRGenerator::generateExpression(ASTNode* node) {
         switch (lit->literalType) {
             case LiteralType::INTEGER: {
                 int value = 0;
-                if (lit->parserToken.token)
+                if (lit->hasDirectValue)
+                    value = lit->directIntValue;
+                else if (lit->parserToken.token)
                     value = std::stoi(lit->parserToken.token->token);
                 emitLoadConst(slot, value);
                 break;
             }
             case LiteralType::BOOLEAN: {
-                int value = (lit->parserToken.token &&
+                int value = 0;
+                if (lit->hasDirectValue)
+                    value = lit->directIntValue ? 1 : 0;
+                else
+                    value = (lit->parserToken.token &&
                              lit->parserToken.token->token == "true") ? 1 : 0;
                 emitLoadConst(slot, value);
                 break;

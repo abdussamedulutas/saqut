@@ -79,7 +79,7 @@ std::string Lexer::getPositionRange() {
 // --------------------------------------------------------------------------
 // include: Belirtilen kelime mevcut konumda başlıyor mu?
 // --------------------------------------------------------------------------
-bool Lexer::include(std::string word, bool accept) {
+bool Lexer::include(std::string_view word, bool accept) {
     beginPosition();
     for (size_t i = 0; i < word.size(); i++) {
         if (isEnd()) {

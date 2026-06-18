@@ -28,6 +28,7 @@
 #include "cli/commands/ast.hpp"
 #include "cli/commands/symbols.hpp"
 #include "cli/commands/check.hpp"
+#include "cli/commands/ir.hpp"
 
 int main(int argc, char* argv[]) {
     // Komutları kaydet
@@ -52,6 +53,10 @@ int main(int argc, char* argv[]) {
     cli.registerCommand({"check",
         "Semantik analiz — tip denetimi + yapısal doğrulama",
         false, cmdCheck});
+
+    cli.registerCommand({"ir",
+        "IR talimat listesini göster (ara temsil — bytecode öncesi)",
+        false, cmdIr});
 
     // --- Gelecek komutlar (TODO) ---
     cli.registerCommand({"compile",

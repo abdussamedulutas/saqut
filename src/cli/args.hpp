@@ -88,8 +88,9 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         // İlk argüman komut mu?
         if (args.command.empty() && i == 1) {
             if (arg == "run"    || arg == "tokens"  || arg == "ast" ||
-                arg == "symbols" || arg == "check"   || arg == "compile" ||
-                arg == "parse"   || arg == "transpile" || arg == "interpret") {
+                arg == "symbols" || arg == "check"   || arg == "ir"      ||
+                arg == "compile" || arg == "parse"   || arg == "transpile" ||
+                arg == "interpret") {
                 args.command = arg;
                 continue;
             }

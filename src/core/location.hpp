@@ -22,6 +22,7 @@
 #define SAQUT_CORE_LOCATION
 
 #include <string>
+#include "vendor/nlohmann/json.hpp"
 
 // ============================================================================
 // SourceLocation — Kaynak Koddaki Bir Nokta
@@ -66,15 +67,17 @@ struct SourceLocation {
     }
 
     // JSON formatı: {"file":"...","line":5,"column":10,"offset":134}
-    std::string toJson() const {
-        if (!isValid()) return "null";
-        return "{"
-            "\"file\":\"" + filePath + "\","
-            "\"line\":" + std::to_string(line) + ","
-            "\"column\":" + std::to_string(column) + ","
-            "\"offset\":" + std::to_string(offset) +
-        "}";
+    nlohmann::json toJsonObj() const {
+        if (!isValid()) return nullptr;
+        return {
+            {"file",   filePath},
+            {"line",   line},
+            {"column", column},
+            {"offset", offset}
+        };
     }
+
+    std::string toJson() const { return toJsonObj().dump(); }
 };
 
 #endif // SAQUT_CORE_LOCATION

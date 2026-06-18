@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include "vendor/nlohmann/json.hpp"
 
 // ============================================================================
 // Enum'lar
@@ -220,31 +221,37 @@ struct Type {
     // ------------------------------------------------------------------ //
     // toJson — Makine-okur (cam ilkesi: her tip dışarıdan sorgulanabilir)
     // ------------------------------------------------------------------ //
-    std::string toJson() const {
+    nlohmann::json toJsonObj() const {
+        nlohmann::json j;
         switch (kind) {
             case TypeKind::Primitive:
-                return std::string("{\"kind\":\"primitive\",\"name\":\"") + primName(prim) + "\"}";
+                j["kind"] = "primitive";
+                j["name"] = primName(prim);
+                break;
             case TypeKind::Array:
-                return std::string("{\"kind\":\"array\",\"element\":") +
-                       (elementType ? elementType->toJson() : "null") + "}";
+                j["kind"]    = "array";
+                j["element"] = elementType ? elementType->toJsonObj() : nullptr;
+                break;
             case TypeKind::Struct:
-                return "{\"kind\":\"struct\",\"name\":\"" + structName + "\"}";
+                j["kind"] = "struct";
+                j["name"] = structName;
+                break;
             case TypeKind::Function: {
-                std::string s = "{\"kind\":\"function\",\"returns\":";
-                s += returnType ? returnType->toJson() : "null";
-                s += ",\"params\":[";
-                for (size_t i = 0; i < paramTypes.size(); ++i) {
-                    if (i) s += ",";
-                    s += paramTypes[i].toJson();
-                }
-                s += "]}";
-                return s;
+                j["kind"]    = "function";
+                j["returns"] = returnType ? returnType->toJsonObj() : nullptr;
+                nlohmann::json params = nlohmann::json::array();
+                for (const auto& p : paramTypes) params.push_back(p.toJsonObj());
+                j["params"] = params;
+                break;
             }
             case TypeKind::Error:
-                return "{\"kind\":\"error\"}";
+                j["kind"] = "error";
+                break;
         }
-        return "null";
+        return j;
     }
+
+    std::string toJson() const { return toJsonObj().dump(); }
 };
 
 #endif // SAQUT_CORE_TYPE

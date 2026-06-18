@@ -6,70 +6,13 @@
 #define SAQUT_CLI_SYMBOLS
 
 #include <iostream>
-#include <sstream>
 #include "cli/args.hpp"
 #include "tokenizer/tokenizer.hpp"
 #include "parser/parser.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
-#include "tools.hpp"
-
-// ─────────────────────────────────────────────────────────────────────────────
-// symbolsToJson — sembol tablosunu JSON olarak serileştir
-// ─────────────────────────────────────────────────────────────────────────────
-
-inline std::string symbolsToJson(const std::string& filePath,
-                                  const SymbolTable& table,
-                                  const DiagnosticEngine& diag) {
-    auto symbols = table.allSymbols();
-    std::ostringstream ss;
-
-    ss << "{\n";
-    ss << "  \"file\": \"" << jsonEscape(filePath) << "\",\n";
-    ss << "  \"symbols\": [";
-
-    bool firstSym = true;
-    for (Symbol* s : symbols) {
-        if (s->isBuiltin) continue;
-
-        if (!firstSym) ss << ",";
-        firstSym = false;
-
-        ss << "\n    {\n";
-        ss << "      \"name\": \""    << jsonEscape(s->name)              << "\",\n";
-        ss << "      \"kind\": \""    << symbolKindName(s->kind)           << "\",\n";
-        ss << "      \"type\": \""    << jsonEscape(s->type.toString())    << "\",\n";
-        ss << "      \"typeDetail\": " << s->type.toJson()                 << ",\n";
-        ss << "      \"definition\": " << s->definitionLoc.toJson()        << ",\n";
-        ss << "      \"isBuiltin\": "  << (s->isBuiltin ? "true" : "false") << ",\n";
-
-        // referanslar
-        ss << "      \"references\": [";
-        bool firstRef = true;
-        for (const SourceLocation& ref : s->references) {
-            if (!firstRef) ss << ", ";
-            firstRef = false;
-            ss << ref.toJson();
-        }
-        ss << "]\n";
-
-        ss << "    }";
-    }
-
-    if (!firstSym) ss << "\n  ";
-    ss << "],\n";
-
-    // tanılar (diagnostic engine'den hazır JSON al, iç kısmını sar)
-    ss << "  \"diagnostics\": " << diag.toJson() << "\n";
-    ss << "}\n";
-
-    return ss.str();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// cmdSymbols — giriş noktası
-// ─────────────────────────────────────────────────────────────────────────────
+#include "vendor/nlohmann/json.hpp"
 
 inline int cmdSymbols(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
@@ -82,21 +25,41 @@ inline int cmdSymbols(const CliArgs& args) {
     Parser parser;
     ASTNode* ast = parser.parse(tokens);
 
-    if (!ast) {
-        // AST null olursa boş ama geçerli bir JSON çıktısı üret
-        DiagnosticEngine diag;
-        diag.report("E000", SourceLocation{}, "AST üretilemedi");
-        SymbolTable empty;
-        std::cout << symbolsToJson(filePath, empty, diag);
-        for (auto* t : tokens) delete t;
-        return 1;
-    }
-
     SymbolTable table;
     DiagnosticEngine diag;
-    SymbolCollector(table, diag).collect(ast);
 
-    std::cout << symbolsToJson(filePath, table, diag);
+    if (ast) {
+        SymbolCollector(table, diag).collect(ast);
+    } else {
+        diag.report("E000", SourceLocation{}, "AST üretilemedi");
+    }
+
+    // ── JSON çıktı ──────────────────────────────────────────────────────────
+    nlohmann::json out;
+    out["file"] = filePath;
+
+    nlohmann::json symArray = nlohmann::json::array();
+    for (Symbol* s : table.allSymbols()) {
+        if (s->isBuiltin) continue;
+
+        nlohmann::json refs = nlohmann::json::array();
+        for (const SourceLocation& r : s->references)
+            refs.push_back(r.toJsonObj());
+
+        symArray.push_back({
+            {"name",       s->name},
+            {"kind",       symbolKindName(s->kind)},
+            {"type",       s->type.toString()},
+            {"typeDetail", s->type.toJsonObj()},
+            {"definition", s->definitionLoc.toJsonObj()},
+            {"references", refs},
+            {"isBuiltin",  s->isBuiltin}
+        });
+    }
+    out["symbols"]     = symArray;
+    out["diagnostics"] = diag.toJsonObj();
+
+    std::cout << out.dump(2) << "\n";
 
     delete ast;
     for (auto* t : tokens) delete t;

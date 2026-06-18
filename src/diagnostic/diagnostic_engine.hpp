@@ -25,6 +25,7 @@
 #include <vector>
 #include <ostream>
 #include "diagnostic/diagnostic.hpp"
+#include "vendor/nlohmann/json.hpp"
 
 // ============================================================================
 // DiagnosticEngine
@@ -88,17 +89,18 @@ public:
     }
 
     // --- Makine-okur çıktı ---
-    std::string toJson() const {
-        std::string s = "{\"diagnostics\":[";
-        for (size_t i = 0; i < diagnostics_.size(); ++i) {
-            if (i) s += ",";
-            s += diagnostics_[i].toJson();
-        }
-        s += "],\"errorCount\":" + std::to_string(errorCount());
-        s += ",\"warningCount\":" + std::to_string(warningCount());
-        s += "}";
-        return s;
+    nlohmann::json toJsonObj() const {
+        nlohmann::json items = nlohmann::json::array();
+        for (const auto& d : diagnostics_)
+            items.push_back(d.toJsonObj());
+        return {
+            {"diagnostics",  items},
+            {"errorCount",   errorCount()},
+            {"warningCount", warningCount()}
+        };
     }
+
+    std::string toJson() const { return toJsonObj().dump(); }
 
 private:
     std::vector<Diagnostic> diagnostics_;

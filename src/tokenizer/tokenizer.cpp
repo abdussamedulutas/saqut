@@ -1,5 +1,58 @@
 #include "tokenizer/tokenizer.hpp"
+#include <unordered_map>
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Keyword hash map — O(1) lookup yerine O(n) for döngüsü
+// ─────────────────────────────────────────────────────────────────────────────
+static const std::unordered_map<std::string_view, std::string_view> KW_MAP = {
+    {"if","if"},{"else","else"},{"for","for"},{"while","while"},{"do","do"},
+    {"switch","switch"},{"case","case"},{"default","default"},
+    {"break","break"},{"continue","continue"},{"return","return"},
+    {"try","try"},{"catch","catch"},{"finally","finally"},
+    {"throw","throw"},{"throws","throws"},{"assert","assert"},
+    {"void","void"},{"int","int"},{"float","float"},{"double","double"},
+    {"char","char"},{"string","string"},{"bool","bool"},
+    {"true","true"},{"false","false"},{"null","null"},
+    {"class","class"},{"struct","struct"},{"interface","interface"},
+    {"enum","enum"},{"extends","extends"},{"implements","implements"},
+    {"new","new"},{"public","public"},{"private","private"},
+    {"protected","protected"},{"static","static"},{"final","final"},
+    {"abstract","abstract"},{"import","import"},{"package","package"},
+    {"const","const"},{"extern","extern"},{"typedef","typedef"},
+    {"sizeof","sizeof"},{"auto","auto"},{"constexpr","constexpr"},
+    {"noexcept","noexcept"},{"native","native"},
+    {"synchronized","synchronized"},{"volatile","volatile"},
+    {"transient","transient"}
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Yardımcı makrolar — OperatorToken ve DelimiterToken üretimi
+// ─────────────────────────────────────────────────────────────────────────────
+#define MAKE_OP(str, len)                      \
+    do {                                        \
+        OperatorToken* _t = new OperatorToken();\
+        _t->start = hmx.getOffset();            \
+        _t->loc   = hmx.getLocation();          \
+        hmx.toChar(len);                        \
+        _t->end   = hmx.getOffset();            \
+        _t->token = (str);                      \
+        return _t;                              \
+    } while(0)
+
+#define MAKE_DEL(str, len)                       \
+    do {                                          \
+        DelimiterToken* _t = new DelimiterToken();\
+        _t->start = hmx.getOffset();              \
+        _t->loc   = hmx.getLocation();            \
+        hmx.toChar(len);                          \
+        _t->end   = hmx.getOffset();              \
+        _t->token = (str);                        \
+        return _t;                                \
+    } while(0)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// scan
+// ─────────────────────────────────────────────────────────────────────────────
 std::vector<Token*> Tokenizer::scan(std::string input, std::string filePath) {
     std::vector<Token*> tokens;
     hmx.setSourceText(filePath, input);
@@ -12,10 +65,14 @@ std::vector<Token*> Tokenizer::scan(std::string input, std::string filePath) {
     return tokens;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// scope — ana dispatch; her token için TEK geçiş
+// ─────────────────────────────────────────────────────────────────────────────
 Token* Tokenizer::scope() {
     hmx.skipWhiteSpace();
 
-    if (hmx.include("//", true))  { skipOneLineComment(); return scope(); }
+    // Yorum satırları — include() burada hâlâ gerekli (2 karakter kontrol)
+    if (hmx.include("//", true))  { skipOneLineComment();  return scope(); }
     if (hmx.include("/*", true))  { skipMultiLineComment(); return scope(); }
 
     if (hmx.isEnd()) {
@@ -24,10 +81,8 @@ Token* Tokenizer::scope() {
         return t;
     }
 
-    if (hmx.getchar() == '"')
-        return readString();
-
-    if (hmx.isNumeric()) {
+    if (hmx.getchar() == '"') return readString();
+    if (hmx.isNumeric())      {
         INumber lem = hmx.readNumeric();
         NumberToken* nt = new NumberToken();
         nt->loc        = lem.startLoc;
@@ -40,50 +95,128 @@ Token* Tokenizer::scope() {
         return nt;
     }
 
-    for (const auto& kw : keywords) {
-        if (hmx.include(kw, false)) {
-            char next = hmx.getchar(static_cast<int>(kw.size()));
-            if ((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') ||
-                (next >= '0' && next <= '9') || next == '_' || next == '$') {
-                continue;
+    char c0 = hmx.getchar();
+    char c1 = hmx.getchar(1);  // sadece 1 ek okuma, include() değil
+
+    // ── Operatörler & Delimiter'lar — switch ile O(1) dispatch ───────────
+    switch (c0) {
+        // + ++ +=
+        case '+':
+            if (c1 == '+') MAKE_OP("++", 2);
+            if (c1 == '=') MAKE_OP("+=", 2);
+            MAKE_OP("+", 1);
+
+        // - -- -= ->
+        case '-':
+            if (c1 == '-') MAKE_OP("--", 2);
+            if (c1 == '=') MAKE_OP("-=", 2);
+            if (c1 == '>') MAKE_DEL("->", 2);
+            MAKE_OP("-", 1);
+
+        // * *= **
+        case '*':
+            if (c1 == '=') MAKE_OP("*=", 2);
+            if (c1 == '*') MAKE_OP("**", 2);
+            MAKE_OP("*", 1);
+
+        // / /=
+        case '/':
+            if (c1 == '=') MAKE_OP("/=", 2);
+            MAKE_OP("/", 1);
+
+        // % %=
+        case '%':
+            if (c1 == '=') MAKE_OP("%=", 2);
+            MAKE_OP("%", 1);
+
+        // < <= << <<=
+        case '<':
+            if (c1 == '<') {
+                if (hmx.getchar(2) == '=') MAKE_OP("<<=", 3);
+                MAKE_OP("<<", 2);
             }
-            KeywordToken* kt = new KeywordToken();
-            kt->start = hmx.getOffset();
-            kt->loc   = hmx.getLocation();
-            hmx.toChar(static_cast<int>(kw.size()));
-            kt->end   = hmx.getOffset();
-            kt->token = kw;
-            return kt;
-        }
+            if (c1 == '=') MAKE_OP("<=", 2);
+            MAKE_OP("<", 1);
+
+        // > >= >> >>=
+        case '>':
+            if (c1 == '>') {
+                if (hmx.getchar(2) == '=') MAKE_OP(">>=", 3);
+                MAKE_OP(">>", 2);
+            }
+            if (c1 == '=') MAKE_OP(">=", 2);
+            MAKE_OP(">", 1);
+
+        // = ==
+        case '=':
+            if (c1 == '=') MAKE_OP("==", 2);
+            MAKE_OP("=", 1);
+
+        // ! !=
+        case '!':
+            if (c1 == '=') MAKE_OP("!=", 2);
+            MAKE_OP("!", 1);
+
+        // & && &=
+        case '&':
+            if (c1 == '&') MAKE_OP("&&", 2);
+            if (c1 == '=') MAKE_OP("&=", 2);
+            MAKE_OP("&", 1);
+
+        // | || |=
+        case '|':
+            if (c1 == '|') MAKE_OP("||", 2);
+            if (c1 == '=') MAKE_OP("|=", 2);
+            MAKE_OP("|", 1);
+
+        // ^ ^=
+        case '^':
+            if (c1 == '=') MAKE_OP("^=", 2);
+            MAKE_OP("^", 1);
+
+        // ~ (tek karakter)
+        case '~': MAKE_OP("~", 1);
+
+        // : ::
+        case ':':
+            if (c1 == ':') MAKE_DEL("::", 2);
+            MAKE_DEL(":", 1);
+
+        // Tek karakterli delimiter'lar
+        case '[': MAKE_DEL("[", 1);
+        case ']': MAKE_DEL("]", 1);
+        case '(': MAKE_DEL("(", 1);
+        case ')': MAKE_DEL(")", 1);
+        case '{': MAKE_DEL("{", 1);
+        case '}': MAKE_DEL("}", 1);
+        case ';': MAKE_DEL(";", 1);
+        case ',': MAKE_DEL(",", 1);
+        case '.': MAKE_DEL(".", 1);
+        case '?': MAKE_OP("?",  1);
+
+        default: break;
     }
 
-    for (const auto& del : delimiters) {
-        if (hmx.include(del, false)) {
-            DelimiterToken* dt = new DelimiterToken();
-            dt->start = hmx.getOffset();
-            dt->loc   = hmx.getLocation();
-            hmx.toChar(static_cast<int>(del.size()));
-            dt->end   = hmx.getOffset();
-            dt->token = del;
-            return dt;
-        }
+    // ── Identifier veya Keyword — önce oku, sonra hash map'te ara ────────
+    IdentifierToken* id = readIdentifier();
+
+    auto it = KW_MAP.find(id->token);
+    if (it != KW_MAP.end()) {
+        KeywordToken* kt = new KeywordToken();
+        kt->start = id->start;
+        kt->end   = id->end;
+        kt->loc   = id->loc;
+        kt->token = id->token;
+        delete id;
+        return kt;
     }
 
-    for (const auto& op : operators) {
-        if (hmx.include(op, false)) {
-            OperatorToken* ot = new OperatorToken();
-            ot->start = hmx.getOffset();
-            ot->loc   = hmx.getLocation();
-            hmx.toChar(static_cast<int>(op.size()));
-            ot->end   = hmx.getOffset();
-            ot->token = op;
-            return ot;
-        }
-    }
-
-    return readIdentifier();
+    return id;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// readIdentifier — değişmedi
+// ─────────────────────────────────────────────────────────────────────────────
 IdentifierToken* Tokenizer::readIdentifier() {
     hmx.beginPosition();
     IdentifierToken* it = new IdentifierToken();
@@ -115,6 +248,9 @@ IdentifierToken* Tokenizer::readIdentifier() {
     return it;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// readString — değişmedi
+// ─────────────────────────────────────────────────────────────────────────────
 StringToken* Tokenizer::readString() {
     hmx.beginPosition();
     StringToken* st = new StringToken();
@@ -127,11 +263,8 @@ StringToken* Tokenizer::readString() {
         st->token.push_back(c);
         switch (c) {
             case '"':
-                if (!started) {
-                    started = true;
-                } else {
-                    ended = true;
-                }
+                if (!started) { started = true; }
+                else          { ended   = true; }
                 break;
             case '\\':
                 hmx.nextChar();
@@ -154,6 +287,9 @@ StringToken* Tokenizer::readString() {
     return st;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// skipOneLineComment / skipMultiLineComment — değişmedi
+// ─────────────────────────────────────────────────────────────────────────────
 void Tokenizer::skipOneLineComment() {
     while (!hmx.isEnd()) {
         if (hmx.getchar() == '\n') {

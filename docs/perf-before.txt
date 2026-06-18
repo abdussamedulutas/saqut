@@ -1,0 +1,406 @@
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 81.25      0.26     0.26 66967977     0.00     0.00  Lexer::include(std::basic_string_view<char, std::char_traits<char> >, bool)
+  9.38      0.29     0.03  1059636     0.00     0.00  Tokenizer::scope()
+  6.25      0.31     0.02                             _init
+  3.12      0.32     0.01  1064503     0.00     0.00  SourceFile::offsetToLocation(int) const
+  0.00      0.32     0.00  2509314     0.00     0.00  Lexer::isEnd()
+  0.00      0.32     0.00  1851576     0.00     0.00  Lexer::getOffset()
+  0.00      0.32     0.00  1449678     0.00     0.00  Lexer::getchar()
+  0.00      0.32     0.00  1059640     0.00     0.00  Lexer::skipWhiteSpace()
+  0.00      0.32     0.00  1059635     0.00     0.00  Lexer::isNumeric()
+  0.00      0.32     0.00   750485     0.00     0.00  Lexer::getLocation()
+  0.00      0.32     0.00   750485     0.00     0.00  Lexer::toChar(int)
+  0.00      0.32     0.00   461302     0.00     0.00  DelimiterToken::~DelimiterToken()
+  0.00      0.32     0.00   230202     0.00     0.00  OperatorToken::~OperatorToken()
+  0.00      0.32     0.00   214740     0.00     0.00  Lexer::nextChar()
+  0.00      0.32     0.00   175303     0.00     0.00  IdentifierToken::~IdentifierToken()
+  0.00      0.32     0.00   175303     0.00     0.00  Lexer::beginPosition()
+  0.00      0.32     0.00   175303     0.00     0.00  Lexer::acceptPosition()
+  0.00      0.32     0.00   175303     0.00     0.00  Tokenizer::readIdentifier()
+  0.00      0.32     0.00   133847     0.00     0.00  NumberToken::~NumberToken()
+  0.00      0.32     0.00   133847     0.00     0.00  Lexer::readNumeric()
+  0.00      0.32     0.00    58981     0.00     0.00  KeywordToken::~KeywordToken()
+  0.00      0.32     0.00    58981     0.00     0.00  Lexer::getchar(int)
+  0.00      0.32     0.00       21     0.00     0.00  void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long)
+  0.00      0.32     0.00       20     0.00     0.00  std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_invoke(std::_Any_data const&, CliArgs const&)
+  0.00      0.32     0.00       19     0.00     0.00  std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation)
+  0.00      0.32     0.00       11     0.00     0.00  bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*)
+  0.00      0.32     0.00        9     0.00     0.00  CliCommand::~CliCommand()
+  0.00      0.32     0.00        7     0.00     0.00  std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&)
+  0.00      0.32     0.00        3     0.00     0.00  std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#2}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation)
+  0.00      0.32     0.00        3     0.00     0.00  std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#3}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation)
+  0.00      0.32     0.00        3     0.00     0.00  std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation)
+  0.00      0.32     0.00        3     0.00     0.00  std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#1}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation)
+  0.00      0.32     0.00        2     0.00     0.00  std::_Hashtable<TokenType, std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > >, std::allocator<std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > >, std::__detail::_Select1st, std::equal_to<TokenType>, std::hash<TokenType>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_Hashtable<std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > const*>(std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > const*, std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > const*, unsigned long, std::hash<TokenType> const&, std::equal_to<TokenType> const&, std::allocator<std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > > const&, std::integral_constant<bool, true>)
+  0.00      0.32     0.00        2     0.00     0.00  std::_Hashtable<std::basic_string_view<char, std::char_traits<char> >, std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType>, std::allocator<std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> >, std::__detail::_Select1st, std::equal_to<std::basic_string_view<char, std::char_traits<char> > >, std::hash<std::basic_string_view<char, std::char_traits<char> > >, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<true, false, true> >::_Hashtable<std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> const*>(std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> const*, std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> const*, unsigned long, std::hash<std::basic_string_view<char, std::char_traits<char> > > const&, std::equal_to<std::basic_string_view<char, std::char_traits<char> > > const&, std::allocator<std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> > const&, std::integral_constant<bool, true>)
+  0.00      0.32     0.00        1     0.00     0.00  readSource[abi:cxx11](CliArgs const&)
+  0.00      0.32     0.00        1     0.00   300.00  cmdTokens(CliArgs const&)
+  0.00      0.32     0.00        1     0.00     0.00  parseArgs(int, char**)
+  0.00      0.32     0.00        1     0.00     0.00  SourceFile::computeLineStarts()
+  0.00      0.32     0.00        1     0.00     0.00  SourceFile::setText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+  0.00      0.32     0.00        1     0.00     0.00  Lexer::setSourceText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+  0.00      0.32     0.00        1     0.00   300.00  Tokenizer::scan(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+  0.00      0.32     0.00        1     0.00     0.00  std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_invoke(std::_Any_data const&, CliArgs const&)
+
+ %         the percentage of the total running time of the
+time       program used by this function.
+
+cumulative a running sum of the number of seconds accounted
+ seconds   for by this function and those listed above it.
+
+ self      the number of seconds accounted for by this
+seconds    function alone.  This is the major sort for this
+           listing.
+
+calls      the number of times this function was invoked, if
+           this function is profiled, else blank.
+
+ self      the average number of milliseconds spent in this
+ms/call    function per call, if this function is profiled,
+	   else blank.
+
+ total     the average number of milliseconds spent in this
+ms/call    function and its descendents per call, if this
+	   function is profiled, else blank.
+
+name       the name of the function.  This is the minor sort
+           for this listing. The index shows the location of
+	   the function in the gprof listing. If the index is
+	   in parenthesis it shows where it would appear in
+	   the gprof listing if it were to be printed.
+
+Copyright (C) 2012-2026 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+		     Call graph (explanation follows)
+
+
+granularity: each sample hit covers 4 byte(s) for 3.12% of 0.32 seconds
+
+index % time    self  children    called     name
+                                                 <spontaneous>
+[1]     93.8    0.00    0.30                 main [1]
+                0.00    0.30       1/1           cmdTokens(CliArgs const&) [2]
+                0.00    0.00      18/20          std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_invoke(std::_Any_data const&, CliArgs const&) [33]
+                0.00    0.00       9/9           CliCommand::~CliCommand() [36]
+                0.00    0.00       7/19          std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [34]
+                0.00    0.00       7/7           std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&) [37]
+                0.00    0.00       4/21          void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) [32]
+                0.00    0.00       1/1           parseArgs(int, char**) [45]
+                0.00    0.00       1/11          bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*) [35]
+                0.00    0.00       1/1           std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_invoke(std::_Any_data const&, CliArgs const&) [49]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [40]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#3}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [39]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#2}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [38]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#1}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [41]
+-----------------------------------------------
+                0.00    0.30       1/1           main [1]
+[2]     93.8    0.00    0.30       1         cmdTokens(CliArgs const&) [2]
+                0.00    0.30       1/1           Tokenizer::scan(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [3]
+                0.00    0.00  461302/461302      DelimiterToken::~DelimiterToken() [23]
+                0.00    0.00  230202/230202      OperatorToken::~OperatorToken() [24]
+                0.00    0.00  175303/175303      IdentifierToken::~IdentifierToken() [26]
+                0.00    0.00  133847/133847      NumberToken::~NumberToken() [29]
+                0.00    0.00   58981/58981       KeywordToken::~KeywordToken() [30]
+                0.00    0.00       2/21          void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) [32]
+                0.00    0.00       1/1           readSource[abi:cxx11](CliArgs const&) [44]
+-----------------------------------------------
+                0.00    0.30       1/1           cmdTokens(CliArgs const&) [2]
+[3]     93.8    0.00    0.30       1         Tokenizer::scan(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [3]
+                0.03    0.27 1059636/1059636     Tokenizer::scope() [4]
+                0.00    0.00  175303/175303      Tokenizer::readIdentifier() [9]
+                0.00    0.00 1059635/2509314     Lexer::isEnd() [17]
+                0.00    0.00       1/1           Lexer::setSourceText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [48]
+-----------------------------------------------
+                0.03    0.27 1059636/1059636     Tokenizer::scan(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [3]
+[4]     93.2    0.03    0.27 1059636         Tokenizer::scope() [4]
+                0.26    0.00 66967977/66967977     Lexer::include(std::basic_string_view<char, std::char_traits<char> >, bool) [5]
+                0.00    0.01  750485/750485      Lexer::getLocation() [8]
+                0.00    0.00  133847/133847      Lexer::readNumeric() [10]
+                0.00    0.00 1500970/1851576     Lexer::getOffset() [18]
+                0.00    0.00 1059774/2509314     Lexer::isEnd() [17]
+                0.00    0.00 1059773/1449678     Lexer::getchar() [19]
+                0.00    0.00 1059640/1059640     Lexer::skipWhiteSpace() [20]
+                0.00    0.00 1059635/1059635     Lexer::isNumeric() [21]
+                0.00    0.00  750485/750485      Lexer::toChar(int) [22]
+                0.00    0.00   58981/58981       Lexer::getchar(int) [31]
+                0.00    0.00     138/214740      Lexer::nextChar() [25]
+-----------------------------------------------
+                0.26    0.00 66967977/66967977     Tokenizer::scope() [4]
+[5]     81.2    0.26    0.00 66967977         Lexer::include(std::basic_string_view<char, std::char_traits<char> >, bool) [5]
+-----------------------------------------------
+                                                 <spontaneous>
+[6]      6.2    0.02    0.00                 _init [6]
+-----------------------------------------------
+                0.00    0.00  138715/1064503     Lexer::readNumeric() [10]
+                0.00    0.00  175303/1064503     Tokenizer::readIdentifier() [9]
+                0.01    0.00  750485/1064503     Lexer::getLocation() [8]
+[7]      3.1    0.01    0.00 1064503         SourceFile::offsetToLocation(int) const [7]
+-----------------------------------------------
+                0.00    0.01  750485/750485      Tokenizer::scope() [4]
+[8]      2.2    0.00    0.01  750485         Lexer::getLocation() [8]
+                0.01    0.00  750485/1064503     SourceFile::offsetToLocation(int) const [7]
+-----------------------------------------------
+                0.00    0.00  175303/175303      Tokenizer::scan(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [3]
+[9]      0.5    0.00    0.00  175303         Tokenizer::readIdentifier() [9]
+                0.00    0.00  175303/1064503     SourceFile::offsetToLocation(int) const [7]
+                0.00    0.00  389905/2509314     Lexer::isEnd() [17]
+                0.00    0.00  389905/1449678     Lexer::getchar() [19]
+                0.00    0.00  350606/1851576     Lexer::getOffset() [18]
+                0.00    0.00  214602/214740      Lexer::nextChar() [25]
+                0.00    0.00  175303/175303      Lexer::beginPosition() [27]
+                0.00    0.00  175303/175303      Lexer::acceptPosition() [28]
+-----------------------------------------------
+                0.00    0.00  133847/133847      Tokenizer::scope() [4]
+[10]     0.4    0.00    0.00  133847         Lexer::readNumeric() [10]
+                0.00    0.00  138715/1064503     SourceFile::offsetToLocation(int) const [7]
+-----------------------------------------------
+                0.00    0.00  389905/2509314     Tokenizer::readIdentifier() [9]
+                0.00    0.00 1059635/2509314     Tokenizer::scan(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [3]
+                0.00    0.00 1059774/2509314     Tokenizer::scope() [4]
+[17]     0.0    0.00    0.00 2509314         Lexer::isEnd() [17]
+-----------------------------------------------
+                0.00    0.00  350606/1851576     Tokenizer::readIdentifier() [9]
+                0.00    0.00 1500970/1851576     Tokenizer::scope() [4]
+[18]     0.0    0.00    0.00 1851576         Lexer::getOffset() [18]
+-----------------------------------------------
+                0.00    0.00  389905/1449678     Tokenizer::readIdentifier() [9]
+                0.00    0.00 1059773/1449678     Tokenizer::scope() [4]
+[19]     0.0    0.00    0.00 1449678         Lexer::getchar() [19]
+-----------------------------------------------
+                0.00    0.00 1059640/1059640     Tokenizer::scope() [4]
+[20]     0.0    0.00    0.00 1059640         Lexer::skipWhiteSpace() [20]
+-----------------------------------------------
+                0.00    0.00 1059635/1059635     Tokenizer::scope() [4]
+[21]     0.0    0.00    0.00 1059635         Lexer::isNumeric() [21]
+-----------------------------------------------
+                0.00    0.00  750485/750485      Tokenizer::scope() [4]
+[22]     0.0    0.00    0.00  750485         Lexer::toChar(int) [22]
+-----------------------------------------------
+                0.00    0.00  461302/461302      cmdTokens(CliArgs const&) [2]
+[23]     0.0    0.00    0.00  461302         DelimiterToken::~DelimiterToken() [23]
+-----------------------------------------------
+                0.00    0.00  230202/230202      cmdTokens(CliArgs const&) [2]
+[24]     0.0    0.00    0.00  230202         OperatorToken::~OperatorToken() [24]
+-----------------------------------------------
+                0.00    0.00     138/214740      Tokenizer::scope() [4]
+                0.00    0.00  214602/214740      Tokenizer::readIdentifier() [9]
+[25]     0.0    0.00    0.00  214740         Lexer::nextChar() [25]
+-----------------------------------------------
+                0.00    0.00  175303/175303      cmdTokens(CliArgs const&) [2]
+[26]     0.0    0.00    0.00  175303         IdentifierToken::~IdentifierToken() [26]
+-----------------------------------------------
+                0.00    0.00  175303/175303      Tokenizer::readIdentifier() [9]
+[27]     0.0    0.00    0.00  175303         Lexer::beginPosition() [27]
+-----------------------------------------------
+                0.00    0.00  175303/175303      Tokenizer::readIdentifier() [9]
+[28]     0.0    0.00    0.00  175303         Lexer::acceptPosition() [28]
+-----------------------------------------------
+                0.00    0.00  133847/133847      cmdTokens(CliArgs const&) [2]
+[29]     0.0    0.00    0.00  133847         NumberToken::~NumberToken() [29]
+-----------------------------------------------
+                0.00    0.00   58981/58981       cmdTokens(CliArgs const&) [2]
+[30]     0.0    0.00    0.00   58981         KeywordToken::~KeywordToken() [30]
+-----------------------------------------------
+                0.00    0.00   58981/58981       Tokenizer::scope() [4]
+[31]     0.0    0.00    0.00   58981         Lexer::getchar(int) [31]
+-----------------------------------------------
+                0.00    0.00       1/21          readSource[abi:cxx11](CliArgs const&) [44]
+                0.00    0.00       2/21          cmdTokens(CliArgs const&) [2]
+                0.00    0.00       4/21          main [1]
+                0.00    0.00      14/21          std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&) [37]
+[32]     0.0    0.00    0.00      21         void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) [32]
+-----------------------------------------------
+                0.00    0.00       2/20          parseArgs(int, char**) [45]
+                0.00    0.00      18/20          main [1]
+[33]     0.0    0.00    0.00      20         std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_invoke(std::_Any_data const&, CliArgs const&) [33]
+-----------------------------------------------
+                0.00    0.00       3/19          std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&) [37]
+                0.00    0.00       4/19          parseArgs(int, char**) [45]
+                0.00    0.00       5/19          CliCommand::~CliCommand() [36]
+                0.00    0.00       7/19          main [1]
+[34]     0.0    0.00    0.00      19         std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [34]
+-----------------------------------------------
+                0.00    0.00       1/11          main [1]
+                0.00    0.00      10/11          parseArgs(int, char**) [45]
+[35]     0.0    0.00    0.00      11         bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*) [35]
+-----------------------------------------------
+                0.00    0.00       9/9           main [1]
+[36]     0.0    0.00    0.00       9         CliCommand::~CliCommand() [36]
+                0.00    0.00       5/19          std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [34]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [40]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#3}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [39]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#2}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [38]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#1}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [41]
+-----------------------------------------------
+                0.00    0.00       7/7           main [1]
+[37]     0.0    0.00    0.00       7         std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&) [37]
+                0.00    0.00      14/21          void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) [32]
+                0.00    0.00       3/19          std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [34]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#3}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [39]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#2}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [38]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#1}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [41]
+                0.00    0.00       1/3           std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [40]
+-----------------------------------------------
+                0.00    0.00       1/3           main [1]
+                0.00    0.00       1/3           CliCommand::~CliCommand() [36]
+                0.00    0.00       1/3           std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&) [37]
+[38]     0.0    0.00    0.00       3         std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#2}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [38]
+-----------------------------------------------
+                0.00    0.00       1/3           main [1]
+                0.00    0.00       1/3           CliCommand::~CliCommand() [36]
+                0.00    0.00       1/3           std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&) [37]
+[39]     0.0    0.00    0.00       3         std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#3}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [39]
+-----------------------------------------------
+                0.00    0.00       1/3           main [1]
+                0.00    0.00       1/3           CliCommand::~CliCommand() [36]
+                0.00    0.00       1/3           std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&) [37]
+[40]     0.0    0.00    0.00       3         std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [40]
+-----------------------------------------------
+                0.00    0.00       1/3           main [1]
+                0.00    0.00       1/3           CliCommand::~CliCommand() [36]
+                0.00    0.00       1/3           std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&) [37]
+[41]     0.0    0.00    0.00       3         std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#1}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [41]
+-----------------------------------------------
+                0.00    0.00       2/2           __static_initialization_and_destruction_0() [66]
+[42]     0.0    0.00    0.00       2         std::_Hashtable<TokenType, std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > >, std::allocator<std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > >, std::__detail::_Select1st, std::equal_to<TokenType>, std::hash<TokenType>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_Hashtable<std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > const*>(std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > const*, std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > const*, unsigned long, std::hash<TokenType> const&, std::equal_to<TokenType> const&, std::allocator<std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > > const&, std::integral_constant<bool, true>) [42]
+-----------------------------------------------
+                0.00    0.00       2/2           __static_initialization_and_destruction_0() [66]
+[43]     0.0    0.00    0.00       2         std::_Hashtable<std::basic_string_view<char, std::char_traits<char> >, std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType>, std::allocator<std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> >, std::__detail::_Select1st, std::equal_to<std::basic_string_view<char, std::char_traits<char> > >, std::hash<std::basic_string_view<char, std::char_traits<char> > >, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<true, false, true> >::_Hashtable<std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> const*>(std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> const*, std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> const*, unsigned long, std::hash<std::basic_string_view<char, std::char_traits<char> > > const&, std::equal_to<std::basic_string_view<char, std::char_traits<char> > > const&, std::allocator<std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> > const&, std::integral_constant<bool, true>) [43]
+-----------------------------------------------
+                0.00    0.00       1/1           cmdTokens(CliArgs const&) [2]
+[44]     0.0    0.00    0.00       1         readSource[abi:cxx11](CliArgs const&) [44]
+                0.00    0.00       1/21          void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long) [32]
+-----------------------------------------------
+                0.00    0.00       1/1           main [1]
+[45]     0.0    0.00    0.00       1         parseArgs(int, char**) [45]
+                0.00    0.00      10/11          bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*) [35]
+                0.00    0.00       4/19          std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) [34]
+                0.00    0.00       2/20          std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_invoke(std::_Any_data const&, CliArgs const&) [33]
+-----------------------------------------------
+                0.00    0.00       1/1           Lexer::setSourceText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [48]
+[46]     0.0    0.00    0.00       1         SourceFile::computeLineStarts() [46]
+-----------------------------------------------
+                0.00    0.00       1/1           Lexer::setSourceText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [48]
+[47]     0.0    0.00    0.00       1         SourceFile::setText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [47]
+-----------------------------------------------
+                0.00    0.00       1/1           Tokenizer::scan(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [3]
+[48]     0.0    0.00    0.00       1         Lexer::setSourceText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [48]
+                0.00    0.00       1/1           SourceFile::computeLineStarts() [46]
+                0.00    0.00       1/1           SourceFile::setText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [47]
+-----------------------------------------------
+                0.00    0.00       1/1           main [1]
+[49]     0.0    0.00    0.00       1         std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_invoke(std::_Any_data const&, CliArgs const&) [49]
+-----------------------------------------------
+
+ This table describes the call tree of the program, and was sorted by
+ the total amount of time spent in each function and its children.
+
+ Each entry in this table consists of several lines.  The line with the
+ index number at the left hand margin lists the current function.
+ The lines above it list the functions that called this function,
+ and the lines below it list the functions this one called.
+ This line lists:
+     index	A unique number given to each element of the table.
+		Index numbers are sorted numerically.
+		The index number is printed next to every function name so
+		it is easier to look up where the function is in the table.
+
+     % time	This is the percentage of the `total' time that was spent
+		in this function and its children.  Note that due to
+		different viewpoints, functions excluded by options, etc,
+		these numbers will NOT add up to 100%.
+
+     self	This is the total amount of time spent in this function.
+
+     children	This is the total amount of time propagated into this
+		function by its children.
+
+     called	This is the number of times the function was called.
+		If the function called itself recursively, the number
+		only includes non-recursive calls, and is followed by
+		a `+' and the number of recursive calls.
+
+     name	The name of the current function.  The index number is
+		printed after it.  If the function is a member of a
+		cycle, the cycle number is printed between the
+		function's name and the index number.
+
+
+ For the function's parents, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the function into this parent.
+
+     children	This is the amount of time that was propagated from
+		the function's children into this parent.
+
+     called	This is the number of times this parent called the
+		function `/' the total number of times the function
+		was called.  Recursive calls to the function are not
+		included in the number after the `/'.
+
+     name	This is the name of the parent.  The parent's index
+		number is printed after it.  If the parent is a
+		member of a cycle, the cycle number is printed between
+		the name and the index number.
+
+ If the parents of the function cannot be determined, the word
+ `<spontaneous>' is printed in the `name' field, and all the other
+ fields are blank.
+
+ For the function's children, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the child into the function.
+
+     children	This is the amount of time that was propagated from the
+		child's children to the function.
+
+     called	This is the number of times the function called
+		this child `/' the total number of times the child
+		was called.  Recursive calls by the child are not
+		listed in the number after the `/'.
+
+     name	This is the name of the child.  The child's index
+		number is printed after it.  If the child is a
+		member of a cycle, the cycle number is printed
+		between the name and the index number.
+
+ If there are any cycles (circles) in the call graph, there is an
+ entry for the cycle-as-a-whole.  This entry shows who called the
+ cycle (as parents) and the members of the cycle (as children.)
+ The `+' recursive calls entry shows the number of function calls that
+ were internal to the cycle, and the calls entry for each member shows,
+ for that member, how many times it was called from other members of
+ the cycle.
+
+Copyright (C) 2012-2026 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+Index by function name
+
+  [44] readSource[abi:cxx11](CliArgs const&) [48] Lexer::setSourceText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [7] SourceFile::offsetToLocation(int) const
+   [2] cmdTokens(CliArgs const&) [28] Lexer::acceptPosition() [42] std::_Hashtable<TokenType, std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > >, std::allocator<std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > >, std::__detail::_Select1st, std::equal_to<TokenType>, std::hash<TokenType>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::_Hashtable<std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > const*>(std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > const*, std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > const*, unsigned long, std::hash<TokenType> const&, std::equal_to<TokenType> const&, std::allocator<std::pair<TokenType const, std::basic_string_view<char, std::char_traits<char> > > > const&, std::integral_constant<bool, true>)
+  [45] parseArgs(int, char**) [20] Lexer::skipWhiteSpace() [43] std::_Hashtable<std::basic_string_view<char, std::char_traits<char> >, std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType>, std::allocator<std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> >, std::__detail::_Select1st, std::equal_to<std::basic_string_view<char, std::char_traits<char> > >, std::hash<std::basic_string_view<char, std::char_traits<char> > >, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<true, false, true> >::_Hashtable<std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> const*>(std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> const*, std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> const*, unsigned long, std::hash<std::basic_string_view<char, std::char_traits<char> > > const&, std::equal_to<std::basic_string_view<char, std::char_traits<char> > > const&, std::allocator<std::pair<std::basic_string_view<char, std::char_traits<char> > const, TokenType> > const&, std::integral_constant<bool, true>)
+  [36] CliCommand::~CliCommand() [17] Lexer::isEnd()      [34] std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation)
+  [46] SourceFile::computeLineStarts() [22] Lexer::toChar(int) [49] std::_Function_handler<int (CliArgs const&), int (*)(CliArgs const&)>::_M_invoke(std::_Any_data const&, CliArgs const&)
+  [47] SourceFile::setText(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) [31] Lexer::getchar(int) [38] std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#2}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) (std_function.h)
+  [29] NumberToken::~NumberToken() [19] Lexer::getchar()  [39] std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#3}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) (std_function.h)
+  [30] KeywordToken::~KeywordToken() [5] Lexer::include(std::basic_string_view<char, std::char_traits<char> >, bool) [40] std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) (std_function.h)
+  [24] OperatorToken::~OperatorToken() [25] Lexer::nextChar() [33] std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#4}>::_M_invoke(std::_Any_data const&, CliArgs const&) (std_function.h)
+  [23] DelimiterToken::~DelimiterToken() [18] Lexer::getOffset() [41] std::_Function_handler<int (CliArgs const&), main::{lambda(CliArgs const&)#1}>::_M_manager(std::_Any_data&, std::_Any_data const&, std::_Manager_operation) (std_function.h)
+  [26] IdentifierToken::~IdentifierToken() [21] Lexer::isNumeric() [37] std::vector<CliCommand, std::allocator<CliCommand> >::push_back(CliCommand const&)
+   [8] Lexer::getLocation()    [9] Tokenizer::readIdentifier() [32] void std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<true>(char const*, unsigned long)
+  [10] Lexer::readNumeric()    [3] Tokenizer::scan(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) [35] bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*)
+  [27] Lexer::beginPosition()  [4] Tokenizer::scope()      [6] _init

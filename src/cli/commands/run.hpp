@@ -1,10 +1,13 @@
 // ============================================================================
-// saQut CLI — run komutu (pipeline: token → AST → IR debug)
-// ============================================================================
+// saQut CLI — run komutu
 //
-// TODO: İleride `saqut -` ile stdin'den okuyup anında çalıştıracak
-//       interpreter modu bu komutun altına gelecek.
+// Tam derleme + çalıştırma pipeline'ı:
+//   tokenize → parse → sembol topla → IR üret → VM çalıştır
 //
+// Başarı kriteri:
+//   build/saqut run file:examples/fibonacci.sqt
+//   → 55
+//   → 55
 // ============================================================================
 
 #ifndef SAQUT_CLI_RUN
@@ -14,53 +17,61 @@
 #include "cli/args.hpp"
 #include "tokenizer/tokenizer.hpp"
 #include "parser/parser.hpp"
-#include "ir/ir.hpp"
+#include "symbol/symbol_table.hpp"
+#include "symbol/symbol_collector.hpp"
+#include "diagnostic/diagnostic_engine.hpp"
+#include "ir/ir_generator.hpp"
+#include "vm/interpreter.hpp"
 
 inline int cmdRun(const CliArgs& args) {
-    std::string source = readSource(args);
+    std::string filePath = inputFilePath(args);
+    std::string source   = readSource(args);
     if (source.empty()) return 1;
 
+    // ── Aşama 1: Tokenize ────────────────────────────────────────────────
     Tokenizer tokenizer;
-    auto tokens = tokenizer.scan(source, inputFilePath(args));
+    auto tokens = tokenizer.scan(source, filePath);
 
-    std::cout << "=== saQut Compiler ===\n";
-    std::cout << "Kaynak kod:\n" << source << "\n\n";
-
-    std::cout << "Tokenler (" << tokens.size() << " adet):\n";
-    for (auto* t : tokens) {
-        std::cout << "  [" << t->gettype() << "] \"" << t->token << "\"\n";
-    }
-    std::cout << "\n";
-
+    // ── Aşama 2: Parse ───────────────────────────────────────────────────
     Parser parser;
     ASTNode* ast = parser.parse(tokens);
-
-    if (ast) {
-        std::cout << "AST:\n";
-        ast->log(0);
-        std::cout << "\n";
-
-        CodeGenerator cg;
-        cg.parse(ast);
-        std::cout << "IR (" << cg.IROpDatas.size() << " komut):\n";
-        for (size_t i = 0; i < cg.IROpDatas.size(); i++) {
-            auto& op = cg.IROpDatas[i];
-            std::cout << "  [" << i << "] reg" << op.targetReg << " = ";
-            switch (op.op) {
-                case OPCode::mathadd: std::cout << "add"; break;
-                case OPCode::mathsub: std::cout << "sub"; break;
-                case OPCode::mathmul: std::cout << "mul"; break;
-                case OPCode::mathdiv: std::cout << "div"; break;
-                case OPCode::declare: std::cout << "literal"; break;
-            }
-            std::cout << " (" << op.arg1.value.index() << ")\n";
-        }
-
-        delete ast;
+    if (!ast) {
+        std::cerr << "Hata: AST üretilemedi\n";
+        for (auto* t : tokens) delete t;
+        return 1;
     }
 
+    // ── Aşama 3: Sembol toplama ───────────────────────────────────────────
+    // Identifier'ların resolvedSymbol'ü doldurulur — IR generator buna ihtiyaç duyar.
+    SymbolTable      symbolTable;
+    DiagnosticEngine diag;
+    SymbolCollector(symbolTable, diag).collect(ast);
+
+    if (diag.hasErrors()) {
+        std::cerr << "Derleme hataları var, program çalıştırılamaz:\n";
+        diag.printAll(std::cerr);
+        delete ast;
+        for (auto* t : tokens) delete t;
+        return 1;
+    }
+
+    // ── Aşama 4: IR üretimi ───────────────────────────────────────────────
+    IRGenerator irGenerator;
+    IRProgram   program = irGenerator.generate(ast, symbolTable);
+
+    // ── Aşama 5: VM çalıştırma ────────────────────────────────────────────
+    int exitCode = 0;
+    try {
+        Interpreter vm(program);
+        exitCode = vm.run();
+    } catch (const std::exception& e) {
+        std::cerr << "Çalışma zamanı hatası: " << e.what() << "\n";
+        exitCode = 1;
+    }
+
+    delete ast;
     for (auto* t : tokens) delete t;
-    return 0;
+    return exitCode;
 }
 
 #endif // SAQUT_CLI_RUN

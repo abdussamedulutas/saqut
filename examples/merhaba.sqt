@@ -1,0 +1,5 @@
+int main() {
+    print("Merhaba");
+    print("saQut calisiyor");
+    return 0;
+}

@@ -19,6 +19,8 @@
 #include "parser/parser.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
+#include "semantic/type_checker.hpp"
+#include "semantic/structural_validator.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
 #include "ir/ir_generator.hpp"
 #include "vm/interpreter.hpp"
@@ -46,6 +48,8 @@ inline int cmdRun(const CliArgs& args) {
     SymbolTable      symbolTable;
     DiagnosticEngine diag;
     SymbolCollector(symbolTable, diag).collect(ast);
+    TypeChecker(symbolTable, diag).check(ast);
+    StructuralValidator(diag).validate(ast);
 
     if (diag.hasErrors()) {
         std::cerr << "Derleme hataları var, program çalıştırılamaz:\n";

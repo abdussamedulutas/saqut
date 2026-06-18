@@ -37,8 +37,11 @@
 enum class Opcode {
 
     // --- Değer yükleme ---
-    LOAD_CONST,    // slots[dest] = intValue
+    LOAD_CONST,    // slots[dest] = intValue (tam sayı sabitini slota yükle)
                    //   Örnek: LOAD_CONST dest=3 val=10  →  slot[3] = 10
+
+    LOAD_STRING,   // slots[dest] = stringValue (metin sabitini slota yükle)
+                   //   Örnek: LOAD_STRING dest=2 val="Merhaba"  →  slot[2] = "Merhaba"
 
     LOAD_SLOT,     // slots[dest] = slots[src]
                    //   Bir slotun değerini başka bir slota kopyalar.
@@ -79,6 +82,7 @@ enum class Opcode {
 inline const char* opcodeName(Opcode op) {
     switch (op) {
         case Opcode::LOAD_CONST:    return "LOAD_CONST";
+        case Opcode::LOAD_STRING:   return "LOAD_STRING";
         case Opcode::LOAD_SLOT:     return "LOAD_SLOT";
         case Opcode::ADD:           return "ADD";
         case Opcode::SUB:           return "SUB";
@@ -121,8 +125,11 @@ struct Instruction {
     int left       = -1;
     int right      = -1;
 
-    // LOAD_CONST için yüklenecek sabit değer
-    int intValue   =  0;
+    // LOAD_CONST için yüklenecek tam sayı sabiti
+    int         intValue    =  0;
+
+    // LOAD_STRING için yüklenecek metin sabiti (tırnak işaretleri olmadan)
+    std::string stringValue;
 
     // JMP / JIF_FALSE için hedef instruction indeksi
     // Üretim sırasında bilinmiyorsa -1 bırakılır, sonradan doldurulur (backpatch).

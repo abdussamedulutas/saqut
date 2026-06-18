@@ -65,6 +65,8 @@ private:
         case TokenType::GREATER:
         case TokenType::LESS_EQUAL:
         case TokenType::GREATER_EQUAL:
+        case TokenType::AMPERSAND_AMPERSAND:
+        case TokenType::PIPE_PIPE:
             return true;
         default:
             return false;
@@ -83,8 +85,10 @@ private:
         case TokenType::LESS:          return l <  r ? 1 : 0;
         case TokenType::GREATER:       return l >  r ? 1 : 0;
         case TokenType::LESS_EQUAL:    return l <= r ? 1 : 0;
-        case TokenType::GREATER_EQUAL: return l >= r ? 1 : 0;
-        default:                       return 0;
+        case TokenType::GREATER_EQUAL:       return l >= r ? 1 : 0;
+        case TokenType::AMPERSAND_AMPERSAND: return (l && r) ? 1 : 0;
+        case TokenType::PIPE_PIPE:           return (l || r) ? 1 : 0;
+        default:                             return 0;
         }
     }
 

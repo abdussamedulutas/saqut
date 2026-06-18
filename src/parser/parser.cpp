@@ -63,11 +63,13 @@ ASTNode* Parser::parseProgram() {
     ProgramNode* program = new ProgramNode();
 
     while (currentToken().type != TokenType::SVR_VOID) {
+        int prevPos = current;
         ASTNode* decl = parseDeclaration();
         if (decl)
             program->addChild(decl);
-        else
-            break;
+        // İlerleme olmadıysa token atla — syntax hatasında sonsuz döngüyü önler
+        if (current == prevPos)
+            nextToken();
     }
 
     return program;

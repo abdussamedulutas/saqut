@@ -1,0 +1,37 @@
+// ============================================================================
+// saQut IR — IRFunction (Tek Fonksiyonun IR Karşılığı)
+//
+// Bir IRFunction, kaynak koddaki tek bir fonksiyonun "pişmiş" halidir.
+// IRGenerator bu yapıyı doldurur, Interpreter bu yapıyı çalıştırır.
+//
+// SLOT DÜZENI:
+//   slot[0 .. paramCount-1]  →  parametreler (soldan sağa)
+//   slot[paramCount ..]      →  lokal değişkenler ve geçici sonuçlar
+//   slotCount                →  toplam kaç slot lazım (frame boyutu)
+//
+// Örnek — fibonacci(int n):
+//   paramCount = 1          →  slot[0] = n
+//   slotCount  = 11         →  slot[0..10] (0'ı parametre, 1-10 hesaplamalar)
+// ============================================================================
+
+#ifndef SAQUT_IR_FUNCTION
+#define SAQUT_IR_FUNCTION
+
+#include <string>
+#include <vector>
+#include "ir/instruction.hpp"
+
+struct IRFunction {
+    std::string              name;         // kaynak koddaki fonksiyon adı
+    int                      paramCount;   // kaç parametresi var
+    int                      slotCount;    // frame boyutu (üretim sonunda doldurulur)
+    std::vector<Instruction> instructions; // bu fonksiyonun talimat listesi
+
+    IRFunction(std::string name, int paramCount)
+        : name(std::move(name)), paramCount(paramCount), slotCount(0) {}
+
+    // Okunabilir IR dump — "saqut run" hata ayıklaması veya inceleme için
+    void dump() const;
+};
+
+#endif // SAQUT_IR_FUNCTION

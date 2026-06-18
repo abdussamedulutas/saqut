@@ -4,9 +4,9 @@
 // Tam derleme + çalıştırma pipeline'ı:
 //   tokenize → parse → sembol topla → [opsiyonel: optimize] → IR üret → VM çalıştır
 //
-// --optimized bayrağı: orijinal AST klonlanır, constant folding + DCE uygulanır,
-// optimize edilmiş klon IR generator'a verilir. Orijinal AST dokunulmadan kalır.
-// Aynı pattern ir.hpp'de de kullanılıyor — paralel değişikliklerde ikisine bak.
+// --optimized bayrağı: AST yerinde optimize edilir (klon yok — sadece tek versiyon
+// gerekiyor). ast komutu orijinali saklaması gerektiği için klon kullanır; run/ir
+// kullanmaz. Aynı pattern ir.hpp'de de var — paralel değişikliklerde ikisine bak.
 // ============================================================================
 
 #ifndef SAQUT_CLI_RUN
@@ -61,24 +61,19 @@ inline int cmdRun(const CliArgs& args) {
     }
 
     // ── Aşama 4 (opsiyonel): Optimizasyon ────────────────────────────────
-    // --optimized bayrağı verilmişse: orijinal AST'yi kopyala, klon üstünde
-    // constant folding + DCE uygula. IR generator klonu kullanır; orijinal
-    // bu scope'ta silinir. Bayrak yoksa sıfır maliyet — klonlama olmaz.
-    ASTNode* activeAst    = ast;
-    ASTNode* optimizedAst = nullptr;
+    // --optimized: constant folding + DCE yerinde uygulanır, klon yok.
+    // Tek versiyon (optimize edilmiş) yeterli — ast komutu gibi karşılaştırma yok.
     if (args.optimized) {
         CompilerConfig   cfg;
         DiagnosticEngine optDiag;
-        OptimizationManager mgr(cfg, optDiag);
-        optimizedAst = mgr.optimize(ast, &symbolTable);
-        activeAst    = optimizedAst;
+        OptimizationManager(cfg, optDiag).runPassesInPlace(ast, &symbolTable);
         if (optDiag.errorCount() + optDiag.warningCount() > 0)
             optDiag.printAll(std::cerr); // W002 (derleme zamanı sıfıra bölme) vb.
     }
 
     // ── Aşama 5: IR üretimi ───────────────────────────────────────────────
     IRGenerator irGenerator;
-    IRProgram   program = irGenerator.generate(activeAst, symbolTable);
+    IRProgram   program = irGenerator.generate(ast, symbolTable);
 
     // ── Aşama 6: VM çalıştırma ────────────────────────────────────────────
     int exitCode = 0;
@@ -90,7 +85,6 @@ inline int cmdRun(const CliArgs& args) {
         exitCode = 1;
     }
 
-    delete optimizedAst; // nullptr ise no-op; orijinal ast her durumda aşağıda silinir
     delete ast;
     for (auto* t : tokens) delete t;
     return exitCode;

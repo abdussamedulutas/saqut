@@ -1,9 +1,18 @@
 // ============================================================================
 // saQut — Optimizasyon Yöneticisi (ADR-007, ADR-009)
 //
-// 1. AST'yi klonlar (orijinal dokunulmaz).
-// 2. Etkin pass'leri fixpoint döngüsüyle çalıştırır.
-// 3. Optimize edilmiş klon sahipliğini döndürür (caller delete eder).
+// İKİ KULLANIM YOLU:
+//
+// 1. runPassesInPlace(root, table)
+//    Pass'leri verilen AST üstünde doğrudan çalıştırır — klon yok.
+//    run / ir / transpile gibi "tek seferlik" komutlar bu yolu kullanır:
+//    AST'nin tek versiyonu gerekiyor, orijinali saklamaya gerek yok.
+//
+// 2. optimize(root, table)         [sadece ast komutu için]
+//    Önce deepClone, sonra runPassesInPlace. Orijinali dokunulmaz bırakır.
+//    Çıktı: optimize edilmiş klon (caller delete eder).
+//    ast komutunun "öncesi / sonrası" karşılaştırması için zorunlu.
+//    Diğer komutlar bu yolu ÇAĞIRMAMALI — gereksiz klon maliyeti.
 //
 // Fixpoint garantisi: her pass yalnızca küçülten dönüşümler yapar
 // (katlama: n düğüm → 1 düğüm; DCE: düğüm siler). Büyüten pass
@@ -33,18 +42,23 @@ public:
         maxRounds_ = cfg.maxFixpointRounds;
     }
 
-    // optimize: AST'yi klonlar ve optimize edilmiş kopyayı döndürür.
-    // Dönen pointer caller'a aittir (delete edilmeli).
-    ASTNode* optimize(ASTNode* root, SymbolTable* table) {
-        ASTNode* clone = deepClone(root);
-
+    // Pass'leri verilen AST üstünde yerinde çalıştırır — klon yok.
+    // run / ir ve diğer tek-versiyon komutları bu yolu kullanır.
+    void runPassesInPlace(ASTNode* root, SymbolTable* table) {
         for (int round = 0; round < maxRounds_; ++round) {
             bool anyChange = false;
             for (auto& pass : passes_)
-                if (pass->run(clone, table)) anyChange = true;
+                if (pass->run(root, table)) anyChange = true;
             if (!anyChange) break;
         }
+    }
 
+    // Önce deepClone, sonra runPassesInPlace. Orijinal dokunulmaz.
+    // SADECE ast komutu kullanır — öncesi/sonrası karşılaştırması için.
+    // Dönen pointer caller'a aittir (delete edilmeli).
+    ASTNode* optimize(ASTNode* root, SymbolTable* table) {
+        ASTNode* clone = deepClone(root);
+        runPassesInPlace(clone, table);
         return clone;
     }
 

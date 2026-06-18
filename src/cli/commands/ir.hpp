@@ -43,24 +43,20 @@ inline int cmdIr(const CliArgs& args) {
         return 1;
     }
 
-    // --optimized: optimize edilmiş AST klonu üzerinden IR üret
-    ASTNode* activeAst   = ast;
-    ASTNode* optimizedAst = nullptr;
+    // --optimized: constant folding + DCE yerinde uygulanır, klon yok.
+    // IR dump için tek versiyon yeterli — ast komutu gibi karşılaştırma yok.
     if (args.optimized) {
         CompilerConfig   cfg;
         DiagnosticEngine optDiag;
-        OptimizationManager mgr(cfg, optDiag);
-        optimizedAst = mgr.optimize(ast, &symbolTable);
-        activeAst    = optimizedAst;
+        OptimizationManager(cfg, optDiag).runPassesInPlace(ast, &symbolTable);
         if (optDiag.errorCount() + optDiag.warningCount() > 0)
             optDiag.printAll(std::cerr); // W002 vb. uyarılar stderr'e
     }
 
     IRGenerator irGenerator;
-    IRProgram   program = irGenerator.generate(activeAst, symbolTable);
+    IRProgram   program = irGenerator.generate(ast, symbolTable);
     program.dump();
 
-    delete optimizedAst; // nullptr ise no-op
     delete ast;
     for (auto* t : tokens) delete t;
     return 0;

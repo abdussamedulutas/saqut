@@ -105,46 +105,45 @@ sembol tablosunun optimizasyondan önceki ve sonraki halini ayrı ayrı görebil
    symbol bağı, erişilebilirlik, constness ekler). Ağacı **bozmaz**, zenginleştirir.
    Orijinal AST hâlâ kaynak kodun tam izdüşümüdür.
 
-2. **Optimizasyon dönüşümü, ağacın bir KOPYASI (klon) üzerinde yapılır.**
-   Orijinal analizli AST = "öncesi"; klon + dönüştürülmüş AST = "sonrası".
-   Ağaç klonlamak ucuz ve basittir, yalnızca `--optimized` istendiğinde yapılır.
+2. **Optimizasyon dönüşümü iki yolla yapılabilir:**
 
-**Sonuç:** Hem "bellek canavarı" felsefesi korunur (orijinal AST her şeyi tutar),
-hem optimizasyon yapılır, hem de öncesi/sonrası ayrı ayrı incelenebilir.
+   a. **`ast` komutu için klon:** orijinal AST dokunulmadan kalır, klon üstünde
+      pass'ler çalışır. Kullanıcı "öncesi" ve "sonrası" AST'yi ayrı ayrı
+      görebilir. `OptimizationManager::optimize()` bu yolu kullanır.
+
+   b. **Diğer tüm komutlar için yerinde (in-place):** `run --optimized`,
+      `ir --optimized` vb. tek versiyon üretiyor — orijinali saklamaya gerek yok.
+      `OptimizationManager::runPassesInPlace()` bu yolu kullanır, klon maliyeti yok.
+
+**Sonuç:** "bellek canavarı" felsefesi `ast` komutunda korunur; diğer komutlar
+gereksiz klon maliyeti taşımaz.
 
 ```
 saqut ast file.sqt              → ham + annotate edilmiş AST (1+2 burada durur)
 saqut ast file.sqt --optimized  → klon, folding uygulanmış (3 var)
+saqut run file.sqt --optimized  → yerinde optimize → IR → VM (klon yok)
+saqut ir  file.sqt --optimized  → yerinde optimize → IR dump (klon yok)
 ```
 
-### Güncelleme — Klon maliyeti yük taşır (load-bearing)
+### Güncelleme — Klon ve sembol tablosu paylaşımı
 
-İlk metin "ağaç klonlamak ucuz ve basittir" diyordu; bu **klon maliyetini hafife
-alıyor** ve bir **tutarlılık (coherence) problemini** atlıyordu. Düzeltme:
+`deepClone` sembol tablosunu yeniden eşlemez (remap etmez) — klondaki
+`IdentifierNode::resolvedSymbol` orijinal `Symbol` nesnelerini gösterir. Bu
+**güvenlidir**, çünkü:
 
-`ASTNode::clone()` "belki gerekir" değil, **merkezi ve spesifiye edilmesi
-zorunlu** bir bileşendir; tüm öncesi/sonrası hikâyesi ona dayanır (bkz. roadmap
-Faz 4'te clone() yükseltildi).
+- `Symbol::references` bir **konum listesi** (`std::vector<SourceLocation>`),
+  referans sayacı değildir. Klonda bir `IdentifierNode` silindiğinde bu liste
+  değişmez.
+- `IdentifierNode` destructor'ı yoktur; `resolvedSymbol`'e dokunan hiçbir yıkıcı
+  kodu çalışmaz.
+- Klondaki pass'ler Symbol nesnelerini **okur** (slot numarası, tip vb.),
+  **yazmaz** — paylaşım salt-okunur (read-only) kullanımdır.
 
-**Klonlanırken karar verilmesi gereken iki nokta (açıkça belgele):**
+**Parent pointer'lar** ise yeniden bağlanır — klon node'larının `parent`'ı
+orijinali değil, klonu gösterir (deepClone bunu zaten yapar).
 
-1. **Parent pointer'lar yeniden bağlanmalı.** Klon node'larının `parent`'ı
-   orijinali değil, klonu göstermeli; yoksa yapısal doğrulama ve dönüşümler
-   yanlış ağaçta gezinir.
-
-2. **`IdentifierNode → Symbol` bağları: paylaş mı, yeniden eşle mi?**
-   - **Paylaş** (klon ve orijinal aynı sembol tablosuna işaret eder): ucuz, ama
-     klonu optimize etmek orijinalin **referans sayımlarını bozar** (DCE klonda
-     bir kullanımı silince orijinalin Symbol ref-count'u da düşer).
-   - **Yeniden eşle** (klona ait bir sembol tablosu kopyası): doğru, ama ucuz
-     değil.
-   - **Karar:** `--optimized` istendiğinde sembol tablosu da **klonlanır ve
-     yeniden eşlenir** (remap). Doğruluk, ucuzluğa tercih edilir; klon zaten
-     yalnızca optimizasyon istendiğinde üretilir, sıcak yol değildir. "Ucuz"
-     iddiası kaldırıldı.
-
-Bu, ADR-013'teki "ref-count Symbol'da yaşar" kararıyla tutarlıdır: ref-count
-Symbol'da olduğu için, klonun kendi Symbol'larına sahip olması şarttır.
+Önceki versiyon "sembol tablosu klonlanır ve remap edilir" diyordu; bu hem hiç
+implement edilmedi hem de gerekli değildi. Düzeltildi.
 
 ---
 
@@ -667,7 +666,7 @@ modelini birlikte zorlar — ikisi de bu yüzden ertelendi.
 | ADR | Konu | Karar |
 |---|---|---|
 | 006 | Frontend mimarisi | Çok-aşamalı; frontend/middle-end/backend katmanları |
-| 007 | Analiz vs optimizasyon | Analiz yerinde işaretler; optimizasyon klonda dönüştürür; `clone()` merkezi, sembol tablosu remap edilir |
+| 007 | Analiz vs optimizasyon | Analiz yerinde; `ast` komutu klon üstünde dönüştürür (öncesi/sonrası karşılaştırması); `run`/`ir` yerinde optimize eder (klon yok); sembol bağları salt-okunur paylaşım (remap gerekmez) |
 | 008 | Optimizasyon konumu | Basitler AST'de, dataflow gerektirenler IR'de |
 | 009 | Pass yönetimi | Fixpoint döngüsü, toggle'lı; monotonluk/iterasyon-tavanı değişmezi; akışa-bağlı analiz tur başına tazelenir |
 | 010 | Tip sistemi | Minimal+genişletilebilir Type; gizli dönüşüm yok; Error tipi; tamsayı literali bağlama-göre tiplenir |

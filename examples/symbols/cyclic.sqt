@@ -1,0 +1,12 @@
+// E010 — döngüsel struct (by-value çevrim → sonsuz boyut)
+struct A {
+    B b;
+}
+
+struct B {
+    A a;
+}
+
+int main() {
+    return 0;
+}

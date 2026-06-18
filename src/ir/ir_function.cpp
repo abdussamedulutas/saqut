@@ -60,17 +60,18 @@ void IRFunction::dump() const {
     }
     header += "  [" + std::to_string(slotCount) + " slot]";
 
-    // Üst çizgi
-    std::cout << "+-" << std::string(header.size(), '-') << "-+\n";
-    std::cout << "|" << header                            <<  " |\n";
-    std::cout << "+-" << std::string(header.size(), '-') << "-+\n";
+    // Başlık: NAME=fibonacci PARAMS=1 SLOTS=10
+    std::cout << "NAME=" << name
+              << " PARAMS=" << paramCount
+              << " SLOTS=" << slotCount
+              << "\n";
 
     // Talimatlar
     for (int i = 0; i < (int)instructions.size(); i++) {
         const Instruction& ins = instructions[i];
 
         // Satır numarası
-        std::cout << "  " << std::setw(3) << std::right << i << "│ ";
+        std::cout << "  " << std::setw(3) << std::right << i << "  ";
 
         // Opcode sütunu (12 karakter genişlik)
         std::cout << std::left << std::setw(12) << opcodeName(ins.opcode);

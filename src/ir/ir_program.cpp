@@ -2,10 +2,10 @@
 #include <iostream>
 
 void IRProgram::dump() const {
-    std::cout << "========== IR DUMP ==========\n\n";
+    std::cout << "IR DUMP\n\n";
     for (const auto& name : functionOrder) {
         auto it = functions.find(name);
         if (it != functions.end()) it->second.dump();
     }
-    std::cout << "=============================\n";
+    std::cout << "END\n";
 }

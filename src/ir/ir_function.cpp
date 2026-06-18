@@ -80,6 +80,9 @@ void IRFunction::dump() const {
         if (ins.opcode == Opcode::LOAD_CONST) {
             std::cout << slot(ins.dest) << " = " << ins.intValue;
 
+        } else if (ins.opcode == Opcode::LOAD_STRING) {
+            std::cout << slot(ins.dest) << " = \"" << ins.stringValue << "\"";
+
         } else if (ins.opcode == Opcode::LOAD_SLOT) {
             std::cout << slot(ins.dest) << " = " << slot(ins.src);
 

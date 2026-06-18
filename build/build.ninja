@@ -58,6 +58,33 @@ build CMakeFiles/saqut.dir/src/core/sourcefile.cpp.o: CXX_COMPILER__saqut_unscan
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/core
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
+build CMakeFiles/saqut.dir/src/ir/ir_function.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/ir/ir_function.cpp || cmake_object_order_depends_target_saqut
+  CONFIG = Debug
+  DEP_FILE = CMakeFiles/saqut.dir/src/ir/ir_function.cpp.o.d
+  FLAGS = -g -std=gnu++20 -Wall -Wextra -g -O0
+  INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
+  OBJECT_DIR = CMakeFiles/saqut.dir
+  OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/ir
+  TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
+
+build CMakeFiles/saqut.dir/src/ir/ir_generator.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/ir/ir_generator.cpp || cmake_object_order_depends_target_saqut
+  CONFIG = Debug
+  DEP_FILE = CMakeFiles/saqut.dir/src/ir/ir_generator.cpp.o.d
+  FLAGS = -g -std=gnu++20 -Wall -Wextra -g -O0
+  INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
+  OBJECT_DIR = CMakeFiles/saqut.dir
+  OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/ir
+  TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
+
+build CMakeFiles/saqut.dir/src/ir/ir_program.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/ir/ir_program.cpp || cmake_object_order_depends_target_saqut
+  CONFIG = Debug
+  DEP_FILE = CMakeFiles/saqut.dir/src/ir/ir_program.cpp.o.d
+  FLAGS = -g -std=gnu++20 -Wall -Wextra -g -O0
+  INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
+  OBJECT_DIR = CMakeFiles/saqut.dir
+  OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/ir
+  TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
+
 build CMakeFiles/saqut.dir/src/lexer/lexer.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/lexer/lexer.cpp || cmake_object_order_depends_target_saqut
   CONFIG = Debug
   DEP_FILE = CMakeFiles/saqut.dir/src/lexer/lexer.cpp.o.d
@@ -184,6 +211,15 @@ build CMakeFiles/saqut.dir/src/tokenizer/tokenizer.cpp.o: CXX_COMPILER__saqut_un
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/tokenizer
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
+build CMakeFiles/saqut.dir/src/vm/interpreter.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/vm/interpreter.cpp || cmake_object_order_depends_target_saqut
+  CONFIG = Debug
+  DEP_FILE = CMakeFiles/saqut.dir/src/vm/interpreter.cpp.o.d
+  FLAGS = -g -std=gnu++20 -Wall -Wextra -g -O0
+  INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
+  OBJECT_DIR = CMakeFiles/saqut.dir
+  OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/vm
+  TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
+
 
 # =============================================================================
 # Link build statements for EXECUTABLE target saqut
@@ -192,7 +228,7 @@ build CMakeFiles/saqut.dir/src/tokenizer/tokenizer.cpp.o: CXX_COMPILER__saqut_un
 #############################################
 # Link the executable saqut
 
-build saqut: CXX_EXECUTABLE_LINKER__saqut_Debug CMakeFiles/saqut.dir/src/core/sourcefile.cpp.o CMakeFiles/saqut.dir/src/lexer/lexer.cpp.o CMakeFiles/saqut.dir/src/main.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/binary_expr.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/declarations.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/expressions.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/identifier.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/literal.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/program.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/statements.cpp.o CMakeFiles/saqut.dir/src/parser/parser.cpp.o CMakeFiles/saqut.dir/src/semantic/structural_validator.cpp.o CMakeFiles/saqut.dir/src/semantic/type_checker.cpp.o CMakeFiles/saqut.dir/src/symbol/symbol_collector.cpp.o CMakeFiles/saqut.dir/src/tokenizer/tokenizer.cpp.o
+build saqut: CXX_EXECUTABLE_LINKER__saqut_Debug CMakeFiles/saqut.dir/src/core/sourcefile.cpp.o CMakeFiles/saqut.dir/src/ir/ir_function.cpp.o CMakeFiles/saqut.dir/src/ir/ir_generator.cpp.o CMakeFiles/saqut.dir/src/ir/ir_program.cpp.o CMakeFiles/saqut.dir/src/lexer/lexer.cpp.o CMakeFiles/saqut.dir/src/main.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/binary_expr.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/declarations.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/expressions.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/identifier.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/literal.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/program.cpp.o CMakeFiles/saqut.dir/src/parser/nodes/statements.cpp.o CMakeFiles/saqut.dir/src/parser/parser.cpp.o CMakeFiles/saqut.dir/src/semantic/structural_validator.cpp.o CMakeFiles/saqut.dir/src/semantic/type_checker.cpp.o CMakeFiles/saqut.dir/src/symbol/symbol_collector.cpp.o CMakeFiles/saqut.dir/src/tokenizer/tokenizer.cpp.o CMakeFiles/saqut.dir/src/vm/interpreter.cpp.o
   CONFIG = Debug
   DEP_FILE = CMakeFiles/saqut.dir/link.d
   FLAGS = -g

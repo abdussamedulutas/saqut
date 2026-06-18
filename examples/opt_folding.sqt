@@ -1,0 +1,11 @@
+// Sabit katlama örneği
+// saqut ast file:examples/opt_folding.sqt --optimized
+// Beklenen: tüm BinaryExpression'lar Literal'e dönüşür.
+
+int main() {
+    int a = 2 + 3;
+    int b = 10 * 4;
+    int c = 100 / 5;
+    int d = a + 1;
+    return 1 * 10 + 2 * 5;
+}

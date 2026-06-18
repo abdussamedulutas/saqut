@@ -1,0 +1,15 @@
+// Ölü kod eleme örneği
+// saqut ast file:examples/opt_dce.sqt --optimized
+// Beklenen: return sonrasındaki deyimler silinir.
+
+int foo() {
+    return 42;
+    int unreachable = 1;
+    int also_dead   = 2;
+}
+
+int main() {
+    int x = foo();
+    return x;
+    print("Bu satır asla çalışmaz");
+}

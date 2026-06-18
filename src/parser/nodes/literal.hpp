@@ -12,6 +12,11 @@ public:
     int         literalBase  = 10;
     bool        isFloatValue = false;
 
+    // Sabit katlama (constant folding) tarafından üretilen sentetik literal.
+    // parserToken.token yerine bu değer kullanılır.
+    bool hasDirectValue  = false;
+    int  directIntValue  = 0;
+
     LiteralNode();
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;

@@ -33,6 +33,7 @@ struct CliArgs {
     bool showHelp   = false;
     bool stdinMode  = false;
     bool compact    = false;  // --compact: boşluksuz JSON
+    bool optimized  = false;  // --optimized: sabit katlama + ölü kod eleme
 };
 
 // ============================================================================
@@ -70,6 +71,10 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         }
         if (arg == "--compact") {
             args.compact = true;
+            continue;
+        }
+        if (arg == "--optimized") {
+            args.optimized = true;
             continue;
         }
         if (arg.compare(0, 5, "file:") == 0) {

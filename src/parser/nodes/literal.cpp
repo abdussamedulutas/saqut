@@ -6,17 +6,21 @@
 LiteralNode::LiteralNode() { kind = ASTKind::Literal; }
 
 void LiteralNode::log(int indent) {
+    std::string val = hasDirectValue ? std::to_string(directIntValue)
+                                     : (parserToken.token ? parserToken.token->token : "?");
     std::cout << padRight("", indent)
-              << "Literal {" << (parserToken.token ? parserToken.token->token : "?") << "} "
+              << "Literal {" << val << "} "
               << literalTypeToString(literalType);
+    if (isConstant) std::cout << " [folded]";
     if (literalType == LiteralType::INTEGER && literalBase != 10)
         std::cout << " (base " << literalBase << ")";
     std::cout << "\n";
 }
 
 std::string LiteralNode::toJson(int depth) {
-    std::string in = jsonIndent(depth);
-    std::string val = parserToken.token ? parserToken.token->token : "?";
+    std::string in  = jsonIndent(depth);
+    std::string val = hasDirectValue ? std::to_string(directIntValue)
+                                     : (parserToken.token ? parserToken.token->token : "?");
     std::ostringstream ss;
     ss << "{\n"
        << in << "  \"kind\": \"Literal\",\n"

@@ -85,18 +85,17 @@ struct Diagnostic {
     std::string    message;  // bağlama özel açıklama
     std::string    hint;     // opsiyonel "şunu dene" önerisi
 
-    std::string toJson() const {
-        std::string s = "{";
-        s += "\"level\":\"";   s += diagLevelName(level); s += "\",";
-        s += "\"code\":\"";    s += jsonEscape(code);     s += "\",";
-        s += "\"location\":";  s += loc.toJson();         s += ",";
-        s += "\"message\":\""; s += jsonEscape(message);  s += "\"";
-        if (!hint.empty()) {
-            s += ",\"hint\":\""; s += jsonEscape(hint); s += "\"";
-        }
-        s += "}";
-        return s;
+    nlohmann::json toJsonObj() const {
+        nlohmann::json j;
+        j["level"]    = diagLevelName(level);
+        j["code"]     = code;
+        j["location"] = loc.toJsonObj();
+        j["message"]  = message;
+        if (!hint.empty()) j["hint"] = hint;
+        return j;
     }
+
+    std::string toJson() const { return toJsonObj().dump(); }
 };
 
 // ============================================================================

@@ -1,62 +1,118 @@
 #include "ir/ir_function.hpp"
 #include <iomanip>
 #include <iostream>
+#include <string>
 
-// Her instruction'ı "indeks: OPCODE  operandlar" formatında yazdır.
-// Bu çıktı hem insanın okuduğu hem de birim testlerin karşılaştırdığı formattır.
+// ─────────────────────────────────────────────────────────────────────────────
+// Yardımcılar
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Slot adını kısa göster: s0, s1, ...
+static std::string slot(int s) {
+    if (s == -1) return "?";
+    return "s" + std::to_string(s);
+}
+
+// İkili op sembolü: ADD → "+"
+static const char* opSymbol(Opcode op) {
+    switch (op) {
+        case Opcode::ADD:           return "+";
+        case Opcode::SUB:           return "-";
+        case Opcode::MUL:           return "*";
+        case Opcode::DIV:           return "/";
+        case Opcode::MOD:           return "%";
+        case Opcode::LESS:          return "<";
+        case Opcode::LESS_EQUAL:    return "<=";
+        case Opcode::GREATER:       return ">";
+        case Opcode::GREATER_EQUAL: return ">=";
+        case Opcode::EQUAL_EQUAL:   return "==";
+        case Opcode::NOT_EQUAL:     return "!=";
+        default:                    return "?";
+    }
+}
+
+static bool isBinaryOp(Opcode op) {
+    switch (op) {
+        case Opcode::ADD: case Opcode::SUB: case Opcode::MUL:
+        case Opcode::DIV: case Opcode::MOD:
+        case Opcode::LESS: case Opcode::LESS_EQUAL:
+        case Opcode::GREATER: case Opcode::GREATER_EQUAL:
+        case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:
+            return true;
+        default: return false;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IRFunction::dump
+// ─────────────────────────────────────────────────────────────────────────────
+
 void IRFunction::dump() const {
-    std::cout << "=== " << name
-              << " (paramCount=" << paramCount
-              << ", slotCount=" << slotCount << ") ===\n";
+    // Başlık: fonksiyon adı + slot bilgisi
+    std::string header = "  " + name + "()";
+    if (paramCount > 0) {
+        header = "  " + name + "(";
+        for (int i = 0; i < paramCount; i++) {
+            if (i) header += ", ";
+            header += "s" + std::to_string(i);
+        }
+        header += ")";
+    }
+    header += "  [" + std::to_string(slotCount) + " slot]";
 
+    // Üst çizgi
+    std::cout << "+-" << std::string(header.size(), '-') << "-+\n";
+    std::cout << "|" << header                            <<  " |\n";
+    std::cout << "+-" << std::string(header.size(), '-') << "-+\n";
+
+    // Talimatlar
     for (int i = 0; i < (int)instructions.size(); i++) {
         const Instruction& ins = instructions[i];
-        std::cout << "  " << std::setw(3) << i << ": "
-                  << std::left << std::setw(14) << opcodeName(ins.opcode);
 
-        switch (ins.opcode) {
-            case Opcode::LOAD_CONST:
-                std::cout << "slot[" << ins.dest << "] = " << ins.intValue;
-                break;
-            case Opcode::LOAD_SLOT:
-                std::cout << "slot[" << ins.dest << "] = slot[" << ins.src << "]";
-                break;
-            case Opcode::ADD: case Opcode::SUB: case Opcode::MUL:
-            case Opcode::DIV: case Opcode::MOD:
-            case Opcode::LESS: case Opcode::LESS_EQUAL:
-            case Opcode::GREATER: case Opcode::GREATER_EQUAL:
-            case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:
-                std::cout << "slot[" << ins.dest << "] = "
-                          << "slot[" << ins.left << "] op slot[" << ins.right << "]";
-                break;
-            case Opcode::JMP:
-                std::cout << "→ " << ins.jumpTarget;
-                break;
-            case Opcode::JIF_FALSE:
-                std::cout << "if !slot[" << ins.cond << "] → " << ins.jumpTarget;
-                break;
-            case Opcode::CALL: {
-                std::cout << "slot[" << ins.dest << "] = " << ins.functionName << "(";
-                for (int j = 0; j < (int)ins.argSlots.size(); j++) {
-                    if (j) std::cout << ", ";
-                    std::cout << "slot[" << ins.argSlots[j] << "]";
-                }
-                std::cout << ")";
-                break;
+        // Satır numarası
+        std::cout << "  " << std::setw(3) << std::right << i << "│ ";
+
+        // Opcode sütunu (12 karakter genişlik)
+        std::cout << std::left << std::setw(12) << opcodeName(ins.opcode);
+
+        // Operandlar — opcode'a göre farklı format
+        if (ins.opcode == Opcode::LOAD_CONST) {
+            std::cout << slot(ins.dest) << " = " << ins.intValue;
+
+        } else if (ins.opcode == Opcode::LOAD_SLOT) {
+            std::cout << slot(ins.dest) << " = " << slot(ins.src);
+
+        } else if (isBinaryOp(ins.opcode)) {
+            std::cout << slot(ins.dest) << " = "
+                      << slot(ins.left) << " " << opSymbol(ins.opcode)
+                      << " " << slot(ins.right);
+
+        } else if (ins.opcode == Opcode::JMP) {
+            std::cout << "→ " << ins.jumpTarget;
+
+        } else if (ins.opcode == Opcode::JIF_FALSE) {
+            std::cout << "!" << slot(ins.cond) << " → " << ins.jumpTarget;
+
+        } else if (ins.opcode == Opcode::CALL) {
+            std::cout << slot(ins.dest) << " = " << ins.functionName << "(";
+            for (int j = 0; j < (int)ins.argSlots.size(); j++) {
+                if (j) std::cout << ", ";
+                std::cout << slot(ins.argSlots[j]);
             }
-            case Opcode::RETURN:
-                std::cout << "slot[" << ins.src << "]";
-                break;
-            case Opcode::CALLHOST: {
-                std::cout << ins.functionName << "(";
-                for (int j = 0; j < (int)ins.argSlots.size(); j++) {
-                    if (j) std::cout << ", ";
-                    std::cout << "slot[" << ins.argSlots[j] << "]";
-                }
-                std::cout << ")";
-                break;
+            std::cout << ")";
+
+        } else if (ins.opcode == Opcode::CALLHOST) {
+            std::cout << ins.functionName << "(";
+            for (int j = 0; j < (int)ins.argSlots.size(); j++) {
+                if (j) std::cout << ", ";
+                std::cout << slot(ins.argSlots[j]);
             }
+            std::cout << ")";
+
+        } else if (ins.opcode == Opcode::RETURN) {
+            std::cout << slot(ins.src);
         }
+
         std::cout << "\n";
     }
     std::cout << "\n";

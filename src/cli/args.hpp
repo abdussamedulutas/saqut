@@ -32,6 +32,7 @@ struct CliArgs {
     std::string format;
     bool showHelp   = false;
     bool stdinMode  = false;
+    bool compact    = false;  // --compact: boşluksuz JSON
 };
 
 // ============================================================================
@@ -65,6 +66,10 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         }
         if (arg == "--format") {
             if (i + 1 < argc) args.format = argv[++i];
+            continue;
+        }
+        if (arg == "--compact") {
+            args.compact = true;
             continue;
         }
         if (arg.compare(0, 5, "file:") == 0) {

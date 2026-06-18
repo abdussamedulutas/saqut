@@ -47,19 +47,20 @@ inline int cmdSymbols(const CliArgs& args) {
             refs.push_back(r.toJsonObj());
 
         symArray.push_back({
-            {"name",       s->name},
-            {"kind",       symbolKindName(s->kind)},
-            {"type",       s->type.toString()},
-            {"typeDetail", s->type.toJsonObj()},
-            {"definition", s->definitionLoc.toJsonObj()},
-            {"references", refs},
-            {"isBuiltin",  s->isBuiltin}
+            {"name",           s->name},
+            {"kind",           symbolKindName(s->kind)},
+            {"type",           s->type.toString()},
+            {"typeDetail",     s->type.toJsonObj()},
+            {"definition",     s->definitionLoc.toJsonObj()},
+            {"referenceCount", static_cast<int>(s->references.size())},
+            {"references",     refs},
+            {"isBuiltin",      s->isBuiltin}
         });
     }
     out["symbols"]     = symArray;
     out["diagnostics"] = diag.toJsonObj();
 
-    std::cout << out.dump(2) << "\n";
+    std::cout << (args.compact ? out.dump() : out.dump(2)) << "\n";
 
     delete ast;
     for (auto* t : tokens) delete t;

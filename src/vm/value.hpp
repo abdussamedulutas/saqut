@@ -1,35 +1,24 @@
-// ============================================================================
-// saQut VM — Value (Çalışma Zamanı Değer)
-//
-// Bir saQut değerinin bellekteki temsilidir.
-//
-// ŞU AN SADECE INT:
-//   fibonacci.sqt tamamen int kullanır, bu dikey dilim için int yeterli.
-//   İleride float, bool, string eklenmesi için "kind" alanı iskelet olarak bırakıldı.
-//
-// BOOLEAN OLARAK KULLANIM:
-//   JIF_FALSE talimatı değerin 0 olup olmadığına bakar.
-//   0 = yanlış, sıfır-dışı = doğru. C geleneği.
-// ============================================================================
-
 #ifndef SAQUT_VM_VALUE
 #define SAQUT_VM_VALUE
 
 #include <string>
+#include <stdexcept>
 
-// Gelecekte float/bool/string eklendiğinde burası genişleyecek.
-// Şimdilik sadece int.
+// Çalışma zamanı değer tipi.
+//
+// Bool ayrı bir kind değil — boolean sonuçlar int olarak saklanır
+// (0 = yanlış, sıfır-dışı = doğru; C geleneği, JIF_FALSE buna dayanır).
+// Float henüz implement edilmedi — IR'de float opcode yok.
 enum class ValueKind {
     Int,
     String,
-    // Float,   // TODO(vm-genişletme)
-    // Bool,    // TODO(vm-genişletme)
+    // Float,  // TODO: float literal + aritmetik eklenince
 };
 
 struct Value {
     ValueKind   kind        = ValueKind::Int;
     int         intValue    = 0;
-    std::string stringValue;   // yalnızca kind == String için geçerli
+    std::string stringValue; // yalnızca kind == String için geçerli
 
     static Value fromInt(int n) {
         Value v;
@@ -47,12 +36,23 @@ struct Value {
 
     // JIF_FALSE için: int 0 = yanlış, boş string = yanlış, diğer = doğru
     bool isTruthy() const {
-        if (kind == ValueKind::Int)    return intValue != 0;
-        if (kind == ValueKind::String) return !stringValue.empty();
+        switch (kind) {
+            case ValueKind::Int:    return intValue != 0;
+            case ValueKind::String: return !stringValue.empty();
+        }
         return false;
     }
 
-    // Okunabilir metin — dump ve hata mesajları için
+    // Yazdırma ve hata mesajları için okunabilir temsil
+    std::string toString() const {
+        switch (kind) {
+            case ValueKind::Int:    return std::to_string(intValue);
+            case ValueKind::String: return stringValue;
+        }
+        return "?";
+    }
+
+    // Tip adı — hata mesajları için
     std::string typeName() const {
         switch (kind) {
             case ValueKind::Int:    return "int";

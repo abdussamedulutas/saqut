@@ -1,4 +1,5 @@
 #include "ir/ir_generator.hpp"
+#include "tokenizer/token.hpp"
 #include "parser/nodes/program.hpp"
 #include "parser/nodes/declarations.hpp"
 #include "parser/nodes/statements.hpp"
@@ -269,25 +270,44 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
         switch (lit->literalType) {
             case LiteralType::INTEGER: {
-                // Sayı metnini int'e çevir
                 int value = 0;
-                if (lit->parserToken.token) {
+                if (lit->parserToken.token)
                     value = std::stoi(lit->parserToken.token->token);
-                }
                 emitLoadConst(slot, value);
                 break;
             }
             case LiteralType::BOOLEAN: {
-                // true → 1, false → 0
                 int value = (lit->parserToken.token &&
                              lit->parserToken.token->token == "true") ? 1 : 0;
                 emitLoadConst(slot, value);
                 break;
             }
-            default:
-                // float, string vb. → TODO(vm-genişletme)
-                emitLoadConst(slot, 0);
+            case LiteralType::STRING: {
+                // StringToken::context tırnak işaretleri olmadan içeriği tutar
+                std::string content;
+                if (auto* st = dynamic_cast<StringToken*>(lit->lexerToken))
+                    content = st->context;
+                else if (lit->parserToken.token) {
+                    // Fallback: token'ın başındaki ve sonundaki " işaretlerini sıyır
+                    std::string raw = lit->parserToken.token->token;
+                    if (raw.size() >= 2 && raw.front() == '"' && raw.back() == '"')
+                        content = raw.substr(1, raw.size() - 2);
+                    else
+                        content = raw;
+                }
+                Instruction ins(Opcode::LOAD_STRING);
+                ins.dest        = slot;
+                ins.stringValue = std::move(content);
+                currentFunction_->instructions.push_back(std::move(ins));
                 break;
+            }
+            case LiteralType::FLOAT:
+                throw std::runtime_error(
+                    "IR üretim hatası: float literal şu an VM tarafından desteklenmiyor. "
+                    "Tam sayı kullanın veya float desteği eklenene kadar bekleyin.");
+            case LiteralType::BOŞ:
+                throw std::runtime_error(
+                    "IR üretim hatası: null literal şu an VM tarafından desteklenmiyor.");
         }
         return slot;
     }

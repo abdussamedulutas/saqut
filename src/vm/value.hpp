@@ -15,20 +15,22 @@
 #ifndef SAQUT_VM_VALUE
 #define SAQUT_VM_VALUE
 
+#include <string>
+
 // Gelecekte float/bool/string eklendiğinde burası genişleyecek.
 // Şimdilik sadece int.
 enum class ValueKind {
     Int,
+    String,
     // Float,   // TODO(vm-genişletme)
     // Bool,    // TODO(vm-genişletme)
-    // String,  // TODO(vm-genişletme)
 };
 
 struct Value {
-    ValueKind kind     = ValueKind::Int;
-    int       intValue = 0;
+    ValueKind   kind        = ValueKind::Int;
+    int         intValue    = 0;
+    std::string stringValue;   // yalnızca kind == String için geçerli
 
-    // Kolay oluşturma
     static Value fromInt(int n) {
         Value v;
         v.kind     = ValueKind::Int;
@@ -36,8 +38,28 @@ struct Value {
         return v;
     }
 
-    // JIF_FALSE için: 0 = yanlış, diğer = doğru
-    bool isTruthy() const { return intValue != 0; }
+    static Value fromString(std::string s) {
+        Value v;
+        v.kind        = ValueKind::String;
+        v.stringValue = std::move(s);
+        return v;
+    }
+
+    // JIF_FALSE için: int 0 = yanlış, boş string = yanlış, diğer = doğru
+    bool isTruthy() const {
+        if (kind == ValueKind::Int)    return intValue != 0;
+        if (kind == ValueKind::String) return !stringValue.empty();
+        return false;
+    }
+
+    // Okunabilir metin — dump ve hata mesajları için
+    std::string typeName() const {
+        switch (kind) {
+            case ValueKind::Int:    return "int";
+            case ValueKind::String: return "string";
+        }
+        return "?";
+    }
 };
 
 #endif // SAQUT_VM_VALUE

@@ -1,5 +1,5 @@
 // ============================================================================
-// saQut CLI — symbols komutu (sembol tablosu)
+// saQut CLI — symbols komutu (sembol tablosu — Faz 2)
 // ============================================================================
 
 #ifndef SAQUT_CLI_SYMBOLS
@@ -9,7 +9,9 @@
 #include "cli/args.hpp"
 #include "tokenizer/tokenizer.hpp"
 #include "parser/parser.hpp"
-#include "json.hpp"
+#include "symbol/symbol_table.hpp"
+#include "symbol/symbol_collector.hpp"
+#include "diagnostic/diagnostic_engine.hpp"
 
 inline int cmdSymbols(const CliArgs& args) {
     std::string source = readSource(args);
@@ -27,7 +29,11 @@ inline int cmdSymbols(const CliArgs& args) {
         return 1;
     }
 
-    auto symbols = collectSymbols(ast);
+    SymbolTable table;
+    DiagnosticEngine diag;
+    SymbolCollector(table, diag).collect(ast);
+
+    auto symbols = table.allSymbols();
 
     std::cout << "Sembol Tablosu (" << symbols.size() << " sembol):\n";
     std::cout << "────────────────────────────────────────────\n";
@@ -36,23 +42,27 @@ inline int cmdSymbols(const CliArgs& args) {
         std::cout << "  (sembol bulunamadı)\n";
     }
 
-    for (auto& s : symbols) {
-        std::cout << "  [" << s.kind << "] " << s.type << " " << s.name << "\n";
+    for (Symbol* s : symbols) {
+        if (s->isBuiltin) continue; // builtinleri çıktıda gösterme
+        std::cout << "  [" << symbolKindName(s->kind) << "] "
+                  << s->type.toString() << " " << s->name
+                  << " @" << s->definitionLoc.shortString()
+                  << "  refs(" << s->references.size() << "):";
+        for (auto& r : s->references)
+            std::cout << " " << r.shortString();
+        std::cout << "\n";
     }
 
     std::cout << "────────────────────────────────────────────\n";
 
-    int fnCount = 0, varCount = 0;
-    for (auto& s : symbols) {
-        if (s.kind == "function") fnCount++;
-        else if (s.kind == "variable") varCount++;
+    if (diag.hasErrors()) {
+        std::cerr << "\n";
+        diag.printAll(std::cerr);
     }
-    std::cout << "Fonksiyon: " << fnCount
-              << "  |  Değişken: " << varCount << "\n";
 
     delete ast;
     for (auto* t : tokens) delete t;
-    return 0;
+    return diag.hasErrors() ? 1 : 0;
 }
 
 #endif // SAQUT_CLI_SYMBOLS

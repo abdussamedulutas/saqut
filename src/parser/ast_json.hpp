@@ -187,7 +187,10 @@ public:
         if (m_hasFields) m_ss << ",\n";
         m_ss << m_indentInner << "\"" << jsonEscape(key) << "\": [";
         m_arrayDepth++;
+        bool saved = m_hasArrayItem;
+        m_hasArrayItem = false; // her dizi kendi virgül sayacıyla başlar
         callback();
+        m_hasArrayItem = saved;
         m_arrayDepth--;
         m_ss << "\n" << m_indentInner << "]";
         m_hasFields = true;

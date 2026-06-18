@@ -45,10 +45,49 @@ private:
         return lit && lit->literalType == LiteralType::INTEGER;
     }
 
+    // Boolean veya integer literal — unary ! için her ikisi de geçerli
+    static bool isScalarLit(ASTNode* node) {
+        auto* lit = dynamic_cast<LiteralNode*>(node);
+        return lit && (lit->literalType == LiteralType::INTEGER ||
+                       lit->literalType == LiteralType::BOOLEAN);
+    }
+
     static int getIntVal(LiteralNode* lit) {
         if (lit->hasDirectValue) return lit->directIntValue;
         if (lit->parserToken.token) return std::stoi(lit->parserToken.token->token);
         return 0;
+    }
+
+    // Boolean literali int'e çevir: "true"→1, "false"→0
+    static int getScalarVal(LiteralNode* lit) {
+        if (lit->literalType == LiteralType::BOOLEAN) {
+            if (!lit->parserToken.token) return 0;
+            return (lit->parserToken.token->token == "true") ? 1 : 0;
+        }
+        return getIntVal(lit);
+    }
+
+    // Unary operatör katlama
+    static bool canFoldUnary(TokenType op) {
+        switch (op) {
+        case TokenType::BANG:  // !
+        case TokenType::TILDE: // ~
+        case TokenType::MINUS: // - (negatif)
+        case TokenType::PLUS:  // + (pozitif, no-op)
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    static int computeUnary(TokenType op, int v) {
+        switch (op) {
+        case TokenType::BANG:  return !v ? 1 : 0;
+        case TokenType::TILDE: return ~v;
+        case TokenType::MINUS: return -v;
+        case TokenType::PLUS:  return  v;
+        default:               return  v;
+        }
     }
 
     // ── Operatör hesaplama ───────────────────────────────────────────────────
@@ -123,7 +162,23 @@ private:
             ASTNode* newRight = fold(bin->Right);
             if (newRight != bin->Right) { bin->Right = newRight; if (newRight) newRight->parent = bin; }
 
-            // İki taraf da tam sayı sabiti ve operatör kesilebilir mi?
+            // ── Unary dal: Left==nullptr → !x, ~x, -x, +x ──────────────────
+            if (bin->Left == nullptr) {
+                if (!isScalarLit(bin->Right)) return bin;
+                if (!canFoldUnary(bin->Operator)) return bin;
+
+                auto* rlit  = static_cast<LiteralNode*>(bin->Right);
+                int   rv    = getScalarVal(rlit);
+                int   result = computeUnary(bin->Operator, rv);
+
+                LiteralNode* lit = makeFoldedLit(result, bin->loc, bin->resolvedType);
+                delete bin->Right;
+                delete bin;
+                changed_ = true;
+                return lit;
+            }
+
+            // ── Binary dal: iki taraf da tam sayı sabiti ────────────────────
             if (!isIntLit(bin->Left) || !isIntLit(bin->Right)) return bin;
             if (!canFoldOp(bin->Operator)) return bin;
 

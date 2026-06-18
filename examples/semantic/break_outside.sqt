@@ -1,0 +1,5 @@
+// E004 — break döngü dışında
+int main() {
+    break;
+    return 0;
+}

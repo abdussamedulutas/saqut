@@ -127,6 +127,7 @@ inline const std::vector<DiagInfo>& diagnosticCatalog() {
         {"W001", DiagLevel::Warning, "Kullanılmayan değişken"},
         {"W002", DiagLevel::Warning, "Sıfıra bölme (sabit ifade)"},
         {"W003", DiagLevel::Warning, "Erişilemez (ölü) kod"},
+        {"W004", DiagLevel::Warning, "Örtük sayısal genişletme (widening)"},
     };
     return catalog;
 }

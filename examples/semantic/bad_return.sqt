@@ -1,0 +1,8 @@
+// E003 — return tipi uyuşmazlığı
+int foo() {
+    return 1.5;
+}
+
+int main() {
+    return 0;
+}

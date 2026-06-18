@@ -27,6 +27,7 @@
 #include "cli/commands/tokens.hpp"
 #include "cli/commands/ast.hpp"
 #include "cli/commands/symbols.hpp"
+#include "cli/commands/check.hpp"
 
 int main(int argc, char* argv[]) {
     // Komutları kaydet
@@ -47,6 +48,10 @@ int main(int argc, char* argv[]) {
     cli.registerCommand({"symbols",
         "Sembol tablosu (fonksiyonlar, değişkenler)",
         false, cmdSymbols});
+
+    cli.registerCommand({"check",
+        "Semantik analiz — tip denetimi + yapısal doğrulama",
+        false, cmdCheck});
 
     // --- Gelecek komutlar (TODO) ---
     cli.registerCommand({"compile",

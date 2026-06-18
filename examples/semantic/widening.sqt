@@ -1,0 +1,7 @@
+// W004 — örtük genişletme: değişken→değişken int→float
+int main() {
+    int a = 5;
+    float b = 1;      // OK: literal bağlama-göre tiplenir, uyarısız
+    float c = a;      // W004: int değişken → float değişken
+    return 0;
+}

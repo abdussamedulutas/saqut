@@ -15,3 +15,6 @@
 0	22	1781786586571540360	build.ninja	1876a59d627a585
 0	22	1781786586571540360	/home/saqut/Masaüstü/saqutcompiler/build/cmake_install.cmake	1876a59d627a585
 1	2086	1781786305407208932	CMakeFiles/saqut.dir/src/symbol/symbol_collector.cpp.o	3348f498f369213d
+10	1265	1781788264862998611	CMakeFiles/saqut.dir/src/parser/parser.cpp.o	2c65b7be26cead32
+10	2216	1781788264862423222	CMakeFiles/saqut.dir/src/main.cpp.o	110c26cb1d0c3a23
+2216	2383	1781788267068424572	saqut	8525928b86934b0a

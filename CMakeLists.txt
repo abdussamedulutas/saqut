@@ -72,4 +72,19 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -P "${GOLDEN_SCRIPT}"
         )
     endif()
+
+    # Doğruluk kalkanı: saqut run --optimized çıktısı == beklenen golden değer
+    # "Optimizasyon oldu" değil, "optimize IR doğru sonuç verdi" testleri.
+    set(RUN_OPT_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.run_opt.expected")
+    if(EXISTS "${RUN_OPT_EXPECTED}")
+        add_test(
+            NAME "golden_${TNAME}_run_opt"
+            COMMAND ${CMAKE_COMMAND}
+                -DBINARY=${SAQUT_BINARY}
+                -DSOURCE=${SQT_FILE}
+                -DEXPECTED=${RUN_OPT_EXPECTED}
+                -DOPTIMIZED=1
+                -P "${GOLDEN_SCRIPT}"
+        )
+    endif()
 endforeach()

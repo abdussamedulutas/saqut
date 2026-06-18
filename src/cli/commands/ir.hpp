@@ -52,7 +52,8 @@ inline int cmdIr(const CliArgs& args) {
         OptimizationManager mgr(cfg, optDiag);
         optimizedAst = mgr.optimize(ast, &symbolTable);
         activeAst    = optimizedAst;
-        optDiag.printAll(std::cerr); // W002 vb. uyarılar stderr'e
+        if (optDiag.errorCount() + optDiag.warningCount() > 0)
+            optDiag.printAll(std::cerr); // W002 vb. uyarılar stderr'e
     }
 
     IRGenerator irGenerator;

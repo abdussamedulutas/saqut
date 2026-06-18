@@ -2,12 +2,11 @@
 // saQut CLI — run komutu
 //
 // Tam derleme + çalıştırma pipeline'ı:
-//   tokenize → parse → sembol topla → IR üret → VM çalıştır
+//   tokenize → parse → sembol topla → [opsiyonel: optimize] → IR üret → VM çalıştır
 //
-// Başarı kriteri:
-//   build/saqut run file:examples/fibonacci.sqt
-//   → 55
-//   → 55
+// --optimized bayrağı: orijinal AST klonlanır, constant folding + DCE uygulanır,
+// optimize edilmiş klon IR generator'a verilir. Orijinal AST dokunulmadan kalır.
+// Aynı pattern ir.hpp'de de kullanılıyor — paralel değişikliklerde ikisine bak.
 // ============================================================================
 
 #ifndef SAQUT_CLI_RUN
@@ -22,6 +21,8 @@
 #include "semantic/type_checker.hpp"
 #include "semantic/structural_validator.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
+#include "core/config.hpp"
+#include "opt/optimization_manager.hpp"
 #include "ir/ir_generator.hpp"
 #include "vm/interpreter.hpp"
 
@@ -43,7 +44,7 @@ inline int cmdRun(const CliArgs& args) {
         return 1;
     }
 
-    // ── Aşama 3: Sembol toplama ───────────────────────────────────────────
+    // ── Aşama 3: Sembol toplama + semantik analiz ─────────────────────────
     // Identifier'ların resolvedSymbol'ü doldurulur — IR generator buna ihtiyaç duyar.
     SymbolTable      symbolTable;
     DiagnosticEngine diag;
@@ -59,11 +60,27 @@ inline int cmdRun(const CliArgs& args) {
         return 1;
     }
 
-    // ── Aşama 4: IR üretimi ───────────────────────────────────────────────
-    IRGenerator irGenerator;
-    IRProgram   program = irGenerator.generate(ast, symbolTable);
+    // ── Aşama 4 (opsiyonel): Optimizasyon ────────────────────────────────
+    // --optimized bayrağı verilmişse: orijinal AST'yi kopyala, klon üstünde
+    // constant folding + DCE uygula. IR generator klonu kullanır; orijinal
+    // bu scope'ta silinir. Bayrak yoksa sıfır maliyet — klonlama olmaz.
+    ASTNode* activeAst    = ast;
+    ASTNode* optimizedAst = nullptr;
+    if (args.optimized) {
+        CompilerConfig   cfg;
+        DiagnosticEngine optDiag;
+        OptimizationManager mgr(cfg, optDiag);
+        optimizedAst = mgr.optimize(ast, &symbolTable);
+        activeAst    = optimizedAst;
+        if (optDiag.errorCount() + optDiag.warningCount() > 0)
+            optDiag.printAll(std::cerr); // W002 (derleme zamanı sıfıra bölme) vb.
+    }
 
-    // ── Aşama 5: VM çalıştırma ────────────────────────────────────────────
+    // ── Aşama 5: IR üretimi ───────────────────────────────────────────────
+    IRGenerator irGenerator;
+    IRProgram   program = irGenerator.generate(activeAst, symbolTable);
+
+    // ── Aşama 6: VM çalıştırma ────────────────────────────────────────────
     int exitCode = 0;
     try {
         Interpreter vm(program);
@@ -73,6 +90,7 @@ inline int cmdRun(const CliArgs& args) {
         exitCode = 1;
     }
 
+    delete optimizedAst; // nullptr ise no-op; orijinal ast her durumda aşağıda silinir
     delete ast;
     for (auto* t : tokens) delete t;
     return exitCode;

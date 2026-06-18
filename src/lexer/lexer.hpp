@@ -22,6 +22,7 @@
 
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <vector>
 #include "core/location.hpp"
 #include "core/sourcefile.hpp"
@@ -67,7 +68,7 @@ public:
     std::string getPositionRange(); // Pozisyon aralığındaki metni döndür
 
     // --- Desen Eşleme ---
-    bool include(std::string word, bool accept = true);
+    bool include(std::string_view word, bool accept = true);
 
     // --- Konum Okuma/Yazma ---
     int  getOffset();        // Mevcut offset'i döndür

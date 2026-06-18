@@ -41,7 +41,7 @@ Token* Tokenizer::scope() {
     }
 
     for (const auto& kw : keywords) {
-        if (hmx.include(std::string(kw), false)) {
+        if (hmx.include(kw, false)) {
             char next = hmx.getchar(static_cast<int>(kw.size()));
             if ((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') ||
                 (next >= '0' && next <= '9') || next == '_' || next == '$') {
@@ -58,7 +58,7 @@ Token* Tokenizer::scope() {
     }
 
     for (const auto& del : delimiters) {
-        if (hmx.include(std::string(del), false)) {
+        if (hmx.include(del, false)) {
             DelimiterToken* dt = new DelimiterToken();
             dt->start = hmx.getOffset();
             dt->loc   = hmx.getLocation();
@@ -70,7 +70,7 @@ Token* Tokenizer::scope() {
     }
 
     for (const auto& op : operators) {
-        if (hmx.include(std::string(op), false)) {
+        if (hmx.include(op, false)) {
             OperatorToken* ot = new OperatorToken();
             ot->start = hmx.getOffset();
             ot->loc   = hmx.getLocation();

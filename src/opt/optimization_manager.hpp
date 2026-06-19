@@ -38,7 +38,7 @@ public:
         if (cfg.optConstantFolding)
             passes_.push_back(std::make_unique<ConstantFoldingPass>(diag));
         if (cfg.optDeadCodeElim)
-            passes_.push_back(std::make_unique<DeadCodeElimPass>());
+            passes_.push_back(std::make_unique<DeadCodeElimPass>(diag));
         maxRounds_ = cfg.maxFixpointRounds;
     }
 

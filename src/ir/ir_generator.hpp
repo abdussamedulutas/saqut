@@ -75,6 +75,15 @@ private:
     // Şu an kaç talimat üretildi? (jump hedefi belirlemek için)
     int currentInstrIndex() const;
 
+    // ── Döngü bağlamı yığını — break/continue hedefleri ─────────────────
+    // Her döngüye girerken bir giriş push'lanır, çıkınca pop'lanır.
+    // İç içe döngülerde en üstteki giriş en içteki döngüye aittir.
+    struct LoopContext {
+        std::vector<int> breakJumps;    // patch bekleyen break JMP indeksleri
+        std::vector<int> continueJumps; // patch bekleyen continue JMP indeksleri
+    };
+    std::vector<LoopContext> loopContextStack_;
+
     // ── Per-function üretim durumu ────────────────────────────────────────
     IRFunction* currentFunction_ = nullptr; // şu an üretilen fonksiyon
     int         nextSlot_        = 0;       // sıradaki boş slot numarası

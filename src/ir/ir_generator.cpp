@@ -153,77 +153,101 @@ void IRGenerator::generateStatement(ASTNode* node) {
     case ASTKind::WhileStatement: {
         auto* ws = (WhileStatementNode*)node;
 
-        // Döngü başının konumu — geri-jump buraya gelecek
         int loopStart = currentInstrIndex();
+        loopContextStack_.push_back({});
 
-        int condSlot  = generateExpression(ws->condition);
-        int exitJump  = emitJumpIfFalse(condSlot);   // ileri, backpatch bekliyor
+        int condSlot = generateExpression(ws->condition);
+        int exitJump = emitJumpIfFalse(condSlot);
 
         if (ws->body) generateStatement(ws->body);
 
-        // Geri-jump: hedef zaten biliniyor (loopStart)
-        emitJumpUnconditional(loopStart);
+        // continue → LOOP_START (hedef baştan beri biliniyor)
+        for (int idx : loopContextStack_.back().continueJumps)
+            currentFunction_->instructions[idx].jumpTarget = loopStart;
 
-        // Döngü çıkış noktası → exitJump'ı doldur
-        patchJump(exitJump);
+        emitJumpUnconditional(loopStart);
+        patchJump(exitJump); // OUT burası
+
+        // break → OUT
+        int outTarget = currentInstrIndex();
+        for (int idx : loopContextStack_.back().breakJumps)
+            currentFunction_->instructions[idx].jumpTarget = outTarget;
+
+        loopContextStack_.pop_back();
         break;
     }
 
     // ── for (init; koşul; güncelleme) { gövde } ─────────────────────────
     //
-    // Üretilen IR yapısı:
+    // IR yapısı (continue C_LABEL'a, break OUT'a atlar):
     //   [init]
     //   LOOP_START:
-    //     [koşul] → condSlot
-    //     JIF_FALSE condSlot → LOOP_END   (ileri-jump, backpatch)
+    //     [koşul] → JIF_FALSE OUT
     //     [gövde]
+    //   C_LABEL:
     //     [güncelleme]
-    //     JMP → LOOP_START                (geri-jump, hedef biliniyor)
-    //   LOOP_END:
+    //     JMP LOOP_START
+    //   OUT:
     // ─────────────────────────────────────────────────────────────────────
     case ASTKind::ForStatement: {
         auto* fs = (ForStatementNode*)node;
 
-        // Init: genellikle "int i = 0" gibi bir VariableDecl
         if (fs->init) generateStatement(fs->init);
 
-        // Döngü başı konumu — geri-jump'ın hedefi
         int loopStart = currentInstrIndex();
+        loopContextStack_.push_back({});
 
-        // Koşul
         int condSlot = fs->condition ? generateExpression(fs->condition) : -1;
         int exitJump = (condSlot != -1) ? emitJumpIfFalse(condSlot) : -1;
 
-        // Gövde
         if (fs->body) generateStatement(fs->body);
 
-        // Güncelleme (ör: i = i + 1) — ifade deyimi, sonuç önemsiz
+        // C_LABEL: güncelleme başlangıcı — continue buraya atlar
+        int cLabel = currentInstrIndex();
+        for (int idx : loopContextStack_.back().continueJumps)
+            currentFunction_->instructions[idx].jumpTarget = cLabel;
+
         if (fs->update) generateExpression(fs->update);
 
-        // Geri-jump: hedef loopStart, zaten biliniyor
         emitJumpUnconditional(loopStart);
 
-        // Döngü çıkışı → exitJump'ı doldur
-        if (exitJump != -1) patchJump(exitJump);
+        if (exitJump != -1) patchJump(exitJump); // OUT burası
+
+        // break → OUT
+        int outTarget = currentInstrIndex();
+        for (int idx : loopContextStack_.back().breakJumps)
+            currentFunction_->instructions[idx].jumpTarget = outTarget;
+
+        loopContextStack_.pop_back();
         break;
     }
 
     // ── do { gövde } while (koşul) ───────────────────────────────────────
     case ASTKind::DoWhileStatement: {
         auto* dw = (DoWhileStatementNode*)node;
+
         int loopStart = currentInstrIndex();
+        loopContextStack_.push_back({});
 
         if (dw->body) generateStatement(dw->body);
 
+        // COND_LABEL: koşul değerlendirmesi — continue buraya atlar
+        int condLabel = currentInstrIndex();
+        for (int idx : loopContextStack_.back().continueJumps)
+            currentFunction_->instructions[idx].jumpTarget = condLabel;
+
         int condSlot = generateExpression(dw->condition);
-        // truthy (sıfır-dışı herhangi bir değer) ise başa dön — JIF_TRUE.
-        // Eski "== 1" geçici çözümü kaldırıldı: koşul 2 gibi 1-olmayan
-        // truthy bir değer üretince yanlışlıkla çıkıyordu (B4).
-        // Geri-jump: hedef loopStart zaten biliniyor, backpatch gerekmez.
         Instruction jit(Opcode::JIF_TRUE);
         jit.cond       = condSlot;
         jit.jumpTarget = loopStart;
         currentFunction_->instructions.push_back(std::move(jit));
+
+        // break → OUT (JIF_TRUE'dan sonraki konum)
+        int outTarget = currentInstrIndex();
+        for (int idx : loopContextStack_.back().breakJumps)
+            currentFunction_->instructions[idx].jumpTarget = outTarget;
+
+        loopContextStack_.pop_back();
         break;
     }
 
@@ -237,10 +261,18 @@ void IRGenerator::generateStatement(ASTNode* node) {
         break;
     }
 
-    case ASTKind::BreakStatement:
-    case ASTKind::ContinueStatement:
-        // TODO(vm-genişletme): break/continue için JMP + label mekanizması gerekir
+    case ASTKind::BreakStatement: {
+        int jumpIdx = emitJumpUnconditional(-1);
+        if (!loopContextStack_.empty())
+            loopContextStack_.back().breakJumps.push_back(jumpIdx);
         break;
+    }
+    case ASTKind::ContinueStatement: {
+        int jumpIdx = emitJumpUnconditional(-1);
+        if (!loopContextStack_.empty())
+            loopContextStack_.back().continueJumps.push_back(jumpIdx);
+        break;
+    }
 
     default:
         break;

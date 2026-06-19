@@ -10,6 +10,7 @@ set(OLD_GLOB
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/logic/short_circuit.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/loops/basic.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/loops/do_while_once.sqt"
+  "/home/saqut/Masaüstü/saqutcompiler/tests/golden/loops/do_while_truthy.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/dce.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/folding.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/run_opt.sqt"

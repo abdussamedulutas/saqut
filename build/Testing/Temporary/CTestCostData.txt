@@ -1,0 +1,15 @@
+unit_tests 10 0.448247
+golden_arithmetic_basic 10 0.000867734
+golden_fibonacci_fib 10 0.00093354
+golden_string_hello 10 0.000870371
+golden_arithmetic_precedence 9 0.000954052
+golden_loops_basic 9 0.000971074
+golden_loops_do_while_once 9 0.000986343
+golden_opt_dce 2 0.00441751
+golden_opt_folding 2 0.00456844
+golden_opt_dce_ir_opt 7 0.00126134
+golden_opt_folding_ir_opt 7 0.00129602
+golden_opt_run_opt 5 0.00182007
+golden_opt_run_opt_run_opt 5 0.00185853
+golden_logic_short_circuit 1 0.00907537
+---

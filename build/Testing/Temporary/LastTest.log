@@ -1,0 +1,196 @@
+Start testing: Jun 19 15:53 +03
+----------------------------------------------------------
+1/12 Testing: unit_tests
+1/12 Test: unit_tests
+Command: "/usr/bin/bash" "/home/saqut/Masaüstü/saqutcompiler/tests/run.sh"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"unit_tests" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+=== test_type ===
+test_type: TUM TESTLER GECTI
+=== test_diagnostic ===
+--- printAll ---
+test.sqt:3:5: hata [E001]: x tanımsız
+test.sqt:7:9: hata [E003]: int'e string atanamaz
+    ipucu: açık dönüşüm gerekiyor
+test.sqt:12:1: uyarı [W001]: y kullanılmıyor
+— 2 hata, 1 uyarı
+--- toJson ---
+{"diagnostics":[{"code":"E001","level":"error","location":{"column":5,"file":"test.sqt","line":3,"offset":40},"message":"x tanımsız"},{"code":"E003","hint":"açık dönüşüm gerekiyor","level":"error","location":{"column":9,"file":"test.sqt","line":7,"offset":88},"message":"int'e string atanamaz"},{"code":"W001","level":"warning","location":{"column":1,"file":"test.sqt","line":12,"offset":150},"message":"y kullanılmıyor"}],"errorCount":2,"warningCount":1}
+test_diagnostic: TUM TESTLER GECTI
+=== TUM TESTLER GECTI ===
+<end of output>
+Test time =   4.48 sec
+----------------------------------------------------------
+Test Passed.
+"unit_tests" end time: Jun 19 15:53 +03
+"unit_tests" time elapsed: 00:00:04
+----------------------------------------------------------
+
+2/12 Testing: golden_arithmetic_basic
+2/12 Test: golden_arithmetic_basic
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/arithmetic/basic.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/arithmetic/basic.expected" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_arithmetic_basic" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_arithmetic_basic" end time: Jun 19 15:53 +03
+"golden_arithmetic_basic" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/12 Testing: golden_arithmetic_precedence
+3/12 Test: golden_arithmetic_precedence
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/arithmetic/precedence.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/arithmetic/precedence.expected" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_arithmetic_precedence" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_arithmetic_precedence" end time: Jun 19 15:53 +03
+"golden_arithmetic_precedence" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/12 Testing: golden_fibonacci_fib
+4/12 Test: golden_fibonacci_fib
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/fibonacci/fib.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/fibonacci/fib.expected" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_fibonacci_fib" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_fibonacci_fib" end time: Jun 19 15:53 +03
+"golden_fibonacci_fib" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/12 Testing: golden_logic_short_circuit
+5/12 Test: golden_logic_short_circuit
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/logic/short_circuit.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/logic/short_circuit.expected" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_logic_short_circuit" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_logic_short_circuit" end time: Jun 19 15:53 +03
+"golden_logic_short_circuit" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/12 Testing: golden_loops_basic
+6/12 Test: golden_loops_basic
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/loops/basic.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/loops/basic.expected" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_loops_basic" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_loops_basic" end time: Jun 19 15:53 +03
+"golden_loops_basic" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/12 Testing: golden_loops_do_while_once
+7/12 Test: golden_loops_do_while_once
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/loops/do_while_once.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/loops/do_while_once.expected" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_loops_do_while_once" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_loops_do_while_once" end time: Jun 19 15:53 +03
+"golden_loops_do_while_once" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/12 Testing: golden_opt_dce_ir_opt
+8/12 Test: golden_opt_dce_ir_opt
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/dce.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/dce.ir_opt.expected" "-DCOMMAND=ir" "-DOPTIMIZED=1" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_opt_dce_ir_opt" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_opt_dce_ir_opt" end time: Jun 19 15:53 +03
+"golden_opt_dce_ir_opt" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/12 Testing: golden_opt_folding_ir_opt
+9/12 Test: golden_opt_folding_ir_opt
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/folding.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/folding.ir_opt.expected" "-DCOMMAND=ir" "-DOPTIMIZED=1" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_opt_folding_ir_opt" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_opt_folding_ir_opt" end time: Jun 19 15:53 +03
+"golden_opt_folding_ir_opt" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/12 Testing: golden_opt_run_opt
+10/12 Test: golden_opt_run_opt
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/run_opt.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/run_opt.expected" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_opt_run_opt" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_opt_run_opt" end time: Jun 19 15:53 +03
+"golden_opt_run_opt" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/12 Testing: golden_opt_run_opt_run_opt
+11/12 Test: golden_opt_run_opt_run_opt
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/run_opt.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/run_opt.run_opt.expected" "-DOPTIMIZED=1" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_opt_run_opt_run_opt" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_opt_run_opt_run_opt" end time: Jun 19 15:53 +03
+"golden_opt_run_opt_run_opt" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/12 Testing: golden_string_hello
+12/12 Test: golden_string_hello
+Command: "/usr/bin/cmake" "-DBINARY=/home/saqut/Masaüstü/saqutcompiler/build/saqut" "-DSOURCE=/home/saqut/Masaüstü/saqutcompiler/tests/golden/string/hello.sqt" "-DEXPECTED=/home/saqut/Masaüstü/saqutcompiler/tests/golden/string/hello.expected" "-P" "/home/saqut/Masaüstü/saqutcompiler/cmake/run_golden.cmake"
+Directory: /home/saqut/Masaüstü/saqutcompiler/build
+"golden_string_hello" start time: Jun 19 15:53 +03
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"golden_string_hello" end time: Jun 19 15:53 +03
+"golden_string_hello" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Jun 19 15:53 +03

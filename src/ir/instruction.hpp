@@ -73,6 +73,14 @@ enum class Opcode {
 
     RETURN,        // Bu frame'i kapat, slots[src]'yi caller'a ilet.
 
+    // --- Bitsel (tümü: slots[dest] = slots[left] OP slots[right]) ---
+    BIT_AND,       // a & b
+    BIT_OR,        // a | b
+    BIT_SHL,       // a << b
+    BIT_SHR,       // a >> b
+    BIT_NOT,       // ~a (unary: slots[dest] = ~slots[src])
+    NOT_UNARY,     // !a (unary: slots[dest] = slots[src] == 0 ? 1 : 0)
+
     // --- Dış dünya (FFI — Foreign Function Interface) ---
     CALLHOST,      // Host (C++) fonksiyonunu çağır. Şu an sadece "print" destekli.
                    //   Dönüş değeri yok; sadece yan etki (stdout'a yazmak gibi).
@@ -99,6 +107,12 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::JIF_FALSE:     return "JIF_FALSE";
         case Opcode::CALL:          return "CALL";
         case Opcode::RETURN:        return "RETURN";
+        case Opcode::BIT_AND:       return "BIT_AND";
+        case Opcode::BIT_OR:        return "BIT_OR";
+        case Opcode::BIT_SHL:       return "BIT_SHL";
+        case Opcode::BIT_SHR:       return "BIT_SHR";
+        case Opcode::BIT_NOT:       return "BIT_NOT";
+        case Opcode::NOT_UNARY:     return "NOT_UNARY";
         case Opcode::CALLHOST:      return "CALLHOST";
     }
     return "UNKNOWN";

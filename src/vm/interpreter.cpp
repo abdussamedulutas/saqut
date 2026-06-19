@@ -148,6 +148,31 @@ int Interpreter::run() {
             continue;
         }
 
+        // ── Bitsel ────────────────────────────────────────────────────────
+        case Opcode::BIT_AND:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.left].intValue & frame.slots[instr.right].intValue);
+            break;
+        case Opcode::BIT_OR:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.left].intValue | frame.slots[instr.right].intValue);
+            break;
+        case Opcode::BIT_SHL:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.left].intValue << frame.slots[instr.right].intValue);
+            break;
+        case Opcode::BIT_SHR:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.left].intValue >> frame.slots[instr.right].intValue);
+            break;
+        case Opcode::BIT_NOT:
+            frame.slots[instr.dest] = Value::fromInt(~frame.slots[instr.src].intValue);
+            break;
+        case Opcode::NOT_UNARY:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.src].intValue == 0 ? 1 : 0);
+            break;
+
         // ── FFI ───────────────────────────────────────────────────────────
         case Opcode::CALLHOST:
             executeHostFunction(instr.functionName, frame.slots, instr.argSlots);

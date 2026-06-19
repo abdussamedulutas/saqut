@@ -101,4 +101,18 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -P "${CMAKE_SOURCE_DIR}/cmake/run_golden_error.cmake"
         )
     endif()
+
+    # Negatif test: .runtime_error — çalışma zamanı hatası beklenen golden testler.
+    # Aynı altyapı: exit code != 0 + stderr içeriği kontrolü.
+    set(RUNTIME_ERROR_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.runtime_error")
+    if(EXISTS "${RUNTIME_ERROR_EXPECTED}")
+        add_test(
+            NAME "golden_${TNAME}_runtime_error"
+            COMMAND ${CMAKE_COMMAND}
+                -DBINARY=${SAQUT_BINARY}
+                -DSOURCE=${SQT_FILE}
+                -DEXPECTED=${RUNTIME_ERROR_EXPECTED}
+                -P "${CMAKE_SOURCE_DIR}/cmake/run_golden_error.cmake"
+        )
+    endif()
 endforeach()

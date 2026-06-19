@@ -7,6 +7,7 @@ set(OLD_GLOB
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/arithmetic/basic.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/arithmetic/precedence.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/fibonacci/fib.sqt"
+  "/home/saqut/Masaüstü/saqutcompiler/tests/golden/logic/not_operator.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/logic/short_circuit.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/loops/basic.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/loops/do_while_once.sqt"

@@ -409,8 +409,13 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 int zeroSlot = freshSlot();
                 emitLoadConst(zeroSlot, 0);
                 emitBinaryOp(Opcode::SUB, resultSlot, zeroSlot, operandSlot);
+            } else if (bin->Operator == TokenType::BANG) {
+                // !x → (x == 0): sıfırsa 1, değilse 0 — her zaman 0 ya da 1
+                int zeroSlot = freshSlot();
+                emitLoadConst(zeroSlot, 0);
+                emitBinaryOp(Opcode::EQUAL_EQUAL, resultSlot, operandSlot, zeroSlot);
             } else {
-                // Diğer unary operatörler → TODO
+                // Diğer unary operatörler (ör. ~) → TODO
                 emitLoadSlot(resultSlot, operandSlot);
             }
             return resultSlot;

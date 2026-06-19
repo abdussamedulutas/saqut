@@ -87,4 +87,18 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -P "${GOLDEN_SCRIPT}"
         )
     endif()
+
+    # Negatif test: .compile_error — derleme hatası beklenen golden testler.
+    # Dosya içeriği stderr'de aranır (regex/düz dize).
+    set(COMPILE_ERROR_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.compile_error")
+    if(EXISTS "${COMPILE_ERROR_EXPECTED}")
+        add_test(
+            NAME "golden_${TNAME}_compile_error"
+            COMMAND ${CMAKE_COMMAND}
+                -DBINARY=${SAQUT_BINARY}
+                -DSOURCE=${SQT_FILE}
+                -DEXPECTED=${COMPILE_ERROR_EXPECTED}
+                -P "${CMAKE_SOURCE_DIR}/cmake/run_golden_error.cmake"
+        )
+    endif()
 endforeach()

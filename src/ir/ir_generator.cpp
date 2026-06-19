@@ -17,25 +17,30 @@
 IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& /*symbolTable*/) {
     IRProgram program;
 
-    // ProgramNode'un her çocuğunu gez.
-    // Bizi ilgilendiren: FunctionDecl. StructDecl/GlobalVar → TODO.
+    // Üst düzey global değişken bildirimlerini topla (#38)
+    std::vector<ASTNode*> globalVars;
+    for (ASTNode* child : programNode->getChildren()) {
+        if (child->kind == ASTKind::VariableDecl)
+            globalVars.push_back(child);
+    }
+
     for (ASTNode* child : programNode->getChildren()) {
         if (child->kind == ASTKind::FunctionDecl) {
-            // Her fonksiyon üretimi için sıfırla
             nameToSlot_.clear();
             nextSlot_ = 0;
 
-            // IRFunction oluştur, currentFunction_ olarak işaretle
             auto* fnDecl = (FunctionDeclNode*)child;
             IRFunction irFn(fnDecl->name, (int)fnDecl->params.size());
             program.addFunction(std::move(irFn));
-
-            // addFunction std::move yaptığı için pointer'ı haritadan alalım
             currentFunction_ = program.findFunction(fnDecl->name);
 
-            generateFunction(child);
+            // Global değişkenleri main'in başına ekle (Seçenek B)
+            if (fnDecl->name == "main") {
+                for (ASTNode* gv : globalVars)
+                    generateStatement(gv);
+            }
 
-            // Fonksiyon bitti — toplam slot sayısını kaydet
+            generateFunction(child);
             currentFunction_->slotCount = nextSlot_;
         }
     }
@@ -407,17 +412,18 @@ int IRGenerator::generateExpression(ASTNode* node) {
             int resultSlot  = freshSlot();
 
             if (bin->Operator == TokenType::MINUS) {
-                // -x → 0 - x
                 int zeroSlot = freshSlot();
                 emitLoadConst(zeroSlot, 0);
                 emitBinaryOp(Opcode::SUB, resultSlot, zeroSlot, operandSlot);
             } else if (bin->Operator == TokenType::BANG) {
-                // !x → (x == 0): sıfırsa 1, değilse 0 — her zaman 0 ya da 1
-                int zeroSlot = freshSlot();
-                emitLoadConst(zeroSlot, 0);
-                emitBinaryOp(Opcode::EQUAL_EQUAL, resultSlot, operandSlot, zeroSlot);
+                Instruction ins(Opcode::NOT_UNARY);
+                ins.dest = resultSlot; ins.src = operandSlot;
+                currentFunction_->instructions.push_back(std::move(ins));
+            } else if (bin->Operator == TokenType::TILDE) {
+                Instruction ins(Opcode::BIT_NOT);
+                ins.dest = resultSlot; ins.src = operandSlot;
+                currentFunction_->instructions.push_back(std::move(ins));
             } else {
-                // Diğer unary operatörler (ör. ~) → TODO
                 emitLoadSlot(resultSlot, operandSlot);
             }
             return resultSlot;
@@ -437,30 +443,32 @@ int IRGenerator::generateExpression(ASTNode* node) {
             case TokenType::GREATER_EQUAL: return generateBinaryArithmetic(Opcode::GREATER_EQUAL, bin->Left, bin->Right);
             case TokenType::EQUAL_EQUAL:   return generateBinaryArithmetic(Opcode::EQUAL_EQUAL,   bin->Left, bin->Right);
             case TokenType::BANG_EQUAL:    return generateBinaryArithmetic(Opcode::NOT_EQUAL,     bin->Left, bin->Right);
-
-            // Mantıksal operatörler: kısa devre dallanmasıyla üretilir (ADR-008).
-            // NOT: sıradan ikili işlem değil — b, a'nın değerine göre atlanabilir.
+            // Bitsel
+            case TokenType::AMPERSAND:     return generateBinaryArithmetic(Opcode::BIT_AND, bin->Left, bin->Right);
+            case TokenType::PIPE:          return generateBinaryArithmetic(Opcode::BIT_OR,  bin->Left, bin->Right);
+            case TokenType::LSHIFT:        return generateBinaryArithmetic(Opcode::BIT_SHL, bin->Left, bin->Right);
+            case TokenType::RSHIFT:        return generateBinaryArithmetic(Opcode::BIT_SHR, bin->Left, bin->Right);
+            // Mantıksal: kısa devre dallanmasıyla üretilir (ADR-008)
             case TokenType::AMPERSAND_AMPERSAND: {
                 int slotA  = generateExpression(bin->Left);
                 int result = freshSlot();
-                emitLoadConst(result, 0);               // varsayılan: false
-                int skipB  = emitJumpIfFalse(slotA);    // a false → b'yi atla
+                emitLoadConst(result, 0);
+                int skipB  = emitJumpIfFalse(slotA);
                 int slotB  = generateExpression(bin->Right);
-                emitLoadSlot(result, slotB);            // result = b
+                emitLoadSlot(result, slotB);
                 patchJump(skipB);
                 return result;
             }
             case TokenType::PIPE_PIPE: {
                 int slotA  = generateExpression(bin->Left);
                 int result = freshSlot();
-                emitLoadConst(result, 1);               // varsayılan: true
-                int skipB  = emitJumpIfTrue(slotA);     // a true → b'yi atla
+                emitLoadConst(result, 1);
+                int skipB  = emitJumpIfTrue(slotA);
                 int slotB  = generateExpression(bin->Right);
-                emitLoadSlot(result, slotB);            // result = b
+                emitLoadSlot(result, slotB);
                 patchJump(skipB);
                 return result;
             }
-
             default: {
                 // Bilinmeyen operatör — boş slot döndür
                 int slot = freshSlot();

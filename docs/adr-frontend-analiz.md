@@ -10,12 +10,11 @@
 > Tartışmanın tam akışı için bkz. `docs/transkript-frontend-tasarim.md`.
 > Uygulama planı için bkz. `docs/roadmap-frontend.md`.
 >
-> ⚠️ **Yapılan vs planlanan:** Bu belgedeki ADR-006…019 **tasarım kararlarıdır**;
-> tarif edilen makine (sembol tablosu, semantik analiz, tip sistemi, diagnostic,
-> optimizasyon, IR+VM) **henüz kodlanmamıştır.** Bugün çalışan: lexer, tokenizer,
-> Pratt parser, AST, AST'nin JSON serileştirmesi, CLI iskeleti, konum takibi ve
-> basit aritmetiği düşüren minimal bir IR deneyi. Hiçbir ADR, var olmayan bir
-> mekanizmayı varmış gibi anlatmaz.
+> ✅ **Uygulama durumu:** Bu belgedeki ADR-006…019 kararlarında tarif edilen
+> makine **kodlandı ve çalışıyor.** Sembol tablosu, semantik analiz, tip sistemi,
+> diagnostic motoru, optimizasyon (constant folding + DCE), IR üreteci ve bytecode
+> VM'in tamamı uygulandı. `examples/fibonacci.sqt` uçtan uca çalışıyor.
+> Güncel "çalışıyor / henüz yok" listesi için bkz. `CLAUDE.md`.
 
 ---
 

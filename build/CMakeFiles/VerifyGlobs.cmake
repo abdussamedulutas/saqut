@@ -18,7 +18,9 @@ set(OLD_GLOB
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/dce.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/folding.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/opt/run_opt.sqt"
+  "/home/saqut/Masaüstü/saqutcompiler/tests/golden/string/equality.sqt"
   "/home/saqut/Masaüstü/saqutcompiler/tests/golden/string/hello.sqt"
+  "/home/saqut/Masaüstü/saqutcompiler/tests/golden/string/ordering_error.sqt"
   )
 if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
   message("-- GLOB mismatch!")

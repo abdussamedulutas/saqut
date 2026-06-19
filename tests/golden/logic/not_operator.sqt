@@ -1,0 +1,28 @@
+// ! operatörü golden testi — değişken operandlar (bozuk olan yol).
+// Sabit operandlar sabit katlama tarafından derleme zamanında hesaplanır;
+// bu test IR üretim yolunu zorlayan değişken operandlar kullanır.
+//
+// Tanım: !x → sıfırsa 1, değilse 0. Sonuç her zaman 0 ya da 1.
+
+int main() {
+    int z = 0;
+    int n = 5;
+
+    // Temel: !0 → 1, !5 → 0
+    print(!z);
+    print(!n);
+
+    // Çift değil normalleştirme: !!5 → 1, !!0 → 0
+    print(!!n);
+    print(!!z);
+
+    // if (!x) dallanma: z=0 iken gövde çalışmalı, n=5 iken çalışmamalı
+    if (!z) {
+        print(1);
+    }
+    if (!n) {
+        print(0);
+    }
+
+    return 0;
+}

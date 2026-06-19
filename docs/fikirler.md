@@ -18,9 +18,10 @@
 >   **çok uzak gelecektir**. ADR-001'deki karşılaştırmalar o gün için geçerli.
 > - "HeavyIR/LightIR" ikiliği (ADR-005) bir **gelecek fikri** olarak durur; v0'ın
 >   IR+VM hedefi tek, basit bir IR'dir + **FFI seam** (ADR-016).
-> - **Yapılan vs planlanan:** ADR-001'deki "mevcut durum" listesi hâlâ doğrudur
->   (lexer/tokenizer/parser/AST + minimal IR deneyi çalışır); kod üretimi ve VM
->   **henüz yoktur.**
+> - **Yapılan vs planlanan:** Tüm pipeline uygulandı. `examples/fibonacci.sqt`
+>   uçtan uca çalışıyor (lexer → tokenizer → parser → sembol tablosu → tip
+>   denetleyici → optimizasyon → IR üreteci → bytecode VM). ADR-001'deki
+>   "mevcut durum" listesi artık tarihseldir; güncel durum için bkz. `CLAUDE.md`.
 
 ---
 

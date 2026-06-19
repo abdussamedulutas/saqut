@@ -1,0 +1,10 @@
+// Negatif test: string sıralama operatörleri derleme hatası vermeli.
+// Bu dosya DERLENMEMELI — TypeChecker E003 üretmeli.
+// < > <= >= operatörlerinin her biri string ile bloklanır.
+
+int main() {
+    string a = "merhaba";
+    string b = "dunya";
+    if (a < b) { return 1; }
+    return 0;
+}

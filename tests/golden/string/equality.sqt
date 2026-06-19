@@ -1,0 +1,16 @@
+// Regresyon testi: string == ve != çalışmaya devam etmeli.
+// TypeChecker string sıralama operatörlerini bloklamasına rağmen
+// eşitlik operatörleri string ile kullanılabilmeli.
+
+int main() {
+    string a = "merhaba";
+    string b = "merhaba";
+    string c = "dunya";
+
+    print(a == b);
+    print(a == c);
+    print(a != c);
+    print(b != b);
+
+    return 0;
+}

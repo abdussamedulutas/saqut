@@ -7,8 +7,12 @@
 #include "parser/parser.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
+#include "semantic/type_checker.hpp"
+#include "semantic/structural_validator.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
 #include "ir/ir_generator.hpp"
+#include "core/config.hpp"
+#include "opt/optimization_manager.hpp"
 
 inline int cmdIr(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
@@ -29,6 +33,8 @@ inline int cmdIr(const CliArgs& args) {
     SymbolTable      symbolTable;
     DiagnosticEngine diag;
     SymbolCollector(symbolTable, diag).collect(ast);
+    TypeChecker(symbolTable, diag).check(ast);
+    StructuralValidator(diag).validate(ast);
 
     if (diag.hasErrors()) {
         diag.printAll(std::cerr);
@@ -37,9 +43,18 @@ inline int cmdIr(const CliArgs& args) {
         return 1;
     }
 
+    // --optimized: constant folding + DCE yerinde uygulanır, klon yok.
+    // IR dump için tek versiyon yeterli — ast komutu gibi karşılaştırma yok.
+    if (args.optimized) {
+        CompilerConfig   cfg;
+        DiagnosticEngine optDiag;
+        OptimizationManager(cfg, optDiag).runPassesInPlace(ast, &symbolTable);
+        if (optDiag.errorCount() + optDiag.warningCount() > 0)
+            optDiag.printAll(std::cerr); // W002 vb. uyarılar stderr'e
+    }
+
     IRGenerator irGenerator;
     IRProgram   program = irGenerator.generate(ast, symbolTable);
-
     program.dump();
 
     delete ast;

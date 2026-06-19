@@ -10,6 +10,7 @@ public:
     ASTNode*  Right = nullptr;
 
     BinaryExpressionNode();
+    ~BinaryExpressionNode() override { delete Left; delete Right; }
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };

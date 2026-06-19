@@ -10,21 +10,12 @@
 > yorum satırlarıyla takip edilebilir olmalıdır (header-only tarzı korunur,
 > bkz. ADR-003).
 >
-> ⚠️ **Yapılan vs planlanan:** Bugün çalışan = lexer, tokenizer, Pratt parser,
-> AST, AST'nin JSON serileştirmesi, CLI iskeleti, konum takibi, basit aritmetiği
-> düşüren minimal IR deneyi. Bu yol haritasındaki **her şey planlıdır** (sembol
-> tablosu, semantik analiz, tip sistemi, diagnostic, optimizasyon).
+> ✅ **Birinci kilometre taşı AŞILDI.** Faz 0–4 uygulandı; `examples/fibonacci.sqt`
+> uçtan uca çalışıyor. Bu yol haritası artık tarihsel bir referanstır.
 >
-> 🎯 **Bu haftanın işi:** **sembol tablosu + iki-geçişli toplayıcı** (Faz 2),
-> hedef **"fibonacci'yi derle ve çalıştır"** (`examples/fibonacci.sqt`). Faz 0–1
-> bunun önkoşuludur.
->
-> 🧭 **Önce dikey dilim, sonra çerçeve.** Bir şey çalışmadan önce genel pass
-> manager / evrensel config / ağır soyutlama inşa etme. Uçtan uca tek bir dilim
-> (kaynak → IR → çalıştır; tamsayı + değişken + kontrol akışı + tek `print`)
-> önce çalışsın. Faz 4'ün framework'ü (OptimizationManager, fixpoint, config)
-> ancak Faz 0–3 fibonacci'yi geçirdikten **sonra** anlam kazanır — erken
-> soyutlama daha az değil, daha çok karmaşıklıktır.
+> **Sonraki hedefler:** float/double codegen, struct IR, array IR, açık bug'lar
+> (#35 bellek sızıntısı, #36 W003 uyarısı, #37 `%=` IR, #38 global değişken IR).
+> Güncel "çalışıyor / henüz yok" listesi için bkz. `CLAUDE.md`.
 
 ---
 
@@ -46,7 +37,7 @@ Katman eşlemesi (ADR-006):
 
 ---
 
-## Faz 0 — Temeller (Type + Diagnostic + Hata Kataloğu)
+## ✅ Faz 0 — Temeller (Type + Diagnostic + Hata Kataloğu) — TAMAMLANDI
 
 **Bağımlılık:** yok. **Hedef:** her şeyin üstüne kurulacağı temel veri yapıları.
 İlgili ADR: 010 (Type), 013 (Diagnostic).
@@ -91,7 +82,7 @@ Katman eşlemesi (ADR-006):
 
 ---
 
-## Faz 1 — AST Refactor (ExpressionNode / StatementNode + analiz alanları)
+## ✅ Faz 1 — AST Refactor (ExpressionNode / StatementNode + analiz alanları) — TAMAMLANDI
 
 **Bağımlılık:** Faz 0 (Type). **Hedef:** node hiyerarşisini ifade/deyim olarak
 ayır, analiz alanlarını ekle. İlgili ADR: 012, 013.
@@ -116,7 +107,7 @@ ayır, analiz alanlarını ekle. İlgili ADR: 012, 013.
 
 ---
 
-## Faz 2 — Symbol Table (scope'lu, iki-geçişli toplama)
+## ✅ Faz 2 — Symbol Table (scope'lu, iki-geçişli toplama) — TAMAMLANDI
 
 **Bağımlılık:** Faz 0, 1. **Hedef:** isim çözümleme + scope + referans toplama.
 İlgili ADR: 011, 013.
@@ -150,7 +141,7 @@ ayır, analiz alanlarını ekle. İlgili ADR: 012, 013.
 
 ---
 
-## Faz 3 — Semantic Analiz (Tip Kontrolü + Yapısal Doğrulama)
+## ✅ Faz 3 — Semantic Analiz (Tip Kontrolü + Yapısal Doğrulama) — TAMAMLANDI
 
 **Bağımlılık:** Faz 2. **Hedef:** tipleri ata/kontrol et, yapısal kuralları
 doğrula. İlgili ADR: 010, 013.
@@ -173,7 +164,7 @@ doğrula. İlgili ADR: 010, 013.
 
 ---
 
-## Faz 4 — Optimizasyon Framework
+## ✅ Faz 4 — Optimizasyon Framework — TAMAMLANDI
 
 **Bağımlılık:** Faz 3. **Hedef:** opsiyonel, iteratif, toggle'lı kaynak-seviyesi
 optimizasyon. **Orijinali bozmaz — klon üstünde** (ADR-007). İlgili ADR: 007, 008, 009.

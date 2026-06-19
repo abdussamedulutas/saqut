@@ -1,0 +1,9 @@
+int main() {
+    print(1 + 2 * 3);
+    print((1 + 2) * 3);
+    print(10 - 4 - 3);
+    print(10 / 3);
+    print(10 % 3);
+    print(2 + 3 * 4 - 6 / 2);
+    return 0;
+}

@@ -236,10 +236,12 @@ public:
     // KARMAŞIKLIK: O(1) — referans döndürür
     std::vector<ASTNode*>& getChildren() { return children; }
 
-    // ~ASTNode() — Sanal yıkıcı (polimorfik silme için)
-    //   delete ASTNode* yapıldığında doğru alt sınıf yıkıcısı çağrılır.
-    //   Bu olmazsa türetilmiş sınıfların kaynakları sızdırılır.
-    virtual ~ASTNode() = default;
+    // ~ASTNode() — children vektörünü özyinelemeli siler.
+    //   Typed pointer'lar (condition, thenBranch vb.) alt sınıf yıkıcılarına bırakılır;
+    //   children vektörü ile typed pointer'lar örtüşmediği için double-delete olmaz.
+    virtual ~ASTNode() {
+        for (auto* ch : children) delete ch;
+    }
 
 protected:
     // children — Alt düğümlerin vektörü.

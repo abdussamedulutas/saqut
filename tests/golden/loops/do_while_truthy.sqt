@@ -1,0 +1,25 @@
+// B4 regresyon testi: do-while koşulu 1-olmayan sıfır-dışı değer üretince
+// döngü yanlışlıkla çıkmamalı ("== 1" geçici çözümü bu hatayı veriyordu).
+//
+// Test 1: koşul 2 üretiyor — döngü 3 kez dönmeli (i: 0→1→2, çıkış i==3)
+// Test 2: koşul 0 olunca düzgün çıkıyor — döngü 1 kez dönmeli
+
+int main() {
+    // Koşul 2 (1-olmayan truthy): döngü erken çıkmamalı
+    int i = 0;
+    do {
+        i = i + 1;
+        print(i);
+    } while (i < 3);
+    // i<3 sonucu: i=1→1, i=2→1, i=3→0; çıktı: 1 2 3
+
+    // Koşul 0: tek iterasyon, gövde bir kez çalışır
+    int j = 5;
+    do {
+        print(j);
+        j = 0;
+    } while (j);
+    // j=5 → print(5), j=0 → while(0) → çıkış; çıktı: 5
+
+    return 0;
+}

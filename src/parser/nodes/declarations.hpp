@@ -11,6 +11,7 @@ public:
     std::string returnType;
     std::vector<VariableDeclNode*> params; // TODO(faz2): parametreler
     FunctionDeclNode();
+    ~FunctionDeclNode() override;
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };
@@ -21,6 +22,7 @@ public:
     std::string name;
     ASTNode*   initExpr = nullptr;
     VariableDeclNode();
+    ~VariableDeclNode() override { delete initExpr; }
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };

@@ -1,6 +1,5 @@
 #include "parser/nodes/identifier.hpp"
 #include <iostream>
-#include <sstream>
 #include "parser/ast_json.hpp"
 
 IdentifierNode::IdentifierNode() { kind = ASTKind::Identifier; }
@@ -11,14 +10,10 @@ void IdentifierNode::log(int indent) {
 }
 
 std::string IdentifierNode::toJson(int depth) {
-    std::string in = jsonIndent(depth);
-    std::string name = parserToken.token ? parserToken.token->token : "?";
-    std::ostringstream ss;
-    ss << "{\n"
-       << in << "  \"kind\": \"Identifier\",\n"
-       << in << "  \"name\": \"" << jsonEscape(name) << "\",\n"
-       << in << "  \"resolvedType\": " << resolvedTypeJson() << ",\n"
-       << in << "  \"location\": " << loc.toJson() << "\n"
-       << in << "}";
-    return ss.str();
+    JsonObject obj(depth);
+    obj.add("kind", "Identifier");
+    obj.add("name", parserToken.token ? parserToken.token->token : "?");
+    obj.addRaw("resolvedType", resolvedTypeJson());
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
 }

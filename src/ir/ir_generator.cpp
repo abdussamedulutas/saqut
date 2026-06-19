@@ -216,21 +216,14 @@ void IRGenerator::generateStatement(ASTNode* node) {
         if (dw->body) generateStatement(dw->body);
 
         int condSlot = generateExpression(dw->condition);
-        // Koşul doğruysa geri atla (1 = doğru → atla; 0 = yanlış → devam)
-        // JIF_FALSE koşul yanlışsa atlar; biz doğruysa atlamak istiyoruz.
-        // Bu yüzden JIF_FALSE yerine "doğruysa atla" mantığı lazım.
-        // Basit çözüm: koşulun tersini al (0→1, diğer→0) ve JIF_FALSE kullan.
-        // NOT: saQut'ta "!" operatörü yok henüz; NOT talimatı eklenebilir.
-        // Şimdilik: koşul slotuna bak, sıfır değilse geri atla.
-        // TODO(vm-genişletme): JIF_TRUE talimatı ekle
-        // Geçici çözüm: sabit 1 ile karşılaştır (condSlot != 0 → geri)
-        int oneSlot = freshSlot();
-        emitLoadConst(oneSlot, 1);
-        int eqSlot = freshSlot();
-        emitBinaryOp(Opcode::EQUAL_EQUAL, eqSlot, condSlot, oneSlot);
-        int skipJump = emitJumpIfFalse(eqSlot); // koşul yanlışsa döngüden çık
-        emitJumpUnconditional(loopStart);        // geri atla
-        patchJump(skipJump);
+        // truthy (sıfır-dışı herhangi bir değer) ise başa dön — JIF_TRUE.
+        // Eski "== 1" geçici çözümü kaldırıldı: koşul 2 gibi 1-olmayan
+        // truthy bir değer üretince yanlışlıkla çıkıyordu (B4).
+        // Geri-jump: hedef loopStart zaten biliniyor, backpatch gerekmez.
+        Instruction jit(Opcode::JIF_TRUE);
+        jit.cond       = condSlot;
+        jit.jumpTarget = loopStart;
+        currentFunction_->instructions.push_back(std::move(jit));
         break;
     }
 

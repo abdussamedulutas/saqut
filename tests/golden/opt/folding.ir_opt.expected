@@ -1,0 +1,21 @@
+IR DUMP
+
+NAME=main PARAMS=0 SLOTS=8
+    0  LOAD_CONST  s0 = 14
+    1  CALLHOST    print(s0)
+    2  LOAD_CONST  s1 = 3
+    3  CALLHOST    print(s1)
+    4  LOAD_CONST  s2 = 1
+    5  CALLHOST    print(s2)
+    6  LOAD_CONST  s3 = 0
+    7  CALLHOST    print(s3)
+    8  LOAD_CONST  s4 = 1
+    9  CALLHOST    print(s4)
+   10  LOAD_CONST  s5 = 0
+   11  CALLHOST    print(s5)
+   12  LOAD_CONST  s6 = 1
+   13  CALLHOST    print(s6)
+   14  LOAD_CONST  s7 = 0
+   15  RETURN      s7
+
+END

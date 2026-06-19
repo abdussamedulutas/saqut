@@ -18,7 +18,7 @@
 #############################################
 # Minimal version of Ninja required by this file
 
-ninja_required_version = 1.5
+ninja_required_version = 1.8
 
 
 #############################################
@@ -56,6 +56,8 @@ build CMakeFiles/saqut.dir/src/core/sourcefile.cpp.o: CXX_COMPILER__saqut_unscan
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/core
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/ir/ir_function.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/ir/ir_function.cpp || cmake_object_order_depends_target_saqut
@@ -65,6 +67,8 @@ build CMakeFiles/saqut.dir/src/ir/ir_function.cpp.o: CXX_COMPILER__saqut_unscann
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/ir
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/ir/ir_generator.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/ir/ir_generator.cpp || cmake_object_order_depends_target_saqut
@@ -74,6 +78,8 @@ build CMakeFiles/saqut.dir/src/ir/ir_generator.cpp.o: CXX_COMPILER__saqut_unscan
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/ir
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/ir/ir_program.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/ir/ir_program.cpp || cmake_object_order_depends_target_saqut
@@ -83,6 +89,8 @@ build CMakeFiles/saqut.dir/src/ir/ir_program.cpp.o: CXX_COMPILER__saqut_unscanne
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/ir
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/lexer/lexer.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/lexer/lexer.cpp || cmake_object_order_depends_target_saqut
@@ -92,6 +100,8 @@ build CMakeFiles/saqut.dir/src/lexer/lexer.cpp.o: CXX_COMPILER__saqut_unscanned_
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/lexer
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/main.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/main.cpp || cmake_object_order_depends_target_saqut
@@ -101,6 +111,8 @@ build CMakeFiles/saqut.dir/src/main.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/parser/nodes/binary_expr.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/parser/nodes/binary_expr.cpp || cmake_object_order_depends_target_saqut
@@ -110,6 +122,8 @@ build CMakeFiles/saqut.dir/src/parser/nodes/binary_expr.cpp.o: CXX_COMPILER__saq
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/parser/nodes
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/parser/nodes/declarations.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/parser/nodes/declarations.cpp || cmake_object_order_depends_target_saqut
@@ -119,6 +133,8 @@ build CMakeFiles/saqut.dir/src/parser/nodes/declarations.cpp.o: CXX_COMPILER__sa
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/parser/nodes
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/parser/nodes/expressions.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/parser/nodes/expressions.cpp || cmake_object_order_depends_target_saqut
@@ -128,6 +144,8 @@ build CMakeFiles/saqut.dir/src/parser/nodes/expressions.cpp.o: CXX_COMPILER__saq
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/parser/nodes
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/parser/nodes/identifier.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/parser/nodes/identifier.cpp || cmake_object_order_depends_target_saqut
@@ -137,6 +155,8 @@ build CMakeFiles/saqut.dir/src/parser/nodes/identifier.cpp.o: CXX_COMPILER__saqu
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/parser/nodes
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/parser/nodes/literal.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/parser/nodes/literal.cpp || cmake_object_order_depends_target_saqut
@@ -146,6 +166,8 @@ build CMakeFiles/saqut.dir/src/parser/nodes/literal.cpp.o: CXX_COMPILER__saqut_u
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/parser/nodes
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/parser/nodes/program.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/parser/nodes/program.cpp || cmake_object_order_depends_target_saqut
@@ -155,6 +177,8 @@ build CMakeFiles/saqut.dir/src/parser/nodes/program.cpp.o: CXX_COMPILER__saqut_u
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/parser/nodes
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/parser/nodes/statements.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/parser/nodes/statements.cpp || cmake_object_order_depends_target_saqut
@@ -164,6 +188,8 @@ build CMakeFiles/saqut.dir/src/parser/nodes/statements.cpp.o: CXX_COMPILER__saqu
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/parser/nodes
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/parser/parser.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/parser/parser.cpp || cmake_object_order_depends_target_saqut
@@ -173,6 +199,8 @@ build CMakeFiles/saqut.dir/src/parser/parser.cpp.o: CXX_COMPILER__saqut_unscanne
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/parser
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/semantic/structural_validator.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/semantic/structural_validator.cpp || cmake_object_order_depends_target_saqut
@@ -182,6 +210,8 @@ build CMakeFiles/saqut.dir/src/semantic/structural_validator.cpp.o: CXX_COMPILER
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/semantic
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/semantic/type_checker.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/semantic/type_checker.cpp || cmake_object_order_depends_target_saqut
@@ -191,6 +221,8 @@ build CMakeFiles/saqut.dir/src/semantic/type_checker.cpp.o: CXX_COMPILER__saqut_
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/semantic
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/symbol/symbol_collector.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/symbol/symbol_collector.cpp || cmake_object_order_depends_target_saqut
@@ -200,6 +232,8 @@ build CMakeFiles/saqut.dir/src/symbol/symbol_collector.cpp.o: CXX_COMPILER__saqu
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/symbol
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/tokenizer/tokenizer.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/tokenizer/tokenizer.cpp || cmake_object_order_depends_target_saqut
@@ -209,6 +243,8 @@ build CMakeFiles/saqut.dir/src/tokenizer/tokenizer.cpp.o: CXX_COMPILER__saqut_un
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/tokenizer
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 build CMakeFiles/saqut.dir/src/vm/interpreter.cpp.o: CXX_COMPILER__saqut_unscanned_Debug /home/saqut/Masaüstü/saqutcompiler/src/vm/interpreter.cpp || cmake_object_order_depends_target_saqut
@@ -218,6 +254,8 @@ build CMakeFiles/saqut.dir/src/vm/interpreter.cpp.o: CXX_COMPILER__saqut_unscann
   INCLUDES = -I/home/saqut/Masaüstü/saqutcompiler/src
   OBJECT_DIR = CMakeFiles/saqut.dir
   OBJECT_FILE_DIR = CMakeFiles/saqut.dir/src/vm
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
 
 
@@ -236,9 +274,22 @@ build saqut: CXX_EXECUTABLE_LINKER__saqut_Debug CMakeFiles/saqut.dir/src/core/so
   OBJECT_DIR = CMakeFiles/saqut.dir
   POST_BUILD = :
   PRE_LINK = :
+  TARGET_COMPILE_PDB = CMakeFiles/saqut.dir/
   TARGET_FILE = saqut
-  TARGET_PDB = saqut.dbg
+  TARGET_PDB = saqut.pdb
   TARGET_SUPPORT_DIR = CMakeFiles/saqut.dir
+
+
+#############################################
+# Utility command for test
+
+build CMakeFiles/test.util: CUSTOM_COMMAND
+  COMMAND = cd /home/saqut/Masaüstü/saqutcompiler/build && /usr/bin/ctest
+  DESC = Running tests...
+  pool = console
+  restat = 1
+
+build test: phony CMakeFiles/test.util
 
 
 #############################################
@@ -282,16 +333,30 @@ build all: phony saqut
 
 
 #############################################
+# Phony target to force glob verification run.
+
+build /home/saqut/Masaüstü/saqutcompiler/build/CMakeFiles/VerifyGlobs.cmake_force: phony
+
+
+#############################################
+# Re-run CMake to check if globbed directories changed.
+
+build /home/saqut/Masaüstü/saqutcompiler/build/CMakeFiles/cmake.verify_globs: VERIFY_GLOBS | /home/saqut/Masaüstü/saqutcompiler/build/CMakeFiles/VerifyGlobs.cmake_force
+  pool = console
+  restat = 1
+
+
+#############################################
 # Re-run CMake if any of its inputs changed.
 
-build build.ninja /home/saqut/Masaüstü/saqutcompiler/build/cmake_install.cmake: RERUN_CMAKE | /home/saqut/Masaüstü/saqutcompiler/CMakeLists.txt /usr/share/cmake/Modules/CMakeCXXInformation.cmake /usr/share/cmake/Modules/CMakeCommonLanguageInclude.cmake /usr/share/cmake/Modules/CMakeGenericSystem.cmake /usr/share/cmake/Modules/CMakeInitializeConfigs.cmake /usr/share/cmake/Modules/CMakeLanguageInformation.cmake /usr/share/cmake/Modules/CMakeSystemSpecificInformation.cmake /usr/share/cmake/Modules/CMakeSystemSpecificInitialize.cmake /usr/share/cmake/Modules/Compiler/CMakeCommonCompilerMacros.cmake /usr/share/cmake/Modules/Compiler/GNU-CXX.cmake /usr/share/cmake/Modules/Compiler/GNU.cmake /usr/share/cmake/Modules/Internal/CMakeCXXLinkerInformation.cmake /usr/share/cmake/Modules/Internal/CMakeCommonLinkerInformation.cmake /usr/share/cmake/Modules/Linker/GNU-CXX.cmake /usr/share/cmake/Modules/Linker/GNU.cmake /usr/share/cmake/Modules/Platform/Linker/GNU.cmake /usr/share/cmake/Modules/Platform/Linker/Linux-GNU-CXX.cmake /usr/share/cmake/Modules/Platform/Linker/Linux-GNU.cmake /usr/share/cmake/Modules/Platform/Linux-GNU-CXX.cmake /usr/share/cmake/Modules/Platform/Linux-GNU.cmake /usr/share/cmake/Modules/Platform/Linux-Initialize.cmake /usr/share/cmake/Modules/Platform/Linux.cmake /usr/share/cmake/Modules/Platform/UnixPaths.cmake CMakeCache.txt CMakeFiles/4.3.3/CMakeCXXCompiler.cmake CMakeFiles/4.3.3/CMakeSystem.cmake
+build build.ninja /home/saqut/Masaüstü/saqutcompiler/build/cmake_install.cmake /home/saqut/Masaüstü/saqutcompiler/build/CTestTestfile.cmake: RERUN_CMAKE /home/saqut/Masaüstü/saqutcompiler/build/CMakeFiles/cmake.verify_globs | /home/saqut/Masaüstü/saqutcompiler/CMakeLists.txt /home/saqut/Masaüstü/saqutcompiler/build/CMakeFiles/VerifyGlobs.cmake /usr/share/cmake/Modules/CMakeCXXCompiler.cmake.in /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp /usr/share/cmake/Modules/CMakeCXXInformation.cmake /usr/share/cmake/Modules/CMakeCommonLanguageInclude.cmake /usr/share/cmake/Modules/CMakeCompilerIdDetection.cmake /usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake /usr/share/cmake/Modules/CMakeDetermineCompiler.cmake /usr/share/cmake/Modules/CMakeDetermineCompilerABI.cmake /usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake /usr/share/cmake/Modules/CMakeDetermineCompilerSupport.cmake /usr/share/cmake/Modules/CMakeDetermineSystem.cmake /usr/share/cmake/Modules/CMakeFindBinUtils.cmake /usr/share/cmake/Modules/CMakeGenericSystem.cmake /usr/share/cmake/Modules/CMakeInitializeConfigs.cmake /usr/share/cmake/Modules/CMakeLanguageInformation.cmake /usr/share/cmake/Modules/CMakeNinjaFindMake.cmake /usr/share/cmake/Modules/CMakeParseImplicitIncludeInfo.cmake /usr/share/cmake/Modules/CMakeParseImplicitLinkInfo.cmake /usr/share/cmake/Modules/CMakeParseLibraryArchitecture.cmake /usr/share/cmake/Modules/CMakeSystem.cmake.in /usr/share/cmake/Modules/CMakeSystemSpecificInformation.cmake /usr/share/cmake/Modules/CMakeSystemSpecificInitialize.cmake /usr/share/cmake/Modules/CMakeTestCXXCompiler.cmake /usr/share/cmake/Modules/CMakeTestCompilerCommon.cmake /usr/share/cmake/Modules/Compiler/ADSP-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/ARMCC-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/ARMClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/AppleClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Borland-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/CMakeCommonCompilerMacros.cmake /usr/share/cmake/Modules/Compiler/Clang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Clang-DetermineCompilerInternal.cmake /usr/share/cmake/Modules/Compiler/Compaq-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Cray-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/CrayClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Diab-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Embarcadero-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Fujitsu-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/FujitsuClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/GHS-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/GNU-CXX-CXXImportStd.cmake /usr/share/cmake/Modules/Compiler/GNU-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/GNU-CXX.cmake /usr/share/cmake/Modules/Compiler/GNU-FindBinUtils.cmake /usr/share/cmake/Modules/Compiler/GNU.cmake /usr/share/cmake/Modules/Compiler/HP-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/IAR-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/IBMCPP-CXX-DetermineVersionInternal.cmake /usr/share/cmake/Modules/Compiler/IBMClang-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Intel-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/IntelLLVM-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/LCC-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/MSVC-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/NVHPC-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/NVIDIA-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/OpenWatcom-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/OrangeC-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/PGI-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/PathScale-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Renesas-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/SCO-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/SunPro-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/TI-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/TIClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Tasking-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/VisualAge-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Watcom-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/XL-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/XLClang-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/zOS-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Internal/CMakeCXXLinkerInformation.cmake /usr/share/cmake/Modules/Internal/CMakeCommonLinkerInformation.cmake /usr/share/cmake/Modules/Internal/CMakeDetermineLinkerId.cmake /usr/share/cmake/Modules/Internal/CMakeInspectCXXLinker.cmake /usr/share/cmake/Modules/Internal/FeatureTesting.cmake /usr/share/cmake/Modules/Linker/GNU-CXX.cmake /usr/share/cmake/Modules/Linker/GNU.cmake /usr/share/cmake/Modules/Platform/Linker/GNU.cmake /usr/share/cmake/Modules/Platform/Linker/Linux-GNU-CXX.cmake /usr/share/cmake/Modules/Platform/Linker/Linux-GNU.cmake /usr/share/cmake/Modules/Platform/Linux-Determine-CXX.cmake /usr/share/cmake/Modules/Platform/Linux-GNU-CXX.cmake /usr/share/cmake/Modules/Platform/Linux-GNU.cmake /usr/share/cmake/Modules/Platform/Linux-Initialize.cmake /usr/share/cmake/Modules/Platform/Linux.cmake /usr/share/cmake/Modules/Platform/UnixPaths.cmake CMakeCache.txt CMakeFiles/4.3.3/CMakeCXXCompiler.cmake CMakeFiles/4.3.3/CMakeSystem.cmake
   pool = console
 
 
 #############################################
 # A missing CMake input file is not an error.
 
-build /home/saqut/Masaüstü/saqutcompiler/CMakeLists.txt /usr/share/cmake/Modules/CMakeCXXInformation.cmake /usr/share/cmake/Modules/CMakeCommonLanguageInclude.cmake /usr/share/cmake/Modules/CMakeGenericSystem.cmake /usr/share/cmake/Modules/CMakeInitializeConfigs.cmake /usr/share/cmake/Modules/CMakeLanguageInformation.cmake /usr/share/cmake/Modules/CMakeSystemSpecificInformation.cmake /usr/share/cmake/Modules/CMakeSystemSpecificInitialize.cmake /usr/share/cmake/Modules/Compiler/CMakeCommonCompilerMacros.cmake /usr/share/cmake/Modules/Compiler/GNU-CXX.cmake /usr/share/cmake/Modules/Compiler/GNU.cmake /usr/share/cmake/Modules/Internal/CMakeCXXLinkerInformation.cmake /usr/share/cmake/Modules/Internal/CMakeCommonLinkerInformation.cmake /usr/share/cmake/Modules/Linker/GNU-CXX.cmake /usr/share/cmake/Modules/Linker/GNU.cmake /usr/share/cmake/Modules/Platform/Linker/GNU.cmake /usr/share/cmake/Modules/Platform/Linker/Linux-GNU-CXX.cmake /usr/share/cmake/Modules/Platform/Linker/Linux-GNU.cmake /usr/share/cmake/Modules/Platform/Linux-GNU-CXX.cmake /usr/share/cmake/Modules/Platform/Linux-GNU.cmake /usr/share/cmake/Modules/Platform/Linux-Initialize.cmake /usr/share/cmake/Modules/Platform/Linux.cmake /usr/share/cmake/Modules/Platform/UnixPaths.cmake CMakeCache.txt CMakeFiles/4.3.3/CMakeCXXCompiler.cmake CMakeFiles/4.3.3/CMakeSystem.cmake: phony
+build /home/saqut/Masaüstü/saqutcompiler/CMakeLists.txt /home/saqut/Masaüstü/saqutcompiler/build/CMakeFiles/VerifyGlobs.cmake /usr/share/cmake/Modules/CMakeCXXCompiler.cmake.in /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp /usr/share/cmake/Modules/CMakeCXXInformation.cmake /usr/share/cmake/Modules/CMakeCommonLanguageInclude.cmake /usr/share/cmake/Modules/CMakeCompilerIdDetection.cmake /usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake /usr/share/cmake/Modules/CMakeDetermineCompiler.cmake /usr/share/cmake/Modules/CMakeDetermineCompilerABI.cmake /usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake /usr/share/cmake/Modules/CMakeDetermineCompilerSupport.cmake /usr/share/cmake/Modules/CMakeDetermineSystem.cmake /usr/share/cmake/Modules/CMakeFindBinUtils.cmake /usr/share/cmake/Modules/CMakeGenericSystem.cmake /usr/share/cmake/Modules/CMakeInitializeConfigs.cmake /usr/share/cmake/Modules/CMakeLanguageInformation.cmake /usr/share/cmake/Modules/CMakeNinjaFindMake.cmake /usr/share/cmake/Modules/CMakeParseImplicitIncludeInfo.cmake /usr/share/cmake/Modules/CMakeParseImplicitLinkInfo.cmake /usr/share/cmake/Modules/CMakeParseLibraryArchitecture.cmake /usr/share/cmake/Modules/CMakeSystem.cmake.in /usr/share/cmake/Modules/CMakeSystemSpecificInformation.cmake /usr/share/cmake/Modules/CMakeSystemSpecificInitialize.cmake /usr/share/cmake/Modules/CMakeTestCXXCompiler.cmake /usr/share/cmake/Modules/CMakeTestCompilerCommon.cmake /usr/share/cmake/Modules/Compiler/ADSP-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/ARMCC-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/ARMClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/AppleClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Borland-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/CMakeCommonCompilerMacros.cmake /usr/share/cmake/Modules/Compiler/Clang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Clang-DetermineCompilerInternal.cmake /usr/share/cmake/Modules/Compiler/Compaq-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Cray-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/CrayClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Diab-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Embarcadero-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Fujitsu-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/FujitsuClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/GHS-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/GNU-CXX-CXXImportStd.cmake /usr/share/cmake/Modules/Compiler/GNU-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/GNU-CXX.cmake /usr/share/cmake/Modules/Compiler/GNU-FindBinUtils.cmake /usr/share/cmake/Modules/Compiler/GNU.cmake /usr/share/cmake/Modules/Compiler/HP-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/IAR-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/IBMCPP-CXX-DetermineVersionInternal.cmake /usr/share/cmake/Modules/Compiler/IBMClang-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Intel-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/IntelLLVM-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/LCC-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/MSVC-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/NVHPC-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/NVIDIA-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/OpenWatcom-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/OrangeC-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/PGI-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/PathScale-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Renesas-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/SCO-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/SunPro-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/TI-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/TIClang-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Tasking-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/VisualAge-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/Watcom-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/XL-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/XLClang-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Compiler/zOS-CXX-DetermineCompiler.cmake /usr/share/cmake/Modules/Internal/CMakeCXXLinkerInformation.cmake /usr/share/cmake/Modules/Internal/CMakeCommonLinkerInformation.cmake /usr/share/cmake/Modules/Internal/CMakeDetermineLinkerId.cmake /usr/share/cmake/Modules/Internal/CMakeInspectCXXLinker.cmake /usr/share/cmake/Modules/Internal/FeatureTesting.cmake /usr/share/cmake/Modules/Linker/GNU-CXX.cmake /usr/share/cmake/Modules/Linker/GNU.cmake /usr/share/cmake/Modules/Platform/Linker/GNU.cmake /usr/share/cmake/Modules/Platform/Linker/Linux-GNU-CXX.cmake /usr/share/cmake/Modules/Platform/Linker/Linux-GNU.cmake /usr/share/cmake/Modules/Platform/Linux-Determine-CXX.cmake /usr/share/cmake/Modules/Platform/Linux-GNU-CXX.cmake /usr/share/cmake/Modules/Platform/Linux-GNU.cmake /usr/share/cmake/Modules/Platform/Linux-Initialize.cmake /usr/share/cmake/Modules/Platform/Linux.cmake /usr/share/cmake/Modules/Platform/UnixPaths.cmake CMakeCache.txt CMakeFiles/4.3.3/CMakeCXXCompiler.cmake CMakeFiles/4.3.3/CMakeSystem.cmake: phony
 
 
 #############################################

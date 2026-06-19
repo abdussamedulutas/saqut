@@ -1,0 +1,14 @@
+int hesapla(int n) {
+    if (n > 0) {
+        return n * 2;
+        print(99);
+    }
+    return 0;
+}
+
+int main() {
+    print(hesapla(5));
+    print(hesapla(0));
+    print(hesapla(-3));
+    return 0;
+}

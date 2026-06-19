@@ -3,6 +3,7 @@
 
 // FunctionDeclNode
 FunctionDeclNode::FunctionDeclNode() { kind = ASTKind::FunctionDecl; }
+FunctionDeclNode::~FunctionDeclNode() { for (auto* p : params) delete p; }
 void FunctionDeclNode::log(int indent) {
     std::cout << jsonIndent(indent) << "FunctionDecl (" << name << " : " << returnType << ")\n";
     for (auto* child : children) child->log(indent + 1);

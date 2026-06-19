@@ -15,9 +15,12 @@
 #include "parser/nodes/declarations.hpp"
 #include "parser/nodes/expressions.hpp"
 #include "parser/nodes/program.hpp"
+#include "diagnostic/diagnostic_engine.hpp"
 
 class DeadCodeElimPass : public OptimizationPass {
 public:
+    explicit DeadCodeElimPass(DiagnosticEngine& diag) : diag_(diag) {}
+
     bool run(ASTNode* root, SymbolTable*) override {
         changed_ = false;
         visit(root);
@@ -30,6 +33,7 @@ public:
     }
 
 private:
+    DiagnosticEngine& diag_;
     bool changed_ = false;
 
     void visit(ASTNode* node) {
@@ -45,11 +49,12 @@ private:
 
             for (auto* child : ch) {
                 if (term) {
-                    // Bu deyim erişilemez
                     if (auto* sn = dynamic_cast<StatementNode*>(child)) {
                         if (sn->isReachable) {
                             sn->isReachable = false;
                             changed_ = true;
+                            diag_.report("W003", sn->loc,
+                                "Bu kod hiçbir zaman çalışmaz (return/break/continue sonrası)");
                         }
                     }
                 }
@@ -59,12 +64,14 @@ private:
                     term = true;
             }
 
-            // Erişilemez çocukları sil ve vektörden çıkar
-            ch.erase(std::remove_if(ch.begin(), ch.end(),
+            // remove_if erişilemez düğümleri sona taşır (silmez), sonra delete
+            auto toErase = std::remove_if(ch.begin(), ch.end(),
                 [](ASTNode* n) {
                     auto* sn = dynamic_cast<StatementNode*>(n);
                     return sn && !sn->isReachable;
-                }), ch.end());
+                });
+            for (auto it = toErase; it != ch.end(); ++it) delete *it;
+            ch.erase(toErase, ch.end());
 
             // Alt bloklara da in
             for (auto* child : ch) visit(child);

@@ -1,0 +1,22 @@
+// while döngüsünde break ve continue golden testi.
+
+int main() {
+    int i = 0;
+
+    // continue: 3'ü atla
+    while (i < 5) {
+        i = i + 1;
+        if (i == 3) { continue; }
+        print(i);
+    }
+
+    // break: 4'te çık
+    i = 0;
+    while (i < 10) {
+        i = i + 1;
+        if (i == 4) { break; }
+        print(i);
+    }
+
+    return 0;
+}

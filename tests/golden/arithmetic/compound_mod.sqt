@@ -1,0 +1,27 @@
+// B8: %= bileşik atama doğru IR üretmeli.
+// Elle hesap: 17%5=2, 10%3=1, 0%4=0, zincir: 20+5=25-3=22*2=44/4=11%3=2
+
+int main() {
+    int a = 17;
+    a %= 5;
+    print(a);   // 2
+
+    int b = 10;
+    b %= 3;
+    print(b);   // 1
+
+    int c = 0;
+    c %= 4;
+    print(c);   // 0
+
+    // Tüm bileşik atamalar zinciri (regresyon)
+    int x = 20;
+    x += 5;     // 25
+    x -= 3;     // 22
+    x *= 2;     // 44
+    x /= 4;     // 11
+    x %= 3;     // 2
+    print(x);   // 2
+
+    return 0;
+}

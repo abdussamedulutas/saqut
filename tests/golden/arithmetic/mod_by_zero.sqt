@@ -1,0 +1,8 @@
+// Runtime test: a %= 0 → çalışma zamanı sıfıra bölme hatası vermeli.
+
+int main() {
+    int a = 7;
+    a %= 0;
+    print(a);
+    return 0;
+}

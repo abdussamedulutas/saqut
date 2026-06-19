@@ -1,0 +1,18 @@
+int main() {
+    int i = 0;
+    while (i < 3) {
+        print(i);
+        i = i + 1;
+    }
+
+    int j = 0;
+    do {
+        print(j);
+        j = j + 1;
+    } while (j < 3);
+
+    for (int k = 0; k < 3; k = k + 1) {
+        print(k);
+    }
+    return 0;
+}

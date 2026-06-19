@@ -112,6 +112,10 @@ int Interpreter::run() {
             if (!frame.slots[instr.cond].isTruthy())
                 frame.instructionPointer = instr.jumpTarget;
             break;
+        case Opcode::JIF_TRUE:
+            if (frame.slots[instr.cond].isTruthy())
+                frame.instructionPointer = instr.jumpTarget;
+            break;
 
         // ── Fonksiyon çağrısı ─────────────────────────────────────────────
         case Opcode::CALL: {

@@ -274,14 +274,29 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             break;
         }
 
-        // Karşılaştırma
-        if (bin->Operator == TokenType::EQUAL_EQUAL  ||
-            bin->Operator == TokenType::BANG_EQUAL   ||
-            bin->Operator == TokenType::LESS         ||
+        // Eşitlik karşılaştırması: string dahil herhangi tiple çalışır
+        if (bin->Operator == TokenType::EQUAL_EQUAL ||
+            bin->Operator == TokenType::BANG_EQUAL) {
+            result = Type::Bool();
+            break;
+        }
+
+        // Sıralama karşılaştırması: YALNIZCA sayısal tipler
+        if (bin->Operator == TokenType::LESS         ||
             bin->Operator == TokenType::LESS_EQUAL   ||
             bin->Operator == TokenType::GREATER      ||
             bin->Operator == TokenType::GREATER_EQUAL) {
-            result = Type::Bool();
+            if (leftType.isError() || rightType.isError()) {
+                result = Type::error(); // önceki hata, sessiz geç
+            } else if (leftType.isNumeric() && rightType.isNumeric()) {
+                result = Type::Bool();
+            } else {
+                diag_.report("E003", bin->loc,
+                    "Sıralama operatörü yalnızca sayısal tiplerle kullanılabilir: " +
+                    leftType.toString() +
+                    " — string için yalnızca == ve != kullanın");
+                result = Type::error();
+            }
             break;
         }
 

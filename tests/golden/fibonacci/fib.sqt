@@ -1,0 +1,24 @@
+int fibonacci(int n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+int fibonacciIterative(int n) {
+    int first = 0;
+    int second = 1;
+    for (int i = 0; i < n; i = i + 1) {
+        int next = first + second;
+        first = second;
+        second = next;
+    }
+    return first;
+}
+
+int main() {
+    int n = 10;
+    print(fibonacci(n));
+    print(fibonacciIterative(n));
+    return 0;
+}

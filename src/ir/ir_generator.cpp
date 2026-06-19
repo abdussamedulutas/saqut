@@ -158,84 +158,101 @@ void IRGenerator::generateStatement(ASTNode* node) {
     case ASTKind::WhileStatement: {
         auto* ws = (WhileStatementNode*)node;
 
-        // Döngü başının konumu — geri-jump buraya gelecek
         int loopStart = currentInstrIndex();
+        loopContextStack_.push_back({});
 
-        int condSlot  = generateExpression(ws->condition);
-        int exitJump  = emitJumpIfFalse(condSlot);   // ileri, backpatch bekliyor
+        int condSlot = generateExpression(ws->condition);
+        int exitJump = emitJumpIfFalse(condSlot);
 
         if (ws->body) generateStatement(ws->body);
 
-        // Geri-jump: hedef zaten biliniyor (loopStart)
-        emitJumpUnconditional(loopStart);
+        // continue → LOOP_START (hedef baştan beri biliniyor)
+        for (int idx : loopContextStack_.back().continueJumps)
+            currentFunction_->instructions[idx].jumpTarget = loopStart;
 
-        // Döngü çıkış noktası → exitJump'ı doldur
-        patchJump(exitJump);
+        emitJumpUnconditional(loopStart);
+        patchJump(exitJump); // OUT burası
+
+        // break → OUT
+        int outTarget = currentInstrIndex();
+        for (int idx : loopContextStack_.back().breakJumps)
+            currentFunction_->instructions[idx].jumpTarget = outTarget;
+
+        loopContextStack_.pop_back();
         break;
     }
 
     // ── for (init; koşul; güncelleme) { gövde } ─────────────────────────
     //
-    // Üretilen IR yapısı:
+    // IR yapısı (continue C_LABEL'a, break OUT'a atlar):
     //   [init]
     //   LOOP_START:
-    //     [koşul] → condSlot
-    //     JIF_FALSE condSlot → LOOP_END   (ileri-jump, backpatch)
+    //     [koşul] → JIF_FALSE OUT
     //     [gövde]
+    //   C_LABEL:
     //     [güncelleme]
-    //     JMP → LOOP_START                (geri-jump, hedef biliniyor)
-    //   LOOP_END:
+    //     JMP LOOP_START
+    //   OUT:
     // ─────────────────────────────────────────────────────────────────────
     case ASTKind::ForStatement: {
         auto* fs = (ForStatementNode*)node;
 
-        // Init: genellikle "int i = 0" gibi bir VariableDecl
         if (fs->init) generateStatement(fs->init);
 
-        // Döngü başı konumu — geri-jump'ın hedefi
         int loopStart = currentInstrIndex();
+        loopContextStack_.push_back({});
 
-        // Koşul
         int condSlot = fs->condition ? generateExpression(fs->condition) : -1;
         int exitJump = (condSlot != -1) ? emitJumpIfFalse(condSlot) : -1;
 
-        // Gövde
         if (fs->body) generateStatement(fs->body);
 
-        // Güncelleme (ör: i = i + 1) — ifade deyimi, sonuç önemsiz
+        // C_LABEL: güncelleme başlangıcı — continue buraya atlar
+        int cLabel = currentInstrIndex();
+        for (int idx : loopContextStack_.back().continueJumps)
+            currentFunction_->instructions[idx].jumpTarget = cLabel;
+
         if (fs->update) generateExpression(fs->update);
 
-        // Geri-jump: hedef loopStart, zaten biliniyor
         emitJumpUnconditional(loopStart);
 
-        // Döngü çıkışı → exitJump'ı doldur
-        if (exitJump != -1) patchJump(exitJump);
+        if (exitJump != -1) patchJump(exitJump); // OUT burası
+
+        // break → OUT
+        int outTarget = currentInstrIndex();
+        for (int idx : loopContextStack_.back().breakJumps)
+            currentFunction_->instructions[idx].jumpTarget = outTarget;
+
+        loopContextStack_.pop_back();
         break;
     }
 
     // ── do { gövde } while (koşul) ───────────────────────────────────────
     case ASTKind::DoWhileStatement: {
         auto* dw = (DoWhileStatementNode*)node;
+
         int loopStart = currentInstrIndex();
+        loopContextStack_.push_back({});
 
         if (dw->body) generateStatement(dw->body);
 
+        // COND_LABEL: koşul değerlendirmesi — continue buraya atlar
+        int condLabel = currentInstrIndex();
+        for (int idx : loopContextStack_.back().continueJumps)
+            currentFunction_->instructions[idx].jumpTarget = condLabel;
+
         int condSlot = generateExpression(dw->condition);
-        // Koşul doğruysa geri atla (1 = doğru → atla; 0 = yanlış → devam)
-        // JIF_FALSE koşul yanlışsa atlar; biz doğruysa atlamak istiyoruz.
-        // Bu yüzden JIF_FALSE yerine "doğruysa atla" mantığı lazım.
-        // Basit çözüm: koşulun tersini al (0→1, diğer→0) ve JIF_FALSE kullan.
-        // NOT: saQut'ta "!" operatörü yok henüz; NOT talimatı eklenebilir.
-        // Şimdilik: koşul slotuna bak, sıfır değilse geri atla.
-        // TODO(vm-genişletme): JIF_TRUE talimatı ekle
-        // Geçici çözüm: sabit 1 ile karşılaştır (condSlot != 0 → geri)
-        int oneSlot = freshSlot();
-        emitLoadConst(oneSlot, 1);
-        int eqSlot = freshSlot();
-        emitBinaryOp(Opcode::EQUAL_EQUAL, eqSlot, condSlot, oneSlot);
-        int skipJump = emitJumpIfFalse(eqSlot); // koşul yanlışsa döngüden çık
-        emitJumpUnconditional(loopStart);        // geri atla
-        patchJump(skipJump);
+        Instruction jit(Opcode::JIF_TRUE);
+        jit.cond       = condSlot;
+        jit.jumpTarget = loopStart;
+        currentFunction_->instructions.push_back(std::move(jit));
+
+        // break → OUT (JIF_TRUE'dan sonraki konum)
+        int outTarget = currentInstrIndex();
+        for (int idx : loopContextStack_.back().breakJumps)
+            currentFunction_->instructions[idx].jumpTarget = outTarget;
+
+        loopContextStack_.pop_back();
         break;
     }
 
@@ -249,10 +266,18 @@ void IRGenerator::generateStatement(ASTNode* node) {
         break;
     }
 
-    case ASTKind::BreakStatement:
-    case ASTKind::ContinueStatement:
-        // TODO(vm-genişletme): break/continue için JMP + label mekanizması gerekir
+    case ASTKind::BreakStatement: {
+        int jumpIdx = emitJumpUnconditional(-1);
+        if (!loopContextStack_.empty())
+            loopContextStack_.back().breakJumps.push_back(jumpIdx);
         break;
+    }
+    case ASTKind::ContinueStatement: {
+        int jumpIdx = emitJumpUnconditional(-1);
+        if (!loopContextStack_.empty())
+            loopContextStack_.back().continueJumps.push_back(jumpIdx);
+        break;
+    }
 
     default:
         break;
@@ -276,13 +301,19 @@ int IRGenerator::generateExpression(ASTNode* node) {
         switch (lit->literalType) {
             case LiteralType::INTEGER: {
                 int value = 0;
-                if (lit->parserToken.token)
+                if (lit->hasDirectValue)
+                    value = lit->directIntValue;
+                else if (lit->parserToken.token)
                     value = std::stoi(lit->parserToken.token->token);
                 emitLoadConst(slot, value);
                 break;
             }
             case LiteralType::BOOLEAN: {
-                int value = (lit->parserToken.token &&
+                int value = 0;
+                if (lit->hasDirectValue)
+                    value = lit->directIntValue ? 1 : 0;
+                else
+                    value = (lit->parserToken.token &&
                              lit->parserToken.token->token == "true") ? 1 : 0;
                 emitLoadConst(slot, value);
                 break;
@@ -350,12 +381,13 @@ int IRGenerator::generateExpression(ASTNode* node) {
             return varSlot;
         }
 
-        // Birleşik atama: += -= *= /=
-        // x += y  ≡  x = x + y
-        if (bin->Operator == TokenType::PLUS_EQUAL  ||
-            bin->Operator == TokenType::MINUS_EQUAL ||
-            bin->Operator == TokenType::STAR_EQUAL  ||
-            bin->Operator == TokenType::SLASH_EQUAL) {
+        // Birleşik atama: += -= *= /= %=
+        // x OP= y  ≡  x = x OP y
+        if (bin->Operator == TokenType::PLUS_EQUAL    ||
+            bin->Operator == TokenType::MINUS_EQUAL   ||
+            bin->Operator == TokenType::STAR_EQUAL    ||
+            bin->Operator == TokenType::SLASH_EQUAL   ||
+            bin->Operator == TokenType::PERCENT_EQUAL) {
 
             auto* lhsId = (IdentifierNode*)bin->Left;
             std::string varName = lhsId->parserToken.token->token;
@@ -363,9 +395,10 @@ int IRGenerator::generateExpression(ASTNode* node) {
             int rhsSlot = generateExpression(bin->Right);
 
             Opcode arithOp = Opcode::ADD;
-            if      (bin->Operator == TokenType::MINUS_EQUAL) arithOp = Opcode::SUB;
-            else if (bin->Operator == TokenType::STAR_EQUAL)  arithOp = Opcode::MUL;
-            else if (bin->Operator == TokenType::SLASH_EQUAL) arithOp = Opcode::DIV;
+            if      (bin->Operator == TokenType::MINUS_EQUAL)   arithOp = Opcode::SUB;
+            else if (bin->Operator == TokenType::STAR_EQUAL)    arithOp = Opcode::MUL;
+            else if (bin->Operator == TokenType::SLASH_EQUAL)   arithOp = Opcode::DIV;
+            else if (bin->Operator == TokenType::PERCENT_EQUAL) arithOp = Opcode::MOD;
 
             int resultSlot = freshSlot();
             emitBinaryOp(arithOp, resultSlot, varSlot, rhsSlot);
@@ -415,6 +448,27 @@ int IRGenerator::generateExpression(ASTNode* node) {
             case TokenType::PIPE:          return generateBinaryArithmetic(Opcode::BIT_OR,  bin->Left, bin->Right);
             case TokenType::LSHIFT:        return generateBinaryArithmetic(Opcode::BIT_SHL, bin->Left, bin->Right);
             case TokenType::RSHIFT:        return generateBinaryArithmetic(Opcode::BIT_SHR, bin->Left, bin->Right);
+            // Mantıksal: kısa devre dallanmasıyla üretilir (ADR-008)
+            case TokenType::AMPERSAND_AMPERSAND: {
+                int slotA  = generateExpression(bin->Left);
+                int result = freshSlot();
+                emitLoadConst(result, 0);
+                int skipB  = emitJumpIfFalse(slotA);
+                int slotB  = generateExpression(bin->Right);
+                emitLoadSlot(result, slotB);
+                patchJump(skipB);
+                return result;
+            }
+            case TokenType::PIPE_PIPE: {
+                int slotA  = generateExpression(bin->Left);
+                int result = freshSlot();
+                emitLoadConst(result, 1);
+                int skipB  = emitJumpIfTrue(slotA);
+                int slotB  = generateExpression(bin->Right);
+                emitLoadSlot(result, slotB);
+                patchJump(skipB);
+                return result;
+            }
             default: {
                 // Bilinmeyen operatör — boş slot döndür
                 int slot = freshSlot();
@@ -573,7 +627,14 @@ int IRGenerator::emitJumpIfFalse(int condSlot) {
     ins.cond       = condSlot;
     ins.jumpTarget = -1; // henüz bilinmiyor — patchJump() bekliyor
     currentFunction_->instructions.push_back(std::move(ins));
-    // Bu instruction'ın indeksini döndür (backpatch için)
+    return (int)currentFunction_->instructions.size() - 1;
+}
+
+int IRGenerator::emitJumpIfTrue(int condSlot) {
+    Instruction ins(Opcode::JIF_TRUE);
+    ins.cond       = condSlot;
+    ins.jumpTarget = -1;
+    currentFunction_->instructions.push_back(std::move(ins));
     return (int)currentFunction_->instructions.size() - 1;
 }
 

@@ -20,6 +20,7 @@
 //   LESS/LEQ/...   : dest, left, right       (sonuç: 1=doğru, 0=yanlış)
 //   JMP            : jumpTarget
 //   JIF_FALSE      : cond, jumpTarget
+//   JIF_TRUE       : cond, jumpTarget
 //   CALL           : dest, functionName, argSlots
 //   RETURN         : src
 //   CALLHOST       : functionName, argSlots
@@ -64,7 +65,8 @@ enum class Opcode {
 
     // --- Kontrol akışı ---
     JMP,           // Koşulsuz atlama: ip = jumpTarget
-    JIF_FALSE,     // Koşullu atlama:  slots[cond] == 0 ise ip = jumpTarget
+    JIF_FALSE,     // Koşullu atlama:  slots[cond] falsy ise ip = jumpTarget
+    JIF_TRUE,      // Koşullu atlama:  slots[cond] truthy ise ip = jumpTarget
 
     // --- Fonksiyon çağrısı ---
     CALL,          // Başka bir saQut fonksiyonunu çağır.
@@ -97,6 +99,7 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::NOT_EQUAL:     return "NOT_EQUAL";
         case Opcode::JMP:           return "JMP";
         case Opcode::JIF_FALSE:     return "JIF_FALSE";
+        case Opcode::JIF_TRUE:      return "JIF_TRUE";
         case Opcode::CALL:          return "CALL";
         case Opcode::RETURN:        return "RETURN";
         case Opcode::CALLHOST:      return "CALLHOST";

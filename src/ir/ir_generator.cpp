@@ -405,6 +405,30 @@ int IRGenerator::generateExpression(ASTNode* node) {
             case TokenType::GREATER_EQUAL: return generateBinaryArithmetic(Opcode::GREATER_EQUAL, bin->Left, bin->Right);
             case TokenType::EQUAL_EQUAL:   return generateBinaryArithmetic(Opcode::EQUAL_EQUAL,   bin->Left, bin->Right);
             case TokenType::BANG_EQUAL:    return generateBinaryArithmetic(Opcode::NOT_EQUAL,     bin->Left, bin->Right);
+
+            // Mantıksal operatörler: kısa devre dallanmasıyla üretilir (ADR-008).
+            // NOT: sıradan ikili işlem değil — b, a'nın değerine göre atlanabilir.
+            case TokenType::AMPERSAND_AMPERSAND: {
+                int slotA  = generateExpression(bin->Left);
+                int result = freshSlot();
+                emitLoadConst(result, 0);               // varsayılan: false
+                int skipB  = emitJumpIfFalse(slotA);    // a false → b'yi atla
+                int slotB  = generateExpression(bin->Right);
+                emitLoadSlot(result, slotB);            // result = b
+                patchJump(skipB);
+                return result;
+            }
+            case TokenType::PIPE_PIPE: {
+                int slotA  = generateExpression(bin->Left);
+                int result = freshSlot();
+                emitLoadConst(result, 1);               // varsayılan: true
+                int skipB  = emitJumpIfTrue(slotA);     // a true → b'yi atla
+                int slotB  = generateExpression(bin->Right);
+                emitLoadSlot(result, slotB);            // result = b
+                patchJump(skipB);
+                return result;
+            }
+
             default: {
                 // Bilinmeyen operatör — boş slot döndür
                 int slot = freshSlot();
@@ -563,7 +587,14 @@ int IRGenerator::emitJumpIfFalse(int condSlot) {
     ins.cond       = condSlot;
     ins.jumpTarget = -1; // henüz bilinmiyor — patchJump() bekliyor
     currentFunction_->instructions.push_back(std::move(ins));
-    // Bu instruction'ın indeksini döndür (backpatch için)
+    return (int)currentFunction_->instructions.size() - 1;
+}
+
+int IRGenerator::emitJumpIfTrue(int condSlot) {
+    Instruction ins(Opcode::JIF_TRUE);
+    ins.cond       = condSlot;
+    ins.jumpTarget = -1;
+    currentFunction_->instructions.push_back(std::move(ins));
     return (int)currentFunction_->instructions.size() - 1;
 }
 

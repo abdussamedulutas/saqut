@@ -1,0 +1,43 @@
+// Kısa devre (short-circuit) değerlendirmesini kanıtlayan golden test.
+//
+// Amaç: sadece "doğru sonuç veriyor" değil, sağ taraftaki yan etkinin
+// ATLANDIĞINI çıktıdan kanıtlamak. Tüm operandlar değişken (sabit değil)
+// — sabit katlama yolunu değil, IR üretim yolunu test eder.
+//
+// Beklenen çıktı analizi:
+//   f=0 && side()  → kısa devre → "S" ÇIKMIYOR
+//   t=1 && side()  → b çalışır  → "S" ÇIKIYOR, "evet_and"
+//   t=1 || side()  → kısa devre → "S" ÇIKMIYOR, "evet_or1"
+//   f=0 || side()  → b çalışır  → "S" ÇIKIYOR, "evet_or2"
+
+int side() {
+    print("S");
+    return 1;
+}
+
+int main() {
+    int f = 0;
+    int t = 1;
+
+    // && false-left: side() atlanmalı, "S" çıkmamalı
+    if (f && side()) {
+        print("hatali_and");
+    }
+
+    // && true-left: side() çalışmalı → "S" çıkar, sonra "evet_and"
+    if (t && side()) {
+        print("evet_and");
+    }
+
+    // || true-left: side() atlanmalı, "S" çıkmamalı, yine de "evet_or1" çıkar
+    if (t || side()) {
+        print("evet_or1");
+    }
+
+    // || false-left: side() çalışmalı → "S" çıkar, sonra "evet_or2"
+    if (f || side()) {
+        print("evet_or2");
+    }
+
+    return 0;
+}

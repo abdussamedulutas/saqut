@@ -66,6 +66,9 @@ private:
     // Döndürülen indeks ileride patchJump() ile doldurulur (backpatch).
     int  emitJumpIfFalse(int condSlot);
 
+    // JIF_TRUE talimatını -1 hedefle yazar, instruction indeksini döndürür.
+    int  emitJumpIfTrue(int condSlot);
+
     // Daha önce -1 hedefle yazılan jump'ın hedefini şu anki pozisyona doldur.
     void patchJump(int instrIndex);
 

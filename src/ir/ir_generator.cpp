@@ -376,12 +376,13 @@ int IRGenerator::generateExpression(ASTNode* node) {
             return varSlot;
         }
 
-        // Birleşik atama: += -= *= /=
-        // x += y  ≡  x = x + y
-        if (bin->Operator == TokenType::PLUS_EQUAL  ||
-            bin->Operator == TokenType::MINUS_EQUAL ||
-            bin->Operator == TokenType::STAR_EQUAL  ||
-            bin->Operator == TokenType::SLASH_EQUAL) {
+        // Birleşik atama: += -= *= /= %=
+        // x OP= y  ≡  x = x OP y
+        if (bin->Operator == TokenType::PLUS_EQUAL    ||
+            bin->Operator == TokenType::MINUS_EQUAL   ||
+            bin->Operator == TokenType::STAR_EQUAL    ||
+            bin->Operator == TokenType::SLASH_EQUAL   ||
+            bin->Operator == TokenType::PERCENT_EQUAL) {
 
             auto* lhsId = (IdentifierNode*)bin->Left;
             std::string varName = lhsId->parserToken.token->token;
@@ -389,9 +390,10 @@ int IRGenerator::generateExpression(ASTNode* node) {
             int rhsSlot = generateExpression(bin->Right);
 
             Opcode arithOp = Opcode::ADD;
-            if      (bin->Operator == TokenType::MINUS_EQUAL) arithOp = Opcode::SUB;
-            else if (bin->Operator == TokenType::STAR_EQUAL)  arithOp = Opcode::MUL;
-            else if (bin->Operator == TokenType::SLASH_EQUAL) arithOp = Opcode::DIV;
+            if      (bin->Operator == TokenType::MINUS_EQUAL)   arithOp = Opcode::SUB;
+            else if (bin->Operator == TokenType::STAR_EQUAL)    arithOp = Opcode::MUL;
+            else if (bin->Operator == TokenType::SLASH_EQUAL)   arithOp = Opcode::DIV;
+            else if (bin->Operator == TokenType::PERCENT_EQUAL) arithOp = Opcode::MOD;
 
             int resultSlot = freshSlot();
             emitBinaryOp(arithOp, resultSlot, varSlot, rhsSlot);

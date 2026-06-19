@@ -66,11 +66,23 @@ private:
     // Döndürülen indeks ileride patchJump() ile doldurulur (backpatch).
     int  emitJumpIfFalse(int condSlot);
 
+    // JIF_TRUE talimatını -1 hedefle yazar, instruction indeksini döndürür.
+    int  emitJumpIfTrue(int condSlot);
+
     // Daha önce -1 hedefle yazılan jump'ın hedefini şu anki pozisyona doldur.
     void patchJump(int instrIndex);
 
     // Şu an kaç talimat üretildi? (jump hedefi belirlemek için)
     int currentInstrIndex() const;
+
+    // ── Döngü bağlamı yığını — break/continue hedefleri ─────────────────
+    // Her döngüye girerken bir giriş push'lanır, çıkınca pop'lanır.
+    // İç içe döngülerde en üstteki giriş en içteki döngüye aittir.
+    struct LoopContext {
+        std::vector<int> breakJumps;    // patch bekleyen break JMP indeksleri
+        std::vector<int> continueJumps; // patch bekleyen continue JMP indeksleri
+    };
+    std::vector<LoopContext> loopContextStack_;
 
     // ── Per-function üretim durumu ────────────────────────────────────────
     IRFunction* currentFunction_ = nullptr; // şu an üretilen fonksiyon

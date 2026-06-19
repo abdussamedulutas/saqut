@@ -8,6 +8,7 @@ public:
     ASTNode*  operand  = nullptr;
     TokenType Operator;
     PostfixNode();
+    ~PostfixNode() override { delete operand; }
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };
@@ -17,6 +18,7 @@ public:
     ASTNode* callee = nullptr;
     std::vector<ASTNode*> arguments;
     CallExpressionNode();
+    ~CallExpressionNode() override { delete callee; for (auto* a : arguments) delete a; }
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };
@@ -27,6 +29,7 @@ public:
     std::string member;
     bool       arrow = false;
     MemberAccessNode();
+    ~MemberAccessNode() override { delete object; }
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };
@@ -36,6 +39,7 @@ public:
     ASTNode* object = nullptr;
     ASTNode* index  = nullptr;
     IndexExpressionNode();
+    ~IndexExpressionNode() override { delete object; delete index; }
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };

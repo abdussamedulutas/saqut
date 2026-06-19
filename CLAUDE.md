@@ -37,13 +37,24 @@ git'te izlenir.
   değil; kripto asla elle yazılmaz (ADR-017).
 
 ## Mevcut durum (yapılan vs planlanan)
-- **Çalışıyor:** lexer, tokenizer, Pratt parser, AST, AST'nin JSON serileştirmesi,
-  CLI iskeleti (`tokens`/`ast`/`symbols`/`run`), konum takibi, basit aritmetiği
-  düşüren minimal IR deneyi.
-- **Planlı (henüz YOK):** sembol tablosu, semantik analiz, tip sistemi, diagnostic
-  motoru, optimizasyon, IR+bytecode VM ile çalıştırma.
-- **Birinci kilometre taşı ("bitti" tanımı):** `examples/fibonacci.sqt`
-  (recursive + iterative) derlenip çalıştırılabilmeli.
+- **✅ Birinci kilometre taşı AŞILDI:** `examples/fibonacci.sqt`
+  (recursive + iterative) `saqut run` ile çalışıyor → `55\n55`.
+- **Çalışıyor (tam pipeline):**
+  - Lexer, tokenizer, Pratt parser, AST + JSON serileştirmesi
+  - Sembol tablosu (iki-geçişli toplayıcı, döngüsel struct tespiti)
+  - Tip sistemi (`src/core/type.hpp`) + diagnostic motoru (`src/diagnostic/`)
+  - Tip denetleyici + yapısal doğrulayıcı (`src/semantic/`)
+  - Optimizasyon: constant folding (int/bool/logical) + dead code elimination
+  - IR üreteci (3-adresli, slot tabanlı) + bytecode VM (yorumlayıcı döngü)
+  - CLI: `tokens` / `ast` / `symbols` / `check` / `ir` / `run` (6 komut)
+- **Henüz YOK (bilinen eksikler):**
+  - float/double codegen (tip sistemi var, IR opcode'u yok)
+  - struct IR (parse/semantik var, codegen yok)
+  - array IR (parse/semantik var, codegen yok)
+  - `%=` operatörü IR'da eksik (#37)
+  - Global değişken IR üretimi sessizce atlıyor (#38)
+  - W003 ölü kod uyarısı üretilmiyor (#36)
+  - DCE silinen düğümleri `delete` etmiyor — bellek sızıntısı (#35)
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası

@@ -91,6 +91,7 @@ Binary lands at `build/saqut`.
 | `saqut ast file:src.sqt` | Full AST as JSON |
 | `saqut ast file:src.sqt --optimized` | AST after constant folding + dead-code elimination |
 | `saqut symbols file:src.sqt` | Symbol table dump |
+| `saqut check file:src.sqt` | Semantic analysis only — errors and warnings, JSON |
 | `saqut ir file:src.sqt` | IR instruction dump |
 | `saqut run file:src.sqt` | Compile and run via bytecode VM |
 

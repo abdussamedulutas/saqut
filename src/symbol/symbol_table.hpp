@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include "symbol/scope.hpp"
 
 class SymbolTable {
@@ -48,6 +49,26 @@ public:
         result.reserve(pool_.size());
         for (const auto& s : pool_) result.push_back(s.get());
         return result;
+    }
+
+    // Struct alan düzeni: struct adı → sıralı [(alan adı, tip)] listesi
+    // Sembol toplayıcı doldurur; tip denetleyici ve IR üreteci okur.
+    std::unordered_map<std::string, std::vector<std::pair<std::string, Type>>> structLayouts;
+
+    int getFieldIndex(const std::string& structName, const std::string& fieldName) const {
+        auto it = structLayouts.find(structName);
+        if (it == structLayouts.end()) return -1;
+        for (int i = 0; i < (int)it->second.size(); i++)
+            if (it->second[i].first == fieldName) return i;
+        return -1;
+    }
+
+    Type getFieldType(const std::string& structName, const std::string& fieldName) const {
+        auto it = structLayouts.find(structName);
+        if (it == structLayouts.end()) return Type::error();
+        for (auto& p : it->second)
+            if (p.first == fieldName) return p.second;
+        return Type::error();
     }
 
 private:

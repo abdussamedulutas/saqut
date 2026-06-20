@@ -193,6 +193,35 @@ int Interpreter::run() {
             continue;
         }
 
+        // ── Struct (ADR-020: referans semantiği) ──────────────────────────
+        case Opcode::STRUCT_NEW: {
+            StructObject* obj = heap_.allocStruct(instr.intValue);
+            frame.slots[instr.dest] = Value::fromRef(obj);
+            break;
+        }
+        case Opcode::FIELD_GET: {
+            Value& objVal = frame.slots[instr.src];
+            if (objVal.kind != ValueKind::Ref || !objVal.ref)
+                throw std::runtime_error("Çalışma hatası: struct değil");
+            auto* obj = (StructObject*)objVal.ref;
+            int idx = instr.intValue;
+            if (idx < 0 || idx >= (int)obj->fields.size())
+                throw std::runtime_error("Çalışma hatası: geçersiz struct alan indeksi " + std::to_string(idx));
+            frame.slots[instr.dest] = obj->fields[idx];
+            break;
+        }
+        case Opcode::FIELD_SET: {
+            Value& objVal = frame.slots[instr.dest];
+            if (objVal.kind != ValueKind::Ref || !objVal.ref)
+                throw std::runtime_error("Çalışma hatası: struct değil");
+            auto* obj = (StructObject*)objVal.ref;
+            int idx = instr.intValue;
+            if (idx < 0 || idx >= (int)obj->fields.size())
+                throw std::runtime_error("Çalışma hatası: geçersiz struct alan indeksi " + std::to_string(idx));
+            obj->fields[idx] = frame.slots[instr.right];
+            break;
+        }
+
         // ── Array (ADR-020: referans semantiği) ───────────────────────────
         case Opcode::ARRAY_NEW: {
             ArrayObject* arr = heap_.allocArray(instr.intValue);

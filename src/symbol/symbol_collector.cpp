@@ -77,14 +77,15 @@ void SymbolCollector::pass1Globals(ASTNode* program) {
                              "'" + st->name + "' zaten bu kapsamda tanımlı");
                 break;
             }
-            // struct alan isimlerini cycle check için kaydet
+            // structFields_'e her zaman bir giriş aç (typeFromName için gerekli)
+            structFields_[st->name]; // boş vektör oluşturur; by-value döngü artık referans semantiğiyle meşru (ADR-020)
+
+            // structLayouts: tüm alanlar (isim + tip) sırayla — IR üreteci ve tip denetleyici için
             for (ASTNode* fieldNode : st->getChildren()) {
                 if (fieldNode->kind == ASTKind::VariableDecl) {
                     auto* vd = (VariableDeclNode*)fieldNode;
-                    // yalnızca struct tipindeki alanları izle
-                    Type ft = Type::fromName(vd->varType);
-                    if (ft.isError()) // primitif değilse struct tipi olabilir
-                        structFields_[st->name].push_back(vd->varType);
+                    Type ft = typeFromName(vd->varType, vd->loc);
+                    table_.structLayouts[st->name].push_back({vd->name, ft});
                 }
             }
             break;
@@ -124,44 +125,10 @@ void SymbolCollector::pass1Globals(ASTNode* program) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void SymbolCollector::checkStructCycles() {
-    // white=0 / gray=1 / black=2
-    std::unordered_map<std::string, int> color;
-    for (auto& kv : structFields_) color[kv.first] = 0;
-
-    std::function<bool(const std::string&)> dfs = [&](const std::string& name) -> bool {
-        auto it = color.find(name);
-        if (it == color.end()) return false; // primitif / bilinmeyen → çevrim değil
-        if (it->second == 1) return true;    // gray → back-edge → çevrim!
-        if (it->second == 2) return false;   // black → zaten işlendi
-
-        it->second = 1; // gri yap
-        auto fit = structFields_.find(name);
-        if (fit != structFields_.end()) {
-            for (const std::string& dep : fit->second) {
-                if (dfs(dep)) return true;
-            }
-        }
-        it->second = 2; // siyah yap
-        return false;
-    };
-
-    for (auto& kv : structFields_) {
-        if (color[kv.first] == 0) {
-            // DFS başlat
-            color[kv.first] = 1;
-            for (const std::string& dep : kv.second) {
-                if (dfs(dep)) {
-                    // tanımlama konumunu bulmak için global scope'ta ara
-                    Symbol* s = table_.global()->lookupLocal(kv.first);
-                    SourceLocation loc = s ? s->definitionLoc : SourceLocation{};
-                    diag_.report("E010", loc,
-                                 "Döngüsel struct: '" + kv.first + "' by-value sonsuz boyut oluşturur");
-                    break;
-                }
-            }
-            color[kv.first] = 2;
-        }
-    }
+    // ADR-020: Struct alanları referans semantiği taşır (Object* pointer).
+    // By-value gömme yok → sonsuz-boyut döngüsü imkânsız.
+    // E010 artık üretilmez; bu metot koşullu olarak devre dışı.
+    // TODO(gelecek): Primitive tipler için by-value gömme eklenirse E010 geri açılır.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

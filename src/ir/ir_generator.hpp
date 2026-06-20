@@ -22,8 +22,11 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
+#include <utility>
 #include "ir/ir_program.hpp"
 #include "symbol/symbol_table.hpp"
+#include "core/type.hpp"
 #include "parser/ast_node.hpp"
 
 class IRGenerator {
@@ -58,6 +61,9 @@ private:
     void emitLoadSlot(int destSlot, int srcSlot);
     void emitLoadGlobal(int destSlot, int globalIndex);
     void emitStoreGlobal(int srcSlot, int globalIndex);
+    void emitStructNew(int destSlot, const std::string& structType, int fieldCount);
+    void emitFieldGet(int destSlot, int objSlot, int fieldIdx);
+    void emitFieldSet(int objSlot, int fieldIdx, int valSlot);
     void emitArrayNew(int destSlot, int capacity);
     void emitArrayGet(int destSlot, int arrSlot, int idxSlot);
     void emitArraySet(int arrSlot, int idxSlot, int valSlot);
@@ -100,6 +106,13 @@ private:
     // Global değişken ismi → global index
     std::unordered_map<std::string, int> nameToGlobal_;
     int                                  globalCount_ = 0;
+
+    // Struct alan düzeni: struct adı → sıralı [(alan adı, Type)] listesi
+    // Sembol tablosundan generate() başında kopyalanır.
+    std::unordered_map<std::string, std::vector<std::pair<std::string, Type>>> structLayouts_;
+
+    int getStructFieldIndex(const std::string& structType, const std::string& fieldName) const;
+    int getStructFieldCount(const std::string& structType) const;
 
     bool isGlobal(const std::string& name) const;
     int  getGlobalIndex(const std::string& name) const;

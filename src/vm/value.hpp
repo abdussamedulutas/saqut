@@ -8,14 +8,14 @@
 struct Object;
 
 // ADR-020: Primitive (int/bool) = değer; bileşik (array/struct/string) = referans.
-// ADR-021: Nil = nullable referansların null değeri (Type? için).
+// ADR-021: Null = nullable referansların null değeri (saQut'ta `null` anahtar sözcüğü).
 // Bool ayrı kind değil — boolean sonuçlar int olarak saklanır (0=yanlış, sıfır-dışı=doğru).
 // Float henüz implement edilmedi — IR'de float opcode yok.
 enum class ValueKind {
     Int,
     String,
     Ref,   // ADR-020: array/struct nesnesine Object* referansı
-    Nil,   // ADR-021: nullable referansın null değeri
+    Null,  // ADR-021: nullable referansın null değeri (saQut kaynağında `null`)
     // Float,  // TODO(#44)
 };
 
@@ -37,17 +37,17 @@ struct Value {
         Value v; v.kind = ValueKind::Ref; v.ref = obj; return v;
     }
 
-    static Value nil() {
-        Value v; v.kind = ValueKind::Nil; return v;
+    static Value null() {
+        Value v; v.kind = ValueKind::Null; return v;
     }
 
-    // JIF_FALSE: int 0 / boş string / nil = yanlış; Ref her zaman doğru
+    // JIF_FALSE: int 0 / boş string / null = yanlış; Ref her zaman doğru
     bool isTruthy() const {
         switch (kind) {
             case ValueKind::Int:    return intValue != 0;
             case ValueKind::String: return !stringValue.empty();
             case ValueKind::Ref:   return ref != nullptr;
-            case ValueKind::Nil:   return false;
+            case ValueKind::Null:  return false;
         }
         return false;
     }
@@ -57,7 +57,7 @@ struct Value {
             case ValueKind::Int:    return std::to_string(intValue);
             case ValueKind::String: return stringValue;
             case ValueKind::Ref:   return "<array>";
-            case ValueKind::Nil:   return "nil";
+            case ValueKind::Null:  return "null";
         }
         return "?";
     }
@@ -67,7 +67,7 @@ struct Value {
             case ValueKind::Int:    return "int";
             case ValueKind::String: return "string";
             case ValueKind::Ref:   return "array";
-            case ValueKind::Nil:   return "nil";
+            case ValueKind::Null:  return "null";
         }
         return "?";
     }

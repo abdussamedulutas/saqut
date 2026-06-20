@@ -1110,6 +1110,57 @@ int? a = 1.71 as int?;  // ✓ tipler eşit
 
 ---
 
+## ADR-027: switch-case — Statement, Fallthrough Yok, Tip-Homojen, Float İzinli (uyarılı)
+
+### Bağlam
+
+C-ailesi bir dilde `switch` bekleniyor ama klasik switch'in iki ünlü gotcha'sı var
+(implicit fallthrough; float eşitliği). saQut'un gotcha-avcısı kimliğiyle bunları
+ele almak gerek.
+
+### Karar
+
+✅ **Statement** (değer döndürmez). Expression-switch (değer dönen `switch`) **ileride**,
+sözdizimini bozmayacak şekilde eklenebilir; v0 statement.
+
+✅ **Implicit fallthrough YOK.** Her `case` kendi bloğu, **otomatik break** (Go/Rust/
+Swift/C# gibi; C'nin `break`-unutma tuzağı yok). Bilerek paylaşım → **çok-değerli case:**
+```
+switch (x) {
+    case 1, 2, 3:  ...     // üçü aynı dal
+    case 4:        ...
+    default:       ...
+}
+```
+`fallthrough` keyword'ü **yok** (çok-değerli case yeter; sadelik).
+
+✅ **Tip-homojenlik (exhaustiveness DEĞİL).** Case etiketleri **switch konusunun
+tipiyle aynı** olmalı: string'e switch → tüm case'ler string (int olamaz); enum'a
+switch → case'ler o enum'un **üyeleri** (`Color.Red`), ham int/string değil; karışık
+**yasak** ("ortalık karışmasın"). **`default` opsiyonel**, eşleşmeyenleri yakalar;
+eşleşme yoksa no-op.
+- **Mandatory exhaustiveness reddedildi:** 300-öğeli enum'da 5'iyle ilgilenip 300 case
+  yazmak saçma. (İleride **opt-in** exhaustiveness — örn. işaretli switch — dönebilir.)
+
+✅ **Domen:** `int`, `float`, `bool`, `char`, `string`, `enum`. **Struct/array YOK**
+(referans kimliği üstünde switch nadiren anlamlı).
+
+✅ **Float İZİNLİ — ama tam-temsil-edilemeyen literal case'de W-uyarısı.**
+- `case 1.5:` / `2.5` / `3.5` → binary float'ta **birebir** → çalışır, **uyarı yok.**
+- `case 0.1:` → tam değil → **W-uyarı:** "0.1 float'ta tam temsil edilemez, eşleşme
+  güvenilmez." (Frontend: literal'i double'a çevir, geri çevir, eşit mi diye bak.)
+- Gerekçe: C/C++/Java float-switch'i **yasaklar**, Rust float pattern'i **kaldırdı** —
+  sebep tam bu eşitlik tuzağı. Biz **yasaklamak yerine aydınlatıyoruz** (#20 ruhu).
+
+### Mevcut kararlarla bağlar
+
+- `switch (T?)` + `case null:` → null'ı bir dal olarak ele al (ADR-021 narrowing'le tutarlı).
+- `catch (e)` içinde `switch (e.code)` → hata kodu dallanması (ADR-025 `code` alanı).
+- enum (#8) ile güçlü. **Pattern matching / destructuring / guard / range = uzak gelecek**
+  (şimdilik değer-eşleme; derleyiciyi sade tut).
+
+---
+
 ## Kararların Özet Tablosu
 
 | ADR | Konu | Karar |
@@ -1135,3 +1186,4 @@ int? a = 1.71 as int?;  // ✓ tipler eşit
 | 024 | String | Immutable değer-tipi, iç temsil **UTF-8**; `==` içerik; mutasyon yeni string üretir; bayt/scalar/grapheme açıkça ayrı; verimli birleştirme için ileride builder; #40/#9'u çözer |
 | 025 | Hata yönetimi | Struct-tabanlı yakalanabilir hata (değer Swift gibi, OOP yok); standart `Error{line,col,message,trace,code}`; klasik `try{}catch{}` **unchecked** (fonksiyon işaretsiz, Java usulü); runtime null-deref/OOB yakalanabilir (esasen FFI backstop); deterministik stacktrace (IR satır tablosu); tuple→ertelendi; finally→`defer`; #57 |
 | 026 | Tip dönüşümü | `as` (infix, sola-bağlı), yalnızca skaler+string; struct/array cast YOK (elle yapıcı fonksiyon); başarısızlık hedef nullable'lığıyla (`as int` fırlatır / `as int?` null); float→int kırpma; #42 |
+| 027 | switch-case | Statement (expression sonra); implicit fallthrough YOK (çok-değerli `case 1,2,3:`); case'ler tip-homojen (exhaustiveness DEĞİL, `default` opsiyonel); domen int/float/bool/char/string/enum (struct/array yok); float izinli + tam-temsil-edilemeyen literal → W-uyarı |

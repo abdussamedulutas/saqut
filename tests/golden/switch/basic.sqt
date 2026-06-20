@@ -1,0 +1,39 @@
+// ADR-027: switch-case temel testi
+// Beklenen çıktı:
+//   bir
+//   uc veya dort
+//   baska
+
+int main() {
+    int x = 1;
+    switch (x) {
+        case 1:
+            print("bir");
+        case 2:
+            print("iki");
+        case 3, 4:
+            print("uc veya dort");
+        default:
+            print("baska");
+    }
+
+    int y = 3;
+    switch (y) {
+        case 1:
+            print("bir");
+        case 3, 4:
+            print("uc veya dort");
+        default:
+            print("baska");
+    }
+
+    int z = 99;
+    switch (z) {
+        case 1:
+            print("bir");
+        default:
+            print("baska");
+    }
+
+    return 0;
+}

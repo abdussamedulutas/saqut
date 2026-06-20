@@ -1,6 +1,7 @@
 #include "semantic/structural_validator.hpp"
 #include "parser/nodes/declarations.hpp"
 #include "parser/nodes/statements.hpp"
+#include "parser/nodes/expressions.hpp"
 
 void StructuralValidator::validate(ASTNode* program) {
     if (!program) return;
@@ -38,25 +39,34 @@ void StructuralValidator::walkStmt(ASTNode* node) {
 
     case ASTKind::WhileStatement: {
         auto* ws = (WhileStatementNode*)node;
-        loopDepth_++;
+        loopDepth_++; pureLoopDepth_++;
         if (ws->body) walkStmt(ws->body);
-        loopDepth_--;
+        loopDepth_--; pureLoopDepth_--;
         break;
     }
 
     case ASTKind::DoWhileStatement: {
         auto* dw = (DoWhileStatementNode*)node;
-        loopDepth_++;
+        loopDepth_++; pureLoopDepth_++;
         if (dw->body) walkStmt(dw->body);
-        loopDepth_--;
+        loopDepth_--; pureLoopDepth_--;
         break;
     }
 
     case ASTKind::ForStatement: {
         auto* fs = (ForStatementNode*)node;
-        loopDepth_++;
+        loopDepth_++; pureLoopDepth_++;
         if (fs->init) walkStmt(fs->init);
         if (fs->body) walkStmt(fs->body);
+        loopDepth_--; pureLoopDepth_--;
+        break;
+    }
+
+    case ASTKind::SwitchStatement: {
+        auto* sw = (SwitchStatementNode*)node;
+        loopDepth_++; // break switch içinde geçerli
+        for (auto& c : sw->cases)
+            for (auto* s : c.body) walkStmt(s);
         loopDepth_--;
         break;
     }
@@ -64,11 +74,11 @@ void StructuralValidator::walkStmt(ASTNode* node) {
     case ASTKind::BreakStatement:
         if (loopDepth_ == 0)
             diag_.report("E004", node->loc,
-                "'break' döngü dışında kullanılamaz");
+                "'break' döngü veya switch dışında kullanılamaz");
         break;
 
     case ASTKind::ContinueStatement:
-        if (loopDepth_ == 0)
+        if (pureLoopDepth_ == 0)
             diag_.report("E004", node->loc,
                 "'continue' döngü dışında kullanılamaz");
         break;

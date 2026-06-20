@@ -107,4 +107,33 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
+// ADR-027: switch (expr) { case v1, v2: ... default: ... }
+// Fallthrough YOK; implicit break her case sonrasında.
+// Çok-değerli case: case 1, 2, 3: (OR semantiği)
+struct CaseClause {
+    std::vector<ASTNode*> values; // boş ise default
+    bool isDefault = false;
+    std::vector<ASTNode*> body;  // bu case'in statement'ları
+    ~CaseClause() {
+        for (auto* v : values) delete v;
+        for (auto* s : body)   delete s;
+    }
+    // Copy forbidden; use heap-allocated CaseClause* or move
+    CaseClause() = default;
+    CaseClause(const CaseClause&) = delete;
+    CaseClause& operator=(const CaseClause&) = delete;
+    CaseClause(CaseClause&&) = default;
+    CaseClause& operator=(CaseClause&&) = default;
+};
+
+class SwitchStatementNode : public StatementNode {
+public:
+    ASTNode* subject = nullptr;
+    std::vector<CaseClause> cases;
+    SwitchStatementNode();
+    ~SwitchStatementNode() override { delete subject; }
+    void log(int indent = 0) override;
+    std::string toJson(int depth = 0) override;
+};
+
 #endif

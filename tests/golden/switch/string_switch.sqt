@@ -1,0 +1,28 @@
+// ADR-027: string switch testi
+// Beklenen çıktı:
+//   elma
+//   bilinmiyor
+
+int main() {
+    string s = "elma";
+    switch (s) {
+        case "elma":
+            print("elma");
+        case "armut":
+            print("armut");
+        default:
+            print("bilinmiyor");
+    }
+
+    string t = "kavun";
+    switch (t) {
+        case "elma":
+            print("elma");
+        case "armut":
+            print("armut");
+        default:
+            print("bilinmiyor");
+    }
+
+    return 0;
+}

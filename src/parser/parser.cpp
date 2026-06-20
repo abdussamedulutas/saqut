@@ -515,6 +515,9 @@ ASTNode* Parser::parseStatement() {
     if (ct.type == TokenType::KW_THROW)
         return parseThrowStatement();
 
+    if (ct.type == TokenType::KW_SWITCH)
+        return parseSwitchStatement();
+
     if (ct.is({
         TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
         TokenType::KW_DOUBLE, TokenType::KW_BOOL, TokenType::KW_CHAR,
@@ -727,6 +730,83 @@ ASTNode* Parser::parseTryStatement() {
     }
 
     return ts;
+}
+
+// ADR-027: switch (expr) { case v1, v2: stmts break; default: stmts }
+// Fallthrough YOK — her case otomatik break'li.
+ASTNode* Parser::parseSwitchStatement() {
+    SwitchStatementNode* sw = new SwitchStatementNode();
+    sw->loc = currentToken().token->loc;
+    nextToken(); // tüket: switch
+
+    // subject: switch (expr)
+    if (currentToken().type == TokenType::LPAREN) {
+        nextToken();
+        sw->subject = parseExpression();
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken();
+    }
+
+    if (currentToken().type != TokenType::LBRACE)
+        return sw;
+    nextToken(); // tüket: {
+
+    while (currentToken().type != TokenType::RBRACE &&
+           currentToken().type != TokenType::SVR_VOID) {
+
+        auto ct = currentToken();
+
+        if (ct.type == TokenType::KW_CASE) {
+            nextToken(); // tüket: case
+            CaseClause clause;
+
+            // case değerlerini virgülle ayır: case 1, 2, 3:
+            // COLON'ın önceliği 3 — parseExpression(3) ile ':'yi tüketmeyiz
+            clause.values.push_back(parseExpression(3));
+            while (currentToken().type == TokenType::COMMA) {
+                nextToken();
+                clause.values.push_back(parseExpression(3));
+            }
+            if (currentToken().type == TokenType::COLON)
+                nextToken(); // tüket: :
+
+            // Bu case'in body'si: case/default/} görene kadar
+            while (currentToken().type != TokenType::KW_CASE &&
+                   currentToken().type != TokenType::KW_DEFAULT &&
+                   currentToken().type != TokenType::RBRACE &&
+                   currentToken().type != TokenType::SVR_VOID) {
+                ASTNode* stmt = parseStatement();
+                if (stmt) clause.body.push_back(stmt);
+                else break;
+            }
+            // Açık break varsa zaten tüketildi (parseStatement → parseBreakStatement)
+            sw->cases.push_back(std::move(clause));
+
+        } else if (ct.type == TokenType::KW_DEFAULT) {
+            nextToken(); // tüket: default
+            if (currentToken().type == TokenType::COLON)
+                nextToken(); // tüket: :
+            CaseClause clause;
+            clause.isDefault = true;
+            while (currentToken().type != TokenType::KW_CASE &&
+                   currentToken().type != TokenType::KW_DEFAULT &&
+                   currentToken().type != TokenType::RBRACE &&
+                   currentToken().type != TokenType::SVR_VOID) {
+                ASTNode* stmt = parseStatement();
+                if (stmt) clause.body.push_back(stmt);
+                else break;
+            }
+            sw->cases.push_back(std::move(clause));
+        } else {
+            // Beklenmedik token — atla
+            nextToken();
+        }
+    }
+
+    if (currentToken().type == TokenType::RBRACE)
+        nextToken(); // tüket: }
+
+    return sw;
 }
 
 // ADR-025: throw <ifade>;

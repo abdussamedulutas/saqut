@@ -53,6 +53,7 @@ private:
     ASTNode* parseExpressionStatement();
     ASTNode* parseTryStatement();
     ASTNode* parseThrowStatement();
+    ASTNode* parseSwitchStatement();
 
     // --- İfadeler (Pratt parser) ---
     ASTNode* parseExpression();

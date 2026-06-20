@@ -308,6 +308,17 @@ void SymbolCollector::walkStmt(ASTNode* node) {
         break;
     }
 
+    // ADR-027: switch (expr) { case v: ... default: ... }
+    case ASTKind::SwitchStatement: {
+        auto* sw = (SwitchStatementNode*)node;
+        if (sw->subject) walkExpr(sw->subject);
+        for (auto& clause : sw->cases) {
+            for (auto* val : clause.values) walkExpr(val);
+            for (auto* s   : clause.body)   walkStmt(s);
+        }
+        break;
+    }
+
     default:
         break;
     }

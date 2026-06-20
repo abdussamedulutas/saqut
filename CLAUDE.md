@@ -68,6 +68,12 @@ git'te izlenir.
   derleyiciyi sade tutar, sessiz alan kaybı önlenir). Başarısızlık **hedef tipin
   nullable'lığıyla:** `as int` → `Error` fırlatır; `as int?` → `null`. Ayrı `as?` YOK.
   `float→int` sıfıra kırpar (NaN/Inf/taşma fallible). `int(x)` fonksiyon-stili reddedildi.
+- **switch-case (ADR-027):** **statement** (expression sonra); **implicit fallthrough
+  YOK** (otomatik break; bilerek paylaşım `case 1,2,3:`). Case'ler **tip-homojen**
+  (switch konusuyla aynı tip; enum'da üyeler `Color.Red`; karışık yasak); **exhaustiveness
+  YOK** (300-enum sorunu), `default` opsiyonel. Domen: int/**float**/bool/char/string/enum
+  (struct/array yok). **Float izinli** ama tam-temsil-edilemeyen literal case → **W-uyarı**
+  (`case 0.1:` uyarır, `case 1.5:` uyarmaz). Bağlar: `switch(T?)`+`case null`, `catch`'te `switch(e.code)`.
 - **Analiz vs Optimizasyon:** Analiz orijinal AST üstünde annotation; optimizasyon
   **klon** üstünde dönüşüm. `ASTNode::clone()` yük taşıyan merkezi bileşen
   (parent pointer'lar + sembol tablosu remap edilir, ADR-007). Fixpoint döngüsü +
@@ -104,9 +110,9 @@ git'te izlenir.
 ## Belge haritası
 - `readme.md` — toolbox çerçevesi, built-vs-planned, dil kimliği, çalıştırma modeli.
 - `docs/fikirler.md` — ADR-001…005 (backend stratejisi, parser, header-only, token, IR).
-- `docs/adr-frontend-analiz.md` — ADR-006…026 (frontend, analiz/optimizasyon,
+- `docs/adr-frontend-analiz.md` — ADR-006…027 (frontend, analiz/optimizasyon,
   çalıştırma modeli, FFI, interface, bellek, **değer/referans semantiği, null
-  güvenliği, mark-sweep GC, eşitlik, string, hata yönetimi, tip dönüşümü**).
+  güvenliği, mark-sweep GC, eşitlik, string, hata yönetimi, tip dönüşümü, switch-case**).
 - `docs/sonnet-handoff.md` — **Sonnet için uygulama promptu** (ADR-020…024'ü koda
   döken sıralı görev planı; ilk görev: GC-hazır nesne modeli + array runtime).
 - `docs/roadmap-frontend.md` — faz-faz uygulama planı (Faz 0–4 → fibonacci).

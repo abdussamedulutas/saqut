@@ -107,6 +107,9 @@ void IRFunction::dump() const {
         } else if (ins.opcode == Opcode::JIF_FALSE) {
             std::cout << "!" << slot(ins.cond) << " → " << ins.jumpTarget;
 
+        } else if (ins.opcode == Opcode::JIF_TRUE) {
+            std::cout << slot(ins.cond) << " → " << ins.jumpTarget;
+
         } else if (ins.opcode == Opcode::CALL) {
             std::cout << slot(ins.dest) << " = " << ins.functionName << "(";
             for (int j = 0; j < (int)ins.argSlots.size(); j++) {

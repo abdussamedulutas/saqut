@@ -77,9 +77,34 @@ ADR-020 doğrultusunda struct referans semantiğiyle uçtan uca çalışıyor:
 - `tests/golden/null/nullable_operand_error.sqt` — nullable aritmetik operand E003 ✓
 - `tests/golden/null/and_narrowing.sqt` — `&&` sağ taraf narrowing ✓
 
+## ✅ TAMAMLANDI — switch-case (ADR-027) (2026-06-20)
+
+- `src/parser/ast_node.hpp` — `SwitchStatement` ASTKind eklendi
+- `src/parser/nodes/statements.hpp/.cpp` — `CaseClause` (move-only), `SwitchStatementNode`
+- `src/parser/parser.cpp` — `parseSwitchStatement()`:
+  - case değerleri `parseExpression(3)` ile ayrıştırıldı (COLON tüketilmez)
+  - Çok-değerli `case 1, 2, 3:` (OR semantiği), `default:` opsiyonel
+- `src/semantic/structural_validator.hpp/.cpp` — `pureLoopDepth_` (continue için); switch sadece `loopDepth_` artırır
+- `src/semantic/type_checker.cpp` — subject tip doğrulama, case homojenlik, `case null:` nullable guard, float W005 uyarısı (IEEE 754 tam temsil)
+- `src/symbol/symbol_collector.cpp` — `SwitchStatement` `walkStmt` case eklendi (print gibi builtinlerin `resolvedSymbol` atanması için kritikti)
+- `src/ir/ir_generator.hpp` — `LoopContext.isSwitch = false`
+- `src/ir/ir_generator.cpp` — SwitchStatement IR: yeni opcode gereksiz; EQUAL_EQUAL + JIF_TRUE/JIF_FALSE + JMP backpatch; `continue` switch context'leri atlar
+- `src/ir/ir_function.cpp` — `JIF_TRUE` IR dump gösterimi eklendi
+- `src/vm/interpreter.cpp` — `EQUAL_EQUAL`/`NOT_EQUAL` null + float karşılaştırma düzeltildi
+- `tests/golden/switch/basic.sqt` — int switch, çok-değerli case, default ✓
+- `tests/golden/switch/string_switch.sqt` — string switch ✓
+- `tests/golden/switch/break_in_switch.sqt` — explicit break ✓
+- `tests/golden/switch/switch_in_loop.sqt` — döngü içi switch, continue döngüye gider ✓
+
 ## 🚀 SIRADAKİ İŞ
 
-1. **mark-sweep GC v2 (#56)** — en son; özellik bloklamaz, en karmaşık. Trigger basit
+1. **Tip dönüşümü `as` (ADR-026, #42)** — açık cast:
+   - Lexer/parser: `as` infix operatör (sola-bağlı); `x as int`, `x as int?`.
+   - Yalnızca **skaler + string** arası (int/float/bool/string). **Struct/array cast YOK.**
+   - Başarısızlık = **hedef nullable'lığı:** `as int` → `Error` fırlat (pendingThrow_, hazır);
+     `as int?` → `null`. `float→int` sıfıra kırp; NaN/Inf/taşma fallible; `string→int` parse.
+   - `int a = x as int?` → E (int?→int, ADR-021 ile). `as?` operatörü YOK.
+2. **mark-sweep GC v2 (#56)** — en son; özellik bloklamaz, en karmaşık. Trigger basit
    "her N tahsiste" yeter; nesne modeli zaten GC-hazır.
 
 Açık mimari borçlar: **#56** (döngüsel referans → mark-sweep GC v2), **#57** (hata

@@ -1,0 +1,22 @@
+// ADR-027: döngü içinde switch — continue döngüye gitmelidir
+// Beklenen çıktı:
+//   bir
+//   uc
+//   bitti
+
+int main() {
+    int i = 0;
+    while (i < 5) {
+        i = i + 1;
+        switch (i) {
+            case 2, 4:
+                continue;
+            case 1:
+                print("bir");
+            case 3:
+                print("uc");
+        }
+    }
+    print("bitti");
+    return 0;
+}

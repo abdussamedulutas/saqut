@@ -1,0 +1,9 @@
+int base = 10;
+int doubled = 0;
+
+int main() {
+    doubled = base * 2;
+    print(base);
+    print(doubled);
+    return 0;
+}

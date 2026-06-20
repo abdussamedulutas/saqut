@@ -1,0 +1,12 @@
+int main() {
+    int x = 15;
+    x &= 6;
+    print(x);
+    x |= 8;
+    print(x);
+    x <<= 2;
+    print(x);
+    x >>= 1;
+    print(x);
+    return 0;
+}

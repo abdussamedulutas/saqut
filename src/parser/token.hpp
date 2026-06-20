@@ -130,9 +130,10 @@ enum class TokenType : uint16_t {
                      //   Sözdizimi: while (koşul) gövde
     KW_DO,           // do (en az bir kez çalışan döngü)
                      //   Sözdizimi: do gövde while (koşul);
-    KW_SWITCH,       // switch (çoklu dal — henüz implemente edilmedi)
-    KW_CASE,         // case (switch dalı — henüz implemente edilmedi)
-    KW_DEFAULT,      // default (switch varsayılan — henüz implemente edilmedi)
+    KW_AS,           // as (tip dönüşümü — ADR-026): expr as int, expr as float?
+    KW_SWITCH,       // switch (çoklu dal — ADR-027)
+    KW_CASE,         // case (switch dalı — ADR-027)
+    KW_DEFAULT,      // default (switch varsayılan — ADR-027)
     KW_BREAK,        // break (döngü/switch'ten çık)
                      //   Sadece döngü veya switch içinde geçerlidir.
     KW_CONTINUE,     // continue (döngünün bir sonraki iterasyonuna geç)
@@ -415,6 +416,9 @@ enum class TokenType : uint16_t {
 //   TODO: İki listeyi ortak bir kaynaktan üretecek bir makro/kod üreteci.
 //
 inline const std::unordered_map<std::string_view, TokenType> KEYWORD_MAP = {
+    // --- Tip dönüşümü (ADR-026) ---
+    {"as",          TokenType::KW_AS},
+
     // --- Control flow ---
     {"if",          TokenType::KW_IF},
     {"else",        TokenType::KW_ELSE},
@@ -786,9 +790,10 @@ inline uint16_t TokenPrecedence(TokenType type) {
         case TokenType::MINUS:     // -
             return 13;
 
-        // Level 12: Bit shift
+        // Level 12: Bit shift + as cast (sola-bağlı, aritmetikten gevşek)
         case TokenType::LSHIFT:    // <<
         case TokenType::RSHIFT:    // >>
+        case TokenType::KW_AS:     // as (ADR-026)
             return 12;
 
         // Level 11: Relational

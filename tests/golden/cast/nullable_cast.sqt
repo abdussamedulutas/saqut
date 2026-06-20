@@ -1,0 +1,18 @@
+// ADR-026: as int? — başarısızsa null döner
+// Beklenen çıktı:
+//   42
+//   null
+
+int main() {
+    string good = "42";
+    int? a = good as int?;
+    if (a != null)
+        print(a as string);
+
+    string bad = "abc";
+    int? b = bad as int?;
+    if (b == null)
+        print("null");
+
+    return 0;
+}

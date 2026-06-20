@@ -656,6 +656,74 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         break;
     }
 
+    // ── CastExpression: expr as TargetType[?]  (ADR-026) ──────────────────
+    case ASTKind::CastExpression: {
+        auto* cast = (CastExpressionNode*)node;
+        Type srcType = checkExpr(cast->operand);
+
+        // Kaynak tip: struct/array cast yasak
+        bool srcOk = srcType.isPrimitive() || srcType.isString() || srcType.isError();
+        if (!srcOk) {
+            diag_.report("E003", cast->loc,
+                "'" + srcType.toString() + "' tipi 'as' ile dönüştürülemez "
+                "(yalnızca int/float/bool/string)");
+            result = Type::error();
+            break;
+        }
+
+        // Hedef tip çözümle
+        Type targetBase = Type::fromName(cast->targetTypeName);
+        if (targetBase.isError()) {
+            diag_.report("E003", cast->loc,
+                "Bilinmeyen hedef tip: '" + cast->targetTypeName + "'");
+            result = Type::error();
+            break;
+        }
+        if (!targetBase.isPrimitive() && !targetBase.isString()) {
+            diag_.report("E003", cast->loc,
+                "'" + cast->targetTypeName + "' as hedef tipi olamaz "
+                "(yalnızca int/float/bool/string)");
+            result = Type::error();
+            break;
+        }
+
+        // Dönüşüm matrisi — geçersiz kombinasyonlar
+        bool srcIsStr  = srcType.isString();
+        bool tgtIsStr  = targetBase.isString();
+        bool srcIsBool = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Bool;
+        bool tgtIsBool = targetBase.isPrimitive() && targetBase.prim == PrimitiveKind::Bool;
+
+        // bool↔int/float yasak (ADR-026: "başta yasak tutmak en güvenlisi")
+        bool srcIsNumeric = srcType.isPrimitive() && !srcIsBool;
+        bool tgtIsNumeric = targetBase.isPrimitive() && !tgtIsBool;
+
+        if (tgtIsBool && !srcIsBool && !srcType.isError()) {
+            diag_.report("E003", cast->loc,
+                "bool hedef tipi olarak 'as' kullanılamaz");
+            result = Type::error();
+            break;
+        }
+        if (srcIsBool && !tgtIsBool && !tgtIsStr) {
+            diag_.report("E003", cast->loc,
+                "bool yalnızca string'e dönüştürülebilir ('as string')");
+            result = Type::error();
+            break;
+        }
+
+        // string→bool yasak
+        if (srcIsStr && tgtIsBool) {
+            diag_.report("E003", cast->loc,
+                "string'den bool'a dönüşüm desteklenmiyor");
+            result = Type::error();
+            break;
+        }
+
+        // Hedef tip (nullable flag ile)
+        result = targetBase;
+        if (cast->targetNullable) result = result.asNullable();
+        break;
+    }
+
     default:
         result = Type::error();
         break;

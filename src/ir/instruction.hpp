@@ -124,6 +124,16 @@ enum class Opcode {
     THROW,      // slots[src] değerini fırlat → en yakın ENTER_TRY'a unwind
                 //   Yakalanmamışsa C++ exception olarak yükseltilir
 
+    // --- Tip dönüşümleri (ADR-026: as operatörü) ---
+    // Hatasız dönüşümler:
+    CAST_INT_TO_STR,    // slots[dest] = to_string(slots[src])  — int  → string
+    CAST_FLOAT_TO_STR,  // slots[dest] = to_string(slots[src])  — float → string
+    CAST_BOOL_TO_STR,   // slots[dest] = "true"/"false"          — bool  → string
+    // Fallible dönüşümler (left=0 → Error fırlat; left=1 → null döndür):
+    CAST_STR_TO_INT,    // slots[dest] = parse_int(slots[src])
+    CAST_STR_TO_FLOAT,  // slots[dest] = parse_float(slots[src])
+    CAST_FLOAT_TO_INT_CHECKED,  // slots[dest] = (int)slots[src]; NaN/Inf/taşma → fallible
+
     // --- Dış dünya (FFI — Foreign Function Interface) ---
     CALLHOST,      // Host (C++) fonksiyonunu çağır. Şu an sadece "print" destekli.
                    //   Dönüş değeri yok; sadece yan etki (stdout'a yazmak gibi).
@@ -154,6 +164,12 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::FNEG:          return "FNEG";
         case Opcode::INT_TO_FLOAT:  return "INT_TO_FLOAT";
         case Opcode::FLOAT_TO_INT:  return "FLOAT_TO_INT";
+        case Opcode::CAST_INT_TO_STR:         return "CAST_INT_TO_STR";
+        case Opcode::CAST_FLOAT_TO_STR:       return "CAST_FLOAT_TO_STR";
+        case Opcode::CAST_BOOL_TO_STR:        return "CAST_BOOL_TO_STR";
+        case Opcode::CAST_STR_TO_INT:         return "CAST_STR_TO_INT";
+        case Opcode::CAST_STR_TO_FLOAT:       return "CAST_STR_TO_FLOAT";
+        case Opcode::CAST_FLOAT_TO_INT_CHECKED: return "CAST_FLOAT_TO_INT_CHECKED";
         case Opcode::STRUCT_NEW:    return "STRUCT_NEW";
         case Opcode::FIELD_GET:     return "FIELD_GET";
         case Opcode::FIELD_SET:     return "FIELD_SET";

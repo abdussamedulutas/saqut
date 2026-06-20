@@ -28,6 +28,7 @@ inline constexpr std::string_view delimiters[] = {
 // Keyword tablosu.
 inline constexpr std::string_view keywords[] = {
     "if",       "else",     "for",      "while",    "do",
+    "as",
     "switch",   "case",     "default",  "break",    "continue",
     "return",   "try",      "catch",    "finally",  "throw",
     "throws",   "assert",

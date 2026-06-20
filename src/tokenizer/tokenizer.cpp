@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 static const std::unordered_map<std::string_view, std::string_view> KW_MAP = {
     {"if","if"},{"else","else"},{"for","for"},{"while","while"},{"do","do"},
+    {"as","as"},
     {"switch","switch"},{"case","case"},{"default","default"},
     {"break","break"},{"continue","continue"},{"return","return"},
     {"try","try"},{"catch","catch"},{"finally","finally"},

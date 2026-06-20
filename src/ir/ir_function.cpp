@@ -138,6 +138,22 @@ void IRFunction::dump() const {
         } else if (ins.opcode == Opcode::FLOAT_TO_INT) {
             std::cout << slot(ins.dest) << " = (int)" << slot(ins.src);
 
+        } else if (ins.opcode == Opcode::CAST_INT_TO_STR) {
+            std::cout << slot(ins.dest) << " = str(" << slot(ins.src) << ")";
+        } else if (ins.opcode == Opcode::CAST_FLOAT_TO_STR) {
+            std::cout << slot(ins.dest) << " = str(" << slot(ins.src) << ")";
+        } else if (ins.opcode == Opcode::CAST_BOOL_TO_STR) {
+            std::cout << slot(ins.dest) << " = str(" << slot(ins.src) << ")";
+        } else if (ins.opcode == Opcode::CAST_STR_TO_INT) {
+            std::cout << slot(ins.dest) << " = int?(" << slot(ins.src) << ")"
+                      << (ins.left ? " [null]" : " [throw]");
+        } else if (ins.opcode == Opcode::CAST_STR_TO_FLOAT) {
+            std::cout << slot(ins.dest) << " = float?(" << slot(ins.src) << ")"
+                      << (ins.left ? " [null]" : " [throw]");
+        } else if (ins.opcode == Opcode::CAST_FLOAT_TO_INT_CHECKED) {
+            std::cout << slot(ins.dest) << " = int(" << slot(ins.src) << ")"
+                      << (ins.left ? " [null]" : " [throw]");
+
         } else if (ins.opcode == Opcode::FNEG) {
             std::cout << slot(ins.dest) << " = -" << slot(ins.src);
 

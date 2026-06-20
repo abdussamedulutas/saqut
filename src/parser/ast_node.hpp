@@ -112,6 +112,8 @@ enum class ASTKind {
                           //   children: [object], [index]
     ArrayLiteral,         // Dizi literali: [1, 2, 3].
                           //   children: [element0, element1, ...]
+    CastExpression,       // Tip dönüşümü: expr as TargetType[?]  (ADR-026)
+                          //   operand: kaynak ifade; targetTypeName: hedef tip adı
 };
 
 // ============================================================================

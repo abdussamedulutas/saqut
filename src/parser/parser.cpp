@@ -288,6 +288,38 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         return idx;
     }
 
+    // ADR-026: as tip dönüşümü — expr as TargetType[?]
+    if (ct.type == TokenType::KW_AS) {
+        nextToken(); // tüket: as
+        CastExpressionNode* cast = new CastExpressionNode();
+        cast->loc     = ct.token ? ct.token->loc : SourceLocation{};
+        cast->operand = left;
+        if (left) left->parent = cast;
+
+        // Hedef tip adını oku: int / float / bool / string / IDENTIFIER
+        auto typeTok = currentToken();
+        if (typeTok.is({TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+                        TokenType::KW_DOUBLE, TokenType::KW_BOOL,
+                        TokenType::KW_STRING_TYPE})) {
+            // tip adını string olarak al
+            cast->targetTypeName = typeTok.token ? typeTok.token->token : "";
+            nextToken();
+        } else if (typeTok.type == TokenType::IDENTIFIER && typeTok.token) {
+            cast->targetTypeName = typeTok.token->token;
+            nextToken();
+        } else {
+            std::cerr << "Parser hatasi: 'as' sonrası tip adı bekleniyor\n";
+            cast->targetTypeName = "int"; // hata kurtarma
+        }
+
+        // Opsiyonel '?' — nullable hedef tip: as int?
+        if (currentToken().type == TokenType::TERNARY) {
+            cast->targetNullable = true;
+            nextToken();
+        }
+        return cast;
+    }
+
     if (ct.type == TokenType::DOT || ct.type == TokenType::ARROW) {
         bool arrow = (ct.type == TokenType::ARROW);
         nextToken();

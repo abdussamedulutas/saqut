@@ -70,6 +70,23 @@ std::string ArrayLiteralNode::toJson(int depth) {
     return obj.str();
 }
 
+// CastExpressionNode (ADR-026)
+CastExpressionNode::CastExpressionNode() { kind = ASTKind::CastExpression; }
+void CastExpressionNode::log(int indent) {
+    std::cout << jsonIndent(indent) << "CastExpression as " << targetTypeName
+              << (targetNullable ? "?" : "") << "\n";
+    if (operand) operand->log(indent + 1);
+}
+std::string CastExpressionNode::toJson(int depth) {
+    JsonObject obj(depth);
+    obj.add("kind", "CastExpression");
+    obj.add("targetType", targetTypeName + (targetNullable ? "?" : ""));
+    if (operand) obj.addRaw("operand", operand->toJson(depth + 1));
+    obj.addRaw("resolvedType", resolvedTypeJson());
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
+}
+
 // IndexExpressionNode
 IndexExpressionNode::IndexExpressionNode() { kind = ASTKind::IndexExpression; }
 void IndexExpressionNode::log(int indent) {

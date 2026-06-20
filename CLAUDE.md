@@ -12,7 +12,7 @@ saQut, **programlanabilir ve incelenebilir bir derleyici** — bir "alet çantas
 aşamasının dışarıdan görülebilir/müdahale edilebilir olması**: token'lar, AST,
 sembol tablosu, optimizasyon öncesi/sonrası ve IR ayrı ayrı incelenebilir.
 Uygulama dili **C++** (header-only eğilimli, ADR-003). CMake + Ninja. `build/`
-git'te izlenir.
+git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` ile yeniden oluştur).
 
 ## Kilitli kararlar (değiştirme — gerekçeler ADR'lerde)
 - **Çalıştırma modeli: IR + bytecode VM (yorumlayıcı döngü).** Tree-walker DEĞİL,
@@ -160,7 +160,7 @@ git'te izlenir.
   yazım engellenemez); isim ise marka ile korunur.
 
 ## Çalışma konvansiyonları
-- Commit mesajları sonunda: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
-- Ana dal `0.1.0`; `master` branch yok. commit/push kullanıcı isteyince yapılır.
-- Wiki API'si Gitea'da REST üzerinden çalışmadı; wiki içeriği `wiki.md`'ye yazılıp
-  kullanıcı tarafından elle yapıştırılıyor.
+- Commit mesajlarına `Co-Authored-By` veya `Claude-Session` satırı **ekleme**.
+- Ana dal `0.1.0`; geliştirme branchi `0.2.0`. commit/push kullanıcı isteyince yapılır.
+- `build/` artık git'te izlenmiyor (.gitignore'da). `wiki/` klasörü repo'ya dahil edildi.
+- Wiki GitHub repo'sundaki `wiki/` klasöründen yönetilir.

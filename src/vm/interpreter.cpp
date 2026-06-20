@@ -141,10 +141,17 @@ int Interpreter::run() {
         case Opcode::EQUAL_EQUAL: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
-            if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
-                r = (lv.ref == rv.ref ? 1 : 0); // ADR-023: array/struct kimlik karşılaştırması
+            // ADR-021/027: null kind ayrı işlenir — null yalnızca null'a eşittir
+            if (lv.kind == ValueKind::Null && rv.kind == ValueKind::Null)
+                r = 1;
+            else if (lv.kind == ValueKind::Null || rv.kind == ValueKind::Null)
+                r = 0;
+            else if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
+                r = (lv.ref == rv.ref ? 1 : 0); // ADR-023: array/struct kimlik
             else if (lv.kind == ValueKind::String)
                 r = (lv.stringValue == rv.stringValue ? 1 : 0);
+            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                r = (lv.floatValue == rv.floatValue ? 1 : 0);
             else
                 r = (lv.intValue == rv.intValue ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);
@@ -153,10 +160,16 @@ int Interpreter::run() {
         case Opcode::NOT_EQUAL: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
-            if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
+            if (lv.kind == ValueKind::Null && rv.kind == ValueKind::Null)
+                r = 0;
+            else if (lv.kind == ValueKind::Null || rv.kind == ValueKind::Null)
+                r = 1;
+            else if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
                 r = (lv.ref != rv.ref ? 1 : 0);
             else if (lv.kind == ValueKind::String)
                 r = (lv.stringValue != rv.stringValue ? 1 : 0);
+            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                r = (lv.floatValue != rv.floatValue ? 1 : 0);
             else
                 r = (lv.intValue != rv.intValue ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);

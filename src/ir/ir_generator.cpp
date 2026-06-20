@@ -300,8 +300,83 @@ void IRGenerator::generateStatement(ASTNode* node) {
     }
     case ASTKind::ContinueStatement: {
         int jumpIdx = emitJumpUnconditional(-1);
-        if (!loopContextStack_.empty())
-            loopContextStack_.back().continueJumps.push_back(jumpIdx);
+        // Switch bağlamını atla — continue en yakın DÖNGÜYE ait (ADR-027)
+        for (int i = (int)loopContextStack_.size() - 1; i >= 0; --i) {
+            if (!loopContextStack_[i].isSwitch) {
+                loopContextStack_[i].continueJumps.push_back(jumpIdx);
+                break;
+            }
+        }
+        break;
+    }
+
+    // ── switch (expr) { case v1, v2: body; default: body; }  (ADR-027) ──
+    //
+    // IR yapısı (fallthrough yok; her case otomatik break):
+    //   subjectSlot = eval(subject)
+    //   case v1, v2 (OR semantiği):
+    //     cmp = EQ(sub, v1); JIF_TRUE → body_start
+    //     cmp = EQ(sub, v2); JIF_FALSE → next_case
+    //     body_start: [stmts]; JMP → out
+    //   next_case:
+    //   ...
+    //   default: [stmts]; JMP → out
+    //   out:
+    case ASTKind::SwitchStatement: {
+        auto* sw = (SwitchStatementNode*)node;
+        int subjectSlot = sw->subject ? generateExpression(sw->subject) : freshSlot();
+
+        // Switch bağlamı: break → out'a atlar; continue switch'e ait değil
+        loopContextStack_.push_back({true, {}, {}});
+
+        std::vector<int> outJumps; // her case body sonundaki JMP → out (backpatch)
+
+        for (auto& clause : sw->cases) {
+            if (clause.isDefault) {
+                for (auto* s : clause.body) generateStatement(s);
+                outJumps.push_back(emitJumpUnconditional(-1));
+                continue;
+            }
+
+            // case v1, v2, ..., vN: — OR semantiği
+            // v1..v(N-1): eşleşirse body_start'a JIF_TRUE (backpatch)
+            // vN:         eşleşmezse next_case'e JIF_FALSE (backpatch)
+            std::vector<int> bodyEntryJumps;
+            int nextCaseJump = -1;
+
+            for (size_t vi = 0; vi < clause.values.size(); vi++) {
+                int valSlot = generateExpression(clause.values[vi]);
+                int cmpSlot = freshSlot();
+                emitBinaryOp(Opcode::EQUAL_EQUAL, cmpSlot, subjectSlot, valSlot);
+                bool isLast = (vi + 1 == clause.values.size());
+                if (isLast)
+                    nextCaseJump = emitJumpIfFalse(cmpSlot);
+                else
+                    bodyEntryJumps.push_back(emitJumpIfTrue(cmpSlot));
+            }
+
+            // body_start: ara değerlerin JIF_TRUE buraya atlar
+            int bodyStart = currentInstrIndex();
+            for (int idx : bodyEntryJumps)
+                currentFunction_->instructions[idx].jumpTarget = bodyStart;
+
+            for (auto* s : clause.body) generateStatement(s);
+            outJumps.push_back(emitJumpUnconditional(-1));
+
+            // next_case: son değerin JIF_FALSE buraya atlar
+            int nextCase = currentInstrIndex();
+            if (nextCaseJump != -1)
+                currentFunction_->instructions[nextCaseJump].jumpTarget = nextCase;
+        }
+
+        // out: tüm case JMP'leri + explicit break'ler buraya atlar
+        int outTarget = currentInstrIndex();
+        for (int idx : outJumps)
+            currentFunction_->instructions[idx].jumpTarget = outTarget;
+        for (int idx : loopContextStack_.back().breakJumps)
+            currentFunction_->instructions[idx].jumpTarget = outTarget;
+
+        loopContextStack_.pop_back();
         break;
     }
 

@@ -15,8 +15,9 @@ private:
     void walkStmt(ASTNode* node);
 
     DiagnosticEngine& diag_;
-    int  loopDepth_  = 0;
-    bool inFunction_ = false;
+    int  loopDepth_   = 0; // döngü + switch derinliği (break için)
+    int  pureLoopDepth_ = 0; // yalnızca döngü derinliği (continue için)
+    bool inFunction_  = false;
 };
 
 #endif // SAQUT_SEMANTIC_STRUCTURAL_VALIDATOR

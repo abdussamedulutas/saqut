@@ -180,3 +180,55 @@ std::string ThrowStatementNode::toJson(int depth) {
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
+
+// SwitchStatementNode (ADR-027)
+SwitchStatementNode::SwitchStatementNode() { kind = ASTKind::SwitchStatement; }
+void SwitchStatementNode::log(int indent) {
+    std::cout << jsonIndent(indent) << "SwitchStatement\n";
+    if (subject) subject->log(indent + 1);
+    for (auto& c : cases) {
+        if (c.isDefault)
+            std::cout << jsonIndent(indent + 1) << "default:\n";
+        else {
+            std::cout << jsonIndent(indent + 1) << "case ";
+            for (size_t i = 0; i < c.values.size(); i++) {
+                if (i) std::cout << ", ";
+                if (c.values[i]) c.values[i]->log(0);
+            }
+            std::cout << "\n";
+        }
+        for (auto* s : c.body) s->log(indent + 2);
+    }
+}
+std::string SwitchStatementNode::toJson(int depth) {
+    JsonObject obj(depth);
+    obj.add("kind", "SwitchStatement");
+    if (subject) obj.addRaw("subject", subject->toJson(depth + 1));
+    std::string casesJson = "[\n";
+    std::string ind = jsonIndent(depth + 1);
+    for (size_t ci = 0; ci < cases.size(); ci++) {
+        auto& c = cases[ci];
+        casesJson += ind + "{\n";
+        casesJson += ind + "  \"isDefault\": " + (c.isDefault ? "true" : "false") + ",\n";
+        casesJson += ind + "  \"values\": [";
+        for (size_t i = 0; i < c.values.size(); i++) {
+            if (i) casesJson += ", ";
+            casesJson += c.values[i] ? c.values[i]->toJson(depth + 2) : "null";
+        }
+        casesJson += "],\n";
+        casesJson += ind + "  \"body\": [";
+        for (size_t i = 0; i < c.body.size(); i++) {
+            if (i) casesJson += ", ";
+            casesJson += c.body[i]->toJson(depth + 2);
+        }
+        casesJson += "]\n";
+        casesJson += ind + "}";
+        if (ci + 1 < cases.size()) casesJson += ",";
+        casesJson += "\n";
+    }
+    casesJson += jsonIndent(depth) + "]";
+    obj.addRaw("cases", casesJson);
+    obj.add("isReachable", isReachable);
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
+}

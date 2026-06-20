@@ -1,0 +1,17 @@
+// ADR-027: switch içinde explicit break testi
+// Beklenen çıktı:
+//   bir
+//   sonrasi
+
+int main() {
+    int x = 1;
+    switch (x) {
+        case 1:
+            print("bir");
+            break;
+        case 2:
+            print("iki");
+    }
+    print("sonrasi");
+    return 0;
+}

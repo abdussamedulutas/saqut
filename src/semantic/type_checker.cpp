@@ -6,6 +6,8 @@
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/identifier.hpp"
 #include "parser/nodes/literal.hpp"
+#include <cmath>
+#include <climits>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Yardımcılar
@@ -286,6 +288,101 @@ void TypeChecker::checkStmt(ASTNode* node) {
     case ASTKind::ThrowStatement: {
         auto* th = (ThrowStatementNode*)node;
         if (th->value) checkExpr(th->value);
+        break;
+    }
+
+    // ADR-027: switch (expr) { case v1, v2: ... default: ... }
+    case ASTKind::SwitchStatement: {
+        auto* sw = (SwitchStatementNode*)node;
+        if (!sw->subject) break;
+
+        Type subjectType = checkExpr(sw->subject);
+        // nullable T? → base tip ile karşılaştırma yapılır; case null: izin verilir
+        Type baseType = subjectType;
+        baseType.nullable = false;
+
+        // Geçerli switch tipleri: int, float, bool, string (aggregate değil)
+        bool subjectOk = baseType.isPrimitive() || baseType.isString()
+                         || baseType.isVoid(); // void = bilinmeyen, hata zaten raporlandı
+        if (!subjectOk && !baseType.isError()) {
+            diag_.report("E003", sw->subject->loc,
+                "switch konusu '" + subjectType.toString() +
+                "' tipi desteklenmiyor (int/float/bool/string bekleniyor)");
+        }
+
+        for (auto& clause : sw->cases) {
+            if (clause.isDefault) {
+                for (auto* s : clause.body) checkStmt(s);
+                continue;
+            }
+            for (auto* val : clause.values) {
+                if (!val) continue;
+                // case null: yalnızca nullable subject ile geçerli
+                bool isNullLit = (val->kind == ASTKind::Literal &&
+                                  ((LiteralNode*)val)->literalType == LiteralType::BOŞ);
+                if (isNullLit) {
+                    if (!subjectType.nullable)
+                        diag_.report("E003", val->loc,
+                            "case null: yalnızca nullable (T?) switch konusuyla kullanılabilir");
+                    continue;
+                }
+
+                Type caseType = checkExpr(val, baseType);
+                // Tip homojenliği: case değeri konuyla aynı base tipte olmalı
+                if (!caseType.isError() && !baseType.isError() &&
+                    !baseType.isVoid() && !caseType.equalsBase(baseType)) {
+                    diag_.report("E003", val->loc,
+                        "case değeri '" + caseType.toString() +
+                        "' switch konusu tipiyle (" + baseType.toString() + ") uyumsuz");
+                }
+
+                // ADR-027: float case → tam-temsil edilemeyen literal uyarısı
+                if (baseType.isPrimitive() &&
+                    (baseType.prim == PrimitiveKind::Float ||
+                     baseType.prim == PrimitiveKind::Double) &&
+                    val->kind == ASTKind::Literal) {
+                    auto* lit = (LiteralNode*)val;
+                    if (lit->literalType == LiteralType::FLOAT && lit->lexerToken) {
+                        const std::string& raw = lit->lexerToken->token;
+                        // Tam-temsil kontrolü: 10^m paydasını 5^m'ye bölebilir miyiz?
+                        // Kesirli basamakları bul, son sıfırları temizle
+                        size_t dotPos = raw.find('.');
+                        if (dotPos != std::string::npos) {
+                            std::string frac = raw.substr(dotPos + 1);
+                            // Üstel kısım varsa at (e/E sonrası) — o zaman genelde tam
+                            size_t ePos = frac.find_first_of("eE");
+                            if (ePos != std::string::npos) frac = frac.substr(0, ePos);
+                            while (!frac.empty() && frac.back() == '0') frac.pop_back();
+                            if (!frac.empty()) {
+                                // Payda = 10^m; tam temsil için pay 5^m'ye bölünebilmeli
+                                int m = (int)frac.size();
+                                // Tüm basamakları tamsayı olarak al
+                                std::string allDigits = raw.substr(0, dotPos) + frac;
+                                while (allDigits.size() > 1 && allDigits[0] == '0')
+                                    allDigits = allDigits.substr(1);
+                                long long num = 0;
+                                bool overflow = false;
+                                for (char ch : allDigits) {
+                                    if (num > (LLONG_MAX - (ch-'0')) / 10) { overflow = true; break; }
+                                    num = num * 10 + (ch - '0');
+                                }
+                                long long fivePow = 1;
+                                for (int i = 0; i < m && !overflow; i++) {
+                                    if (fivePow > LLONG_MAX / 5) { overflow = true; break; }
+                                    fivePow *= 5;
+                                }
+                                bool exact = !overflow && (num % fivePow == 0);
+                                if (!exact)
+                                    diag_.report("W005", val->loc,
+                                        "case " + raw + ": bu float değeri IEEE 754'te tam temsil "
+                                        "edilemez; karşılaştırma beklendik sonuç vermeyebilir");
+                            }
+                        }
+                    }
+                }
+            }
+            for (auto* s : clause.body) checkStmt(s);
+        }
         break;
     }
 

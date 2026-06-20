@@ -89,6 +89,7 @@ enum class ASTKind {
                           //   Örn: x = 5; veya foo();
     TryStatement,         // try { body } catch (Error e) { handler }  (ADR-025)
     ThrowStatement,       // throw <ifade>;                             (ADR-025)
+    SwitchStatement,      // switch (expr) { case v: ... default: ... } (ADR-027)
 
     /* ====== İfadeler (Expressions) ====== */
     BinaryExpression,     // İkili işlem: sol OP sağ.

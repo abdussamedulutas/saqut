@@ -93,8 +93,9 @@ private:
     // Her döngüye girerken bir giriş push'lanır, çıkınca pop'lanır.
     // İç içe döngülerde en üstteki giriş en içteki döngüye aittir.
     struct LoopContext {
+        bool             isSwitch = false;  // true → switch; continue buraya ait değil
         std::vector<int> breakJumps;    // patch bekleyen break JMP indeksleri
-        std::vector<int> continueJumps; // patch bekleyen continue JMP indeksleri
+        std::vector<int> continueJumps; // patch bekleyen continue JMP indeksleri (switch'te boş)
     };
     std::vector<LoopContext> loopContextStack_;
 

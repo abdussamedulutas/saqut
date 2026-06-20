@@ -20,18 +20,46 @@ git'te izlenir.
   ham hız değil). C'ye transpile ileride geçerli 2. backend. İleride makine kodu
   gerekirse libgccjit/LLVM'e bağlanılır (çok uzak). Bellek = host C++ heap; özel
   allocator yok. (ADR-015)
-- **Dil kimliği:** prosedürel, C-ailesi sözdizimi, value semantics, zorunlu
-  class/main boilerplate yok. **Yok:** class/OOP, closure, generic, kullanıcı
-  pointer'ı (`*`/`&`), auto/tip çıkarımı, gizli int↔float (tek istisna sabit
-  folding). **Var:** struct, tipli fonksiyonlar, array (`int[]`). `interface`
-  **ertelendi** (reddedilmedi, ADR-018).
+- **Dil kimliği:** prosedürel, C-ailesi sözdizimi, zorunlu class/main boilerplate
+  yok. **Semantik (ADR-020):** primitive (`int`/`float`/`bool`) = **değer**;
+  bileşik (`struct`/`array`/`string`) = **referans** (JS/Java/C# modeli). "Pointer
+  yok" = kullanıcıya `&`/`*` **sözdizimi** verilmez; derleyici/runtime içeride ve
+  çalışma zamanında referansı sonuna kadar kullanır. **Yok:** OOP, closure,
+  generic, auto/tip çıkarımı, gizli int↔float (tek istisna sabit folding). **Var:**
+  struct, tipli fonksiyonlar, array (`int[]`). `class`/`function` sözdizimsel
+  **rezerve** (semantik ileride). `interface` **ertelendi** (ADR-018).
+  ⚠️ Referans semantiği döngüsel-referans **sızıntısını** açtı → GC/döngü
+  toplayıcı borcu (**#56**, `karar-gerekli`).
+- **Null güvenliği (ADR-021):** varsayılan non-null; nullable açıkça `Type?`
+  (Kotlin/Swift modeli). `null` yalnızca `T?`'ye atanır; `T?` üstünde doğrudan
+  erişim derleme hatası. **Akış-duyarlı null analizi** (`if (a != null)` daraltır;
+  guard/early-return; `&&` sağ tarafı). Runtime maliyeti **sıfır** (compile-time).
+  `a!` = runtime-kontrollü non-null iddiası. İlk gerçek akış-duyarlı analiz →
+  yapısal akış yeter, SSA gerekmez (#2 için veri).
+- **Bellek/GC (ADR-022):** **basit, taşımasız, stop-the-world, deterministik
+  mark-sweep** (döngüleri toplar, "cage" korunur). **`shared_ptr`'ı kalıcı model
+  YAPMA** (refcount döngüde sızar = topuğa-sıkma). Kural: nesne modelini **baştan
+  GC-hazır** kur (header: tip+mark biti+liste; VM kök sayar; nesne çocuk
+  referansları sayar). v1: toplamasız (arena); v2: aynı model üstünde mark-sweep.
+  Asıl perf-katili GC kararı → basit tutarak de-risk edildi.
+- **Eşitlik (ADR-023):** `==` primitive'de değer, referans (struct/array) **kimlik**
+  (aynı nesne). Derin/yapısal eşitlik **asla** `==`'e bağlanmaz → ayrı görünür
+  `deepEquals()` (PHP `==`/`===`/`clone` ailesi gibi). **String istisnası:** `==`
+  **içerik** olmalı (Java gotcha'sından kaçın) → string'i immutable değer-tipi
+  modelle (#40). `obj==obj`'i hata yapmak + kullanıcı-tanımlı eşitlik = uzak gelecek.
+- **String (ADR-024):** **immutable değer-tipi, iç temsil UTF-8.** `s = s + "x"`
+  yeni string üretir; `==` içerik (ADR-023). Bayt/scalar/grapheme erişimi açıkça
+  ayrı (sahte O(1) karakter indeksi YOK). Verimli birleştirme için ileride builder.
+  Çözdüğü: #40 (yüzey), #9 (iç temsil). Mevcut `Value` string'i inline tutuyor —
+  immutable olduğu için bu yeterli; heap/object-model'e taşımak zorunlu değil.
 - **Analiz vs Optimizasyon:** Analiz orijinal AST üstünde annotation; optimizasyon
   **klon** üstünde dönüşüm. `ASTNode::clone()` yük taşıyan merkezi bileşen
   (parent pointer'lar + sembol tablosu remap edilir, ADR-007). Fixpoint döngüsü +
   iterasyon tavanı (`maxFixpointRounds`, ADR-009).
 - **Literal/tip kuralı:** tamsayı literali bağlama-göre tiplenir (`float x = 1;`
   geçerli; `int y = 1.5;`→E003; değişken→değişken gizli dönüşüm yok). Döngüsel
-  by-value struct → E010. (ADR-010/011)
+  by-value struct → E010 (⚠️ ADR-020 ile revize: referansla tutulan struct alanı
+  artık döngü kurabilir, `Node next` meşru). (ADR-010/011)
 - **FFI seam:** kasıtlı "host fonksiyonu çağır" mekanizması (`callhost`); `print`
   ilk müşteri (ADR-016). Batteries = sınır/FFI problemi, "zlib'i yeniden yaz"
   değil; kripto asla elle yazılmaz (ADR-017).
@@ -60,8 +88,11 @@ git'te izlenir.
 ## Belge haritası
 - `readme.md` — toolbox çerçevesi, built-vs-planned, dil kimliği, çalıştırma modeli.
 - `docs/fikirler.md` — ADR-001…005 (backend stratejisi, parser, header-only, token, IR).
-- `docs/adr-frontend-analiz.md` — ADR-006…019 (frontend, analiz/optimizasyon,
-  çalıştırma modeli, FFI, interface, bellek).
+- `docs/adr-frontend-analiz.md` — ADR-006…024 (frontend, analiz/optimizasyon,
+  çalıştırma modeli, FFI, interface, bellek, **değer/referans semantiği, null
+  güvenliği, mark-sweep GC, eşitlik, string**).
+- `docs/sonnet-handoff.md` — **Sonnet için uygulama promptu** (ADR-020…024'ü koda
+  döken sıralı görev planı; ilk görev: GC-hazır nesne modeli + array runtime).
 - `docs/roadmap-frontend.md` — faz-faz uygulama planı (Faz 0–4 → fibonacci).
 - `docs/transkript-frontend-tasarim.md` — tasarım oturumu transkripti.
 - `examples/fibonacci.sqt` — geçerli referans program.

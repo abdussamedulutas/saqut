@@ -5,6 +5,29 @@ tasarım noktalarını tutar. Her giriş hangi issue'ya bağlı olduğunu belirt
 
 ---
 
+## ✅ TAMAMLANDI — GC-hazır nesne modeli + array runtime (2026-06-20)
+
+ADR-020…024 (değer/referans semantiği, null güvenliği, mark-sweep GC, eşitlik)
+doğrultusunda uçtan uca array çalışıyor:
+- `src/vm/object.hpp` — Object, ArrayObject, Heap (v1: toplama yok, GC-hazır header)
+- `src/vm/value.hpp` — ValueKind::Ref + Nil eklendi
+- `src/ir/instruction.hpp` — ARRAY_NEW/GET/SET/LEN eklendi
+- Array literal parser (`[1,2,3]`), `int[]` tip sözdizimi (Java/C# stili)
+- Referans semantiği, kimlik `==` (ADR-023), sınır kontrolü
+- Golden test: `tests/golden/array/ref_semantics.sqt` ✓
+
+## 🚀 SIRADAKİ İŞ (docs/sonnet-handoff.md Bölüm 2)
+
+1. **Struct runtime** — StructObject : Object, alan erişimi, E010 revizyonu
+2. **String cilası (ADR-024)** — içerik `==`, UTF-8 concat+print
+3. **Null akış-analizi (ADR-021)** — `Type?`, flow-narrowing, `a!`
+4. **float/double (#44)** — Value::Float + FADD/FSUB/… opcodes
+5. **mark-sweep GC v2 (#56)** — header+kök kancası üstünde aç
+
+Açık mimari borç: **#56** (döngüsel referans sızıntısı → mark-sweep GC v2).
+
+---
+
 ## #modül-scope — IRFunction.moduleId: Modül-düzeyi değişken izolasyonu
 
 **Etkilenen dosyalar:**

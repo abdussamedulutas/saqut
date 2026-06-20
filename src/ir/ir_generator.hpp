@@ -58,6 +58,10 @@ private:
     void emitLoadSlot(int destSlot, int srcSlot);
     void emitLoadGlobal(int destSlot, int globalIndex);
     void emitStoreGlobal(int srcSlot, int globalIndex);
+    void emitArrayNew(int destSlot, int capacity);
+    void emitArrayGet(int destSlot, int arrSlot, int idxSlot);
+    void emitArraySet(int arrSlot, int idxSlot, int valSlot);
+    void emitArrayLen(int destSlot, int arrSlot);
     void emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot);
     void emitReturn(int srcSlot);
     // Koşulsuz atlama yazar; instruction indeksini döndürür (backpatch için).

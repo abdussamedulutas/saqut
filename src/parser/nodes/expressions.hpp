@@ -44,4 +44,13 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
+class ArrayLiteralNode : public ExpressionNode {
+public:
+    std::vector<ASTNode*> elements;
+    ArrayLiteralNode();
+    ~ArrayLiteralNode() override { for (auto* e : elements) delete e; }
+    void log(int indent = 0) override;
+    std::string toJson(int depth = 0) override;
+};
+
 #endif

@@ -150,6 +150,23 @@ ASTNode* Parser::parseNullDenotation() {
         return expr;
     }
 
+    // Array literal: [expr, expr, ...]
+    if (ct.type == TokenType::LBRACKET) {
+        nextToken();
+        ArrayLiteralNode* arr = new ArrayLiteralNode();
+        arr->loc = ct.token ? ct.token->loc : SourceLocation{};
+        if (currentToken().type != TokenType::RBRACKET) {
+            arr->elements.push_back(parseExpression(0));
+            while (currentToken().type == TokenType::COMMA) {
+                nextToken();
+                arr->elements.push_back(parseExpression(0));
+            }
+        }
+        if (currentToken().type == TokenType::RBRACKET)
+            nextToken();
+        return arr;
+    }
+
     if (ct.is({
         TokenType::PLUS_PLUS, TokenType::MINUS_MINUS,
         TokenType::PLUS, TokenType::MINUS,
@@ -315,6 +332,13 @@ ASTNode* Parser::parseFunctionDecl() {
             if (!isTypeKw || !typeTok.token) break;
             std::string paramType = typeTok.token->token;
             nextToken();
+            // int[] a — tip sonrasında [] varsa array tipi
+            if (currentToken().type == TokenType::LBRACKET) {
+                nextToken();
+                if (currentToken().type == TokenType::RBRACKET)
+                    nextToken();
+                paramType += "[]";
+            }
             if (currentToken().type != TokenType::IDENTIFIER || !currentToken().token) break;
             VariableDeclNode* param = new VariableDeclNode();
             param->loc = currentToken().token->loc;
@@ -364,6 +388,14 @@ ASTNode* Parser::parseVariableDecl() {
     vd->varType = currentToken().token->token;
     nextToken();
 
+    // Java/C# stili: int[] x — tip adından hemen sonra [] gelir
+    if (currentToken().type == TokenType::LBRACKET) {
+        nextToken();
+        if (currentToken().type == TokenType::RBRACKET)
+            nextToken();
+        vd->varType += "[]";
+    }
+
     if (currentToken().type != TokenType::IDENTIFIER) {
         std::cerr << "Parser hatası: değişken ismi bekleniyor\n";
         return vd;
@@ -372,6 +404,7 @@ ASTNode* Parser::parseVariableDecl() {
     vd->name = currentToken().token->token;
     nextToken();
 
+    // C stili: int x[] — geriye dönük uyumluluk (postfix [])
     if (currentToken().type == TokenType::LBRACKET) {
         nextToken();
         while (currentToken().type != TokenType::RBRACKET &&
@@ -380,6 +413,7 @@ ASTNode* Parser::parseVariableDecl() {
             nextToken();
         if (currentToken().type == TokenType::RBRACKET)
             nextToken();
+        if (vd->varType.back() != ']') vd->varType += "[]";
     }
 
     if (currentToken().type == TokenType::EQUAL) {

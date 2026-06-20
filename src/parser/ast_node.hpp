@@ -107,6 +107,8 @@ enum class ASTKind {
                           //   children: [object], [member]
     IndexExpression,      // Dizi/indeks erişimi: a[i].
                           //   children: [object], [index]
+    ArrayLiteral,         // Dizi literali: [1, 2, 3].
+                          //   children: [element0, element1, ...]
 };
 
 // ============================================================================

@@ -188,6 +188,11 @@ struct Type {
         if (n == "string") return String();
         if (n == "bool")   return Bool();
         if (n == "void")   return Void();
+        // "int[]", "float[]" vb. — suffix [] ile dizi tipi
+        if (n.size() > 2 && n.substr(n.size() - 2) == "[]") {
+            Type elem = fromName(n.substr(0, n.size() - 2));
+            if (!elem.isError()) return array(elem);
+        }
         return error();
     }
 

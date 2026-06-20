@@ -53,6 +53,23 @@ std::string MemberAccessNode::toJson(int depth) {
     return obj.str();
 }
 
+// ArrayLiteralNode
+ArrayLiteralNode::ArrayLiteralNode() { kind = ASTKind::ArrayLiteral; }
+void ArrayLiteralNode::log(int indent) {
+    std::cout << jsonIndent(indent) << "ArrayLiteral [" << elements.size() << " eleman]\n";
+    for (auto* e : elements) e->log(indent + 1);
+}
+std::string ArrayLiteralNode::toJson(int depth) {
+    JsonObject obj(depth);
+    obj.add("kind", "ArrayLiteral");
+    obj.addArray("elements", [&]() {
+        for (auto* e : elements) obj.addItem(e->toJson(depth + 2));
+    });
+    obj.addRaw("resolvedType", resolvedTypeJson());
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
+}
+
 // IndexExpressionNode
 IndexExpressionNode::IndexExpressionNode() { kind = ASTKind::IndexExpression; }
 void IndexExpressionNode::log(int indent) {

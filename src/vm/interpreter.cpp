@@ -2,6 +2,9 @@
 #include "vm/object.hpp"
 #include <iostream>
 #include <stdexcept>
+#include <sstream>
+#include <cmath>
+#include <climits>
 
 // ── makeErrorValue ─────────────────────────────────────────────────────────────
 // ADR-025: Error struct oluşturur — alan sırası: [line, col, message, trace, code]
@@ -330,6 +333,65 @@ int Interpreter::run() {
                 throw std::runtime_error("Çalışma hatası: dizi değil");
             auto* arr = (ArrayObject*)arrVal.ref;
             frame.slots[instr.dest] = Value::fromInt((int)arr->elements.size());
+            break;
+        }
+
+        // ── Tip dönüşümleri (ADR-026: as operatörü) ─────────────────────
+        case Opcode::CAST_INT_TO_STR: {
+            frame.slots[instr.dest] = Value::fromString(
+                std::to_string(frame.slots[instr.src].intValue));
+            break;
+        }
+        case Opcode::CAST_FLOAT_TO_STR: {
+            std::ostringstream oss;
+            double fv = frame.slots[instr.src].floatValue;
+            oss << fv;
+            frame.slots[instr.dest] = Value::fromString(oss.str());
+            break;
+        }
+        case Opcode::CAST_BOOL_TO_STR:
+            frame.slots[instr.dest] = Value::fromString(
+                frame.slots[instr.src].intValue ? "true" : "false");
+            break;
+
+        case Opcode::CAST_STR_TO_INT: {
+            const std::string& s = frame.slots[instr.src].stringValue;
+            try {
+                size_t pos;
+                long long v = std::stoll(s, &pos);
+                if (pos != s.size()) throw std::invalid_argument("tam parse değil");
+                if (v < INT_MIN || v > INT_MAX) throw std::out_of_range("taşma");
+                frame.slots[instr.dest] = Value::fromInt((int)v);
+            } catch (...) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "'" + s + "' int'e dönüştürülemedi", "E_CAST");
+            }
+            break;
+        }
+        case Opcode::CAST_STR_TO_FLOAT: {
+            const std::string& s = frame.slots[instr.src].stringValue;
+            try {
+                size_t pos;
+                double v = std::stod(s, &pos);
+                if (pos != s.size()) throw std::invalid_argument("tam parse değil");
+                frame.slots[instr.dest] = Value::fromFloat(v);
+            } catch (...) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "'" + s + "' float'a dönüştürülemedi", "E_CAST");
+            }
+            break;
+        }
+        case Opcode::CAST_FLOAT_TO_INT_CHECKED: {
+            double fv = frame.slots[instr.src].floatValue;
+            if (!std::isfinite(fv) || fv < (double)INT_MIN || fv > (double)INT_MAX) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "Float değer int aralığı dışında veya NaN/Inf", "E_CAST");
+            } else {
+                frame.slots[instr.dest] = Value::fromInt((int)fv); // sıfıra kırp
+            }
             break;
         }
 

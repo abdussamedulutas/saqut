@@ -795,6 +795,64 @@ int IRGenerator::generateExpression(ASTNode* node) {
         return destSlot;
     }
 
+    // ── CastExpression: expr as TargetType[?]  (ADR-026) ───────────────────
+    case ASTKind::CastExpression: {
+        auto* cast = (CastExpressionNode*)node;
+        int srcSlot  = generateExpression(cast->operand);
+        int destSlot = freshSlot();
+        int nullable = cast->targetNullable ? 1 : 0;
+
+        // Kaynak ve hedef tipleri resolvedType üstünden al
+        Type srcType = Type::error();
+        if (auto* exn = dynamic_cast<ExpressionNode*>(cast->operand))
+            srcType = exn->resolvedType;
+        Type tgtType = cast->resolvedType;
+        tgtType.nullable = false; // base type
+
+        bool srcIsStr   = srcType.isString();
+        bool srcIsFloat = srcType.isPrimitive() &&
+                          (srcType.prim == PrimitiveKind::Float ||
+                           srcType.prim == PrimitiveKind::Double);
+        bool srcIsInt   = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Int;
+        bool srcIsBool  = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Bool;
+        bool tgtIsStr   = tgtType.isString();
+        bool tgtIsFloat = tgtType.isPrimitive() &&
+                          (tgtType.prim == PrimitiveKind::Float ||
+                           tgtType.prim == PrimitiveKind::Double);
+        bool tgtIsInt   = tgtType.isPrimitive() && tgtType.prim == PrimitiveKind::Int;
+
+        Opcode op;
+        bool infallible = false;
+        if (srcIsInt && tgtIsFloat) {
+            op = Opcode::INT_TO_FLOAT; infallible = true;
+        } else if (srcIsFloat && tgtIsInt) {
+            op = Opcode::CAST_FLOAT_TO_INT_CHECKED;
+        } else if (srcIsInt && tgtIsStr) {
+            op = Opcode::CAST_INT_TO_STR; infallible = true;
+        } else if (srcIsFloat && tgtIsStr) {
+            op = Opcode::CAST_FLOAT_TO_STR; infallible = true;
+        } else if (srcIsBool && tgtIsStr) {
+            op = Opcode::CAST_BOOL_TO_STR; infallible = true;
+        } else if (srcIsStr && tgtIsInt) {
+            op = Opcode::CAST_STR_TO_INT;
+        } else if (srcIsStr && tgtIsFloat) {
+            op = Opcode::CAST_STR_TO_FLOAT;
+        } else {
+            // Aynı tip→aynı tip (int→int gibi): kimlik dönüşümü
+            Instruction nop(Opcode::LOAD_SLOT);
+            nop.dest = destSlot;
+            nop.src  = srcSlot;
+            currentFunction_->instructions.push_back(std::move(nop));
+            return destSlot;
+        }
+        Instruction ins(op);
+        ins.dest = destSlot;
+        ins.src  = srcSlot;
+        ins.left = infallible ? -1 : nullable; // -1=bayraksız; 0=throw; 1=null
+        currentFunction_->instructions.push_back(std::move(ins));
+        return destSlot;
+    }
+
     default:
         // Bilinmeyen ifade türü
         return freshSlot(); // boş slot (0 değeriyle)

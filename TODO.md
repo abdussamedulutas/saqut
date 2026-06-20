@@ -96,15 +96,30 @@ ADR-020 doğrultusunda struct referans semantiğiyle uçtan uca çalışıyor:
 - `tests/golden/switch/break_in_switch.sqt` — explicit break ✓
 - `tests/golden/switch/switch_in_loop.sqt` — döngü içi switch, continue döngüye gider ✓
 
+## ✅ TAMAMLANDI — Tip dönüşümü `as` (ADR-026, #42) (2026-06-20)
+
+- `src/tokenizer/tokenizer.hpp/.cpp` — `"as"` keyword olarak eklendi
+- `src/parser/token.hpp` — `KW_AS` enum + KEYWORD_MAP + precedence 12 (additive=13'ten gevşek)
+- `src/parser/ast_node.hpp` — `CastExpression` ASTKind eklendi
+- `src/parser/nodes/expressions.hpp/.cpp` — `CastExpressionNode` (operand + targetTypeName + targetNullable)
+- `src/parser/parser.cpp` — `KW_AS` left-denotation: tip adı + opsiyonel `?` ayrıştırma
+- `src/semantic/type_checker.cpp` — kaynak/hedef tip doğrulama; dönüşüm matrisi (bool↔int yasak;
+  struct/array yasak); resolvedType = hedef tip + nullable flag
+- `src/symbol/symbol_collector.cpp` — `CastExpression` + `ArrayLiteral` walkExpr case eklendi
+- `src/ir/instruction.hpp` — yeni opcode'lar: `CAST_INT_TO_STR`, `CAST_FLOAT_TO_STR`,
+  `CAST_BOOL_TO_STR`, `CAST_STR_TO_INT`, `CAST_STR_TO_FLOAT`, `CAST_FLOAT_TO_INT_CHECKED`
+- `src/ir/ir_generator.cpp` — CastExpression IR: kaynak+hedef resolvedType ile doğru opcode seçimi;
+  fallible dönüşümlerde `ins.left = nullable` (0=throw, 1=null)
+- `src/ir/ir_function.cpp` — yeni cast opcode dump gösterimleri
+- `src/vm/interpreter.cpp` — VM: infallible cast'ler doğrudan; fallible cast'ler `try/catch`
+  ile E_CAST fırlatır veya null döndürür; `<sstream>/<cmath>/<climits>` eklendi
+- `tests/golden/cast/basic.sqt` — int/float/bool/string arası temel cast ✓
+- `tests/golden/cast/nullable_cast.sqt` — `as int?` başarısızsa null ✓
+- `tests/golden/cast/cast_error.sqt` — `as int` başarısızsa E_CAST yakalanır ✓
+
 ## 🚀 SIRADAKİ İŞ
 
-1. **Tip dönüşümü `as` (ADR-026, #42)** — açık cast:
-   - Lexer/parser: `as` infix operatör (sola-bağlı); `x as int`, `x as int?`.
-   - Yalnızca **skaler + string** arası (int/float/bool/string). **Struct/array cast YOK.**
-   - Başarısızlık = **hedef nullable'lığı:** `as int` → `Error` fırlat (pendingThrow_, hazır);
-     `as int?` → `null`. `float→int` sıfıra kırp; NaN/Inf/taşma fallible; `string→int` parse.
-   - `int a = x as int?` → E (int?→int, ADR-021 ile). `as?` operatörü YOK.
-2. **mark-sweep GC v2 (#56)** — en son; özellik bloklamaz, en karmaşık. Trigger basit
+1. **mark-sweep GC v2 (#56)** — en son; özellik bloklamaz, en karmaşık. Trigger basit
    "her N tahsiste" yeter; nesne modeli zaten GC-hazır.
 
 Açık mimari borçlar: **#56** (döngüsel referans → mark-sweep GC v2), **#57** (hata

@@ -1,0 +1,40 @@
+// ADR-026: as operatörü — temel dönüşümler
+// Beklenen çıktı:
+//   3
+//   3.14
+//   true
+//   false
+//   42
+//   1
+
+int main() {
+    // float → int (sıfıra kırp)
+    float f = 3.9;
+    int i = f as int;
+    print(i as string);
+
+    // int → float
+    int n = 3;
+    float pi = n as float;
+    float pi2 = pi + 0.14;
+    print(pi2 as string);
+
+    // bool → string
+    bool b = true;
+    print(b as string);
+    bool b2 = false;
+    print(b2 as string);
+
+    // string → int
+    string s = "42";
+    int parsed = s as int;
+    print(parsed as string);
+
+    // int → string → int (zincirleme)
+    int x = 1;
+    string sx = x as string;
+    int y = sx as int;
+    print(y as string);
+
+    return 0;
+}

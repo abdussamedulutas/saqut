@@ -1,0 +1,16 @@
+// ADR-026: as int (non-null) başarısızsa Error fırlatır
+// Beklenen çıktı:
+//   yakalandi
+//   E_CAST
+
+int main() {
+    string bad = "merhaba";
+    try {
+        int x = bad as int;
+        print("hata yok");
+    } catch (Error e) {
+        print("yakalandi");
+        print(e.code);
+    }
+    return 0;
+}

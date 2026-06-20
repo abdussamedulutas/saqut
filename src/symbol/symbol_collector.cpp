@@ -381,6 +381,18 @@ void SymbolCollector::walkExpr(ASTNode* node) {
         break;
     }
 
+    case ASTKind::ArrayLiteral: {
+        auto* al = (ArrayLiteralNode*)node;
+        for (auto* e : al->elements) walkExpr(e);
+        break;
+    }
+
+    case ASTKind::CastExpression: {  // ADR-026
+        auto* cast = (CastExpressionNode*)node;
+        if (cast->operand) walkExpr(cast->operand);
+        break;
+    }
+
     case ASTKind::Literal:
         break; // yaprak
 

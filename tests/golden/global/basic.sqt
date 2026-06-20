@@ -1,0 +1,12 @@
+int counter = 0;
+int total = 100;
+
+int main() {
+    counter = 5;
+    total = total + counter;
+    print(counter);
+    print(total);
+    counter += 3;
+    print(counter);
+    return 0;
+}

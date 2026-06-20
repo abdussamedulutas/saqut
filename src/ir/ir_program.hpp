@@ -29,6 +29,10 @@ struct IRProgram {
     // Ekleme sırası (dump'ta orijinal sırayla göstermek için)
     std::vector<std::string> functionOrder;
 
+    // Global değişkenler (LOAD_GLOBAL / STORE_GLOBAL için)
+    int                      globalCount = 0;
+    std::vector<std::string> globalNames; // index → isim (dump için)
+
     // Yeni fonksiyon ekle
     void addFunction(IRFunction fn) {
         functionOrder.push_back(fn.name);

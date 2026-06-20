@@ -3,6 +3,9 @@
 #include <stdexcept>
 
 int Interpreter::run() {
+    // Global slot'ları sıfırla
+    globalSlots_.assign(program_.globalCount, Value::fromInt(0));
+
     IRFunction* mainFunction = program_.findFunction("main");
     if (!mainFunction)
         throw std::runtime_error("Çalışma hatası: 'main' fonksiyonu bulunamadı");
@@ -69,6 +72,35 @@ int Interpreter::run() {
             frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue % d);
             break;
         }
+
+        // ── Bitsel ────────────────────────────────────────────────────────
+        case Opcode::BAND:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.left].intValue & frame.slots[instr.right].intValue);
+            break;
+        case Opcode::BOR:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.left].intValue | frame.slots[instr.right].intValue);
+            break;
+        case Opcode::SHL:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.left].intValue << frame.slots[instr.right].intValue);
+            break;
+        case Opcode::SHR:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.left].intValue >> frame.slots[instr.right].intValue);
+            break;
+        case Opcode::BNOT:
+            frame.slots[instr.dest] = Value::fromInt(~frame.slots[instr.src].intValue);
+            break;
+
+        // ── Global değişken erişimi ────────────────────────────────────────
+        case Opcode::LOAD_GLOBAL:
+            frame.slots[instr.dest] = globalSlots_[instr.intValue];
+            break;
+        case Opcode::STORE_GLOBAL:
+            globalSlots_[instr.intValue] = frame.slots[instr.src];
+            break;
 
         // ── Karşılaştırma ─────────────────────────────────────────────────
         case Opcode::LESS:

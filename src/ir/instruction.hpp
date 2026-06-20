@@ -55,6 +55,13 @@ enum class Opcode {
     DIV,           // UYARI: sıfıra bölme → runtime_error fırlatılır
     MOD,
 
+    // --- Bitsel (tümü: slots[dest] = slots[left] OP slots[right]) ---
+    BAND,          // slots[left] & slots[right]
+    BOR,           // slots[left] | slots[right]
+    SHL,           // slots[left] << slots[right]
+    SHR,           // slots[left] >> slots[right]
+    BNOT,          // ~slots[src]  → slots[dest]  (tekli operatör; src kullanır, left/right değil)
+
     // --- Karşılaştırma (sonuç: 1 = doğru, 0 = yanlış) ---
     LESS,          // slots[left] <  slots[right]
     LESS_EQUAL,    // slots[left] <= slots[right]
@@ -75,6 +82,10 @@ enum class Opcode {
 
     RETURN,        // Bu frame'i kapat, slots[src]'yi caller'a ilet.
 
+    // --- Global değişken erişimi ---
+    LOAD_GLOBAL,   // slots[dest] = globalSlots[intValue]
+    STORE_GLOBAL,  // globalSlots[intValue] = slots[src]
+
     // --- Dış dünya (FFI — Foreign Function Interface) ---
     CALLHOST,      // Host (C++) fonksiyonunu çağır. Şu an sadece "print" destekli.
                    //   Dönüş değeri yok; sadece yan etki (stdout'a yazmak gibi).
@@ -91,6 +102,13 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::MUL:           return "MUL";
         case Opcode::DIV:           return "DIV";
         case Opcode::MOD:           return "MOD";
+        case Opcode::BAND:          return "BAND";
+        case Opcode::BOR:           return "BOR";
+        case Opcode::SHL:           return "SHL";
+        case Opcode::SHR:           return "SHR";
+        case Opcode::BNOT:          return "BNOT";
+        case Opcode::LOAD_GLOBAL:   return "LOAD_GLOBAL";
+        case Opcode::STORE_GLOBAL:  return "STORE_GLOBAL";
         case Opcode::LESS:          return "LESS";
         case Opcode::LESS_EQUAL:    return "LESS_EQUAL";
         case Opcode::GREATER:       return "GREATER";

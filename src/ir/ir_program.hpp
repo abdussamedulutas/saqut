@@ -29,7 +29,11 @@ struct IRProgram {
     // Ekleme sırası (dump'ta orijinal sırayla göstermek için)
     std::vector<std::string> functionOrder;
 
-    // Global değişkenler (LOAD_GLOBAL / STORE_GLOBAL için)
+    // Modül-düzeyi değişkenler (LOAD_GLOBAL / STORE_GLOBAL için)
+    // Bunlar "global" değil — bu IRProgram'ın temsil ettiği tek modüle aittir.
+    // Çok-modüllü derlemede her modülün kendi IRProgram'ı (veya ayrı slot alanı) olur.
+    // TODO(#modül-scope): moduleId alanı eklenince Interpreter bu alana
+    //   frame.function->moduleId üzerinden erişecek (bkz. TODO.md).
     int                      globalCount = 0;
     std::vector<std::string> globalNames; // index → isim (dump için)
 

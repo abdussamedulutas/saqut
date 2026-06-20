@@ -17,7 +17,8 @@
 IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& /*symbolTable*/) {
     IRProgram program;
 
-    // 1. Geçiş: global VariableDecl'leri topla ve kayıt et
+    // 1. Geçiş: modül-düzeyi VariableDecl'leri topla ve kayıt et
+    // "Global" değil — bu dosyanın (modülün) kendi değişkenleri.
     std::vector<VariableDeclNode*> globalVars;
     for (ASTNode* child : programNode->getChildren()) {
         if (child->kind == ASTKind::VariableDecl) {

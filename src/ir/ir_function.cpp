@@ -121,6 +121,18 @@ void IRFunction::dump() const {
         } else if (ins.opcode == Opcode::BNOT) {
             std::cout << slot(ins.dest) << " = ~" << slot(ins.src);
 
+        } else if (ins.opcode == Opcode::ARRAY_NEW) {
+            std::cout << slot(ins.dest) << " = array[" << ins.intValue << "]";
+
+        } else if (ins.opcode == Opcode::ARRAY_GET) {
+            std::cout << slot(ins.dest) << " = " << slot(ins.left) << "[" << slot(ins.right) << "]";
+
+        } else if (ins.opcode == Opcode::ARRAY_SET) {
+            std::cout << slot(ins.dest) << "[" << slot(ins.left) << "] = " << slot(ins.right);
+
+        } else if (ins.opcode == Opcode::ARRAY_LEN) {
+            std::cout << slot(ins.dest) << " = len(" << slot(ins.src) << ")";
+
         } else if (ins.opcode == Opcode::LOAD_GLOBAL) {
             std::cout << slot(ins.dest) << " = global[" << ins.intValue << "]";
 

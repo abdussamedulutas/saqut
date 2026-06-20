@@ -1,4 +1,5 @@
 #include "vm/interpreter.hpp"
+#include "vm/object.hpp"
 #include <iostream>
 #include <stdexcept>
 
@@ -121,17 +122,25 @@ int Interpreter::run() {
             break;
         case Opcode::EQUAL_EQUAL: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
-            int r = (lv.kind == ValueKind::String)
-                ? (lv.stringValue == rv.stringValue ? 1 : 0)
-                : (lv.intValue    == rv.intValue    ? 1 : 0);
+            int r;
+            if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
+                r = (lv.ref == rv.ref ? 1 : 0); // ADR-023: array/struct kimlik karşılaştırması
+            else if (lv.kind == ValueKind::String)
+                r = (lv.stringValue == rv.stringValue ? 1 : 0);
+            else
+                r = (lv.intValue == rv.intValue ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
         case Opcode::NOT_EQUAL: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
-            int r = (lv.kind == ValueKind::String)
-                ? (lv.stringValue != rv.stringValue ? 1 : 0)
-                : (lv.intValue    != rv.intValue    ? 1 : 0);
+            int r;
+            if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
+                r = (lv.ref != rv.ref ? 1 : 0);
+            else if (lv.kind == ValueKind::String)
+                r = (lv.stringValue != rv.stringValue ? 1 : 0);
+            else
+                r = (lv.intValue != rv.intValue ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
@@ -182,6 +191,48 @@ int Interpreter::run() {
                 return returnValue.intValue;
 
             continue;
+        }
+
+        // ── Array (ADR-020: referans semantiği) ───────────────────────────
+        case Opcode::ARRAY_NEW: {
+            ArrayObject* arr = heap_.allocArray(instr.intValue);
+            arr->elements.resize(instr.intValue, Value::fromInt(0));
+            frame.slots[instr.dest] = Value::fromRef(arr);
+            break;
+        }
+        case Opcode::ARRAY_GET: {
+            Value& arrVal = frame.slots[instr.left];
+            if (arrVal.kind != ValueKind::Ref || !arrVal.ref)
+                throw std::runtime_error("Çalışma hatası: dizi değil");
+            auto* arr = (ArrayObject*)arrVal.ref;
+            int idx = frame.slots[instr.right].intValue;
+            if (idx < 0 || idx >= (int)arr->elements.size())
+                throw std::runtime_error(
+                    "Çalışma hatası: dizi sınır dışı (indeks=" + std::to_string(idx) +
+                    ", uzunluk=" + std::to_string(arr->elements.size()) + ")");
+            frame.slots[instr.dest] = arr->elements[idx];
+            break;
+        }
+        case Opcode::ARRAY_SET: {
+            Value& arrVal = frame.slots[instr.dest];
+            if (arrVal.kind != ValueKind::Ref || !arrVal.ref)
+                throw std::runtime_error("Çalışma hatası: dizi değil");
+            auto* arr = (ArrayObject*)arrVal.ref;
+            int idx = frame.slots[instr.left].intValue;
+            if (idx < 0 || idx >= (int)arr->elements.size())
+                throw std::runtime_error(
+                    "Çalışma hatası: dizi sınır dışı (indeks=" + std::to_string(idx) +
+                    ", uzunluk=" + std::to_string(arr->elements.size()) + ")");
+            arr->elements[idx] = frame.slots[instr.right];
+            break;
+        }
+        case Opcode::ARRAY_LEN: {
+            Value& arrVal = frame.slots[instr.src];
+            if (arrVal.kind != ValueKind::Ref || !arrVal.ref)
+                throw std::runtime_error("Çalışma hatası: dizi değil");
+            auto* arr = (ArrayObject*)arrVal.ref;
+            frame.slots[instr.dest] = Value::fromInt((int)arr->elements.size());
+            break;
         }
 
         // ── FFI ───────────────────────────────────────────────────────────

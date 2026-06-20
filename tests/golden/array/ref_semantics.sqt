@@ -1,0 +1,15 @@
+void degistir(int[] a) {
+    a[0] = 99;
+}
+
+int main() {
+    int[] x = [1, 2, 3];
+    degistir(x);
+    print(x[0]);
+    int[] y = x;
+    print(y == x);
+    int[] z = [1, 2, 3];
+    print(z == x);
+    print(x[1]);
+    return 0;
+}

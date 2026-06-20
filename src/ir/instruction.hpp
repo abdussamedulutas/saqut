@@ -82,6 +82,12 @@ enum class Opcode {
 
     RETURN,        // Bu frame'i kapat, slots[src]'yi caller'a ilet.
 
+    // --- Array (ADR-020: referans semantiği) ---
+    ARRAY_NEW,   // slots[dest] = yeni ArrayObject(intValue eleman kapasitesi)
+    ARRAY_GET,   // slots[dest] = slots[left][slots[right]]  — sınır kontrolü
+    ARRAY_SET,   // slots[dest][slots[left]] = slots[right]  — sınır kontrolü (dest=dizi, left=idx, right=değer)
+    ARRAY_LEN,   // slots[dest] = slots[src].uzunluk()
+
     // --- Modül-düzeyi değişken erişimi ---
     // "Global" değil: her değişken kendi dosyasına (modülüne) aittir.
     // Başka modüller bu alana doğrudan erişemez; yalnızca export/import ile ulaşabilir.
@@ -111,6 +117,10 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::SHL:           return "SHL";
         case Opcode::SHR:           return "SHR";
         case Opcode::BNOT:          return "BNOT";
+        case Opcode::ARRAY_NEW:     return "ARRAY_NEW";
+        case Opcode::ARRAY_GET:     return "ARRAY_GET";
+        case Opcode::ARRAY_SET:     return "ARRAY_SET";
+        case Opcode::ARRAY_LEN:     return "ARRAY_LEN";
         case Opcode::LOAD_GLOBAL:   return "LOAD_GLOBAL";
         case Opcode::STORE_GLOBAL:  return "STORE_GLOBAL";
         case Opcode::LESS:          return "LESS";

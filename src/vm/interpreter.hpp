@@ -16,6 +16,7 @@
 #include <vector>
 #include "ir/ir_program.hpp"
 #include "vm/call_frame.hpp"
+#include "vm/object.hpp"
 
 class Interpreter {
 public:
@@ -29,6 +30,7 @@ private:
     IRProgram&            program_;
     std::vector<CallFrame> callStack_;
     std::vector<Value>    globalSlots_;
+    Heap                  heap_;
 
     // Host (C++) fonksiyon çağrısı — şu an sadece "print" destekli
     void executeHostFunction(const std::string& name,

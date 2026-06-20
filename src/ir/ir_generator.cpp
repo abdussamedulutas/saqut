@@ -376,9 +376,19 @@ int IRGenerator::generateExpression(ASTNode* node) {
     case ASTKind::BinaryExpression: {
         auto* bin = (BinaryExpressionNode*)node;
 
-        // Atama operatörleri: x = expr
+        // Atama operatörleri: x = expr  ve  a[i] = expr
         if (bin->Operator == TokenType::EQUAL) {
             int rhsSlot = generateExpression(bin->Right);
+
+            // a[i] = val → ARRAY_SET
+            if (bin->Left && bin->Left->kind == ASTKind::IndexExpression) {
+                auto* idx = (IndexExpressionNode*)bin->Left;
+                int arrSlot = generateExpression(idx->object);
+                int idxSlot = generateExpression(idx->index);
+                emitArraySet(arrSlot, idxSlot, rhsSlot);
+                return rhsSlot;
+            }
+
             auto* lhsId = (IdentifierNode*)bin->Left;
             std::string varName = lhsId->parserToken.token->token;
 
@@ -579,6 +589,30 @@ int IRGenerator::generateExpression(ASTNode* node) {
         return resultSlot;                  // artırmadan önceki değer
     }
 
+    // ── Array literali: [1, 2, 3] ─────────────────────────────────────────
+    case ASTKind::ArrayLiteral: {
+        auto* al = (ArrayLiteralNode*)node;
+        int arrSlot = freshSlot();
+        emitArrayNew(arrSlot, (int)al->elements.size());
+        for (int i = 0; i < (int)al->elements.size(); i++) {
+            int idxSlot = freshSlot();
+            emitLoadConst(idxSlot, i);
+            int valSlot = generateExpression(al->elements[i]);
+            emitArraySet(arrSlot, idxSlot, valSlot);
+        }
+        return arrSlot;
+    }
+
+    // ── Index erişimi okuma: a[i] ─────────────────────────────────────────
+    case ASTKind::IndexExpression: {
+        auto* idx = (IndexExpressionNode*)node;
+        int arrSlot  = generateExpression(idx->object);
+        int idxSlot  = generateExpression(idx->index);
+        int destSlot = freshSlot();
+        emitArrayGet(destSlot, arrSlot, idxSlot);
+        return destSlot;
+    }
+
     default:
         // Bilinmeyen ifade türü
         return freshSlot(); // boş slot (0 değeriyle)
@@ -648,6 +682,36 @@ void IRGenerator::emitStoreGlobal(int srcSlot, int globalIndex) {
     Instruction ins(Opcode::STORE_GLOBAL);
     ins.src      = srcSlot;
     ins.intValue = globalIndex;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitArrayNew(int destSlot, int capacity) {
+    Instruction ins(Opcode::ARRAY_NEW);
+    ins.dest     = destSlot;
+    ins.intValue = capacity;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitArrayGet(int destSlot, int arrSlot, int idxSlot) {
+    Instruction ins(Opcode::ARRAY_GET);
+    ins.dest  = destSlot;
+    ins.left  = arrSlot;
+    ins.right = idxSlot;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitArraySet(int arrSlot, int idxSlot, int valSlot) {
+    Instruction ins(Opcode::ARRAY_SET);
+    ins.dest  = arrSlot;
+    ins.left  = idxSlot;
+    ins.right = valSlot;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitArrayLen(int destSlot, int arrSlot) {
+    Instruction ins(Opcode::ARRAY_LEN);
+    ins.dest = destSlot;
+    ins.src  = arrSlot;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 

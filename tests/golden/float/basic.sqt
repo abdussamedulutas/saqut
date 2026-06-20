@@ -1,0 +1,11 @@
+int main() {
+    float x = 3.14;
+    float y = 2.0;
+    print(x + y);
+    print(x * y);
+    print(x - y);
+    print(x / y);
+    float z = 1;
+    print(z);
+    return 0;
+}

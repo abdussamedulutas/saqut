@@ -58,6 +58,8 @@ private:
     // Talimatları currentFunction_->instructions'a ekler.
 
     void emitLoadConst(int destSlot, int value);
+    void emitLoadFloat(int destSlot, double value);
+    void emitIntToFloat(int destSlot, int srcSlot);
     void emitLoadSlot(int destSlot, int srcSlot);
     void emitLoadGlobal(int destSlot, int globalIndex);
     void emitStoreGlobal(int srcSlot, int globalIndex);

@@ -110,6 +110,16 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
         if (vd->initExpr) {
             int initSlot = generateExpression(vd->initExpr);
+            // float/double değişkenine int sabit atama → INT_TO_FLOAT
+            bool targetIsFloat = (vd->varType == "float" || vd->varType == "double");
+            bool srcIsInt = false;
+            if (auto* e = dynamic_cast<ExpressionNode*>(vd->initExpr))
+                srcIsInt = e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Int;
+            if (targetIsFloat && srcIsInt) {
+                int conv = freshSlot();
+                emitIntToFloat(conv, initSlot);
+                initSlot = conv;
+            }
             if (initSlot != varSlot) emitLoadSlot(varSlot, initSlot);
         } else if (structLayouts_.count(vd->varType)) {
             // Struct değişkeni: init ifadesi yoksa boş StructObject oluştur
@@ -312,12 +322,21 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
         switch (lit->literalType) {
             case LiteralType::INTEGER: {
-                int value = 0;
-                if (lit->hasDirectValue)
-                    value = lit->directIntValue;
-                else if (lit->parserToken.token)
-                    value = std::stoi(lit->parserToken.token->token);
-                emitLoadConst(slot, value);
+                // Float/double bağlamında tam sayı literali → LOAD_FLOAT (bağlama-göre tip, ADR-010)
+                bool asFloat = lit->resolvedType.isPrimitive() &&
+                               (lit->resolvedType.prim == PrimitiveKind::Float ||
+                                lit->resolvedType.prim == PrimitiveKind::Double);
+                if (asFloat) {
+                    double val = 0.0;
+                    if (lit->hasDirectValue) val = (double)lit->directIntValue;
+                    else if (lit->parserToken.token) val = std::stod(lit->parserToken.token->token);
+                    emitLoadFloat(slot, val);
+                } else {
+                    int value = 0;
+                    if (lit->hasDirectValue) value = lit->directIntValue;
+                    else if (lit->parserToken.token) value = std::stoi(lit->parserToken.token->token);
+                    emitLoadConst(slot, value);
+                }
                 break;
             }
             case LiteralType::BOOLEAN: {
@@ -349,13 +368,18 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 currentFunction_->instructions.push_back(std::move(ins));
                 break;
             }
-            case LiteralType::FLOAT:
-                throw std::runtime_error(
-                    "IR üretim hatası: float literal şu an VM tarafından desteklenmiyor. "
-                    "Tam sayı kullanın veya float desteği eklenene kadar bekleyin.");
+            case LiteralType::FLOAT: {
+                double val = 0.0;
+                if (lit->parserToken.token)
+                    val = std::stod(lit->parserToken.token->token);
+                emitLoadFloat(slot, val);
+                break;
+            }
             case LiteralType::BOŞ:
-                throw std::runtime_error(
-                    "IR üretim hatası: null literal şu an VM tarafından desteklenmiyor.");
+                // null literal → Null kind Value (ADR-021)
+                { Instruction ins(Opcode::LOAD_CONST); ins.dest = slot; ins.intValue = 0;
+                  currentFunction_->instructions.push_back(std::move(ins)); } // placeholder; VM'de Null üretmeli
+                break;
         }
         return slot;
     }
@@ -652,7 +676,41 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
     int leftSlot  = generateExpression(leftNode);
     int rightSlot = generateExpression(rightNode);
     int destSlot  = freshSlot();
-    emitBinaryOp(opcode, destSlot, leftSlot, rightSlot);
+
+    // Float tip kontrolü — resolvedType üstünden (tip denetleyici tarafından yazıldı)
+    bool leftIsFloat  = false, rightIsFloat = false;
+    if (auto* e = dynamic_cast<ExpressionNode*>(leftNode))
+        leftIsFloat  = e->resolvedType.isPrimitive() &&
+                       (e->resolvedType.prim == PrimitiveKind::Float ||
+                        e->resolvedType.prim == PrimitiveKind::Double);
+    if (auto* e = dynamic_cast<ExpressionNode*>(rightNode))
+        rightIsFloat = e->resolvedType.isPrimitive() &&
+                       (e->resolvedType.prim == PrimitiveKind::Float ||
+                        e->resolvedType.prim == PrimitiveKind::Double);
+
+    if (leftIsFloat || rightIsFloat) {
+        // Int operandı float'a çevir
+        if (!leftIsFloat) {
+            int conv = freshSlot();
+            emitIntToFloat(conv, leftSlot);
+            leftSlot = conv;
+        }
+        if (!rightIsFloat) {
+            int conv = freshSlot();
+            emitIntToFloat(conv, rightSlot);
+            rightSlot = conv;
+        }
+        // Float opcode eşleştirmesi
+        Opcode floatOp = opcode;
+        if      (opcode == Opcode::ADD) floatOp = Opcode::FADD;
+        else if (opcode == Opcode::SUB) floatOp = Opcode::FSUB;
+        else if (opcode == Opcode::MUL) floatOp = Opcode::FMUL;
+        else if (opcode == Opcode::DIV) floatOp = Opcode::FDIV;
+        // karşılaştırma opcodeları aynı kalır (LESS, GREATER, vb.)
+        emitBinaryOp(floatOp, destSlot, leftSlot, rightSlot);
+    } else {
+        emitBinaryOp(opcode, destSlot, leftSlot, rightSlot);
+    }
     return destSlot;
 }
 
@@ -707,6 +765,20 @@ void IRGenerator::emitStoreGlobal(int srcSlot, int globalIndex) {
     Instruction ins(Opcode::STORE_GLOBAL);
     ins.src      = srcSlot;
     ins.intValue = globalIndex;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitLoadFloat(int destSlot, double value) {
+    Instruction ins(Opcode::LOAD_FLOAT);
+    ins.dest       = destSlot;
+    ins.floatValue = value;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitIntToFloat(int destSlot, int srcSlot) {
+    Instruction ins(Opcode::INT_TO_FLOAT);
+    ins.dest = destSlot;
+    ins.src  = srcSlot;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 

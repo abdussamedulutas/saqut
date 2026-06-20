@@ -193,6 +193,38 @@ int Interpreter::run() {
             continue;
         }
 
+        // ── Float aritmetik (#44) ─────────────────────────────────────────
+        case Opcode::LOAD_FLOAT:
+            frame.slots[instr.dest] = Value::fromFloat(instr.floatValue);
+            break;
+        case Opcode::FADD:
+            frame.slots[instr.dest] = Value::fromFloat(
+                frame.slots[instr.left].floatValue + frame.slots[instr.right].floatValue);
+            break;
+        case Opcode::FSUB:
+            frame.slots[instr.dest] = Value::fromFloat(
+                frame.slots[instr.left].floatValue - frame.slots[instr.right].floatValue);
+            break;
+        case Opcode::FMUL:
+            frame.slots[instr.dest] = Value::fromFloat(
+                frame.slots[instr.left].floatValue * frame.slots[instr.right].floatValue);
+            break;
+        case Opcode::FDIV: {
+            double r = frame.slots[instr.right].floatValue;
+            if (r == 0.0) throw std::runtime_error("Çalışma hatası: float sıfıra bölme");
+            frame.slots[instr.dest] = Value::fromFloat(frame.slots[instr.left].floatValue / r);
+            break;
+        }
+        case Opcode::FNEG:
+            frame.slots[instr.dest] = Value::fromFloat(-frame.slots[instr.src].floatValue);
+            break;
+        case Opcode::INT_TO_FLOAT:
+            frame.slots[instr.dest] = Value::fromFloat((double)frame.slots[instr.src].intValue);
+            break;
+        case Opcode::FLOAT_TO_INT:
+            frame.slots[instr.dest] = Value::fromInt((int)frame.slots[instr.src].floatValue);
+            break;
+
         // ── Struct (ADR-020: referans semantiği) ──────────────────────────
         case Opcode::STRUCT_NEW: {
             StructObject* obj = heap_.allocStruct(instr.intValue);
@@ -280,8 +312,7 @@ void Interpreter::executeHostFunction(const std::string&       name,
     if (name == "print") {
         if (!argSlots.empty()) {
             const Value& val = slots[argSlots[0]];
-            if (val.kind == ValueKind::String) std::cout << val.stringValue << "\n";
-            else                               std::cout << val.intValue    << "\n";
+            std::cout << val.toString() << "\n";
         }
         return;
     }

@@ -20,6 +20,10 @@ static const char* opSymbol(Opcode op) {
         case Opcode::SUB:           return "-";
         case Opcode::MUL:           return "*";
         case Opcode::DIV:           return "/";
+        case Opcode::FADD:          return "+.";
+        case Opcode::FSUB:          return "-.";
+        case Opcode::FMUL:          return "*.";
+        case Opcode::FDIV:          return "/.";
         case Opcode::MOD:           return "%";
         case Opcode::BAND:          return "&";
         case Opcode::BOR:           return "|";
@@ -39,6 +43,7 @@ static bool isBinaryOp(Opcode op) {
     switch (op) {
         case Opcode::ADD: case Opcode::SUB: case Opcode::MUL:
         case Opcode::DIV: case Opcode::MOD:
+        case Opcode::FADD: case Opcode::FSUB: case Opcode::FMUL: case Opcode::FDIV:
         case Opcode::BAND: case Opcode::BOR: case Opcode::SHL: case Opcode::SHR:
         case Opcode::LESS: case Opcode::LESS_EQUAL:
         case Opcode::GREATER: case Opcode::GREATER_EQUAL:
@@ -120,6 +125,18 @@ void IRFunction::dump() const {
 
         } else if (ins.opcode == Opcode::BNOT) {
             std::cout << slot(ins.dest) << " = ~" << slot(ins.src);
+
+        } else if (ins.opcode == Opcode::LOAD_FLOAT) {
+            std::cout << slot(ins.dest) << " = " << ins.floatValue;
+
+        } else if (ins.opcode == Opcode::INT_TO_FLOAT) {
+            std::cout << slot(ins.dest) << " = (float)" << slot(ins.src);
+
+        } else if (ins.opcode == Opcode::FLOAT_TO_INT) {
+            std::cout << slot(ins.dest) << " = (int)" << slot(ins.src);
+
+        } else if (ins.opcode == Opcode::FNEG) {
+            std::cout << slot(ins.dest) << " = -" << slot(ins.src);
 
         } else if (ins.opcode == Opcode::STRUCT_NEW) {
             std::cout << slot(ins.dest) << " = struct<" << ins.functionName << ">[" << ins.intValue << " alan]";

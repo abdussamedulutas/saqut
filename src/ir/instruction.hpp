@@ -82,9 +82,13 @@ enum class Opcode {
 
     RETURN,        // Bu frame'i kapat, slots[src]'yi caller'a ilet.
 
-    // --- Global değişken erişimi ---
-    LOAD_GLOBAL,   // slots[dest] = globalSlots[intValue]
-    STORE_GLOBAL,  // globalSlots[intValue] = slots[src]
+    // --- Modül-düzeyi değişken erişimi ---
+    // "Global" değil: her değişken kendi dosyasına (modülüne) aittir.
+    // Başka modüller bu alana doğrudan erişemez; yalnızca export/import ile ulaşabilir.
+    // TODO(#modül-scope): IRFunction.moduleId eklenerek çok-modüllü derlemede
+    //   her fonksiyonun kendi modülünün slot alanına bakması sağlanacak (bkz. TODO.md).
+    LOAD_GLOBAL,   // slots[dest] = moduleSlots[intValue]  (bu modülün modül-düzeyi değişkeni)
+    STORE_GLOBAL,  // moduleSlots[intValue] = slots[src]
 
     // --- Dış dünya (FFI — Foreign Function Interface) ---
     CALLHOST,      // Host (C++) fonksiyonunu çağır. Şu an sadece "print" destekli.

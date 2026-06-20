@@ -1,0 +1,30 @@
+// ADR-021: akış-duyarlı null analizi
+// nested + guard narrowing
+
+int? maybeGet(bool flag) {
+    if (flag) {
+        return 42;
+    }
+    return null;
+}
+
+int main() {
+    int? a = maybeGet(true);
+
+    // nested: if (a != null) { a non-null }
+    if (a != null) {
+        int x = a;       // OK: narrowed
+        print(x);
+    }
+
+    // guard: if (a == null) return;  sonrasında a non-null
+    int? b = maybeGet(false);
+    if (b == null) {
+        print(0);
+        return 0;
+    }
+    // burada b non-null (guard geçti)
+    int y = b;
+    print(y);
+    return 0;
+}

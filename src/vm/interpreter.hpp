@@ -14,9 +14,17 @@
 #define SAQUT_VM_INTERPRETER
 
 #include <vector>
+#include <optional>
 #include "ir/ir_program.hpp"
 #include "vm/call_frame.hpp"
 #include "vm/object.hpp"
+
+// ADR-025: try bloğu girişinde yığına eklenen kayıt
+struct TryFrame {
+    size_t callStackDepth; // ENTER_TRY anındaki callStack_.size() — unwind için
+    int    catchTarget;    // catch bloğunun IR instruction indeksi
+    int    errorSlot;      // catch değişkeninin slot numarası (catch frame'inde)
+};
 
 class Interpreter {
 public:
@@ -27,10 +35,17 @@ public:
     int run();
 
 private:
-    IRProgram&            program_;
+    IRProgram&             program_;
     std::vector<CallFrame> callStack_;
-    std::vector<Value>    globalSlots_;
-    Heap                  heap_;
+    std::vector<Value>     globalSlots_;
+    Heap                   heap_;
+    std::vector<TryFrame>  tryStack_;                 // ADR-025: aktif try çerçeveleri
+    std::optional<Value>   pendingThrow_;             // bekleyen istisna değeri
+
+    // Error StructObject oluştur (ADR-025): [line, col, message, trace, code]
+    Value makeErrorValue(const std::string& message,
+                         const std::string& code = "",
+                         int line = 0, int col = 0);
 
     // Host (C++) fonksiyon çağrısı — şu an sadece "print" destekli
     void executeHostFunction(const std::string& name,

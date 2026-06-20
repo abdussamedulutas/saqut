@@ -511,6 +511,11 @@ bir yükümlülüktür ama **frontend'i bloklamaz** ve kolay yolu vardır:
 
 ### Güncelleme — Scope-tabanlı bellek artık GEREKÇELİ (bağımlılığı belgele)
 
+> ⚠️ **İPTAL — bu güncelleme ADR-020 ile geçersiz kılındı.** Bileşik tipler artık
+> runtime'da referans (JS/Java/C# modeli); bileşikler scope'tan kaçar, bellek
+> erişilebilirliğe bağlı, geri-kazanım stratejisi (#56) gerekecek. Aşağıdaki
+> "GC gerekmez" sonucu **artık geçerli değildir** — tarihsel bağlam için bırakıldı.
+
 Önceki kaygı ("scope çıkışında free, aliasing/escape altında bozulur") kilitli
 dil kimliğiyle **lehte çözüldü:**
 
@@ -660,6 +665,451 @@ modelini birlikte zorlar — ikisi de bu yüzden ertelendi.
 
 ---
 
+## ADR-020: Değer vs Referans Semantiği — Bileşik Tipler Runtime'da Referanstır
+
+### Bağlam
+
+ADR-014/018/019 boyunca bellek modeli tek bir **taşıyıcı varsayıma** dayanıyordu:
+
+> "kullanıcı pointer'ı yok + kaçan referans yok → array/struct scope'tan kaçamaz
+> → scope-tabanlı bellek çalışır, **GC gerekmez**."
+
+Bu varsayım, `interface`'in (ADR-018) ve closure'ın ertelenmesinin de ikinci
+gerekçesiydi. Tasarım oturumunda **bilinçli olarak değiştirildi.** "Pointer yok"
+ilkesinin gerçekte ne demek olduğu netleşti:
+
+> **"Pointer/referans yok" = kullanıcıya `&`/`*` *sözdizimi* verilmez.**
+> Bu bir *value-semantics* iddiası değildi; amacı sözdizimsel pointer kontrolünü
+> kullanıcıdan almaktı. Derleyici ve runtime, bileşik değerleri her aşamada
+> **referansla** taşır — aksi halde her atama/çağrı/dönüşte derin kopya yaşanır
+> ve bağlı yapılar (node) imkânsızlaşırdı.
+
+### Karar
+
+✅ **İki katmanlı semantik (JavaScript / Java / C# nesne modeli):**
+
+| Kategori | Tipler | Atama / parametre semantiği |
+|---|---|---|
+| **Primitive** | `int`, `float`, `bool`, (`char` vb.) | **Saf değer** — kopyalanır |
+| **Bileşik (referans)** | `struct`, `array`, `string`\*, (ileride `class`, `function`) | **Referans** — paylaşılır |
+
+- `a=0; b=a; b=5` → `a` hâlâ `0` (primitive kopya). Fonksiyon parametresinde de aynı.
+- `func(arr)` → array'in **kendisi** geçer; `func` içinde değişen çağıranı **etkiler**.
+- `func(arr[0])` → eleman primitive → **kopya**; çağıranı **etkilemez**.
+- \* `string`'in primitive-gibi mi (immutable değer) yoksa referans mı sayılacağı
+  ayrı bir alt-karar; #40 ile beraber netleşecek.
+
+✅ **`class` ve `function` tipleri sözdizimsel olarak rezerve** — şu an semantik
+yok, backend'i ilgilendirmez; ileride referans tip olarak gelecekler. Lexer/parser
+keyword'leri tanıyıp "henüz desteklenmiyor" diyebilir. (ADR-014'teki "class yok
+sayılır" maddesi bu yönde yumuşatıldı: yok sayılmaz, rezerve edilir.)
+
+### Bilinçli geri açtığımız problem: kaçma / yaşam-süresi
+
+Bu karar, ADR-014'ün "scope-tabanlı bellek GEREKÇELİ / GC gerekmez" sonucunu
+**iptal eder.** Referansla:
+
+1. **Aliasing gerçek.** `b = a; b.x = 5` → `a.x` de değişir. "Takma ad yok, akıl
+   yürütmesi kolay" sadeliği takas edildi. **Determinizm korunur** — tek
+   iş-parçacığı, deterministik kayıt-tekrar / time-travel debug hâlâ doğal; takas
+   edilen yalnızca aliasing-özgürlüğüdür.
+2. **Bileşikler scope'tan kaçar.** Bir node `return` edilebilir veya başka bir
+   struct'ın alanında saklanabilir → "scope çıkışında free" **artık yanlış.**
+   Sahiplik scope'a değil **erişilebilirliğe** bağlı.
+3. **Döngüsel yapılar artık meşru ve istenen.** `struct Node { Node next; }`
+   ADR-011/014'te `E010` ile yasaktı (by-value → sonsuz boyut). Referansla alan
+   pointer-boyutlu → **sonlu** → bağlı liste / ağaç / graf **yazılabilir.** Bunlar
+   dilin hedef kullanımının kalbi: XML node'ları, JSON kalıpları, class'sız ORM.
+   **Sonuç:** `E010` revize edilmeli — referansla tutulan struct alanı için döngü
+   artık hata değildir.
+
+### Bunun açtığı zorunlu problem (ayrı issue)
+
+Döngüsel referans → naif **referans sayımı (`shared_ptr`) sızdırır.** Bu artık
+"olabilir" değil, dilin **hedeflediği** yapıların (graf/döngü) doğrudan sonucu.
+Bir geri-kazanım stratejisi (izleyici GC / döngü toplayıcı) **kesinlikle**
+gerekecek. Bu güçlü mimari borç **#56**'da izlenir ve `karar-gerekli`. v1 motoru
+`shared_ptr` ile başlayıp döngüyü **bilinçli ve belgeleyerek** sızdırabilir, ama
+ürünleşmeden önce çözülmek zorundadır.
+
+### İptal/revize edilen önceki kararlar
+
+- **ADR-014** — "scope-tabanlı bellek GEREKÇELİ / GC gerekmez" sonucu **iptal.**
+  Bellek artık scope'a değil erişilebilirliğe bağlı; geri-kazanım stratejisi #56.
+- **ADR-018 / ADR-019** — `interface` / closure'ı ertelemenin "kaçma problemini
+  yeniden açar" gerekçesi **artık geçersiz** (problem zaten açık). Bu ikisini
+  *daha kolay* alınabilir kılar — ama hâlâ kapsam dışı, sadece engeli değişti.
+- **ADR-011** — `E010` döngüsel struct kuralı revize edilecek (yukarı bkz.).
+
+---
+
+## ADR-021: Null Güvenliği — `Type?` Nullable + Akış-Duyarlı Null Analizi
+
+### Bağlam
+
+ADR-020 ile bileşik tipler referans oldu. Referans, "gösterecek bir şey yok"
+durumunu (bağlı listenin sonu, başlatılmamış alan) **zorunlu** kılar. "null her
+yerde" (Java/C#/JS) milyar dolarlık hatadır: null-deref çalışma zamanında patlar.
+saQut'un kimliği "kafes — derleyici/VM seni korur" → bunu derleme zamanında
+yakalamak istiyoruz.
+
+### Karar
+
+✅ **Kotlin/Swift modeli: varsayılan null-OLAMAZ, nullable açıkça `?` ile.**
+
+- `Node a` → asla null olamaz; başlatılması zorunlu.
+- `Node? a` → null olabilir; başlatılmazsa değeri **`null`**.
+- `null` literali yalnızca `T?` tipine atanabilir; `Node a = null` → **derleme hatası**.
+- `T?` üstünde doğrudan alan/eleman erişimi (`a.next`) → **derleme hatası**
+  (önce null-kontrolü şart).
+
+### Atama/operand kuralı — `T <: T?` (tek yönlü), katı
+
+✅ **Alt-tip:** `T <: T?`. Yani:
+- `int? a = 5;` → ✓ (int → int?, **genişletme serbest**).
+- `int a = bir_int?;` → ✗ (int? → int, **daraltma yasak**).
+
+✅ **Katı operand kuralı:** non-null bir bağlamda — atamanın sol tarafı, **her
+operatör operandı**, non-null bekleyen bir argüman — değer **statik olarak non-null**
+olmalı. `int a = b + c + d`'de `b/c/d`'den **biri bile** nullable ise → **derleme
+hatası.** Sembol tablosu/akış görünümü seviyesinde: `notnull = notnull + notnull + …`.
+Sezgi yok, deterministik. (`notnull + notnull` → `notnull`.)
+
+### Akış-duyarlı null analizi (flow-sensitive narrowing)
+
+`T?` bir değişken **program noktasına göre** "kesin non-null" kanıtlandıysa
+daraltılır:
+
+```c
+Node? a = ...;
+// a.next;            // E0xx: a null olabilir
+if (a != null) {
+    a.next;           // OK — bu dalda a, Node'a daraltıldı
+}
+// a.next;            // yine hata (daldan çıkıldı)
+
+if (a == null) return;   // guard / erken çıkış
+a.next;                  // OK — buradan sonrası kesin non-null
+```
+
+`if` bu sistemin **bel kemiğidir** — sadece büyük/küçük/eşitlik değil, nullable
+aklamanın da aracı. **İki form da desteklenir:**
+
+1. **Nested (blok-kapsamlı):** `if (a != null) { /* a: T burada */ }`. Ayrıca
+   `if/else`'in zıt dalı, `while (a != null) { … }`.
+2. **Sıralı (guard / erken-çıkış):** `if (a == null) return; /* a: T bundan sonra */`.
+   Dal kesin çıkıyorsa (`return`/`throw`/`break`/`continue`) negasyonu **ardışık**
+   koda taşınır.
+
+**Mekanik:** CFG üzerinde ileri-yönlü dataflow; her nullable değişken için kafes
+`{MaybeNull, NonNull}`. Koşullarda daraltma (`!= null`, `== null` guard, `&&`
+kısa-devre sağ tarafı); kesin-çıkış dalları negasyonu ardına taşır; birleşme (join)
+muhafazakâr (bir daldan MaybeNull gelirse MaybeNull); atama RHS'e göre sıfırlar.
+
+> **Karmaşıklaştırma sınırı:** narrowing yalnızca **doğrudan test edilen değişken**
+> için tanınır (`x == null`/`x != null`). **Alias takibi YOK** (`y = x; if (y != null)`
+> → x daralmaz) ve keyfi teorem-ispatı yok. Bu, derleyiciyi basit tutarken yaygın
+> durumların hepsini kapsar → developer **uzun/karmaşık kod yazmak zorunda kalmaz.**
+
+> **Runtime maliyeti SIFIR** — tamamen derleme-zamanı analizi; üretilen kodda
+> fazladan kontrol yok.
+
+### Kaçış kapısı YOK — `!` ve `??` YASAK
+
+Null **yalnızca görünür kontrol akışıyla** (yukarıdaki `if` narrowing) aklanır.
+Gizli runtime null-aklama operatörleri **yasaktır:**
+
+- ❌ **`x!`** (non-null iddiası) — "compiler'a güvenme, runtime'da kontrol et"
+  = statik garantiyi delen gizli backdoor. *(ADR-021'in ilk taslağındaki `a!`
+  KALDIRILDI.)*
+- ❌ **`x ?? default`** (elvis), **`x?.field`** (güvenli çağrı) — null durumunu
+  sessizce gizleyen şeker.
+
+> Ayrım: `as int`'in başarısızlıkta fırlatması yasak **değil** — o bir null-backdoor
+> değil, kendiliğinden başarısız olabilen bir *dönüşüm* (ADR-026).
+
+### Frontend her şeyi kesin çözer (backend-bağımsızlık)
+
+Nullability **tamamen frontend'de** çözülür; tüm null-güvenlik hataları IR'den
+**önce** verilir. Backend'ler (IR+VM, ileride C-transpile) null-güvenliği **yeniden
+analiz etmez** — garantiyi hazır devralır (ADR-006/019). Bu sayede: well-typed saf
+saQut kodu **statik null-güvenlidir** → non-null referans deref'i runtime null-kontrolü
+**gerektirmez** (perf + sadelik). Runtime null-deref hatası (ADR-025) bu yüzden
+geriye esas olarak **FFI sınırı** (host non-null sözünü çiğnerse) ve savunma amaçlı
+backstop olarak kalır — saf saQut kodu bunu üretmez.
+
+### Mimari yeri
+
+Bu, saQut'un ilk gerçek **akış-duyarlı** analizidir. **Yapısal kontrol akışı**
+üstünde (AST + structured CFG) yapılabilir; tam SSA gerektirmez → **#2 (CFG/SSA
+gerekli mi?)** için somut veri: şimdilik yapısal akış analizi yeter. **#20**
+(akıllı diagnostic) bu analizden beslenir ("burada null olabilir, çünkü …").
+
+---
+
+## ADR-022: Bellek Geri-Kazanımı — Basit Deterministik Mark-Sweep + GC-Hazır Nesne Modeli
+
+### Bağlam
+
+ADR-020 referans semantiği → döngüsel yapılar (#56). Kısıtlar: GC **basit ve
+deterministik** olmalı, "karmaşık ve rastgele" istenmiyor. Ayrıca bu, **geç
+değiştirilmesi en pahalı** karardır (nesne modeline işler) → topuğa sıkmamak
+kritik.
+
+### Önce yanlış-eşleştirmeyi temizle
+
+**`null`/`?` GC'yi zorlaştırmaz.** Nullable tamamen derleme-zamanı/tip meselesidir;
+runtime'da null referans sadece "boş işaretçi" → GC için *daha kolay* (izlenecek
+nesne yok). null ile GC **dik (orthogonal)**; aralarında gerilim yoktur.
+
+### Seçenekler ve neden mark-sweep
+
+| Strateji | Döngü | Basitlik | Topuğa-sıkma riski |
+|---|---|---|---|
+| Refcount (`shared_ptr` her yerde) | ❌ sızdırır | başta basit | **Yüksek** — node dilinde döngü kaçınılmaz; üstüne döngü toplayıcı = CPython karmaşıklığı (tam "karmaşık/rastgele") |
+| **Mark-sweep, taşımasız, stop-the-world** | ✅ | **en basit *doğru* GC** | **Düşük** — gelişmiş GC'lerin tabanı; üstüne eklenir, yeniden yazılmaz |
+| Generational / incremental / compacting | ✅ | karmaşık (write barrier, remembered set) | pause'lar belirsizleşir = istenmeyen "rastgele" |
+
+✅ **Karar: taşımasız (non-moving), stop-the-world, basit mark-sweep.**
+- Döngüleri **bedavaya** toplar (izleme döngü umursamaz) → #56'yı gerçekten çözer.
+- **Deterministik:** GC belirli safepoint'lerde çalışır (ör. her N tahsiste) →
+  kayıt-tekrar / time-travel bit-aynı kalır ("cage" korunur). "Rastgele" değil.
+- Taşımasız → işaretçi düzeltme / barrier yok → VM'in geri kalanı GC'ye katılmak
+  zorunda değil. *Crafting Interpreters*'ın `clox`'u tam bunu yapar (~birkaç yüz satır).
+
+### Topuğa-sıkmama kuralı — nesne modelini ŞİMDİ GC-hazır kur
+
+Asıl risk GC'yi *yazmak* değil, nesne modelini sonradan ona uyduramamaktır. O
+yüzden **bugünden** (toplama yokken bile):
+
+1. Her heap nesnesine küçük **header**: tip tag + mark biti + tüm-nesneler listesi için `next`.
+2. VM **kök (root) sayımı** yapabilsin: operand stack, frame local'leri, global'ler.
+3. Bir nesne **içerdiği referansları** sayabilsin: referans-tipli struct alanları,
+   referans-tipli array elemanları.
+
+Bu üçü hazırsa "mark-sweep'i aç" **lokal bir ekleme** olur, nesne-modeli yeniden
+yazımı değil.
+
+### Aşamalandırma (#56'nın yönü)
+
+- **v1 (şimdi):** GC-header'lı tahsis + intrusive tüm-nesneler listesi + kök sayımı.
+  **Toplama yok** (program sonunda hepsini bırak / arena). Fibonacci/test ölçeğinde
+  sorunsuz; kısa programlar sızıntıdan etkilenmez.
+- **v2 (#56 ciddileşince):** aynı header+kök+çocuk-sayımı üstünde mark-sweep'i aç.
+  Model yeniden yazılmaz.
+- **`shared_ptr`'dan kaçın:** v1'de bile her referansa refcount gömmek, sonra
+  mark-sweep için **sökmek** ayrı bir topuğa-sıkmadır. Baştan GC-header modeli kur,
+  sadece henüz toplama.
+
+### Performans notu — asıl "katil" nerede?
+
+- **Nullability / null:** runtime maliyeti **sıfır** — katil değil.
+- **Referans modeli:** her bileşik heap'te + işaretçi dolaylılığı → düzenli ama
+  yönetilebilir maliyet; ileride **escape analizi** ile kaçmayan nesneleri stack'e
+  alıp *semantiği bozmadan* hızlandırılır (opt-in, sonra).
+- **Tek yüksek-değişim-maliyetli karar = GC.** Onu da (a) basit mark-sweep seçip
+  (b) modeli baştan GC-hazır kurarak de-risk ettik. **Kaçınılacak gerçek katil:
+  refcount'u kalıcı model yapmak.**
+
+---
+
+## ADR-023: Eşitlik Semantiği — Referanslarda Kimlik Eşitliği (`==`)
+
+### Bağlam
+
+ADR-020 ile bileşik tipler referans. `==` / `!=` referans tipler için ne yapsın?
+Yapısal (derin) eşitlik sezgisel ama üç sorunu var: (1) büyük yapıda **derin
+gezinme maliyeti**, (2) yeni açtığımız **döngüsel grafta sonsuz döngü** riski
+(ziyaret-takibi şart), (3) seçtiğimiz referans modeliyle **tutarsız**.
+
+### Karar
+
+✅ **Kimlik eşitliği (A):**
+
+| Kategori | `==` davranışı |
+|---|---|
+| Primitive (`int`/`float`/`bool`) | **değer** karşılaştırması (`3 == 3`) |
+| Referans (`struct`, `array`) | **kimlik** — aynı nesne mi? (işaretçi aynılığı) |
+| `string` | ⏸️ **#40'a bağlı** — aşağıdaki nota bak |
+| `null` | `null == null` → true; `null == nesne` → false; `a == null` null-daraltma deyimi (ADR-021) |
+
+İçerik karşılaştırması istenirse **ayrı, niyeti görünür** bir mekanizmayla gelir
+(ileride builtin `deepEquals()` / PHP'nin `==` vs `===` vs `clone` ailesi gibi) —
+asla sessizce `==`'e bağlanmaz. Gerekçe: deepEqual'ı `==`'e bağlamak büyük/döngüsel
+yapılarda performans ve sonsuz-döngü tuzağıdır; "cam kutu, sürpriz yok" kimliğiyle
+de çelişir.
+
+### ⚠️ String istisnası (Java gotcha'sı)
+
+Saf kimlik eşitliğini string'e de uygularsak `"abc" == "abc"` → **false** olur —
+Java'nın en çok sövülen hatası. Çoğu dil string'i istisna yapar (JS'te string
+primitive → içerik; C# overload; Python intern). Bu yüzden **string'in `==`'i
+içerik eşitliği olmalı**, ki bu string'i **immutable değer-tipi** olarak modellemeyi
+güçlü biçimde öneriyor (bkz. #40). ADR-023 struct/array'i kilitler; string'in `==`'i
+#40'ta netleşir ama **varsayılan yön: içerik eşitliği.**
+
+### Açık (ileride, çok uzak — şimdi karar değil)
+
+- **`obj == obj`'i hata/uyarı yapmak:** kullanıcıyı niyetini açık yazmaya zorlamak
+  (kimlik mi içerik mi). Daha katı bir duruş; v0'da `==` = kimlik serbest.
+- **Kullanıcı-tanımlı eşitlik (OOP'siz):** ileride bir tip için `equals(T,T)->bool`
+  konvansiyonu veya benzeri ile `==`'i kullanıcının tanımlamasına izin vermek —
+  operator-overload'un OOP'siz karşılığı. Çok uzak.
+
+---
+
+## ADR-024: String — Immutable Değer-Tipi, İç Temsil UTF-8
+
+### Bağlam
+
+ADR-020 string'i "bileşik (referans)" listesine `?` ile koymuştu; ADR-023 string
+`==`'inin **içerik** olmasını istedi (Java gotcha'sından kaçınmak için). İkisi de
+string'i değişmez-değer modeline itti.
+
+### Karar
+
+✅ **String = immutable (değişmez) değer-tipi; iç temsil UTF-8 bayt.**
+
+- **Immutable:** oluşturulduktan sonra içeriği değişmez; `s = s + "x"` **yeni**
+  string üretir, eskisini değiştirmez.
+- **`==` içerik eşitliği** (ADR-023 istisnası). Paylaşılınca değişmediği için
+  içerik-eşitliği güvenlidir; aliasing sürprizi yok (JS'in string'i primitive gibi
+  davranmasının sebebi budur).
+- **GC dostu:** serbestçe paylaşılır / intern edilebilir.
+- **İç temsil UTF-8** (Rust/Go/Swift hattı): kompakt, web-doğal, ASCII'de ucuz.
+  `s[i]` **karakter** indeksi O(1) **değildir** → bayt / scalar / grapheme erişimi
+  **açıkça** ayrılır; sahte O(1) vaat edilmez (Java/JS'in "uzunluk emoji'de yalan
+  söylüyor" sürprizinden kaçın). Host tarafında `std::string` ham bayt olarak oturur.
+- **Verimli birleştirme** için ileride ayrı **builder** tipi (StringBuilder / `join`)
+  — çekirdeği kirletmeden, döngüde O(n²)'den kaçınmak için.
+
+### Etkilenen
+
+- **#40** (string işlem yüzeyi) bu kararla netleşti; **#9** (iç temsil) = UTF-8.
+- ADR-020'deki string `?` işareti → "değer-tipi" olarak çözüldü.
+
+---
+
+## ADR-025: Hata Yönetim Modeli — Struct-Tabanlı Yakalanabilir Hatalar (Swift-tarzı)
+
+### Bağlam
+
+ADR-020 (struct = referans) → null bir struct alanına erişim/yazma ihtimali doğdu:
+klasik NullPointerException. ADR-021 statik analizi *kanıtlayabildiğini* derleme
+zamanında yakalar, ama `!` iddiası ve kanıtlanamayan durumlar (struct alanı,
+cross-fonksiyon) için bir **runtime backstop** gerekir. Ayrıca array OOB, /0 gibi
+faults. Java/C#/JS bunları **yakalanabilir** hata yapar — ama OOP exception
+hiyerarşisi (`extends Exception`) bizde yok.
+
+### Karar
+
+✅ **Yakalanabilir, struct-tabanlı hata modeli — OOP'siz.**
+Hata *değeri* Swift gibi (düz struct, hiyerarşi/extend yok); *görünürlük* Java/C#/JS
+gibi (**unchecked** — fonksiyon işaretlenmez, klasik `try{}catch{}`). "Exception'ın
+tanıdık catch-and-jump ergonomisi + OOP'suz değer."
+
+1. **Hata değeri = standart built-in struct** — extend yok, OOP yok, deterministik:
+   ```
+   struct Error {
+       int    line;      // hata satırı
+       int    col;       // sütun ("char" tip adıyla çakışmaması için col)
+       string message;   // insan-okunur (derleyicinin W/E kataloğundan)
+       string trace;     // stacktrace, en içten dışa
+       string code;      // makine-okunur W/E kodu (E010 vb.) — JSON/toolbox filtresi
+   }
+   ```
+2. **try/catch (unwind + jump):** hata oluşunca en yakın çevreleyen `catch`'e
+   zıplanır; `catch (e)` → `e : Error`.
+3. **Runtime null-deref = yakalanabilir hata** (NPE analoğu). ADR-021 statik
+   analizinin **backstop'u**: `a!` patlayınca + analizin kanıtlayamadığı durumlar.
+   Array OOB ve /0 da aynı kapıdan.
+4. **`throw`** ile kullanıcı da hata kaldırabilir (`Error` doldurup).
+5. **Determinizm:** unwind deterministik; stacktrace frame'lerden üretilir;
+   time-travel/replay handle eklenebilir.
+
+### Görünürlük — KARAR: (ii) görünmez / unchecked (Java/C#/JS usulü)
+
+✅ **Fonksiyonlar işaretlenmez.** "Bu hata yapabilir / yapamaz" anotasyonu **YOK**
+(C++'ın `noexcept`/`constexpr` benzeri kirlilik istenmiyor). Çağrıda `try f()`
+işareti de yok. **Klasik `try { ... } catch (e) { ... }` bloğu** — "anam babam usulü".
+
+**Gerekçe:** developer'a **güven** + insanların derin try-catch alışkanlığını bozmamak
+(sözdizimini tanıdık tut, içgüdüye dokunma). Hatalar zaten çoğunlukla FFI, bellek
+dolması ve derleyici-içi durumlardan doğar; her çağrıyı işaretlemenin bedeli faydadan
+büyük.
+
+> Not: Bu, `Type?` (explicit nullable) ile **bilinçli** felsefi ayrışmadır — null
+> *tipte* görünür, ama hata akışı *blok* düzeyinde tanıdık tutulur. Reddedilen (i):
+> Swift/Zig'in imza-işaretli + çağrıda `try f()` modeli.
+
+### Stacktrace mekaniği (modelden bağımsız önkoşul)
+
+- Her `CallFrame` → `IRFunction` + komut işaretçisi; **IR'a satır tablosu**
+  (komut index → kaynak konum) eklenir (önce taşıyıp taşımadığı doğrulanmalı).
+- panic/throw'da frame stack gezilir → `fonksiyon + konum`, en içten dışa → `trace`.
+- Sunum: derleme-zamanı diagnostic ile **aynı kabuk** (kod + mesaj + konum +
+  "nasıl düzelt" #20), hem insan hem **JSON** (toolbox: her hata yapılandırılmış nesne).
+- Farklılaştırıcı: deterministik → trace'e adım indeksi → hataya **geri sar**.
+
+### İlişkili güncellemeler
+
+- **ADR-014 "tuple yok" → "tuple ERTELENDİ"** (reddedilmedi; çoklu-dönüş kodu
+  spagettileştirir, şimdilik uzak ama masada — `interface` gibi).
+- **`finally` yerine ileride `defer`** (GC'li, RAII'siz dilde daha temiz). Ayrı küçük karar.
+- ADR-021 ile uyum: statik analiz provable null'ı yakalar; bu hata onun backstop'u + `!`.
+
+---
+
+## ADR-026: Tip Dönüşümü — `as` (Skaler/String), Başarısızlık Hedef Tipinin Nullable'lığıyla
+
+### Bağlam
+
+ADR-010 "gizli int↔float yok" → değişken-değişken dönüşüm **açık** olmalı. float
+runtime'ı var ama cast sözdizimi yoktu → int↔float dönüşümü imkânsızdı. Ayrıca
+elimizde null (ADR-021) + hata (ADR-025) modelleri var; cast bunlarla örtüşmeli.
+
+### Karar
+
+✅ **Sözdizimi: `as` (infix, sola-bağlı).** `deger as int`.
+- Sola-bağlı olduğu için zincir **lineer** okunur: `a as int as string` =
+  `((a as int) as string)`, parantez gerekmez (fonksiyon-stili `int(float(a))`'nın
+  iç içe çirkinliği yok).
+- `int(x)` fonksiyon-stili **reddedildi** ("int adlı fonksiyon mu, cast mı"
+  belirsizliği); C-tarzı `(int)x` ve `static_cast<>` reddedildi.
+
+✅ **Kapsam: yalnızca skaler + string** (`int`/`float`/`bool`/`string` arası).
+- **Struct/array cast'e GİRMEZ.** Farklı struct'lar ayrı tiplerdir; "dönüşümleri"
+  geliştiricinin yazdığı **açık yapıcı fonksiyonlarla** olur (`Employee yap(Person p)`).
+  Gerekçe: yapısal/duck eşleme veya reinterpret = derleyiciyi karmaşıklaştırır +
+  sessiz alan kaybı = hataya açık. OOP'siz "cage" kimliğiyle uyumsuz.
+
+✅ **Başarısızlık davranışı = HEDEF TİPİN nullable'lığı** (ayrı `as?` operatörü YOK):
+- `x as int` → hedef non-null → başarısızsa **`Error` fırlatır** (ADR-025), sonuç `int`.
+- `x as int?` → hedef nullable → başarısızsa **`null` döner**, sonuç `int?`.
+
+Nullable her zaman **tipte** (`?`) yaşar, ayrı operatör icat edilmez. Sonra `int?`'i
+`int`'e çevirmek için **narrowing** (`if`) gerekir — `!`/`??` yasak (ADR-021).
+
+### Dönüşüm matrisi
+
+| Dönüşüm | Hatasız mı? | Not |
+|---|---|---|
+| `int → float` | ✅ hatasız | büyük int'te kesinlik kaybı olabilir, patlamaz |
+| `int → string`, `float → string` | ✅ hatasız | biçimlendirme |
+| `string → int`/`float` | ⚠️ fallible | parse; `"abc"` → `as int` fırlatır / `as int?` null |
+| `float → int` | ⚠️ fallible | sonlu & aralık-içi: **sıfıra doğru kırpılır** (`1.71→1`, `-1.71→-1`); NaN/Inf/taşma → fırlatır / null |
+| `bool ↔ int` | (karar) | başta yasak tutmak en güvenlisi; gerekirse açılır |
+
+### Örnek (ADR-021 ile birlikte)
+
+```
+int a = 1.71 as int?;   // ✗ DERLEME HATASI: int? → int (daraltma); cast başarılı olsa bile statik tip int?
+int a = 1.71 as int;    // ✓ a = 1 (kırpma); başarısızsa Error
+int? a = 1.71 as int?;  // ✓ tipler eşit
+```
+
+---
+
 ## Kararların Özet Tablosu
 
 | ADR | Konu | Karar |
@@ -678,3 +1128,10 @@ modelini birlikte zorlar — ikisi de bu yüzden ertelendi.
 | 017 | Batteries/stdlib | Sınır problemi; küçük builtin + FFI/kütüphane; ertelendi |
 | 018 | `interface` | Ertelendi (reddedilmedi); struct+fonksiyon yeter |
 | 019 | Frontend↔runtime | Frontend yapı+anlam; çekirdek/cihaz/çıktı runtime'a ait |
+| 020 | Değer/referans semantiği | Primitive=değer, bileşik (struct/array/string)=referans; "pointer yok"=`&`/`*` sözdizimi yok; kaçma/lifetime problemi bilinçli açıldı → GC borcu (#56); ADR-014'ün "GC gerekmez" sonucu iptal |
+| 021 | Null güvenliği | `Type?` nullable, varsayılan non-null; akış-duyarlı null analizi (compile-time, runtime maliyeti sıfır); `!` runtime-kontrollü non-null iddiası |
+| 022 | Bellek geri-kazanımı | Basit taşımasız stop-the-world mark-sweep (deterministik); nesne modeli baştan GC-hazır (header+root+child); v1 toplamasız, v2 mark-sweep; refcount kalıcı model DEĞİL; #56'nın yönü |
+| 023 | Eşitlik semantiği | `==` = primitive değer / referans (struct,array) **kimlik**; deepEqual asla `==`'e bağlanmaz (ayrı `deepEquals()`); string `==` içerik (→ #40, Java gotcha'sından kaçın); `obj==obj` hata + kullanıcı-tanımlı eşitlik = uzak gelecek |
+| 024 | String | Immutable değer-tipi, iç temsil **UTF-8**; `==` içerik; mutasyon yeni string üretir; bayt/scalar/grapheme açıkça ayrı; verimli birleştirme için ileride builder; #40/#9'u çözer |
+| 025 | Hata yönetimi | Struct-tabanlı yakalanabilir hata (değer Swift gibi, OOP yok); standart `Error{line,col,message,trace,code}`; klasik `try{}catch{}` **unchecked** (fonksiyon işaretsiz, Java usulü); runtime null-deref/OOB yakalanabilir (esasen FFI backstop); deterministik stacktrace (IR satır tablosu); tuple→ertelendi; finally→`defer`; #57 |
+| 026 | Tip dönüşümü | `as` (infix, sola-bağlı), yalnızca skaler+string; struct/array cast YOK (elle yapıcı fonksiyon); başarısızlık hedef nullable'lığıyla (`as int` fırlatır / `as int?` null); float→int kırpma; #42 |

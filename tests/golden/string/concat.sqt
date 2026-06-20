@@ -1,0 +1,24 @@
+// ADR-024: string birleştirme (+, +=) — immutable değer-tipi, içerik ==
+
+int main() {
+    string a = "Merhaba";
+    string b = " Dünya";
+    string c = a + b;
+    print(c);
+
+    string s = "foo";
+    s += "bar";
+    print(s);
+
+    // İki farklı değişken, aynı içerik → true (ADR-023/024)
+    string x = "abc";
+    string y = "abc";
+    print(x == y);
+
+    // Birleştirme sonucu eşitlik
+    string p = "Hello" + " World";
+    string q = "Hello World";
+    print(p == q);
+
+    return 0;
+}

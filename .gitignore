@@ -17,6 +17,4 @@ scripts/gitea.py
 __pycache__/
 
 # CMake versiyona özgü dosyalar (otomatik üretilir, her güncellemede değişir)
-build/CMakeFiles/[0-9]*/
-build/.cmake/
-build/compile_commands.json
+build/*

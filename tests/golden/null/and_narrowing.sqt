@@ -1,0 +1,21 @@
+// ADR-021: && sağ taraf narrowing
+int? getValue() {
+    return 7;
+}
+
+bool check(int? v) {
+    if (v != null && v > 5) {
+        return true;
+    }
+    return false;
+}
+
+int main() {
+    bool r = check(getValue());
+    if (r) {
+        print(1);
+    } else {
+        print(0);
+    }
+    return 0;
+}

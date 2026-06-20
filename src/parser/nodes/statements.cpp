@@ -147,3 +147,36 @@ std::string ExpressionStatementNode::toJson(int depth) {
     obj.addRaw("location", loc.toJson());
     return obj.str();
 }
+
+// TryStatementNode (ADR-025)
+TryStatementNode::TryStatementNode() { kind = ASTKind::TryStatement; }
+void TryStatementNode::log(int indent) {
+    std::cout << jsonIndent(indent) << "TryStatement (catch " << catchVar << ")\n";
+    if (body)    body->log(indent + 1);
+    if (handler) handler->log(indent + 1);
+}
+std::string TryStatementNode::toJson(int depth) {
+    JsonObject obj(depth);
+    obj.add("kind", "TryStatement");
+    obj.add("catchVar", catchVar);
+    if (body)    obj.addRaw("body",    body->toJson(depth + 1));
+    if (handler) obj.addRaw("handler", handler->toJson(depth + 1));
+    obj.add("isReachable", isReachable);
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
+}
+
+// ThrowStatementNode (ADR-025)
+ThrowStatementNode::ThrowStatementNode() { kind = ASTKind::ThrowStatement; }
+void ThrowStatementNode::log(int indent) {
+    std::cout << jsonIndent(indent) << "ThrowStatement\n";
+    if (value) value->log(indent + 1);
+}
+std::string ThrowStatementNode::toJson(int depth) {
+    JsonObject obj(depth);
+    obj.add("kind", "ThrowStatement");
+    if (value) obj.addRaw("value", value->toJson(depth + 1));
+    obj.add("isReachable", isReachable);
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
+}

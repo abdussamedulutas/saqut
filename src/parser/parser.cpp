@@ -85,8 +85,15 @@ ASTNode* Parser::parseDeclaration() {
     })) {
         auto la1 = lookahead(1);
         auto la2 = lookahead(2);
+        // int name(  → fonksiyon
         if (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN)
             return parseFunctionDecl();
+        // int? name(  → nullable dönüş tipli fonksiyon (ADR-021)
+        if (la1.type == TokenType::TERNARY) {
+            auto la3 = lookahead(3);
+            if (la2.type == TokenType::IDENTIFIER && la3.type == TokenType::LPAREN)
+                return parseFunctionDecl();
+        }
         return parseVariableDecl();
     }
 
@@ -99,6 +106,11 @@ ASTNode* Parser::parseDeclaration() {
         auto la2 = lookahead(2);
         if (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN)
             return parseFunctionDecl();
+        if (la1.type == TokenType::TERNARY) {
+            auto la3 = lookahead(3);
+            if (la2.type == TokenType::IDENTIFIER && la3.type == TokenType::LPAREN)
+                return parseFunctionDecl();
+        }
         if (la1.type == TokenType::IDENTIFIER)
             return parseVariableDecl();
     }
@@ -316,6 +328,10 @@ ASTNode* Parser::parseFunctionDecl() {
     fn->returnType = currentToken().token->token;
     nextToken();
 
+    // ADR-021: nullable dönüş tipi — int? f()
+    if (currentToken().type == TokenType::TERNARY)
+        { nextToken(); fn->returnType += "?"; }
+
     fn->name = currentToken().token->token;
     nextToken();
 
@@ -339,6 +355,9 @@ ASTNode* Parser::parseFunctionDecl() {
                     nextToken();
                 paramType += "[]";
             }
+            // ADR-021: nullable parametre — int? a
+            if (currentToken().type == TokenType::TERNARY)
+                { nextToken(); paramType += "?"; }
             if (currentToken().type != TokenType::IDENTIFIER || !currentToken().token) break;
             VariableDeclNode* param = new VariableDeclNode();
             param->loc = currentToken().token->loc;
@@ -395,6 +414,10 @@ ASTNode* Parser::parseVariableDecl() {
             nextToken();
         vd->varType += "[]";
     }
+
+    // ADR-021: nullable soneki — int? x
+    if (currentToken().type == TokenType::TERNARY)
+        { nextToken(); vd->varType += "?"; }
 
     if (currentToken().type != TokenType::IDENTIFIER) {
         std::cerr << "Parser hatası: değişken ismi bekleniyor\n";
@@ -485,6 +508,12 @@ ASTNode* Parser::parseStatement() {
 
     if (ct.type == TokenType::KW_CONTINUE)
         return parseContinueStatement();
+
+    if (ct.type == TokenType::KW_TRY)
+        return parseTryStatement();
+
+    if (ct.type == TokenType::KW_THROW)
+        return parseThrowStatement();
 
     if (ct.is({
         TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
@@ -669,4 +698,44 @@ ASTNode* Parser::parseExpressionStatement() {
         nextToken();
 
     return es;
+}
+
+// ADR-025: try { body } catch (Error catchVar) { handler }
+ASTNode* Parser::parseTryStatement() {
+    TryStatementNode* ts = new TryStatementNode();
+    ts->loc = currentToken().token->loc;
+    nextToken(); // tüket: try
+
+    ts->body = parseBlock();
+
+    // catch (Error e)
+    if (currentToken().type == TokenType::KW_CATCH) {
+        nextToken(); // tüket: catch
+        if (currentToken().type == TokenType::LPAREN)
+            nextToken(); // tüket: (
+        // "Error" tip adını atla
+        if (currentToken().type == TokenType::IDENTIFIER ||
+            currentToken().type == TokenType::KW_STRING_TYPE)
+            nextToken(); // tüket: Error (ya da herhangi bir tip adı)
+        // catch değişken adını al
+        if (currentToken().type == TokenType::IDENTIFIER && currentToken().token)
+            ts->catchVar = currentToken().token->token;
+        nextToken(); // tüket: değişken adı
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken(); // tüket: )
+        ts->handler = parseBlock();
+    }
+
+    return ts;
+}
+
+// ADR-025: throw <ifade>;
+ASTNode* Parser::parseThrowStatement() {
+    ThrowStatementNode* th = new ThrowStatementNode();
+    th->loc = currentToken().token->loc;
+    nextToken(); // tüket: throw
+    th->value = parseExpression();
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
+    return th;
 }

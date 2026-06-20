@@ -1,0 +1,29 @@
+// ADR-025: throw + iç içe fonksiyon çağrısında unwind + array OOB
+
+int riskli() {
+    int arr[3] = [1, 2, 3];
+    return arr[10];
+}
+
+int main() {
+    // Dış fonksiyonda throw
+    try {
+        riskli();
+        print("erişilmez");
+    } catch (Error e) {
+        print("OOB yakalandi");
+        print(e.code);
+    }
+
+    // Açık throw — string değer atıp catch et
+    try {
+        throw "kullanici hatasi";
+    } catch (Error e) {
+        print("throw yakalandi");
+    }
+
+    // Catch sonrası akış devam etmeli
+    print("devam");
+
+    return 0;
+}

@@ -1,0 +1,6 @@
+// ADR-021: nullable → non-null atama hata vermeli
+int main() {
+    int? a = 5;
+    int b = a;  // HATA: int? → int atanamaz
+    return 0;
+}

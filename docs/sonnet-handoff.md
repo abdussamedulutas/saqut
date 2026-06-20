@@ -121,12 +121,20 @@ func main() {
    (`"şğü"` concat+print bozulmasın); bayt-uzunluğu vs karakter ayrımını açık API
    olarak işaretle. (İstege bağlı: string'i de Object modeline taşıyıp intern et —
    zorunlu değil.)
-3. **Null akış-analizi (ADR-021).** Ayrı **frontend** görevi: `Type?` tip sistemi +
-   akış-duyarlı narrowing (`if (a != null)`, guard, `&&`), `T?` üstünde doğrudan
-   erişim → derleme hatası, `a!` runtime-kontrollü iddia. CFG/yapısal akış üstünde;
-   SSA gerekmez. #20 (akıllı diagnostic) buradan beslenir.
-4. **float/double (#44).** Bağımsız; `Value::Float` + FADD… opcode + tip denetleyici.
-5. **mark-sweep GC v2 (#56).** Adım 1.1'de bırakılan header+kök kancası üstünde aç.
+3. **Null akış-analizi (ADR-021 — REVİZE).** Ayrı **frontend** görevi: `Type?` tip
+   sistemi + `T <: T?` atama kuralı + katı operand kuralı + akış-duyarlı narrowing
+   (nested `if` + sıralı guard + `&&`). ⚠️ **`a!`/`??`/`?.` YASAK** — null yalnızca
+   görünür `if` ile aklanır. `T?` üstünde doğrudan erişim → derleme hatası. Frontend
+   kesin çözer (backend yeniden analiz etmez). Detay: TODO Bölüm "SIRADAKİ İŞ" + ADR-021.
+4. **Hata yönetimi (ADR-025, #57).** Struct-tabanlı yakalanabilir hata (Swift-tarzı):
+   - **Önkoşul:** IR'a **satır tablosu** (komut index → kaynak konum) — stacktrace için. Şu an taşıyor mu doğrula.
+   - Standart built-in `struct Error { int line; int char; string message; string trace; string code; }`.
+   - Klasik **`try { ... } catch (e) { ... }` bloğu** (unwind + en yakın handler'a zıpla); `catch (e)` → `e : Error`. `throw` ile kullanıcı da kaldırır.
+   - Runtime null-deref (NPE analoğu), array OOB, /0, `a!` patlaması → **yakalanabilir hata**; `message`/`code` = derleyicinin W/E kataloğu.
+   - **UNCHECKED (Java/C#/JS usulü):** fonksiyon **işaretlenmez** (`noexcept`/`constexpr` tarzı YOK), çağrıda **`try f()` YOK**. İmza-işaretli Swift/Zig modeli KULLANMA.
+   - Stacktrace = frame stack'ten en içten dışa; insan + JSON; deterministik (adım indeksi/replay handle).
+5. **float/double (#44).** Bağımsız; `Value::Float` + FADD… opcode + tip denetleyici.
+6. **mark-sweep GC v2 (#56).** Adım 1.1'de bırakılan header+kök kancası üstünde aç.
 
 ---
 
@@ -150,5 +158,29 @@ func main() {
 
 ## 5. Özet — tek cümle
 GC-hazır basit nesne modelini kur (header + all-objects listesi, toplama yok), `Value`'ya
-referans (`Ref`) + `Nil` ekle, **array**'i referans semantiği + kimlik `==` + sınır
+referans (`Ref`) + `Null` ekle, **array**'i referans semantiği + kimlik `==` + sınır
 kontrolüyle uçtan uca çalıştır; struct ve null-analizi sonraki görevler.
+
+---
+
+## 6. ⚠️ TERMİNOLOJİ KİLİDİ — isimleri değiştirme/icat etme
+
+Bu oturumda `null` yerine `nil` yazıldı; bu tür sapmalar **olmamalı.** Anlaşılan
+isimler **aynen** kullanılır. İsmi belirsiz bir şeyle karşılaşırsan **icat etme —
+Opus'a sor.**
+
+| Kavram | DOĞRU | YANLIŞ (kullanma) |
+|---|---|---|
+| Null anahtar sözcüğü / literal | **`null`** | ~~`nil`~~, ~~`none`~~, ~~`void`~~ |
+| Nullable tip işareti | **`Type?`** (ör. `int?`, `Node?`) | ~~`Optional<T>`~~, ~~`Type \| null`~~ |
+| Non-null iddiası / elvis / safe-call | **YASAK** — `if` narrowing kullan | ~~`a!`~~, ~~`a ?? x`~~, ~~`a?.f`~~ (ADR-021 revize) |
+| Array literal | **`[1, 2, 3]`** | ~~`{1,2,3}`~~ |
+| Array tip | **`int[]`** | ~~`array<int>`~~, ~~`[]int`~~ |
+| Hata tipi | **`Error`** (`{line,char,message,trace,code}`) | ~~`Exception`~~, ~~`Err`~~ |
+| Hata kaldırma / yakalama | **`throw` / `try` / `catch`** | ~~`raise`~~, ~~`rescue`~~ |
+| Fonksiyon | **`func`** | ~~`fn`~~, ~~`function`~~, ~~`def`~~ |
+| C++ ValueKind null'u | **`ValueKind::Null`** | ~~`Nil`~~ |
+
+**Genel kural:** ADR'lerde/handoff'ta yazan tam ismi kullan. Yeni bir isim gerekiyorsa
+ve ADR'de yoksa, **kendin karar verme** — TODO'ya not düş veya Opus'a sor. Kod
+identifier'ları İngilizce (dil sözdizimi), yorum/commit Türkçe.

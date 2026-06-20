@@ -21,6 +21,50 @@ int TypeChecker::numericRank(const Type& t) {
     }
 }
 
+// ADR-021: "a != null" / "a == null" kalıbını ayrıştır
+// Dönüş: {varName, isNotNull}  — varName boşsa kalıp tanınmadı.
+std::pair<std::string, bool> TypeChecker::extractNullCheck(ASTNode* cond) {
+    if (!cond || cond->kind != ASTKind::BinaryExpression) return {"", false};
+    auto* bin = (BinaryExpressionNode*)cond;
+    bool isNE = (bin->Operator == TokenType::BANG_EQUAL);
+    bool isEE = (bin->Operator == TokenType::EQUAL_EQUAL);
+    if (!isNE && !isEE) return {"", false};
+
+    // Hangi taraf null literal?
+    auto isNullLit = [](ASTNode* n) -> bool {
+        if (!n || n->kind != ASTKind::Literal) return false;
+        return ((LiteralNode*)n)->literalType == LiteralType::BOŞ;
+    };
+    auto identName = [](ASTNode* n) -> std::string {
+        if (!n || n->kind != ASTKind::Identifier) return "";
+        auto* id = (IdentifierNode*)n;
+        return id->parserToken.token ? id->parserToken.token->token : "";
+    };
+
+    std::string var;
+    if (isNullLit(bin->Right)) var = identName(bin->Left);
+    else if (isNullLit(bin->Left)) var = identName(bin->Right);
+    if (var.empty()) return {"", false};
+    return {var, isNE}; // isNE=true → "a != null"; false → "a == null"
+}
+
+// ADR-021: guard pattern — bu statement her zaman çıkış yapıyor mu?
+bool TypeChecker::alwaysExits(ASTNode* stmt) {
+    if (!stmt) return false;
+    switch (stmt->kind) {
+        case ASTKind::ReturnStatement:
+        case ASTKind::ThrowStatement:
+        case ASTKind::BreakStatement:
+        case ASTKind::ContinueStatement:
+            return true;
+        case ASTKind::Block: {
+            auto& ch = stmt->getChildren();
+            return !ch.empty() && alwaysExits(ch.back());
+        }
+        default: return false;
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // check — giriş noktası
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,21 +106,41 @@ bool TypeChecker::checkAssign(const Type& target, const Type& src,
                                const SourceLocation& loc,
                                const std::string& ctx) {
     if (target.isError() || src.isError()) return true; // önceki hata, sessiz geç
-    if (target.equals(src))               return true;
+
+    // ADR-021: null literal ataması
+    if (src.isNullLiteral()) {
+        if (target.nullable) return true;  // T? ← null → OK
+        diag_.report("E003", loc,
+            "'" + ctx + "': null non-null tipine (" + target.toString() + ") atanamaz");
+        return false;
+    }
+
+    // ADR-021: nullable uyumu
+    // T? ← T  → OK (widening: non-null, nullable'a gider)
+    // T  ← T? → E  (narrowing: nullable, non-null'a gidemez; narrowing gerekli)
+    if (src.nullable && !target.nullable && src.equalsBase(target)) {
+        diag_.report("E003", loc,
+            "'" + ctx + "': " + src.toString() +
+            " nullable tipi non-null " + target.toString() + " tipine atanamaz"
+            " (if ile null kontrolü yapın)");
+        return false;
+    }
+    // T? ← T → OK (equalsBase eşleşiyorsa, nullable farkı widening)
+    if (!src.nullable && target.nullable && src.equalsBase(target)) return true;
+
+    if (target.equals(src)) return true;
 
     int tRank = numericRank(target);
     int sRank = numericRank(src);
 
     if (tRank >= 0 && sRank >= 0) {
         if (tRank > sRank) {
-            // Genişletme (widening): int→float, int→double, float→double
-            if (srcIsLiteral) return true; // literal bağlama-göre tiplenir, uyarısız
+            if (srcIsLiteral) return true;
             diag_.report("W004", loc,
                 "'" + ctx + "': " + src.toString() +
                 " → " + target.toString() + " örtük genişletme");
             return true;
         } else {
-            // Daraltma (narrowing): float→int, double→float, vb.
             diag_.report("E003", loc,
                 "'" + ctx + "': " + src.toString() +
                 " → " + target.toString() + " daraltma (veri kaybı)");
@@ -84,7 +148,6 @@ bool TypeChecker::checkAssign(const Type& target, const Type& src,
         }
     }
 
-    // Tamamen farklı tipler
     diag_.report("E003", loc,
         "'" + ctx + "': " + src.toString() +
         " tipi " + target.toString() + " tipine atanamaz");
@@ -100,9 +163,26 @@ void TypeChecker::checkStmt(ASTNode* node) {
 
     switch (node->kind) {
 
-    case ASTKind::Block:
-        for (ASTNode* child : node->getChildren()) checkStmt(child);
+    case ASTKind::Block: {
+        // ADR-021: guard/sıralı narrowing — if (a == null) return; → sonrasında a non-null
+        std::vector<std::string> guardNarrowed; // bu blokta guard'la daraltılanlar
+        for (ASTNode* child : node->getChildren()) {
+            checkStmt(child);
+            // guard kontrolü: if (a == null) { return/throw/break/continue; }
+            if (child->kind == ASTKind::IfStatement) {
+                auto* ifn = (IfStatementNode*)child;
+                if (!ifn->elseBranch && ifn->thenBranch && alwaysExits(ifn->thenBranch)) {
+                    auto [var, isNotNull] = extractNullCheck(ifn->condition);
+                    if (!var.empty() && !isNotNull) { // "a == null" → guard
+                        narrowedNonNull_.insert(var);
+                        guardNarrowed.push_back(var);
+                    }
+                }
+            }
+        }
+        for (auto& v : guardNarrowed) narrowedNonNull_.erase(v);
         break;
+    }
 
     case ASTKind::VariableDecl: {
         auto* vd = (VariableDeclNode*)node;
@@ -144,9 +224,23 @@ void TypeChecker::checkStmt(ASTNode* node) {
 
     case ASTKind::IfStatement: {
         auto* ifn = (IfStatementNode*)node;
-        if (ifn->condition)  checkExpr(ifn->condition);
+        if (ifn->condition) checkExpr(ifn->condition);
+
+        // ADR-021: nested narrowing — if (a != null) { a non-null } else { a null }
+        auto [narrowVar, isNotNull] = extractNullCheck(ifn->condition);
+
+        if (!narrowVar.empty() && isNotNull) // "a != null" → then'de non-null
+            narrowedNonNull_.insert(narrowVar);
         if (ifn->thenBranch) checkStmt(ifn->thenBranch);
+        if (!narrowVar.empty() && isNotNull)
+            narrowedNonNull_.erase(narrowVar);
+
+        if (!narrowVar.empty() && !isNotNull) // "a == null" → else'de non-null
+            narrowedNonNull_.insert(narrowVar);
         if (ifn->elseBranch) checkStmt(ifn->elseBranch);
+        if (!narrowVar.empty() && !isNotNull)
+            narrowedNonNull_.erase(narrowVar);
+
         break;
     }
 
@@ -179,6 +273,21 @@ void TypeChecker::checkStmt(ASTNode* node) {
     case ASTKind::BreakStatement:
     case ASTKind::ContinueStatement:
         break; // yapısal doğrulama StructuralValidator'ın işi
+
+    // ADR-025: try { body } catch (Error e) { handler }
+    case ASTKind::TryStatement: {
+        auto* ts = (TryStatementNode*)node;
+        if (ts->body)    checkStmt(ts->body);
+        if (ts->handler) checkStmt(ts->handler);
+        break;
+    }
+
+    // ADR-025: throw <ifade>; — unchecked, herhangi bir değer atılabilir
+    case ASTKind::ThrowStatement: {
+        auto* th = (ThrowStatementNode*)node;
+        if (th->value) checkExpr(th->value);
+        break;
+    }
 
     default:
         break;
@@ -222,7 +331,14 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
                 break;
             case LiteralType::BOOLEAN: result = Type::Bool();   break;
             case LiteralType::STRING:  result = Type::String(); break;
-            default:                   result = Type::error();  break;
+            case LiteralType::BOŞ:
+                // null literal: bağlam nullable ise o tip, değilse Void+nullable (null sentinel)
+                if (!expected.isError() && expected.nullable)
+                    result = expected;
+                else
+                    result = Type::Void().asNullable(); // null sentinel
+                break;
+            default: result = Type::error(); break;
         }
         break;
     }
@@ -231,6 +347,12 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
     case ASTKind::Identifier: {
         auto* id = (IdentifierNode*)node;
         result = id->resolvedSymbol ? id->resolvedSymbol->type : Type::error();
+        // ADR-021: narrowing — bu değişken null kontrolünden geçtiyse non-null say
+        if (result.nullable && id->parserToken.token) {
+            std::string name = id->parserToken.token->token;
+            if (narrowedNonNull_.count(name))
+                result = result.asNonNull();
+        }
         break;
     }
 
@@ -267,11 +389,23 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         }
 
         Type leftType  = checkExpr(bin->Left);
+
+        // ADR-021: && kısa-devre sağ taraf narrowing — "a != null && a.field"
+        if (bin->Operator == TokenType::AMPERSAND_AMPERSAND) {
+            auto [narrowVar, isNotNull] = extractNullCheck(bin->Left);
+            if (!narrowVar.empty() && isNotNull)
+                narrowedNonNull_.insert(narrowVar);
+            checkExpr(bin->Right);
+            if (!narrowVar.empty() && isNotNull)
+                narrowedNonNull_.erase(narrowVar);
+            result = Type::Bool();
+            break;
+        }
+
         Type rightType = checkExpr(bin->Right);
 
-        // Mantıksal
-        if (bin->Operator == TokenType::AMPERSAND_AMPERSAND ||
-            bin->Operator == TokenType::PIPE_PIPE) {
+        // Mantıksal (||)
+        if (bin->Operator == TokenType::PIPE_PIPE) {
             result = Type::Bool();
             break;
         }
@@ -299,6 +433,24 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
                     " — string için yalnızca == ve != kullanın");
                 result = Type::error();
             }
+            break;
+        }
+
+        // ADR-021: katı operand kuralı — non-null bağlamda nullable operand yasak
+        // (eşitlik / null karşılaştırmaları için geçerli değil)
+        if (!leftType.isError() && !rightType.isError() &&
+            (leftType.nullable || rightType.nullable)) {
+            diag_.report("E003", bin->loc,
+                "Nullable operand: '" + leftType.toString() + "' ve '" +
+                rightType.toString() + "' — null kontrolü yapın veya daraltın");
+            result = Type::error();
+            break;
+        }
+
+        // String birleştirme: yalnızca + operatörü (ADR-024)
+        if (bin->Operator == TokenType::PLUS &&
+            leftType.isString() && rightType.isString()) {
+            result = Type::String();
             break;
         }
 
@@ -377,6 +529,14 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
     case ASTKind::MemberAccess: {
         auto* ma = (MemberAccessNode*)node;
         Type objType = checkExpr(ma->object);
+        // ADR-021: nullable nesne üstünde doğrudan alan erişimi yasak
+        if (objType.nullable) {
+            diag_.report("E003", node->loc,
+                "Nullable tip '" + objType.toString() + "' üstünde doğrudan erişim"
+                " — if ile null kontrolü yapın");
+            result = Type::error();
+            break;
+        }
         if (objType.isStruct()) {
             result = table_.getFieldType(objType.structName, ma->member);
             if (result.isError())

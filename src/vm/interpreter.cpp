@@ -3,6 +3,20 @@
 #include <iostream>
 #include <stdexcept>
 
+// ── makeErrorValue ─────────────────────────────────────────────────────────────
+// ADR-025: Error struct oluşturur — alan sırası: [line, col, message, trace, code]
+Value Interpreter::makeErrorValue(const std::string& message,
+                                   const std::string& code,
+                                   int line, int col) {
+    StructObject* obj = heap_.allocStruct(5);
+    obj->fields[0] = Value::fromInt(line);
+    obj->fields[1] = Value::fromInt(col);
+    obj->fields[2] = Value::fromString(message);
+    obj->fields[3] = Value::fromString("");   // trace — ileride IR satır tablosuyla doldurulacak
+    obj->fields[4] = Value::fromString(code);
+    return Value::fromRef(obj);
+}
+
 int Interpreter::run() {
     // Global slot'ları sıfırla
     globalSlots_.assign(program_.globalCount, Value::fromInt(0));
@@ -42,6 +56,10 @@ int Interpreter::run() {
             frame.slots[instr.dest] = Value::fromString(instr.stringValue);
             break;
 
+        case Opcode::LOAD_NULL:
+            frame.slots[instr.dest] = Value::null();
+            break;
+
         case Opcode::LOAD_SLOT:
             frame.slots[instr.dest] = frame.slots[instr.src];
             break;
@@ -63,13 +81,13 @@ int Interpreter::run() {
             break;
         case Opcode::DIV: {
             int d = frame.slots[instr.right].intValue;
-            if (d == 0) throw std::runtime_error("Çalışma hatası: sıfıra bölme");
+            if (d == 0) { pendingThrow_ = makeErrorValue("Sıfıra bölme", "E_DIVZERO"); break; }
             frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue / d);
             break;
         }
         case Opcode::MOD: {
             int d = frame.slots[instr.right].intValue;
-            if (d == 0) throw std::runtime_error("Çalışma hatası: sıfıra bölme (mod)");
+            if (d == 0) { pendingThrow_ = makeErrorValue("Sıfıra bölme (mod)", "E_DIVZERO"); break; }
             frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue % d);
             break;
         }
@@ -211,7 +229,7 @@ int Interpreter::run() {
             break;
         case Opcode::FDIV: {
             double r = frame.slots[instr.right].floatValue;
-            if (r == 0.0) throw std::runtime_error("Çalışma hatası: float sıfıra bölme");
+            if (r == 0.0) { pendingThrow_ = makeErrorValue("Float sıfıra bölme", "E_DIVZERO"); break; }
             frame.slots[instr.dest] = Value::fromFloat(frame.slots[instr.left].floatValue / r);
             break;
         }
@@ -263,27 +281,33 @@ int Interpreter::run() {
         }
         case Opcode::ARRAY_GET: {
             Value& arrVal = frame.slots[instr.left];
-            if (arrVal.kind != ValueKind::Ref || !arrVal.ref)
-                throw std::runtime_error("Çalışma hatası: dizi değil");
+            if (arrVal.kind != ValueKind::Ref || !arrVal.ref) {
+                pendingThrow_ = makeErrorValue("Dizi beklendi, farklı tip alındı", "E_TYPE"); break;
+            }
             auto* arr = (ArrayObject*)arrVal.ref;
             int idx = frame.slots[instr.right].intValue;
-            if (idx < 0 || idx >= (int)arr->elements.size())
-                throw std::runtime_error(
-                    "Çalışma hatası: dizi sınır dışı (indeks=" + std::to_string(idx) +
-                    ", uzunluk=" + std::to_string(arr->elements.size()) + ")");
+            if (idx < 0 || idx >= (int)arr->elements.size()) {
+                pendingThrow_ = makeErrorValue(
+                    "Dizi sınır dışı (indeks=" + std::to_string(idx) +
+                    ", uzunluk=" + std::to_string(arr->elements.size()) + ")", "E_OOB");
+                break;
+            }
             frame.slots[instr.dest] = arr->elements[idx];
             break;
         }
         case Opcode::ARRAY_SET: {
             Value& arrVal = frame.slots[instr.dest];
-            if (arrVal.kind != ValueKind::Ref || !arrVal.ref)
-                throw std::runtime_error("Çalışma hatası: dizi değil");
+            if (arrVal.kind != ValueKind::Ref || !arrVal.ref) {
+                pendingThrow_ = makeErrorValue("Dizi beklendi, farklı tip alındı", "E_TYPE"); break;
+            }
             auto* arr = (ArrayObject*)arrVal.ref;
             int idx = frame.slots[instr.left].intValue;
-            if (idx < 0 || idx >= (int)arr->elements.size())
-                throw std::runtime_error(
-                    "Çalışma hatası: dizi sınır dışı (indeks=" + std::to_string(idx) +
-                    ", uzunluk=" + std::to_string(arr->elements.size()) + ")");
+            if (idx < 0 || idx >= (int)arr->elements.size()) {
+                pendingThrow_ = makeErrorValue(
+                    "Dizi sınır dışı (indeks=" + std::to_string(idx) +
+                    ", uzunluk=" + std::to_string(arr->elements.size()) + ")", "E_OOB");
+                break;
+            }
             arr->elements[idx] = frame.slots[instr.right];
             break;
         }
@@ -296,10 +320,60 @@ int Interpreter::run() {
             break;
         }
 
+        // ── String (ADR-024: immutable değer-tipi, içerik ==) ────────────
+        case Opcode::STRING_CONCAT:
+            frame.slots[instr.dest] = Value::fromString(
+                frame.slots[instr.left].stringValue +
+                frame.slots[instr.right].stringValue);
+            break;
+
+        // ── Hata yönetimi (ADR-025) ──────────────────────────────────────
+        case Opcode::ENTER_TRY:
+            tryStack_.push_back({callStack_.size(), instr.jumpTarget, instr.dest});
+            break;
+
+        case Opcode::LEAVE_TRY:
+            if (!tryStack_.empty()) tryStack_.pop_back();
+            break;
+
+        case Opcode::THROW:
+            pendingThrow_ = frame.slots[instr.src];
+            break;
+
         // ── FFI ───────────────────────────────────────────────────────────
         case Opcode::CALLHOST:
             executeHostFunction(instr.functionName, frame.slots, instr.argSlots);
             break;
+        }
+
+        // ── pendingThrow_ işle: try varsa catch'e unwind, yoksa fırlat ───
+        if (pendingThrow_.has_value()) {
+            Value errVal = std::move(*pendingThrow_);
+            pendingThrow_.reset();
+
+            if (!tryStack_.empty()) {
+                TryFrame tf = tryStack_.back();
+                tryStack_.pop_back();
+                // catch bloğunun bulunduğu frame'e unwind
+                while (callStack_.size() > tf.callStackDepth)
+                    callStack_.pop_back();
+                // Error'ı catch değişkenine bağla ve catch etiketine atla
+                callStack_.back().slots[tf.errorSlot] = errVal;
+                callStack_.back().instructionPointer  = tf.catchTarget;
+            } else {
+                // Yakalanmamış hata — mesajı çıkar ve C++ exception olarak yükselt
+                std::string msg = "Yakalanmamış hata";
+                if (errVal.kind == ValueKind::Ref && errVal.ref) {
+                    auto* s = static_cast<StructObject*>(errVal.ref);
+                    if ((int)s->fields.size() > 2 &&
+                        s->fields[2].kind == ValueKind::String)
+                        msg = s->fields[2].stringValue;
+                } else if (errVal.kind == ValueKind::String) {
+                    msg = errVal.stringValue;
+                }
+                throw std::runtime_error(msg);
+            }
+            continue;
         }
     }
 

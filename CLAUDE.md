@@ -30,12 +30,14 @@ git'te izlenir.
   **rezerve** (semantik ileride). `interface` **ertelendi** (ADR-018).
   ⚠️ Referans semantiği döngüsel-referans **sızıntısını** açtı → GC/döngü
   toplayıcı borcu (**#56**, `karar-gerekli`).
-- **Null güvenliği (ADR-021):** varsayılan non-null; nullable açıkça `Type?`
-  (Kotlin/Swift modeli). `null` yalnızca `T?`'ye atanır; `T?` üstünde doğrudan
-  erişim derleme hatası. **Akış-duyarlı null analizi** (`if (a != null)` daraltır;
-  guard/early-return; `&&` sağ tarafı). Runtime maliyeti **sıfır** (compile-time).
-  `a!` = runtime-kontrollü non-null iddiası. İlk gerçek akış-duyarlı analiz →
-  yapısal akış yeter, SSA gerekmez (#2 için veri).
+- **Null güvenliği (ADR-021, REVİZE):** varsayılan non-null; nullable açıkça `Type?`
+  (Kotlin/Swift). `null` yalnızca `T?`'ye atanır; `T?` üstünde doğrudan erişim derleme
+  hatası. **Atama kuralı `T <: T?`** (notnull→nullable serbest, nullable→notnull yasak).
+  **Katı operand kuralı:** non-null bağlamda her operand statik non-null olmalı
+  (`int a=b+c+d`, biri nullable → hata). Aklama **yalnızca görünür `if` narrowing**
+  (nested + sıralı guard + `&&`; alias takibi yok). ⚠️ **`a!`/`??`/`?.` YASAK** (gizli
+  runtime null-aklama yok). Runtime maliyeti **sıfır**; frontend kesin çözer (backend
+  yeniden analiz etmez) → runtime null-deref esasen FFI backstop'u. SSA gerekmez (#2).
 - **Bellek/GC (ADR-022):** **basit, taşımasız, stop-the-world, deterministik
   mark-sweep** (döngüleri toplar, "cage" korunur). **`shared_ptr`'ı kalıcı model
   YAPMA** (refcount döngüde sızar = topuğa-sıkma). Kural: nesne modelini **baştan
@@ -52,6 +54,20 @@ git'te izlenir.
   ayrı (sahte O(1) karakter indeksi YOK). Verimli birleştirme için ileride builder.
   Çözdüğü: #40 (yüzey), #9 (iç temsil). Mevcut `Value` string'i inline tutuyor —
   immutable olduğu için bu yeterli; heap/object-model'e taşımak zorunlu değil.
+- **Hata yönetimi (ADR-025, #57):** **Swift-tarzı** yakalanabilir, **struct-tabanlı**
+  hata — OOP/extend YOK. Standart `Error { line; char; message; trace; code }`
+  (message=W/E metni, code=W/E kodu). **Klasik `try{}catch{}` bloğu, UNCHECKED**
+  (Java/C#/JS usulü): fonksiyon işaretlenmez (`noexcept`/`constexpr` tarzı YOK),
+  çağrıda `try f()` yok — developer'a güven, alışkanlık bozulmaz. Runtime null-deref
+  (NPE analoğu), array OOB, /0, `a!` patlaması → yakalanabilir hata (ADR-021'in runtime
+  backstop'u). `throw` ile kullanıcı da kaldırır. Deterministik stacktrace (IR satır
+  tablosu önkoşul). **Tuple → ertelendi** (ADR-014'teki "yok" gevşedi). `finally` yerine
+  ileride `defer`.
+- **Tip dönüşümü (ADR-026, #42):** açık **`as`** (infix, sola-bağlı): `x as int`.
+  Yalnızca **skaler + string** arası; **struct/array cast YOK** (elle yapıcı fonksiyon —
+  derleyiciyi sade tutar, sessiz alan kaybı önlenir). Başarısızlık **hedef tipin
+  nullable'lığıyla:** `as int` → `Error` fırlatır; `as int?` → `null`. Ayrı `as?` YOK.
+  `float→int` sıfıra kırpar (NaN/Inf/taşma fallible). `int(x)` fonksiyon-stili reddedildi.
 - **Analiz vs Optimizasyon:** Analiz orijinal AST üstünde annotation; optimizasyon
   **klon** üstünde dönüşüm. `ASTNode::clone()` yük taşıyan merkezi bileşen
   (parent pointer'lar + sembol tablosu remap edilir, ADR-007). Fixpoint döngüsü +
@@ -88,9 +104,9 @@ git'te izlenir.
 ## Belge haritası
 - `readme.md` — toolbox çerçevesi, built-vs-planned, dil kimliği, çalıştırma modeli.
 - `docs/fikirler.md` — ADR-001…005 (backend stratejisi, parser, header-only, token, IR).
-- `docs/adr-frontend-analiz.md` — ADR-006…024 (frontend, analiz/optimizasyon,
+- `docs/adr-frontend-analiz.md` — ADR-006…026 (frontend, analiz/optimizasyon,
   çalıştırma modeli, FFI, interface, bellek, **değer/referans semantiği, null
-  güvenliği, mark-sweep GC, eşitlik, string**).
+  güvenliği, mark-sweep GC, eşitlik, string, hata yönetimi, tip dönüşümü**).
 - `docs/sonnet-handoff.md` — **Sonnet için uygulama promptu** (ADR-020…024'ü koda
   döken sıralı görev planı; ilk görev: GC-hazır nesne modeli + array runtime).
 - `docs/roadmap-frontend.md` — faz-faz uygulama planı (Faz 0–4 → fibonacci).

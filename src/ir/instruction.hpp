@@ -82,6 +82,16 @@ enum class Opcode {
 
     RETURN,        // Bu frame'i kapat, slots[src]'yi caller'a ilet.
 
+    // --- Float aritmetik (#44) ---
+    LOAD_FLOAT,    // slots[dest] = floatValue (double sabit yükle)
+    FADD,          // slots[dest] = slots[left] + slots[right]  (float)
+    FSUB,          // slots[dest] = slots[left] - slots[right]  (float)
+    FMUL,          // slots[dest] = slots[left] * slots[right]  (float)
+    FDIV,          // slots[dest] = slots[left] / slots[right]  (float; sıfır → runtime_error)
+    FNEG,          // slots[dest] = -slots[src]                 (float tekli eksi)
+    INT_TO_FLOAT,  // slots[dest] = (double)slots[src]  — gizli int→float çevrimi (literal atamasında)
+    FLOAT_TO_INT,  // slots[dest] = (int)slots[src]     — açık cast (ileride: int(x))
+
     // --- Struct (ADR-020: referans semantiği) ---
     STRUCT_NEW,  // slots[dest] = yeni StructObject(intValue alan sayısı); functionName = struct tipi adı
     FIELD_GET,   // slots[dest] = slots[src].fields[intValue]  (src=nesne, intValue=alan indeksi)
@@ -122,6 +132,14 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::SHL:           return "SHL";
         case Opcode::SHR:           return "SHR";
         case Opcode::BNOT:          return "BNOT";
+        case Opcode::LOAD_FLOAT:    return "LOAD_FLOAT";
+        case Opcode::FADD:          return "FADD";
+        case Opcode::FSUB:          return "FSUB";
+        case Opcode::FMUL:          return "FMUL";
+        case Opcode::FDIV:          return "FDIV";
+        case Opcode::FNEG:          return "FNEG";
+        case Opcode::INT_TO_FLOAT:  return "INT_TO_FLOAT";
+        case Opcode::FLOAT_TO_INT:  return "FLOAT_TO_INT";
         case Opcode::STRUCT_NEW:    return "STRUCT_NEW";
         case Opcode::FIELD_GET:     return "FIELD_GET";
         case Opcode::FIELD_SET:     return "FIELD_SET";
@@ -170,6 +188,9 @@ struct Instruction {
 
     // LOAD_CONST için yüklenecek tam sayı sabiti
     int         intValue    =  0;
+
+    // LOAD_FLOAT için yüklenecek double sabiti (#44)
+    double      floatValue  = 0.0;
 
     // LOAD_STRING için yüklenecek metin sabiti (tırnak işaretleri olmadan)
     std::string stringValue;

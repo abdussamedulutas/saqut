@@ -10,6 +10,10 @@
 #include <stdexcept>
 #include <string>
 
+// Error struct alan sırası (ADR-025): makeError için IR tarafından bilinir
+// 0=line, 1=col, 2=message, 3=trace, 4=code
+static constexpr int ERROR_FIELD_COUNT = 5;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // generate — Ana giriş noktası
 // ─────────────────────────────────────────────────────────────────────────────
@@ -301,6 +305,54 @@ void IRGenerator::generateStatement(ASTNode* node) {
         break;
     }
 
+    // ── try { body } catch (Error e) { handler }  (ADR-025) ────────────
+    case ASTKind::TryStatement: {
+        auto* ts = (TryStatementNode*)node;
+
+        // Catch değişkeni için slot; VM bu slota Error nesnesini yazar
+        int errorSlot = freshSlot();
+        if (!ts->catchVar.empty())
+            registerVariable(ts->catchVar, errorSlot);
+
+        // ENTER_TRY: catch hedefi henüz bilinmiyor (-1), sonradan patchlanır
+        Instruction enterTry(Opcode::ENTER_TRY);
+        enterTry.dest       = errorSlot;
+        enterTry.jumpTarget = -1;
+        currentFunction_->instructions.push_back(std::move(enterTry));
+        int enterTryIdx = (int)currentFunction_->instructions.size() - 1;
+
+        // Try gövdesi
+        if (ts->body) generateStatement(ts->body);
+
+        // Normal çıkış: try frame'ini çıkar
+        Instruction leaveTry(Opcode::LEAVE_TRY);
+        currentFunction_->instructions.push_back(std::move(leaveTry));
+
+        // Catch bloğunu atla (normal akışta)
+        int jumpOverCatch = emitJumpUnconditional(-1);
+
+        // Catch etiketi: ENTER_TRY buraya atlayacak
+        int catchLabel = currentInstrIndex();
+        currentFunction_->instructions[enterTryIdx].jumpTarget = catchLabel;
+
+        // Catch gövdesi
+        if (ts->handler) generateStatement(ts->handler);
+
+        // Catch bitti
+        patchJump(jumpOverCatch);
+        break;
+    }
+
+    // ── throw <ifade>;  (ADR-025) ────────────────────────────────────────
+    case ASTKind::ThrowStatement: {
+        auto* th = (ThrowStatementNode*)node;
+        int valSlot = th->value ? generateExpression(th->value) : freshSlot();
+        Instruction ins(Opcode::THROW);
+        ins.src = valSlot;
+        currentFunction_->instructions.push_back(std::move(ins));
+        break;
+    }
+
     default:
         break;
     }
@@ -376,9 +428,9 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 break;
             }
             case LiteralType::BOŞ:
-                // null literal → Null kind Value (ADR-021)
-                { Instruction ins(Opcode::LOAD_CONST); ins.dest = slot; ins.intValue = 0;
-                  currentFunction_->instructions.push_back(std::move(ins)); } // placeholder; VM'de Null üretmeli
+                // null literal → ValueKind::Null (ADR-021)
+                { Instruction ins(Opcode::LOAD_NULL); ins.dest = slot;
+                  currentFunction_->instructions.push_back(std::move(ins)); }
                 break;
         }
         return slot;
@@ -464,6 +516,12 @@ int IRGenerator::generateExpression(ASTNode* node) {
             else if (bin->Operator == TokenType::PIPE_EQUAL)     arithOp = Opcode::BOR;
             else if (bin->Operator == TokenType::LSHIFT_EQUAL)   arithOp = Opcode::SHL;
             else if (bin->Operator == TokenType::RSHIFT_EQUAL)   arithOp = Opcode::SHR;
+
+            // string += string → STRING_CONCAT (ADR-024)
+            if (bin->Operator == TokenType::PLUS_EQUAL) {
+                if (auto* e = dynamic_cast<ExpressionNode*>(bin->Right))
+                    if (e->resolvedType.isString()) arithOp = Opcode::STRING_CONCAT;
+            }
 
             int resultSlot = freshSlot();
 
@@ -679,14 +737,25 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
 
     // Float tip kontrolü — resolvedType üstünden (tip denetleyici tarafından yazıldı)
     bool leftIsFloat  = false, rightIsFloat = false;
-    if (auto* e = dynamic_cast<ExpressionNode*>(leftNode))
+    bool leftIsString = false, rightIsString = false;
+    if (auto* e = dynamic_cast<ExpressionNode*>(leftNode)) {
         leftIsFloat  = e->resolvedType.isPrimitive() &&
                        (e->resolvedType.prim == PrimitiveKind::Float ||
                         e->resolvedType.prim == PrimitiveKind::Double);
-    if (auto* e = dynamic_cast<ExpressionNode*>(rightNode))
+        leftIsString = e->resolvedType.isString();
+    }
+    if (auto* e = dynamic_cast<ExpressionNode*>(rightNode)) {
         rightIsFloat = e->resolvedType.isPrimitive() &&
                        (e->resolvedType.prim == PrimitiveKind::Float ||
                         e->resolvedType.prim == PrimitiveKind::Double);
+        rightIsString = e->resolvedType.isString();
+    }
+
+    // String birleştirme (ADR-024): + → STRING_CONCAT
+    if ((leftIsString || rightIsString) && opcode == Opcode::ADD) {
+        emitBinaryOp(Opcode::STRING_CONCAT, destSlot, leftSlot, rightSlot);
+        return destSlot;
+    }
 
     if (leftIsFloat || rightIsFloat) {
         // Int operandı float'a çevir

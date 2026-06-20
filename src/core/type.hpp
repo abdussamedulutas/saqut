@@ -73,6 +73,7 @@ struct Type {
     std::shared_ptr<Type> returnType;                 // kind == Function
     std::vector<Type>     paramTypes;                 // kind == Function
     std::string           structName;                 // kind == Struct
+    bool                  nullable = false;           // ADR-021: Type? sözdizimi
 
     // ------------------------------------------------------------------ //
     // Factory'ler
@@ -132,11 +133,26 @@ struct Type {
                 prim == PrimitiveKind::Double);
     }
 
+    bool isString() const {
+        return kind == TypeKind::Primitive && prim == PrimitiveKind::String;
+    }
+
+    // ADR-021: "null" literal tipi — yalnızca nullable değişkene atanabilir
+    bool isNullLiteral() const {
+        return kind == TypeKind::Primitive && prim == PrimitiveKind::Void && nullable;
+    }
+
+    // Nullable kopyası döndür
+    Type asNullable() const { Type t = *this; t.nullable = true; return t; }
+    Type asNonNull()  const { Type t = *this; t.nullable = false; return t; }
+
     // ------------------------------------------------------------------ //
     // equals — Yapısal eşitlik (katı; gizli dönüşüm yok, ADR-010)
     // ------------------------------------------------------------------ //
+    // Yapısal eşitlik — nullable dahil (ADR-021: int ≠ int?)
     bool equals(const Type& o) const {
         if (kind != o.kind) return false;
+        if (nullable != o.nullable) return false;
         switch (kind) {
             case TypeKind::Primitive:
                 return prim == o.prim;
@@ -154,12 +170,13 @@ struct Type {
                 return true;
             }
             case TypeKind::Error:
-                // Error == Error: ardışık sahte hataların bastırılması tip
-                // denetleyicinin sorumluluğundadır (operandı Error ise hata üretme).
                 return true;
         }
-        return false; // erişilemez (tüm enum değerleri kapsandı)
+        return false;
     }
+
+    // Temel yapısal eşitlik — nullable farkını yok say (T == T? üstün çakışma için)
+    bool equalsBase(const Type& o) const { return asNonNull().equals(o.asNonNull()); }
 
     // ------------------------------------------------------------------ //
     // İsim yardımcıları
@@ -177,10 +194,15 @@ struct Type {
         return "?";
     }
 
-    // Bir tip adından (parser tipleri string olarak tutar) primitif Type üretir.
-    // Bilinen primitif değilse Error döner — bilinmeyen tip adının teşhisi
-    // (E007) çağıranın (Faz 2/3) işidir; bu fonksiyon sessizce Error verir.
+    // Bir tip adından (parser tipleri string olarak tutar) Type üretir.
+    // "int?" → nullable int; "int[]" → int array; bilinen değilse Error.
     static Type fromName(const std::string& n) {
+        // Nullable soneki: "int?", "string?" vb. (ADR-021)
+        if (!n.empty() && n.back() == '?') {
+            Type base = fromName(n.substr(0, n.size() - 1));
+            if (!base.isError()) return base.asNullable();
+            return error();
+        }
         if (n == "int")    return Int();
         if (n == "float")  return Float();
         if (n == "double") return Double();
@@ -200,27 +222,28 @@ struct Type {
     // toString — İnsan-okur ("int", "int[]", "fn(int,int)->int")
     // ------------------------------------------------------------------ //
     std::string toString() const {
+        std::string base;
         switch (kind) {
             case TypeKind::Primitive:
-                return primName(prim);
+                base = primName(prim); break;
             case TypeKind::Array:
-                return (elementType ? elementType->toString() : "<?>") + "[]";
+                base = (elementType ? elementType->toString() : "<?>") + "[]"; break;
             case TypeKind::Struct:
-                return "struct " + structName;
+                base = "struct " + structName; break;
             case TypeKind::Function: {
-                std::string s = "fn(";
+                base = "fn(";
                 for (size_t i = 0; i < paramTypes.size(); ++i) {
-                    if (i) s += ",";
-                    s += paramTypes[i].toString();
+                    if (i) base += ",";
+                    base += paramTypes[i].toString();
                 }
-                s += ")->";
-                s += returnType ? returnType->toString() : "<?>";
-                return s;
+                base += ")->";
+                base += returnType ? returnType->toString() : "<?>";
+                break;
             }
             case TypeKind::Error:
                 return "<error>";
         }
-        return "<?>";
+        return nullable ? base + "?" : base;
     }
 
     // ------------------------------------------------------------------ //

@@ -1,0 +1,6 @@
+// ADR-021: nullable operand aritmetikte hata vermeli
+int main() {
+    int? a = 5;
+    int b = a + 1;  // HATA: a nullable
+    return 0;
+}

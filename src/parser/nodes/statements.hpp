@@ -85,4 +85,26 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
+// ADR-025: try { body } catch (Error catchVar) { handler }
+class TryStatementNode : public StatementNode {
+public:
+    ASTNode*    body        = nullptr;
+    std::string catchVar;              // catch değişken adı (ör. "e")
+    ASTNode*    handler     = nullptr;
+    TryStatementNode();
+    ~TryStatementNode() override { delete body; delete handler; }
+    void log(int indent = 0) override;
+    std::string toJson(int depth = 0) override;
+};
+
+// ADR-025: throw <ifade>;
+class ThrowStatementNode : public StatementNode {
+public:
+    ASTNode* value = nullptr;
+    ThrowStatementNode();
+    ~ThrowStatementNode() override { delete value; }
+    void log(int indent = 0) override;
+    std::string toJson(int depth = 0) override;
+};
+
 #endif

@@ -29,6 +29,18 @@ void SymbolCollector::seedBuiltins() {
                                Type::function(Type::Void(), {}),
                                SourceLocation{});
     if (s) s->isBuiltin = true;
+
+    // ADR-025: Error builtin struct — try/catch için
+    // Alan sırası VM makeErrorValue() ile eşleşmeli: [line, col, message, trace, code]
+    table_.structLayouts["Error"] = {
+        {"line",    Type::Int()},
+        {"col",     Type::Int()},
+        {"message", Type::String()},
+        {"trace",   Type::String()},
+        {"code",    Type::String()}
+    };
+    table_.define("Error", SymbolKind::Struct, Type::structType("Error"), {});
+    structFields_["Error"]; // cycle checker'a tanıt
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -272,6 +284,29 @@ void SymbolCollector::walkStmt(ASTNode* node) {
     case ASTKind::BreakStatement:
     case ASTKind::ContinueStatement:
         break; // yaprak
+
+    // ADR-025: try { body } catch (Error e) { handler }
+    case ASTKind::TryStatement: {
+        auto* ts = (TryStatementNode*)node;
+        if (ts->body) walkStmt(ts->body);
+        // catch değişkeni catch bloğu kapsamında görünür
+        if (ts->handler) {
+            table_.enterScope();
+            if (!ts->catchVar.empty())
+                table_.define(ts->catchVar, SymbolKind::Variable,
+                              Type::structType("Error"), {});
+            walkStmt(ts->handler);
+            table_.exitScope();
+        }
+        break;
+    }
+
+    // ADR-025: throw <ifade>;
+    case ASTKind::ThrowStatement: {
+        auto* th = (ThrowStatementNode*)node;
+        if (th->value) walkExpr(th->value);
+        break;
+    }
 
     default:
         break;

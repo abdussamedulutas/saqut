@@ -1,0 +1,14 @@
+// ADR-025: temel try/catch — runtime hatasını yakala
+
+int main() {
+    try {
+        int x = 10 / 0;
+        print("erişilmez");
+    } catch (Error e) {
+        print("yakalandi");
+        print(e.message);
+        print(e.code);
+    }
+
+    return 0;
+}

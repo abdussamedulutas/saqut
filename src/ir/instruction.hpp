@@ -42,6 +42,7 @@ enum class Opcode {
                    //   Örnek: LOAD_CONST dest=3 val=10  →  slot[3] = 10
 
     LOAD_STRING,   // slots[dest] = stringValue (metin sabitini slota yükle)
+    LOAD_NULL,     // slots[dest] = null  (ADR-021: ValueKind::Null)
                    //   Örnek: LOAD_STRING dest=2 val="Merhaba"  →  slot[2] = "Merhaba"
 
     LOAD_SLOT,     // slots[dest] = slots[src]
@@ -111,6 +112,18 @@ enum class Opcode {
     LOAD_GLOBAL,   // slots[dest] = moduleSlots[intValue]  (bu modülün modül-düzeyi değişkeni)
     STORE_GLOBAL,  // moduleSlots[intValue] = slots[src]
 
+    // --- String işlemleri (ADR-024: immutable değer-tipi, içerik ==) ---
+    STRING_CONCAT, // slots[dest] = slots[left] + slots[right]  (yeni string üretir)
+
+    // --- Hata yönetimi (ADR-025: UNCHECKED try/catch/throw) ---
+    ENTER_TRY,  // try bloğuna giriş: TryFrame'i yığına it
+                //   dest       = catch bloğundaki Error değerinin yazılacağı slot
+                //   jumpTarget = catch bloğunun IR konumu (-1 → backpatch)
+                //   callDepth  = VM, callStack.size()'ı kayıt altına alır (unwind için)
+    LEAVE_TRY,  // try bloğundan normal çıkış: TryFrame'i çıkar (istisna olmadı)
+    THROW,      // slots[src] değerini fırlat → en yakın ENTER_TRY'a unwind
+                //   Yakalanmamışsa C++ exception olarak yükseltilir
+
     // --- Dış dünya (FFI — Foreign Function Interface) ---
     CALLHOST,      // Host (C++) fonksiyonunu çağır. Şu an sadece "print" destekli.
                    //   Dönüş değeri yok; sadece yan etki (stdout'a yazmak gibi).
@@ -121,6 +134,7 @@ inline const char* opcodeName(Opcode op) {
     switch (op) {
         case Opcode::LOAD_CONST:    return "LOAD_CONST";
         case Opcode::LOAD_STRING:   return "LOAD_STRING";
+        case Opcode::LOAD_NULL:     return "LOAD_NULL";
         case Opcode::LOAD_SLOT:     return "LOAD_SLOT";
         case Opcode::ADD:           return "ADD";
         case Opcode::SUB:           return "SUB";
@@ -160,6 +174,10 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::JIF_TRUE:      return "JIF_TRUE";
         case Opcode::CALL:          return "CALL";
         case Opcode::RETURN:        return "RETURN";
+        case Opcode::STRING_CONCAT: return "STRING_CONCAT";
+        case Opcode::ENTER_TRY:     return "ENTER_TRY";
+        case Opcode::LEAVE_TRY:     return "LEAVE_TRY";
+        case Opcode::THROW:         return "THROW";
         case Opcode::CALLHOST:      return "CALLHOST";
     }
     return "UNKNOWN";

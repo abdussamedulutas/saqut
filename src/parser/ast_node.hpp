@@ -87,6 +87,8 @@ enum class ASTKind {
     ExpressionStatement,  // ifade + noktalı virgül (;)
                           //   children: [expression]
                           //   Örn: x = 5; veya foo();
+    TryStatement,         // try { body } catch (Error e) { handler }  (ADR-025)
+    ThrowStatement,       // throw <ifade>;                             (ADR-025)
 
     /* ====== İfadeler (Expressions) ====== */
     BinaryExpression,     // İkili işlem: sol OP sağ.

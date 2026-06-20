@@ -17,25 +17,40 @@
 IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& /*symbolTable*/) {
     IRProgram program;
 
-    // ProgramNode'un her çocuğunu gez.
-    // Bizi ilgilendiren: FunctionDecl. StructDecl/GlobalVar → TODO.
+    // 1. Geçiş: global VariableDecl'leri topla ve kayıt et
+    std::vector<VariableDeclNode*> globalVars;
+    for (ASTNode* child : programNode->getChildren()) {
+        if (child->kind == ASTKind::VariableDecl) {
+            auto* vd = (VariableDeclNode*)child;
+            nameToGlobal_[vd->name] = globalCount_++;
+            program.globalCount++;
+            program.globalNames.push_back(vd->name);
+            globalVars.push_back(vd);
+        }
+    }
+
+    // 2. Geçiş: fonksiyonları üret
     for (ASTNode* child : programNode->getChildren()) {
         if (child->kind == ASTKind::FunctionDecl) {
-            // Her fonksiyon üretimi için sıfırla
             nameToSlot_.clear();
             nextSlot_ = 0;
 
-            // IRFunction oluştur, currentFunction_ olarak işaretle
             auto* fnDecl = (FunctionDeclNode*)child;
             IRFunction irFn(fnDecl->name, (int)fnDecl->params.size());
             program.addFunction(std::move(irFn));
-
-            // addFunction std::move yaptığı için pointer'ı haritadan alalım
             currentFunction_ = program.findFunction(fnDecl->name);
 
-            generateFunction(child);
+            // main'in başında global değişkenlerin init ifadelerini üret
+            if (fnDecl->name == "main") {
+                for (VariableDeclNode* gv : globalVars) {
+                    if (gv->initExpr) {
+                        int initSlot = generateExpression(gv->initExpr);
+                        emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
+                    }
+                }
+            }
 
-            // Fonksiyon bitti — toplam slot sayısını kaydet
+            generateFunction(child);
             currentFunction_->slotCount = nextSlot_;
         }
     }
@@ -344,13 +359,15 @@ int IRGenerator::generateExpression(ASTNode* node) {
     }
 
     // ── Değişken ismi: n, first, second ... ──────────────────────────────
-    // Bu değişkenin değeri zaten bir slotta. O slotu döndür.
     case ASTKind::Identifier: {
         auto* id = (IdentifierNode*)node;
         std::string name = id->parserToken.token ? id->parserToken.token->token : "";
 
-        // Önce builtin mi? (print gibi) — identifier olarak gelen builtin fonksiyon
-        // çağrıları CallExpression içinde yakalanıyor, burada sadece değişken kalır
+        if (isGlobal(name)) {
+            int tempSlot = freshSlot();
+            emitLoadGlobal(tempSlot, getGlobalIndex(name));
+            return tempSlot;
+        }
         return lookupVariable(name);
     }
 
@@ -358,44 +375,59 @@ int IRGenerator::generateExpression(ASTNode* node) {
     case ASTKind::BinaryExpression: {
         auto* bin = (BinaryExpressionNode*)node;
 
-        // Atama operatörleri: x = expr, x += expr ...
-        // Sol taraf bir değişken, sağ taraf hesaplanır ve o değişkene yazılır.
+        // Atama operatörleri: x = expr
         if (bin->Operator == TokenType::EQUAL) {
-            // Sağ tarafı hesapla
             int rhsSlot = generateExpression(bin->Right);
-
-            // Sol taraf değişkenin slotunu bul
             auto* lhsId = (IdentifierNode*)bin->Left;
             std::string varName = lhsId->parserToken.token->token;
-            int varSlot = lookupVariable(varName);
 
-            // Sonucu değişkenin slotuna kopyala
-            if (rhsSlot != varSlot) {
-                emitLoadSlot(varSlot, rhsSlot);
+            if (isGlobal(varName)) {
+                emitStoreGlobal(rhsSlot, getGlobalIndex(varName));
+                return rhsSlot;
             }
+
+            int varSlot = lookupVariable(varName);
+            if (rhsSlot != varSlot) emitLoadSlot(varSlot, rhsSlot);
             return varSlot;
         }
 
-        // Birleşik atama: += -= *= /= %=
+        // Birleşik atama: += -= *= /= %= &= |= <<= >>=
         // x OP= y  ≡  x = x OP y
         if (bin->Operator == TokenType::PLUS_EQUAL    ||
             bin->Operator == TokenType::MINUS_EQUAL   ||
             bin->Operator == TokenType::STAR_EQUAL    ||
             bin->Operator == TokenType::SLASH_EQUAL   ||
-            bin->Operator == TokenType::PERCENT_EQUAL) {
+            bin->Operator == TokenType::PERCENT_EQUAL ||
+            bin->Operator == TokenType::AMPERSAND_EQUAL ||
+            bin->Operator == TokenType::PIPE_EQUAL      ||
+            bin->Operator == TokenType::LSHIFT_EQUAL    ||
+            bin->Operator == TokenType::RSHIFT_EQUAL) {
 
             auto* lhsId = (IdentifierNode*)bin->Left;
             std::string varName = lhsId->parserToken.token->token;
-            int varSlot = lookupVariable(varName);
             int rhsSlot = generateExpression(bin->Right);
 
             Opcode arithOp = Opcode::ADD;
-            if      (bin->Operator == TokenType::MINUS_EQUAL)   arithOp = Opcode::SUB;
-            else if (bin->Operator == TokenType::STAR_EQUAL)    arithOp = Opcode::MUL;
-            else if (bin->Operator == TokenType::SLASH_EQUAL)   arithOp = Opcode::DIV;
-            else if (bin->Operator == TokenType::PERCENT_EQUAL) arithOp = Opcode::MOD;
+            if      (bin->Operator == TokenType::MINUS_EQUAL)    arithOp = Opcode::SUB;
+            else if (bin->Operator == TokenType::STAR_EQUAL)     arithOp = Opcode::MUL;
+            else if (bin->Operator == TokenType::SLASH_EQUAL)    arithOp = Opcode::DIV;
+            else if (bin->Operator == TokenType::PERCENT_EQUAL)  arithOp = Opcode::MOD;
+            else if (bin->Operator == TokenType::AMPERSAND_EQUAL) arithOp = Opcode::BAND;
+            else if (bin->Operator == TokenType::PIPE_EQUAL)     arithOp = Opcode::BOR;
+            else if (bin->Operator == TokenType::LSHIFT_EQUAL)   arithOp = Opcode::SHL;
+            else if (bin->Operator == TokenType::RSHIFT_EQUAL)   arithOp = Opcode::SHR;
 
             int resultSlot = freshSlot();
+
+            if (isGlobal(varName)) {
+                int currentSlot = freshSlot();
+                emitLoadGlobal(currentSlot, getGlobalIndex(varName));
+                emitBinaryOp(arithOp, resultSlot, currentSlot, rhsSlot);
+                emitStoreGlobal(resultSlot, getGlobalIndex(varName));
+                return resultSlot;
+            }
+
+            int varSlot = lookupVariable(varName);
             emitBinaryOp(arithOp, resultSlot, varSlot, rhsSlot);
             emitLoadSlot(varSlot, resultSlot);
             return varSlot;
@@ -412,12 +444,17 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 emitLoadConst(zeroSlot, 0);
                 emitBinaryOp(Opcode::SUB, resultSlot, zeroSlot, operandSlot);
             } else if (bin->Operator == TokenType::BANG) {
-                // !x → (x == 0): sıfırsa 1, değilse 0 — her zaman 0 ya da 1
+                // !x → (x == 0): sıfırsa 1, değilse 0
                 int zeroSlot = freshSlot();
                 emitLoadConst(zeroSlot, 0);
                 emitBinaryOp(Opcode::EQUAL_EQUAL, resultSlot, operandSlot, zeroSlot);
+            } else if (bin->Operator == TokenType::TILDE) {
+                // ~x — bitsel değil
+                Instruction ins(Opcode::BNOT);
+                ins.dest = resultSlot;
+                ins.src  = operandSlot;
+                currentFunction_->instructions.push_back(std::move(ins));
             } else {
-                // Diğer unary operatörler (ör. ~) → TODO
                 emitLoadSlot(resultSlot, operandSlot);
             }
             return resultSlot;
@@ -437,6 +474,12 @@ int IRGenerator::generateExpression(ASTNode* node) {
             case TokenType::GREATER_EQUAL: return generateBinaryArithmetic(Opcode::GREATER_EQUAL, bin->Left, bin->Right);
             case TokenType::EQUAL_EQUAL:   return generateBinaryArithmetic(Opcode::EQUAL_EQUAL,   bin->Left, bin->Right);
             case TokenType::BANG_EQUAL:    return generateBinaryArithmetic(Opcode::NOT_EQUAL,     bin->Left, bin->Right);
+
+            // Bitsel operatörler
+            case TokenType::AMPERSAND: return generateBinaryArithmetic(Opcode::BAND, bin->Left, bin->Right);
+            case TokenType::PIPE:      return generateBinaryArithmetic(Opcode::BOR,  bin->Left, bin->Right);
+            case TokenType::LSHIFT:    return generateBinaryArithmetic(Opcode::SHL,  bin->Left, bin->Right);
+            case TokenType::RSHIFT:    return generateBinaryArithmetic(Opcode::SHR,  bin->Left, bin->Right);
 
             // Mantıksal operatörler: kısa devre dallanmasıyla üretilir (ADR-008).
             // NOT: sıradan ikili işlem değil — b, a'nın değerine göre atlanabilir.
@@ -591,6 +634,29 @@ void IRGenerator::emitLoadSlot(int destSlot, int srcSlot) {
     ins.dest = destSlot;
     ins.src  = srcSlot;
     currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitLoadGlobal(int destSlot, int globalIndex) {
+    Instruction ins(Opcode::LOAD_GLOBAL);
+    ins.dest     = destSlot;
+    ins.intValue = globalIndex;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitStoreGlobal(int srcSlot, int globalIndex) {
+    Instruction ins(Opcode::STORE_GLOBAL);
+    ins.src      = srcSlot;
+    ins.intValue = globalIndex;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+bool IRGenerator::isGlobal(const std::string& name) const {
+    return nameToGlobal_.count(name) > 0;
+}
+
+int IRGenerator::getGlobalIndex(const std::string& name) const {
+    auto it = nameToGlobal_.find(name);
+    return (it != nameToGlobal_.end()) ? it->second : -1;
 }
 
 void IRGenerator::emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot) {

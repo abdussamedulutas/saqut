@@ -56,6 +56,8 @@ private:
 
     void emitLoadConst(int destSlot, int value);
     void emitLoadSlot(int destSlot, int srcSlot);
+    void emitLoadGlobal(int destSlot, int globalIndex);
+    void emitStoreGlobal(int srcSlot, int globalIndex);
     void emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot);
     void emitReturn(int srcSlot);
     // Koşulsuz atlama yazar; instruction indeksini döndürür (backpatch için).
@@ -88,9 +90,15 @@ private:
     IRFunction* currentFunction_ = nullptr; // şu an üretilen fonksiyon
     int         nextSlot_        = 0;       // sıradaki boş slot numarası
 
-    // Değişken ismi → slot numarası.
-    // Sınırlama: aynı isimdeki farklı scope değişkenleri çakışır (TODO).
+    // Değişken ismi → slot numarası (lokal).
     std::unordered_map<std::string, int> nameToSlot_;
+
+    // Global değişken ismi → global index
+    std::unordered_map<std::string, int> nameToGlobal_;
+    int                                  globalCount_ = 0;
+
+    bool isGlobal(const std::string& name) const;
+    int  getGlobalIndex(const std::string& name) const;
 };
 
 #endif // SAQUT_IR_GENERATOR

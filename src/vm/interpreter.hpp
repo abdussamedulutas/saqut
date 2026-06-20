@@ -28,6 +28,7 @@ public:
 private:
     IRProgram&            program_;
     std::vector<CallFrame> callStack_;
+    std::vector<Value>    globalSlots_;
 
     // Host (C++) fonksiyon çağrısı — şu an sadece "print" destekli
     void executeHostFunction(const std::string& name,

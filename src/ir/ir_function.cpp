@@ -21,6 +21,10 @@ static const char* opSymbol(Opcode op) {
         case Opcode::MUL:           return "*";
         case Opcode::DIV:           return "/";
         case Opcode::MOD:           return "%";
+        case Opcode::BAND:          return "&";
+        case Opcode::BOR:           return "|";
+        case Opcode::SHL:           return "<<";
+        case Opcode::SHR:           return ">>";
         case Opcode::LESS:          return "<";
         case Opcode::LESS_EQUAL:    return "<=";
         case Opcode::GREATER:       return ">";
@@ -35,6 +39,7 @@ static bool isBinaryOp(Opcode op) {
     switch (op) {
         case Opcode::ADD: case Opcode::SUB: case Opcode::MUL:
         case Opcode::DIV: case Opcode::MOD:
+        case Opcode::BAND: case Opcode::BOR: case Opcode::SHL: case Opcode::SHR:
         case Opcode::LESS: case Opcode::LESS_EQUAL:
         case Opcode::GREATER: case Opcode::GREATER_EQUAL:
         case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:
@@ -112,6 +117,15 @@ void IRFunction::dump() const {
                 std::cout << slot(ins.argSlots[j]);
             }
             std::cout << ")";
+
+        } else if (ins.opcode == Opcode::BNOT) {
+            std::cout << slot(ins.dest) << " = ~" << slot(ins.src);
+
+        } else if (ins.opcode == Opcode::LOAD_GLOBAL) {
+            std::cout << slot(ins.dest) << " = global[" << ins.intValue << "]";
+
+        } else if (ins.opcode == Opcode::STORE_GLOBAL) {
+            std::cout << "global[" << ins.intValue << "] = " << slot(ins.src);
 
         } else if (ins.opcode == Opcode::RETURN) {
             std::cout << slot(ins.src);

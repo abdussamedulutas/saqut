@@ -121,6 +121,15 @@ void IRFunction::dump() const {
         } else if (ins.opcode == Opcode::BNOT) {
             std::cout << slot(ins.dest) << " = ~" << slot(ins.src);
 
+        } else if (ins.opcode == Opcode::STRUCT_NEW) {
+            std::cout << slot(ins.dest) << " = struct<" << ins.functionName << ">[" << ins.intValue << " alan]";
+
+        } else if (ins.opcode == Opcode::FIELD_GET) {
+            std::cout << slot(ins.dest) << " = " << slot(ins.src) << "." << ins.intValue;
+
+        } else if (ins.opcode == Opcode::FIELD_SET) {
+            std::cout << slot(ins.dest) << "." << ins.intValue << " = " << slot(ins.right);
+
         } else if (ins.opcode == Opcode::ARRAY_NEW) {
             std::cout << slot(ins.dest) << " = array[" << ins.intValue << "]";
 

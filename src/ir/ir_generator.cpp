@@ -14,8 +14,11 @@
 // generate — Ana giriş noktası
 // ─────────────────────────────────────────────────────────────────────────────
 
-IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& /*symbolTable*/) {
+IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable) {
     IRProgram program;
+
+    // 0. Geçiş: struct layout haritasını sembol tablosundan al
+    structLayouts_ = symbolTable.structLayouts;
 
     // 1. Geçiş: modül-düzeyi VariableDecl'leri topla ve kayıt et
     // "Global" değil — bu dosyanın (modülün) kendi değişkenleri.
@@ -97,7 +100,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
         break;
     }
 
-    // ── Değişken bildirimi: int x = <ifade> ──────────────────────────────
+    // ── Değişken bildirimi: int x = <ifade>  /  Point p; ────────────────
     case ASTKind::VariableDecl: {
         auto* vd = (VariableDeclNode*)node;
 
@@ -106,14 +109,12 @@ void IRGenerator::generateStatement(ASTNode* node) {
         registerVariable(vd->name, varSlot);
 
         if (vd->initExpr) {
-            // Başlatma ifadesini üret, sonucu bir slotta al
             int initSlot = generateExpression(vd->initExpr);
-
-            if (initSlot != varSlot) {
-                // Sonuç başka bir slotta, değişkenin slotuna kopyala
-                emitLoadSlot(varSlot, initSlot);
-            }
-            // initSlot == varSlot: LOAD_CONST doğrudan varSlot'a yazıldı, kopya gerekmez
+            if (initSlot != varSlot) emitLoadSlot(varSlot, initSlot);
+        } else if (structLayouts_.count(vd->varType)) {
+            // Struct değişkeni: init ifadesi yoksa boş StructObject oluştur
+            int fc = getStructFieldCount(vd->varType);
+            emitStructNew(varSlot, vd->varType, fc);
         }
 
         // Sibling VariableDecl'ler: int a, b; → children'da diğer VariableDecl'ler
@@ -389,6 +390,18 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 return rhsSlot;
             }
 
+            // p.field = val → FIELD_SET
+            if (bin->Left && bin->Left->kind == ASTKind::MemberAccess) {
+                auto* ma = (MemberAccessNode*)bin->Left;
+                int objSlot = generateExpression(ma->object);
+                std::string structName;
+                if (auto* exprObj = dynamic_cast<ExpressionNode*>(ma->object))
+                    structName = exprObj->resolvedType.structName;
+                int idx2 = getStructFieldIndex(structName, ma->member);
+                if (idx2 >= 0) emitFieldSet(objSlot, idx2, rhsSlot);
+                return rhsSlot;
+            }
+
             auto* lhsId = (IdentifierNode*)bin->Left;
             std::string varName = lhsId->parserToken.token->token;
 
@@ -589,7 +602,19 @@ int IRGenerator::generateExpression(ASTNode* node) {
         return resultSlot;                  // artırmadan önceki değer
     }
 
-    // ── Array literali: [1, 2, 3] ─────────────────────────────────────────
+    // ── Üye erişimi okuma: p.x ───────────────────────────────────────────
+    case ASTKind::MemberAccess: {
+        auto* ma     = (MemberAccessNode*)node;
+        int objSlot  = generateExpression(ma->object);
+        int destSlot = freshSlot();
+        // Nesnenin struct adını resolvedType üstünden al (tip denetleyici yazdı)
+        std::string structName;
+        if (auto* exprObj = dynamic_cast<ExpressionNode*>(ma->object))
+            structName = exprObj->resolvedType.structName;
+        int idx = getStructFieldIndex(structName, ma->member);
+        if (idx >= 0) emitFieldGet(destSlot, objSlot, idx);
+        return destSlot;
+    }
     case ASTKind::ArrayLiteral: {
         auto* al = (ArrayLiteralNode*)node;
         int arrSlot = freshSlot();
@@ -685,6 +710,30 @@ void IRGenerator::emitStoreGlobal(int srcSlot, int globalIndex) {
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
+void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int fieldCount) {
+    Instruction ins(Opcode::STRUCT_NEW);
+    ins.dest         = destSlot;
+    ins.intValue     = fieldCount;
+    ins.functionName = structType; // struct tip adı
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx) {
+    Instruction ins(Opcode::FIELD_GET);
+    ins.dest     = destSlot;
+    ins.src      = objSlot;
+    ins.intValue = fieldIdx;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitFieldSet(int objSlot, int fieldIdx, int valSlot) {
+    Instruction ins(Opcode::FIELD_SET);
+    ins.dest     = objSlot;
+    ins.intValue = fieldIdx;
+    ins.right    = valSlot;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
 void IRGenerator::emitArrayNew(int destSlot, int capacity) {
     Instruction ins(Opcode::ARRAY_NEW);
     ins.dest     = destSlot;
@@ -713,6 +762,20 @@ void IRGenerator::emitArrayLen(int destSlot, int arrSlot) {
     ins.dest = destSlot;
     ins.src  = arrSlot;
     currentFunction_->instructions.push_back(std::move(ins));
+}
+
+int IRGenerator::getStructFieldIndex(const std::string& structType, const std::string& fieldName) const {
+    auto it = structLayouts_.find(structType);
+    if (it == structLayouts_.end()) return -1;
+    for (int i = 0; i < (int)it->second.size(); i++)
+        if (it->second[i].first == fieldName) return i;
+    return -1;
+}
+
+int IRGenerator::getStructFieldCount(const std::string& structType) const {
+    auto it = structLayouts_.find(structType);
+    if (it == structLayouts_.end()) return 0;
+    return (int)it->second.size();
 }
 
 bool IRGenerator::isGlobal(const std::string& name) const {

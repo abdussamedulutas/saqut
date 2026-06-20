@@ -497,6 +497,15 @@ ASTNode* Parser::parseStatement() {
     if (ct.type == TokenType::KW_STRUCT)
         return parseStructDecl();
 
+    // Kullanıcı tanımlı struct tipiyle değişken bildirimi: Point p; veya Point p = ...;
+    if (ct.type == TokenType::IDENTIFIER) {
+        auto la1 = lookahead(1);
+        // "TypeName varName" veya "TypeName varName = ..." → değişken bildirimi
+        // (TypeName LPAREN → ifade; o durumda parseExpressionStatement devam eder)
+        if (la1.type == TokenType::IDENTIFIER)
+            return parseVariableDecl();
+    }
+
     return parseExpressionStatement();
 }
 

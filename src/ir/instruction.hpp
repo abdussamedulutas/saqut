@@ -82,6 +82,11 @@ enum class Opcode {
 
     RETURN,        // Bu frame'i kapat, slots[src]'yi caller'a ilet.
 
+    // --- Struct (ADR-020: referans semantiği) ---
+    STRUCT_NEW,  // slots[dest] = yeni StructObject(intValue alan sayısı); functionName = struct tipi adı
+    FIELD_GET,   // slots[dest] = slots[src].fields[intValue]  (src=nesne, intValue=alan indeksi)
+    FIELD_SET,   // slots[dest].fields[intValue] = slots[right]  (dest=nesne, intValue=alan indeksi, right=değer)
+
     // --- Array (ADR-020: referans semantiği) ---
     ARRAY_NEW,   // slots[dest] = yeni ArrayObject(intValue eleman kapasitesi)
     ARRAY_GET,   // slots[dest] = slots[left][slots[right]]  — sınır kontrolü
@@ -117,6 +122,9 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::SHL:           return "SHL";
         case Opcode::SHR:           return "SHR";
         case Opcode::BNOT:          return "BNOT";
+        case Opcode::STRUCT_NEW:    return "STRUCT_NEW";
+        case Opcode::FIELD_GET:     return "FIELD_GET";
+        case Opcode::FIELD_SET:     return "FIELD_SET";
         case Opcode::ARRAY_NEW:     return "ARRAY_NEW";
         case Opcode::ARRAY_GET:     return "ARRAY_GET";
         case Opcode::ARRAY_SET:     return "ARRAY_SET";

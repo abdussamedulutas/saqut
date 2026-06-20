@@ -107,6 +107,8 @@ void TypeChecker::checkStmt(ASTNode* node) {
     case ASTKind::VariableDecl: {
         auto* vd = (VariableDeclNode*)node;
         Type targetType = Type::fromName(vd->varType);
+        if (targetType.isError() && table_.structLayouts.count(vd->varType))
+            targetType = Type::structType(vd->varType);
         if (vd->initExpr) {
             Type srcType = checkExpr(vd->initExpr, targetType);
             bool isLit   = vd->initExpr->kind == ASTKind::Literal;
@@ -374,15 +376,26 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
     // ── MemberAccess / IndexExpression ─────────────────────────────────────
     case ASTKind::MemberAccess: {
         auto* ma = (MemberAccessNode*)node;
-        checkExpr(ma->object);
-        result = Type::error(); // TODO(faz3+): struct alan çözümü
+        Type objType = checkExpr(ma->object);
+        if (objType.isStruct()) {
+            result = table_.getFieldType(objType.structName, ma->member);
+            if (result.isError())
+                diag_.report("E001", node->loc,
+                             "'" + objType.structName + "' struct'ında '" + ma->member + "' alanı yok");
+        } else {
+            result = Type::error();
+        }
         break;
     }
     case ASTKind::IndexExpression: {
         auto* ie = (IndexExpressionNode*)node;
-        checkExpr(ie->object);
+        Type objType = checkExpr(ie->object);
         if (ie->index) checkExpr(ie->index);
-        result = Type::error(); // TODO(faz3+): array eleman tipi
+        // array eleman tipi
+        if (objType.isArray() && objType.elementType)
+            result = *objType.elementType;
+        else
+            result = Type::Int(); // varsayılan (tip çıkarımı tam değil)
         break;
     }
 

@@ -8,7 +8,7 @@
 // marked + next: mark-sweep için hazır; v1'de kullanılmaz.
 // TODO(#56): mark-sweep v2 — Heap::collect() bu header'ı kullanacak.
 
-enum class ObjectType { Array /*, Struct, String (ileride) */ };
+enum class ObjectType { Array, Struct };
 
 struct Object {
     ObjectType type;
@@ -17,7 +17,6 @@ struct Object {
 };
 
 // Forward declare — Value, Object*'ı taşır; Object, Value içerir.
-// Gerçek tanım value.hpp'den sonra gelir; burada sadece forward.
 struct Value;
 
 struct ArrayObject : Object {
@@ -25,6 +24,15 @@ struct ArrayObject : Object {
     explicit ArrayObject(int capacity = 0) {
         type = ObjectType::Array;
         if (capacity > 0) elements.reserve(capacity);
+    }
+};
+
+// ADR-020: Struct = referans semantiği. Alanlar sıra indeksiyle erişilir.
+struct StructObject : Object {
+    std::vector<Value> fields;
+    explicit StructObject(int fieldCount = 0) {
+        type = ObjectType::Struct;
+        fields.resize(fieldCount); // Value::fromInt(0) ile başlatılır (varsayılan)
     }
 };
 
@@ -41,7 +49,15 @@ struct Heap {
         head       = obj;
         allocCount++;
         return obj;
-        // TODO(#56): mark-sweep kök taraması buradan — GC eşiği aşılınca tetikle
+    }
+
+    StructObject* allocStruct(int fieldCount) {
+        auto* obj  = new StructObject(fieldCount);
+        obj->next  = head;
+        head       = obj;
+        allocCount++;
+        return obj;
+        // TODO(#56): mark-sweep kök taraması buradan
     }
 
     // v1: process exit'te OS toplar; yıkıcı tüm nesneleri siler.

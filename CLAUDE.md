@@ -108,6 +108,6 @@ git'te izlenir.
 
 ## Çalışma konvansiyonları
 - Commit mesajları sonunda: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
-- Ana dal `master`; commit/push kullanıcı isteyince yapılır.
+- Ana dal `0.1.0`; `master` branch yok. commit/push kullanıcı isteyince yapılır.
 - Wiki API'si Gitea'da REST üzerinden çalışmadı; wiki içeriği `wiki.md`'ye yazılıp
   kullanıcı tarafından elle yapıştırılıyor.

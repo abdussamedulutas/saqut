@@ -1,3 +1,18 @@
-int main(){
-    print("Naber" +" Naber");
+struct Person{
+    string name;
 }
+
+
+int main(){
+    Person ali;
+    ali.name = "Abdussamed";
+    ali = changeName(ali);
+    print(ali.name);
+    return 0;
+}
+
+Person changeName(Person p){
+    p.name = null;
+    return p;
+}
+

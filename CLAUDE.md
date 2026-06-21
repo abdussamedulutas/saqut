@@ -120,13 +120,14 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - `examples/fibonacci.sqt` — geçerli referans program.
 - `examples/parser-stress/` — yalnızca parser'ı zorlayan, **geçerli olmayan** fixture'lar.
 
-## Gitea issue yönetimi
-- Repo: `git.saqut.com/saqut/saqut-compiler` (Gitea). Cloudflare, Python-urllib
-  User-Agent'ını banlıyor → tarayıcı User-Agent'ı şart.
-- `scripts/gitea.py` — API istemcisi (`~/.git-credentials`'tan kimlik okur).
-  Komutlar: `list/get/create/edit/comment`. Toplu issue üretimi:
-  `scripts/create_issues.py`, `create_future_issues.py`, `create_syntax_test_issues.py`.
-- **Issue yapısı (bu oturumda kuruldu):**
+## GitHub issue yönetimi
+- Repo: `github.com/abdussamedulutas/saqut` (GitHub). **Her zaman `gh` CLI kullan.**
+  `scripts/gitea.py` ve git.saqut.com (Gitea) artık kullanılmıyor.
+- **Issue işlemleri:** `gh issue list`, `gh issue create`, `gh issue edit`,
+  `gh issue comment`, `gh label list`, `gh pr create` vb.
+- Label eklemek için: `gh issue create --label "bug"` ya da
+  `gh issue edit <N> --add-label "bug"`.
+- **Issue yapısı:**
   - **#69–73** `faz-plani` — Faz 0–4 (Tip+Diagnostic, AST refactor, Symbol Table,
     Semantik Analiz, Optimizasyon). Format: Giriş/Gelişme/Sonuç-Başarı Kriterleri +
     mühendis-olmayan analiz.

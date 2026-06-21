@@ -28,7 +28,8 @@ private:
     bool checkAssign(const Type& target, const Type& src,
                      bool srcIsLiteral,
                      const SourceLocation& loc,
-                     const std::string& context);
+                     const std::string& context,
+                     const std::string& hintExpr = "");
 
     // İki sayısal tipin genişlik sırası: int=0, float=1, double=2; -1 = sayısal değil.
     static int numericRank(const Type& t);

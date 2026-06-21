@@ -1,0 +1,29 @@
+void level3() {
+    try {
+        int[] arr = [1, 2, 3];
+        int bad = arr[99];
+    } catch (Error e) {
+        throw "level3 hata";
+    }
+}
+
+void level2() {
+    level3();
+}
+
+int main() {
+    try {
+        level2();
+    } catch (Error e) {
+        print(1);
+    }
+
+    try {
+        throw "ozel hata";
+    } catch (Error e) {
+        print(2);
+    }
+
+    print(3);
+    return 0;
+}

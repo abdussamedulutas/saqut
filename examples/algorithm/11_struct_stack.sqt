@@ -1,0 +1,45 @@
+// Test: Stack veri yapısı (struct içinde array field)
+// Risk: FIELD_GET → ARRAY_GET çift dolaylı erişim; GC iki seviyeyi izliyor mu
+// Beklenen: Push/pop başarıyla çalışır
+// Test: 3 eleman push, 3 eleman pop, underflow dene
+
+struct Stack {
+    int[] data;
+    int top;
+}
+
+void push(Stack s, int val) {
+    s.data[s.top] = val;
+    s.top = s.top + 1;
+}
+
+int pop(Stack s) {
+    s.top = s.top - 1;
+    return s.data[s.top];
+}
+
+int main() {
+    Stack s;
+    s.data = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    s.top = 0;
+
+    // Push 3 eleman
+    push(s, 10);
+    push(s, 20);
+    push(s, 30);
+
+    // Pop 3 eleman
+    print(pop(s));  // 30
+    print(pop(s));  // 20
+    print(pop(s));  // 10
+
+    // Underflow test: s.top = 0, pop → -1 indeksi
+    try {
+        int underflow = pop(s);
+        print(underflow);
+    } catch (Error e) {
+        print(e.code);  // E_OOB beklenir
+    }
+
+    return 0;
+}

@@ -1,0 +1,33 @@
+struct Node {
+    int val;
+    Node? next;
+}
+
+int main() {
+    Node n1;
+    Node n2;
+    Node n3;
+    Node n4;
+    Node n5;
+
+    n1.val = 1;
+    n1.next = null;
+    n2.val = 2;
+    n2.next = null;
+    n3.val = 3;
+    n3.next = null;
+    n4.val = 4;
+    n4.next = null;
+    n5.val = 5;
+    n5.next = null;
+
+    // Chain: n1 -> n2 -> n3 -> n4 -> n5
+    // (Referans semantiği — bu yapı çalışabilir mi?)
+    // Alternatif: array simulation
+    int[] vals = [1, 2, 3, 4, 5];
+    for (int i = 0; i < 5; i = i + 1) {
+        print(vals[i]);
+    }
+
+    return 0;
+}

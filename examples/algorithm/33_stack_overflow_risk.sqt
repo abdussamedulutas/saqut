@@ -1,0 +1,12 @@
+// Fibonacci recursive — exponential complexity, stack testi
+int fib(int n) {
+    if (n <= 1) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+int main() {
+    // fib(35) ≈ 29M çağrı, çok yavaş ama bellek/stack'i test eder
+    // timeout'a takılabilir
+    print(fib(30));
+    return 0;
+}

@@ -1,0 +1,14 @@
+int main() {
+    float x = 1.5;
+    switch (x) {
+        case 1.0:
+            print(1);
+        case 1.5:
+            print(2);
+        case 0.1:
+            print(3);
+        default:
+            print(4);
+    }
+    return 0;
+}

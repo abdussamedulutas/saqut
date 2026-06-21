@@ -1,0 +1,13 @@
+// String birleştirmesi — bellek patlatma potansiyeli
+int main() {
+    string s = "";
+
+    // 1000 iterasyon — her adımda string büyür
+    // 1+2+3+...+1000 = 500500 karakter tahsisi
+    for (int i = 0; i < 1000; i = i + 1) {
+        s = s + "x";
+    }
+
+    print(s);
+    return 0;
+}

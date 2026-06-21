@@ -1,0 +1,17 @@
+int main() {
+    try {
+        float z = 0.0;
+        float r = 1.0 / z;
+        print(r);
+    } catch (Error e) {
+        print(e.code);
+    }
+
+    float a = 0.1;
+    float b = 0.2;
+    float c = a + b;
+    float d = 0.3;
+    if (c == d) { print(1); } else { print(0); }
+
+    return 0;
+}

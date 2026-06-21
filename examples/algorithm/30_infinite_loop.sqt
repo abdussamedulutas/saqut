@@ -1,0 +1,9 @@
+int main() {
+    print(1);
+    int i = 0;
+    while (true) {
+        i = i + 1;
+    }
+    print(2);
+    return 0;
+}

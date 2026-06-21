@@ -1,0 +1,11 @@
+int main() {
+    string s1 = "elma";
+    string s2 = "havuc";
+    string s3 = "karpuz";
+
+    if (s1 == "elma") { print(1); }
+    if (s2 == "havuc") { print(2); }
+    if (s3 == "karpuz") { print(3); }
+
+    return 0;
+}

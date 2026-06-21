@@ -1,0 +1,24 @@
+struct Point {
+    int x;
+    int y;
+}
+
+Point lastPoint(int n) {
+    Point last;
+    last.x = 0;
+    last.y = 0;
+    for (int i = 0; i < n; i = i + 1) {
+        Point p;
+        p.x = i;
+        p.y = i * 2;
+        last = p;
+    }
+    return last;
+}
+
+int main() {
+    Point result = lastPoint(1000);
+    print(result.x);
+    print(result.y);
+    return 0;
+}

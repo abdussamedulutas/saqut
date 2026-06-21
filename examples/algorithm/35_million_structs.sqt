@@ -1,0 +1,27 @@
+// 10000 struct tahsisi (döngüde)
+struct Data {
+    int a;
+    int b;
+    int c;
+}
+
+int main() {
+    Data last;
+    last.a = 0;
+    last.b = 0;
+    last.c = 0;
+
+    // 10000 struct oluştur, GC baskısı
+    for (int i = 0; i < 10000; i = i + 1) {
+        Data d;
+        d.a = i;
+        d.b = i * 2;
+        d.c = i * 3;
+        last = d;
+    }
+
+    print(last.a);
+    print(last.b);
+    print(last.c);
+    return 0;
+}

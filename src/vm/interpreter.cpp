@@ -213,6 +213,10 @@ int Interpreter::run() {
         }
 
         // ── Dönüş ─────────────────────────────────────────────────────────
+        //
+        // GC safepoint: frame pop'landıktan SONRA, dönüş değeri caller'a
+        // yazıldıktan SONRA tetiklenir — kök kümesi bu noktada kararlıdır.
+        // Döngüsel referanslar dahil erişilemeyen her nesne burada toplanır.
         case Opcode::RETURN: {
             Value returnValue    = frame.slots[instr.src];
             int   returnDestSlot = frame.returnDestSlot;
@@ -220,6 +224,8 @@ int Interpreter::run() {
 
             if (!callStack_.empty() && returnDestSlot != -1)
                 callStack_.back().slots[returnDestSlot] = returnValue;
+
+            heap_.collect(globalSlots_, callStack_);
 
             if (callStack_.empty())
                 return returnValue.intValue;

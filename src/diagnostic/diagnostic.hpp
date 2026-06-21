@@ -36,6 +36,7 @@
 
 #include <string>
 #include <vector>
+#include <algorithm>
 #include "core/location.hpp"
 #include "tools.hpp"   // jsonEscape — TEK tanım (tools.hpp); çakışmayı önler
 
@@ -159,6 +160,37 @@ inline Diagnostic makeDiagnostic(const std::string& code,
     d.message = message;
     d.hint    = hint;
     return d;
+}
+
+// ============================================================================
+// Yazım-hatası önerisi — E001 "did you mean?" için
+// ============================================================================
+
+inline int diagEditDistance(const std::string& a, const std::string& b) {
+    size_t m = a.size(), n = b.size();
+    if (m > 32 || n > 32) return 99;
+    std::vector<std::vector<int>> dp(m+1, std::vector<int>(n+1, 0));
+    for (size_t i = 0; i <= m; i++) dp[i][0] = (int)i;
+    for (size_t j = 0; j <= n; j++) dp[0][j] = (int)j;
+    for (size_t i = 1; i <= m; i++)
+        for (size_t j = 1; j <= n; j++) {
+            int sub = dp[i-1][j-1] + (a[i-1] == b[j-1] ? 0 : 1);
+            dp[i][j] = std::min(dp[i-1][j]+1, std::min(dp[i][j-1]+1, sub));
+        }
+    return dp[m][n];
+}
+
+// Adaylar arasından en yakın ismi döndürür; mesafe ≥ 3 ise boş string.
+inline std::string suggestName(const std::string& unknown,
+                                const std::vector<std::string>& candidates) {
+    std::string best;
+    int bestDist = 3;
+    for (const auto& c : candidates) {
+        if (c.empty() || c[0] == '_') continue;
+        int d = diagEditDistance(unknown, c);
+        if (d < bestDist) { bestDist = d; best = c; }
+    }
+    return best;
 }
 
 #endif // SAQUT_DIAGNOSTIC_DIAGNOSTIC

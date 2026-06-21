@@ -1,0 +1,18 @@
+int pow_fast(int base, int exp) {
+    if (exp == 0) { return 1; }
+    if (exp % 2 == 0) {
+        int half = pow_fast(base, exp / 2);
+        return half * half;
+    }
+    return base * pow_fast(base, exp - 1);
+}
+
+int main() {
+    print(pow_fast(2, 0));
+    print(pow_fast(0, 0));
+    print(pow_fast(2, 3));
+    print(pow_fast(2, 10));
+    print(pow_fast(2, 30));
+    print(pow_fast(0, 5));
+    return 0;
+}

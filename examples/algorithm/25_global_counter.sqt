@@ -1,0 +1,15 @@
+int step_count = 0;
+
+int gcd_steps(int a, int b) {
+    step_count = step_count + 1;
+    if (b == 0) { return a; }
+    return gcd_steps(b, a % b);
+}
+
+int main() {
+    step_count = 0;
+    int result = gcd_steps(252, 105);
+    print(result);
+    print(step_count);
+    return 0;
+}

@@ -1,0 +1,10 @@
+// Sonsuz rekürsif fonksiyon — stack'i patlatmaya çalış
+int infinite_recurse(int depth) {
+    print(depth);  // Her çağrıda depth yazdır
+    return infinite_recurse(depth + 1);
+}
+
+int main() {
+    infinite_recurse(0);
+    return 0;
+}

@@ -48,6 +48,12 @@ void SymbolCollector::seedBuiltins() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 Type SymbolCollector::typeFromName(const std::string& n, const SourceLocation& loc) {
+    // "Node?" gibi nullable struct: Type::fromName struct'ı bilmez, burada çözüyoruz.
+    if (!n.empty() && n.back() == '?') {
+        Type base = typeFromName(n.substr(0, n.size() - 1), loc);
+        if (!base.isError()) return base.asNullable();
+        return Type::error();
+    }
     Type t = Type::fromName(n);
     if (!t.isError()) return t;
     if (structFields_.count(n)) return Type::structType(n);

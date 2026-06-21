@@ -33,12 +33,12 @@ inline int cmdAst(const CliArgs& args) {
     ASTNode* ast = parser.parse(tokens);
 
     if (!ast) {
-        std::cerr << "Hata: AST üretilemedi\n";
+        std::cerr << "error: failed to build AST\n";
         for (auto* t : tokens) delete t;
         return 1;
     }
 
-    // ── Sembol + tip analizi (--optimized için gerekli; yalın ast'te opsiyonel) ──
+    // ── Symbol + type analysis (required for --optimized; optional for plain ast) ──
     SymbolTable      symbolTable;
     DiagnosticEngine diag;
     SymbolCollector(symbolTable, diag).collect(ast);

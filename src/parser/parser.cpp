@@ -150,7 +150,7 @@ ASTNode* Parser::parseNullDenotation() {
     auto ct = currentToken();
 
     if (ct.type == TokenType::SVR_VOID) {
-        std::cerr << "Parser hatası: beklenmeyen dosya sonu\n";
+        std::cerr << "parser error: unexpected end of file\n";
         return nullptr;
     }
 
@@ -308,8 +308,8 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
             cast->targetTypeName = typeTok.token->token;
             nextToken();
         } else {
-            std::cerr << "Parser hatasi: 'as' sonrası tip adı bekleniyor\n";
-            cast->targetTypeName = "int"; // hata kurtarma
+            std::cerr << "parser error: expected type name after 'as'\n";
+            cast->targetTypeName = "int"; // error recovery
         }
 
         // Opsiyonel '?' — nullable hedef tip: as int?
@@ -325,7 +325,7 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         nextToken();
 
         if (currentToken().type != TokenType::IDENTIFIER) {
-            std::cerr << "Parser hatasi: uye ismi bekleniyor\n";
+            std::cerr << "parser error: expected member name\n";
             return left;
         }
 
@@ -452,7 +452,7 @@ ASTNode* Parser::parseVariableDecl() {
         { nextToken(); vd->varType += "?"; }
 
     if (currentToken().type != TokenType::IDENTIFIER) {
-        std::cerr << "Parser hatası: değişken ismi bekleniyor\n";
+        std::cerr << "parser error: expected variable name\n";
         return vd;
     }
 
@@ -480,7 +480,7 @@ ASTNode* Parser::parseVariableDecl() {
         nextToken();
 
         if (currentToken().type != TokenType::IDENTIFIER) {
-            std::cerr << "Parser hatası: virgülden sonra değişken ismi bekleniyor\n";
+            std::cerr << "parser error: expected variable name after ','\n";
             break;
         }
 

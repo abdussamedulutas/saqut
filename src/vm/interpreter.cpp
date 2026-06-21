@@ -6,6 +6,34 @@
 #include <cmath>
 #include <climits>
 
+// ── buildTrace ─────────────────────────────────────────────────────────────────
+// Mevcut callStack_'i en içten dışa gezerek stacktrace string'i üretir.
+// pendingThrow_ set edilmeden (unwind olmadan) önce çağrılmalıdır.
+std::string Interpreter::buildTrace() const {
+    std::string result;
+    for (int i = (int)callStack_.size() - 1; i >= 0; --i) {
+        const CallFrame& f = callStack_[i];
+        if (!f.function) continue;
+        // ip zaten artırılmış olduğundan şu an çalışan instruction = ip - 1
+        int ip = f.instructionPointer - 1;
+        if (ip >= 0 && ip < (int)f.function->instructions.size()) {
+            const Instruction& ins = f.function->instructions[ip];
+            if (ins.sourceLine > 0) {
+                const std::string& file =
+                    program_.moduleRegistry.filePath(f.function->moduleId);
+                result += f.function->name + " (" + file + ":" +
+                          std::to_string(ins.sourceLine) + ":" +
+                          std::to_string(ins.sourceCol)  + ")\n";
+            } else {
+                result += f.function->name + " (?)\n";
+            }
+        } else {
+            result += f.function->name + " (?)\n";
+        }
+    }
+    return result;
+}
+
 // ── makeErrorValue ─────────────────────────────────────────────────────────────
 // ADR-025: Error struct oluşturur — alan sırası: [line, col, message, trace, code]
 Value Interpreter::makeErrorValue(const std::string& message,
@@ -15,18 +43,23 @@ Value Interpreter::makeErrorValue(const std::string& message,
     obj->fields[0] = Value::fromInt(line);
     obj->fields[1] = Value::fromInt(col);
     obj->fields[2] = Value::fromString(message);
-    obj->fields[3] = Value::fromString("");   // trace — ileride IR satır tablosuyla doldurulacak
+    obj->fields[3] = Value::fromString(buildTrace());
     obj->fields[4] = Value::fromString(code);
     return Value::fromRef(obj);
 }
 
 int Interpreter::run() {
-    // Global slot'ları sıfırla
-    globalSlots_.assign(program_.globalCount, Value::fromInt(0));
+    // Her modülün global slot vektörünü başlat (key = int moduleId)
+    for (auto& [id, count] : program_.moduleGlobalCounts)
+        moduleSlots_[id].assign(count, Value::fromInt(0));
+    // Geriye dönük uyumluluk: moduleGlobalCounts boşsa globalCount'u kullan
+    if (program_.moduleGlobalCounts.empty() && program_.globalCount > 0)
+        moduleSlots_[ModuleRegistry::INVALID_ID].assign(
+            program_.globalCount, Value::fromInt(0));
 
     IRFunction* mainFunction = program_.findFunction("main");
     if (!mainFunction)
-        throw std::runtime_error("Çalışma hatası: 'main' fonksiyonu bulunamadı");
+        throw std::runtime_error("runtime error: 'main' function not found");
 
     CallFrame mainFrame;
     mainFrame.function           = mainFunction;
@@ -84,13 +117,13 @@ int Interpreter::run() {
             break;
         case Opcode::DIV: {
             int d = frame.slots[instr.right].intValue;
-            if (d == 0) { pendingThrow_ = makeErrorValue("Sıfıra bölme", "E_DIVZERO"); break; }
+            if (d == 0) { pendingThrow_ = makeErrorValue("division by zero", "E_DIVZERO"); break; }
             frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue / d);
             break;
         }
         case Opcode::MOD: {
             int d = frame.slots[instr.right].intValue;
-            if (d == 0) { pendingThrow_ = makeErrorValue("Sıfıra bölme (mod)", "E_DIVZERO"); break; }
+            if (d == 0) { pendingThrow_ = makeErrorValue("division by zero (modulo)", "E_DIVZERO"); break; }
             frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue % d);
             break;
         }
@@ -118,10 +151,12 @@ int Interpreter::run() {
 
         // ── Global değişken erişimi ────────────────────────────────────────
         case Opcode::LOAD_GLOBAL:
-            frame.slots[instr.dest] = globalSlots_[instr.intValue];
+            frame.slots[instr.dest] =
+                moduleSlots_[frame.function->moduleId][instr.intValue];
             break;
         case Opcode::STORE_GLOBAL:
-            globalSlots_[instr.intValue] = frame.slots[instr.src];
+            moduleSlots_[frame.function->moduleId][instr.intValue] =
+                frame.slots[instr.src];
             break;
 
         // ── Karşılaştırma ─────────────────────────────────────────────────
@@ -197,7 +232,7 @@ int Interpreter::run() {
             IRFunction* callee = program_.findFunction(instr.functionName);
             if (!callee)
                 throw std::runtime_error(
-                    "Çalışma hatası: '" + instr.functionName + "' fonksiyonu bulunamadı");
+                    "runtime error: '" + instr.functionName + "' function not found");
 
             CallFrame newFrame;
             newFrame.function           = callee;
@@ -225,7 +260,11 @@ int Interpreter::run() {
             if (!callStack_.empty() && returnDestSlot != -1)
                 callStack_.back().slots[returnDestSlot] = returnValue;
 
-            heap_.collect(globalSlots_, callStack_);
+            // Tüm modüllerin global slotlarını kök olarak ver
+            std::vector<Value> allGlobals;
+            for (auto& [id, slots] : moduleSlots_)
+                allGlobals.insert(allGlobals.end(), slots.begin(), slots.end());
+            heap_.collect(allGlobals, callStack_);
 
             if (callStack_.empty())
                 return returnValue.intValue;
@@ -251,7 +290,7 @@ int Interpreter::run() {
             break;
         case Opcode::FDIV: {
             double r = frame.slots[instr.right].floatValue;
-            if (r == 0.0) { pendingThrow_ = makeErrorValue("Float sıfıra bölme", "E_DIVZERO"); break; }
+            if (r == 0.0) { pendingThrow_ = makeErrorValue("float division by zero", "E_DIVZERO"); break; }
             frame.slots[instr.dest] = Value::fromFloat(frame.slots[instr.left].floatValue / r);
             break;
         }
@@ -274,22 +313,22 @@ int Interpreter::run() {
         case Opcode::FIELD_GET: {
             Value& objVal = frame.slots[instr.src];
             if (objVal.kind != ValueKind::Ref || !objVal.ref)
-                throw std::runtime_error("Çalışma hatası: struct değil");
+                throw std::runtime_error("runtime error: not a struct");
             auto* obj = (StructObject*)objVal.ref;
             int idx = instr.intValue;
             if (idx < 0 || idx >= (int)obj->fields.size())
-                throw std::runtime_error("Çalışma hatası: geçersiz struct alan indeksi " + std::to_string(idx));
+                throw std::runtime_error("runtime error: invalid struct field index " + std::to_string(idx));
             frame.slots[instr.dest] = obj->fields[idx];
             break;
         }
         case Opcode::FIELD_SET: {
             Value& objVal = frame.slots[instr.dest];
             if (objVal.kind != ValueKind::Ref || !objVal.ref)
-                throw std::runtime_error("Çalışma hatası: struct değil");
+                throw std::runtime_error("runtime error: not a struct");
             auto* obj = (StructObject*)objVal.ref;
             int idx = instr.intValue;
             if (idx < 0 || idx >= (int)obj->fields.size())
-                throw std::runtime_error("Çalışma hatası: geçersiz struct alan indeksi " + std::to_string(idx));
+                throw std::runtime_error("runtime error: invalid struct field index " + std::to_string(idx));
             obj->fields[idx] = frame.slots[instr.right];
             break;
         }
@@ -304,14 +343,14 @@ int Interpreter::run() {
         case Opcode::ARRAY_GET: {
             Value& arrVal = frame.slots[instr.left];
             if (arrVal.kind != ValueKind::Ref || !arrVal.ref) {
-                pendingThrow_ = makeErrorValue("Dizi beklendi, farklı tip alındı", "E_TYPE"); break;
+                pendingThrow_ = makeErrorValue("expected array, got different type", "E_TYPE"); break;
             }
             auto* arr = (ArrayObject*)arrVal.ref;
             int idx = frame.slots[instr.right].intValue;
             if (idx < 0 || idx >= (int)arr->elements.size()) {
                 pendingThrow_ = makeErrorValue(
-                    "Dizi sınır dışı (indeks=" + std::to_string(idx) +
-                    ", uzunluk=" + std::to_string(arr->elements.size()) + ")", "E_OOB");
+                    "array index out of bounds (index=" + std::to_string(idx) +
+                    ", length=" + std::to_string(arr->elements.size()) + ")", "E_OOB");
                 break;
             }
             frame.slots[instr.dest] = arr->elements[idx];
@@ -320,14 +359,14 @@ int Interpreter::run() {
         case Opcode::ARRAY_SET: {
             Value& arrVal = frame.slots[instr.dest];
             if (arrVal.kind != ValueKind::Ref || !arrVal.ref) {
-                pendingThrow_ = makeErrorValue("Dizi beklendi, farklı tip alındı", "E_TYPE"); break;
+                pendingThrow_ = makeErrorValue("expected array, got different type", "E_TYPE"); break;
             }
             auto* arr = (ArrayObject*)arrVal.ref;
             int idx = frame.slots[instr.left].intValue;
             if (idx < 0 || idx >= (int)arr->elements.size()) {
                 pendingThrow_ = makeErrorValue(
-                    "Dizi sınır dışı (indeks=" + std::to_string(idx) +
-                    ", uzunluk=" + std::to_string(arr->elements.size()) + ")", "E_OOB");
+                    "array index out of bounds (index=" + std::to_string(idx) +
+                    ", length=" + std::to_string(arr->elements.size()) + ")", "E_OOB");
                 break;
             }
             arr->elements[idx] = frame.slots[instr.right];
@@ -336,7 +375,7 @@ int Interpreter::run() {
         case Opcode::ARRAY_LEN: {
             Value& arrVal = frame.slots[instr.src];
             if (arrVal.kind != ValueKind::Ref || !arrVal.ref)
-                throw std::runtime_error("Çalışma hatası: dizi değil");
+                throw std::runtime_error("runtime error: not an array");
             auto* arr = (ArrayObject*)arrVal.ref;
             frame.slots[instr.dest] = Value::fromInt((int)arr->elements.size());
             break;
@@ -365,13 +404,13 @@ int Interpreter::run() {
             try {
                 size_t pos;
                 long long v = std::stoll(s, &pos);
-                if (pos != s.size()) throw std::invalid_argument("tam parse değil");
-                if (v < INT_MIN || v > INT_MAX) throw std::out_of_range("taşma");
+                if (pos != s.size()) throw std::invalid_argument("incomplete parse");
+                if (v < INT_MIN || v > INT_MAX) throw std::out_of_range("overflow");
                 frame.slots[instr.dest] = Value::fromInt((int)v);
             } catch (...) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
-                    "'" + s + "' int'e dönüştürülemedi", "E_CAST");
+                    "'" + s + "' cannot convert to int", "E_CAST");
             }
             break;
         }
@@ -380,12 +419,12 @@ int Interpreter::run() {
             try {
                 size_t pos;
                 double v = std::stod(s, &pos);
-                if (pos != s.size()) throw std::invalid_argument("tam parse değil");
+                if (pos != s.size()) throw std::invalid_argument("incomplete parse");
                 frame.slots[instr.dest] = Value::fromFloat(v);
             } catch (...) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
-                    "'" + s + "' float'a dönüştürülemedi", "E_CAST");
+                    "'" + s + "' cannot convert to float", "E_CAST");
             }
             break;
         }
@@ -394,9 +433,9 @@ int Interpreter::run() {
             if (!std::isfinite(fv) || fv < (double)INT_MIN || fv > (double)INT_MAX) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
-                    "Float değer int aralığı dışında veya NaN/Inf", "E_CAST");
+                    "float value out of int range or NaN/Inf", "E_CAST");
             } else {
-                frame.slots[instr.dest] = Value::fromInt((int)fv); // sıfıra kırp
+                frame.slots[instr.dest] = Value::fromInt((int)fv); // truncate to zero
             }
             break;
         }
@@ -417,9 +456,18 @@ int Interpreter::run() {
             if (!tryStack_.empty()) tryStack_.pop_back();
             break;
 
-        case Opcode::THROW:
-            pendingThrow_ = frame.slots[instr.src];
+        case Opcode::THROW: {
+            Value errVal = frame.slots[instr.src];
+            // If user throws Error struct, fill trace field (fields[3])
+            if (errVal.kind == ValueKind::Ref && errVal.ref &&
+                errVal.ref->type == ObjectType::Struct) {
+                auto* errObj = static_cast<StructObject*>(errVal.ref);
+                if ((int)errObj->fields.size() >= 4)
+                    errObj->fields[3] = Value::fromString(buildTrace());
+            }
+            pendingThrow_ = errVal;
             break;
+        }
 
         // ── FFI ───────────────────────────────────────────────────────────
         case Opcode::CALLHOST:
@@ -442,8 +490,8 @@ int Interpreter::run() {
                 callStack_.back().slots[tf.errorSlot] = errVal;
                 callStack_.back().instructionPointer  = tf.catchTarget;
             } else {
-                // Yakalanmamış hata — mesajı çıkar ve C++ exception olarak yükselt
-                std::string msg = "Yakalanmamış hata";
+                // Uncaught error — extract message and raise as C++ exception
+                std::string msg = "uncaught error";
                 if (errVal.kind == ValueKind::Ref && errVal.ref) {
                     auto* s = static_cast<StructObject*>(errVal.ref);
                     if ((int)s->fields.size() > 2 &&
@@ -471,5 +519,5 @@ void Interpreter::executeHostFunction(const std::string&       name,
         }
         return;
     }
-    throw std::runtime_error("Çalışma hatası: bilinmeyen host fonksiyonu '" + name + "'");
+    throw std::runtime_error("runtime error: unknown host function '" + name + "'");
 }

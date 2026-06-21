@@ -56,16 +56,6 @@ inline const char* diagLevelName(DiagLevel l) {
     return "?";
 }
 
-// İnsan-okur çıktı için Türkçe karşılık
-inline const char* diagLevelNameTr(DiagLevel l) {
-    switch (l) {
-        case DiagLevel::Error:   return "hata";
-        case DiagLevel::Warning: return "uyarı";
-        case DiagLevel::Note:    return "not";
-        case DiagLevel::Hint:    return "ipucu";
-    }
-    return "?";
-}
 
 // NOT: jsonEscape() tools.hpp'de tanımlıdır (tek tanım — ODR çakışması olmaz).
 
@@ -115,20 +105,20 @@ struct DiagInfo {
 
 inline const std::vector<DiagInfo>& diagnosticCatalog() {
     static const std::vector<DiagInfo> catalog = {
-        {"E001", DiagLevel::Error,   "Tanımsız değişken/isim"},
-        {"E002", DiagLevel::Error,   "Aynı scope'ta çift tanım"},
-        {"E003", DiagLevel::Error,   "Tip uyuşmazlığı"},
-        {"E004", DiagLevel::Error,   "Döngü/switch dışı break/continue"},
-        {"E005", DiagLevel::Error,   "Fonksiyon dışı return"},
-        {"E006", DiagLevel::Error,   "Return tipi imzaya uymuyor"},
-        {"E007", DiagLevel::Error,   "Tanımsız tip"},
-        {"E008", DiagLevel::Error,   "Fonksiyon çağrısı argümanı uyuşmuyor"},
-        {"E009", DiagLevel::Error,   "Array boyutu sabit değil / geçersiz"},
-        {"E010", DiagLevel::Error,   "Özyinelemeli/döngüsel struct tanımı"},
-        {"W001", DiagLevel::Warning, "Kullanılmayan değişken"},
-        {"W002", DiagLevel::Warning, "Sıfıra bölme (sabit ifade)"},
-        {"W003", DiagLevel::Warning, "Erişilemez (ölü) kod"},
-        {"W004", DiagLevel::Warning, "Örtük sayısal genişletme (widening)"},
+        {"E001", DiagLevel::Error,   "Undefined variable/name"},
+        {"E002", DiagLevel::Error,   "Duplicate definition in same scope"},
+        {"E003", DiagLevel::Error,   "Type mismatch"},
+        {"E004", DiagLevel::Error,   "break/continue outside loop/switch"},
+        {"E005", DiagLevel::Error,   "return outside function"},
+        {"E006", DiagLevel::Error,   "Return type does not match signature"},
+        {"E007", DiagLevel::Error,   "Undefined type"},
+        {"E008", DiagLevel::Error,   "Function call argument mismatch"},
+        {"E009", DiagLevel::Error,   "Array size is not constant / invalid"},
+        {"E010", DiagLevel::Error,   "Recursive/cyclic struct definition"},
+        {"W001", DiagLevel::Warning, "Unused variable"},
+        {"W002", DiagLevel::Warning, "Division by zero (constant expression)"},
+        {"W003", DiagLevel::Warning, "Unreachable (dead) code"},
+        {"W004", DiagLevel::Warning, "Implicit numeric widening"},
     };
     return catalog;
 }

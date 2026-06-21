@@ -80,12 +80,12 @@ public:
     void printAll(std::ostream& os) const {
         for (const auto& d : diagnostics_) {
             os << d.loc.toString() << ": "
-               << diagLevelNameTr(d.level) << " [" << d.code << "]: "
+               << diagLevelName(d.level) << " [" << d.code << "]: "
                << d.message << "\n";
             if (!d.hint.empty())
-                os << "    ipucu: " << d.hint << "\n";
+                os << "    hint: " << d.hint << "\n";
         }
-        os << "— " << errorCount() << " hata, " << warningCount() << " uyarı\n";
+        os << "— " << errorCount() << " error(s), " << warningCount() << " warning(s)\n";
     }
 
     // --- Makine-okur çıktı ---

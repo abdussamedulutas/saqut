@@ -67,6 +67,29 @@ bool TypeChecker::alwaysExits(ASTNode* stmt) {
     }
 }
 
+// Non-void fonksiyon kontrolü: tüm akış yolları return veya throw ile bitiyor mu?
+bool TypeChecker::pathAlwaysReturns(ASTNode* stmt) {
+    if (!stmt) return false;
+    switch (stmt->kind) {
+        case ASTKind::ReturnStatement:
+        case ASTKind::ThrowStatement:
+            return true;
+        case ASTKind::Block:
+            // Sıralı yürütme: ilk garantili çıkışa kadar ilerle
+            for (ASTNode* ch : stmt->getChildren())
+                if (pathAlwaysReturns(ch)) return true;
+            return false;
+        case ASTKind::IfStatement: {
+            auto* ifn = (IfStatementNode*)stmt;
+            if (!ifn->elseBranch) return false; // else yok → if atlanabilir
+            return pathAlwaysReturns(ifn->thenBranch)
+                && pathAlwaysReturns(ifn->elseBranch);
+        }
+        default:
+            return false; // döngü, atama, çağrı vb. → garanti yok
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // check — giriş noktası
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,6 +119,16 @@ void TypeChecker::checkFunction(ASTNode* fnNode) {
     auto& ch = fn->getChildren();
     if (!ch.empty()) checkStmt(ch[0]); // body Block
 
+    // Non-void fonksiyonun tüm akış yolları return/throw ile bitmeli
+    if (!currentReturnType_.isVoid()) {
+        if (ch.empty() || !pathAlwaysReturns(ch[0])) {
+            diag_.report("E006", fn->loc,
+                "'" + fn->name + "' function must return " + fn->returnType +
+                " but some paths have no return",
+                "add `return <value>;` to all control flow paths");
+        }
+    }
+
     inFunction_ = false;
 }
 
@@ -109,24 +142,24 @@ bool TypeChecker::checkAssign(const Type& target, const Type& src,
                                const std::string& ctx) {
     if (target.isError() || src.isError()) return true; // önceki hata, sessiz geç
 
-    // ADR-021: null literal ataması
+    // ADR-021: null literal assignment
     if (src.isNullLiteral()) {
         if (target.nullable) return true;  // T? ← null → OK
         diag_.report("E003", loc,
-            "'" + ctx + "': null non-null tipine (" + target.toString() + ") atanamaz",
-            "Nullable yapmak için tipi değiştirin: `" + target.toString() + "? " + ctx + " = null;`");
+            "'" + ctx + "': cannot assign null to non-null type (" + target.toString() + ")",
+            "make the type nullable: `" + target.toString() + "? " + ctx + " = null;`");
         return false;
     }
 
-    // ADR-021: nullable uyumu
-    // T? ← T  → OK (widening: non-null, nullable'a gider)
-    // T  ← T? → E  (narrowing: nullable, non-null'a gidemez; narrowing gerekli)
+    // ADR-021: nullable compatibility
+    // T? ← T  → OK (widening: non-null to nullable)
+    // T  ← T? → E  (narrowing: nullable to non-null requires narrowing)
     if (src.nullable && !target.nullable && src.equalsBase(target)) {
         diag_.report("E003", loc,
             "'" + ctx + "': " + src.toString() +
-            " nullable tipi non-null " + target.toString() + " tipine atanamaz"
-            " (if ile null kontrolü yapın)",
-            "if (" + ctx + " != null) { /* burada " + ctx + " non-null, güvenle kullanabilirsiniz */ }");
+            " nullable type cannot be assigned to non-null " + target.toString() +
+            " (use if to check for null)",
+            "if (" + ctx + " != null) { /* here " + ctx + " is non-null, safe to use */ }");
         return false;
     }
     // T? ← T → OK (equalsBase eşleşiyorsa, nullable farkı widening)
@@ -142,22 +175,22 @@ bool TypeChecker::checkAssign(const Type& target, const Type& src,
             if (srcIsLiteral) return true;
             diag_.report("W004", loc,
                 "'" + ctx + "': " + src.toString() +
-                " → " + target.toString() + " örtük genişletme",
-                "Açık dönüşüm: `" + ctx + " as " + target.toString() + "` (uyarıyı susturmak için)");
+                " → " + target.toString() + " implicit widening",
+                "use explicit cast: `" + ctx + " as " + target.toString() + "` (to suppress this warning)");
             return true;
         } else {
             diag_.report("E003", loc,
                 "'" + ctx + "': " + src.toString() +
-                " → " + target.toString() + " daraltma (veri kaybı)",
-                "Açık dönüşüm: `" + ctx + " as " + target.toString() + "` (veri kaybı olabilir)");
+                " → " + target.toString() + " narrowing conversion (possible data loss)",
+                "use explicit cast: `" + ctx + " as " + target.toString() + "` (data loss may occur)");
             return false;
         }
     }
 
     diag_.report("E003", loc,
-        "'" + ctx + "': " + src.toString() +
-        " tipi " + target.toString() + " tipine atanamaz",
-        "Dönüşüm için: `<ifade> as " + target.toString() + "` kullanın");
+        "'" + ctx + "': cannot assign " + src.toString() +
+        " to " + target.toString(),
+        "use explicit cast: `<expression> as " + target.toString() + "`");
     return false;
 }
 
@@ -219,9 +252,9 @@ void TypeChecker::checkStmt(ASTNode* node) {
         if (!rs->value) {
             if (inFunction_ && !currentReturnType_.isVoid())
                 diag_.report("E006", rs->loc,
-                    "Değersiz return; fonksiyon " +
-                    currentReturnType_.toString() + " döndürmeli",
-                    "return ifadesine değer ekleyin: `return <" + currentReturnType_.toString() + "_degeri>;`");
+                    "empty return; function must return " +
+                    currentReturnType_.toString(),
+                    "add a value to the return statement: `return <" + currentReturnType_.toString() + "_value>;`");
             break;
         }
         Type valType = checkExpr(rs->value, currentReturnType_);
@@ -312,9 +345,9 @@ void TypeChecker::checkStmt(ASTNode* node) {
                          || baseType.isVoid(); // void = bilinmeyen, hata zaten raporlandı
         if (!subjectOk && !baseType.isError()) {
             diag_.report("E003", sw->subject->loc,
-                "switch konusu '" + subjectType.toString() +
-                "' tipi desteklenmiyor (int/float/bool/string bekleniyor)",
-                "switch yalnızca int, float, bool veya string değerleriyle çalışır — struct/array için if-else kullanın");
+                "switch subject '" + subjectType.toString() +
+                "' type not supported (expected int/float/bool/string)",
+                "switch only works with int, float, bool or string values — use if-else for struct/array");
         }
 
         for (auto& clause : sw->cases) {
@@ -330,19 +363,19 @@ void TypeChecker::checkStmt(ASTNode* node) {
                 if (isNullLit) {
                     if (!subjectType.nullable)
                         diag_.report("E003", val->loc,
-                            "case null: yalnızca nullable (T?) switch konusuyla kullanılabilir",
-                            "switch konusunu nullable yapın: `" + subjectType.toString() + "? degisken = ...;`");
+                            "case null: only valid with nullable (T?) switch subject",
+                            "make the switch subject nullable: `" + subjectType.toString() + "? variable = ...;`");
                     continue;
                 }
 
                 Type caseType = checkExpr(val, baseType);
-                // Tip homojenliği: case değeri konuyla aynı base tipte olmalı
+                // Type homogeneity: case value must be same base type as subject
                 if (!caseType.isError() && !baseType.isError() &&
                     !baseType.isVoid() && !caseType.equalsBase(baseType)) {
                     diag_.report("E003", val->loc,
-                        "case değeri '" + caseType.toString() +
-                        "' switch konusu tipiyle (" + baseType.toString() + ") uyumsuz",
-                        "Tüm case değerleri switch konusuyla aynı tipte olmalı (" + baseType.toString() + "). Dönüşüm: `deger as " + baseType.toString() + "`");
+                        "case value '" + caseType.toString() +
+                        "' incompatible with switch subject type (" + baseType.toString() + ")",
+                        "all case values must be the same type as the switch subject (" + baseType.toString() + "). Use cast: `value as " + baseType.toString() + "`");
                 }
 
                 // ADR-027: float case → tam-temsil edilemeyen literal uyarısı
@@ -383,8 +416,7 @@ void TypeChecker::checkStmt(ASTNode* node) {
                                 bool exact = !overflow && (num % fivePow == 0);
                                 if (!exact)
                                     diag_.report("W005", val->loc,
-                                        "case " + raw + ": bu float değeri IEEE 754'te tam temsil "
-                                        "edilemez; karşılaştırma beklendik sonuç vermeyebilir");
+                                        "case " + raw + ": this float value cannot be exactly represented in IEEE 754; comparison may not yield expected result");
                             }
                         }
                     }
@@ -427,10 +459,10 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
                 if (!expected.isError() && expected.equals(Type::Double()))
                     result = Type::Double();
                 else if (!expected.isError() && numericRank(expected) == 0) {
-                    // int bekleniyor ama float literal: E003
+                    // int expected but float literal: E003
                     diag_.report("E003", lit->loc,
-                        "Float literal int bağlamında kullanılamaz (veri kaybı)",
-                        "Tam sayı kullanın (örn. 3 yerine 3.0f değil 3) veya değişkeni float yapın: `float degisken = ...;`");
+                        "float literal cannot be used in int context (data loss)",
+                        "use an integer literal (e.g. 3 instead of 3.0) or change the variable type to float: `float variable = ...;`");
                     result = Type::error();
                 } else {
                     result = Type::Float();
@@ -477,7 +509,7 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             Type leftType  = checkExpr(bin->Left);
             Type rightType = checkExpr(bin->Right, leftType);
             bool isLit     = bin->Right && bin->Right->kind == ASTKind::Literal;
-            checkAssign(leftType, rightType, isLit, bin->loc, "atama");
+            checkAssign(leftType, rightType, isLit, bin->loc, "assignment");
             result = leftType;
             break;
         }
@@ -490,8 +522,8 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             } else {
                 result = rightType.isNumeric() ? rightType : Type::error();
                 if (result.isError() && !rightType.isError())
-                    diag_.report("E003", bin->loc, "Sayısal olmayan operand",
-                    "- (unary) yalnızca int veya float değerlerde kullanılabilir");
+                    diag_.report("E003", bin->loc, "non-numeric operand",
+                    "- (unary) only works on int or float values");
             }
             break;
         }
@@ -525,34 +557,34 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             break;
         }
 
-        // Sıralama karşılaştırması: YALNIZCA sayısal tipler
+        // Comparison operators: ONLY numeric types
         if (bin->Operator == TokenType::LESS         ||
             bin->Operator == TokenType::LESS_EQUAL   ||
             bin->Operator == TokenType::GREATER      ||
             bin->Operator == TokenType::GREATER_EQUAL) {
             if (leftType.isError() || rightType.isError()) {
-                result = Type::error(); // önceki hata, sessiz geç
+                result = Type::error(); // previous error, silent pass
             } else if (leftType.isNumeric() && rightType.isNumeric()) {
                 result = Type::Bool();
             } else {
                 diag_.report("E003", bin->loc,
-                    "Sıralama operatörü yalnızca sayısal tiplerle kullanılabilir: " +
+                    "comparison operator only works with numeric types: " +
                     leftType.toString() +
-                    " — string için yalnızca == ve != kullanın",
-                    "string karşılaştırmak için == veya != kullanın; sayısal sıralama için int/float kullanın");
+                    " — for string use only == and !=",
+                    "for string comparison use == or !=; for numeric comparison use int/float");
                 result = Type::error();
             }
             break;
         }
 
-        // ADR-021: katı operand kuralı — non-null bağlamda nullable operand yasak
-        // (eşitlik / null karşılaştırmaları için geçerli değil)
+        // ADR-021: strict operand rule — nullable operands forbidden in non-null context
+        // (not applicable for equality / null comparisons)
         if (!leftType.isError() && !rightType.isError() &&
             (leftType.nullable || rightType.nullable)) {
             diag_.report("E003", bin->loc,
-                "Nullable operand: '" + leftType.toString() + "' ve '" +
-                rightType.toString() + "' — null kontrolü yapın veya daraltın",
-                "if (degisken != null) { /* burada güvenle kullanabilirsiniz */ } veya değişkeni non-null tipte tanımlayın");
+                "nullable operand: '" + leftType.toString() + "' and '" +
+                rightType.toString() + "' — check for null or narrow",
+                "if (variable != null) { /* here it is non-null, safe to use */ } or define the variable as non-null type");
             result = Type::error();
             break;
         }
@@ -564,18 +596,18 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             break;
         }
 
-        // Aritmetik: +, -, *, /, %
+        // Arithmetic: +, -, *, /, %
         int lRank = numericRank(leftType);
         int rRank = numericRank(rightType);
 
         if (lRank >= 0 && rRank >= 0) {
-            // Aynı tip veya otomatik genişletme; sonuç daha geniş tip.
+            // Same type or implicit widening; result is the wider type.
             result = (lRank >= rRank) ? leftType : rightType;
         } else if (!leftType.isError() && !rightType.isError()) {
             diag_.report("E003", bin->loc,
-                "Aritmetik operatör sayısal olmayan tip: " +
-                leftType.toString() + " ve " + rightType.toString(),
-                "Aritmetik için int veya float kullanın. Dönüşüm: `degisken as int`");
+                "arithmetic operator on non-numeric type: " +
+                leftType.toString() + " and " + rightType.toString(),
+                "use int or float for arithmetic. Cast: `variable as int`");
             result = Type::error();
         } else {
             result = Type::error();
@@ -591,29 +623,29 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         if (!calleeType.isFunction()) {
             if (!calleeType.isError())
                 diag_.report("E003", call->loc,
-                    "Çağrılabilir değil: " + calleeType.toString(),
-                    "Yalnızca fonksiyonlar çağrılabilir. `func isim(parametreler) : donusTipi { ... }` ile tanımlayın");
+                    "not callable: " + calleeType.toString(),
+                    "only functions can be called. define with: `func name(parameters) : returnType { ... }`");
             result = Type::error();
-            // Argümanları yine de gez (cascade hatayı önle)
+            // Still walk arguments (cascade error prevention)
             for (auto* arg : call->arguments) checkExpr(arg);
             break;
         }
 
-        // Argüman sayısı kontrolü — builtin print hariç (paramTypes boş = değişken arity)
+        // Argument count check — builtin print excepted (empty paramTypes = variable arity)
         if (!calleeType.paramTypes.empty()) {
             size_t expected_count = calleeType.paramTypes.size();
             size_t got_count      = call->arguments.size();
             if (got_count != expected_count) {
                 diag_.report("E008", call->loc,
-                    std::to_string(expected_count) + " argüman bekleniyor, " +
-                    std::to_string(got_count) + " verildi",
+                    std::to_string(expected_count) + " argument(s) expected, " +
+                    std::to_string(got_count) + " given",
                     got_count < expected_count
-                        ? std::to_string(expected_count - got_count) + " argüman eksik — fonksiyon tanımına bakın ve eksik argümanları ekleyin"
-                        : std::to_string(got_count - expected_count) + " argüman fazla — fazladan argümanları kaldırın");
+                        ? std::to_string(expected_count - got_count) + " argument(s) missing — check function definition and add missing arguments"
+                        : std::to_string(got_count - expected_count) + " argument(s) extra — remove extra arguments");
             }
         }
 
-        // Argüman tiplerini kontrol et
+        // Check argument types
         for (size_t i = 0; i < call->arguments.size(); ++i) {
             Type paramType = (i < calleeType.paramTypes.size())
                              ? calleeType.paramTypes[i]
@@ -622,7 +654,7 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             bool isLit   = call->arguments[i]->kind == ASTKind::Literal;
             if (!paramType.isError())
                 checkAssign(paramType, argType, isLit,
-                            call->arguments[i]->loc, "argüman");
+                            call->arguments[i]->loc, "argument");
         }
 
         result = calleeType.returnType ? *calleeType.returnType : Type::Void();
@@ -635,8 +667,8 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         Type opType = checkExpr(pf->operand);
         if (!opType.isNumeric() && !opType.isError())
             diag_.report("E003", pf->loc,
-                "++ / -- sayısal olmayan tip: " + opType.toString(),
-                "++ ve -- yalnızca int veya float değişkenlerde kullanılabilir");
+                "++ / -- on non-numeric type: " + opType.toString(),
+                "++ and -- only work on int or float variables");
         result = opType;
         break;
     }
@@ -645,12 +677,12 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
     case ASTKind::MemberAccess: {
         auto* ma = (MemberAccessNode*)node;
         Type objType = checkExpr(ma->object);
-        // ADR-021: nullable nesne üstünde doğrudan alan erişimi yasak
+        // ADR-021: direct field access on nullable object forbidden
         if (objType.nullable) {
             diag_.report("E003", node->loc,
-                "Nullable tip '" + objType.toString() + "' üstünde doğrudan erişim"
-                " — if ile null kontrolü yapın",
-                "if (degisken != null) { degisken.alan ... } veya tipi non-null yapın: `" + objType.toString().substr(0, objType.toString().size()-1) + " degisken = ...;`");
+                "direct access on nullable type '" + objType.toString() +
+                "' — use if to check for null",
+                "if (variable != null) { variable.field ... } or make the type non-null: `" + objType.toString().substr(0, objType.toString().size()-1) + " variable = ...;`");
             result = Type::error();
             break;
         }
@@ -658,8 +690,8 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             result = table_.getFieldType(objType.structName, ma->member);
             if (result.isError())
                 diag_.report("E001", node->loc,
-                             "'" + objType.structName + "' struct'ında '" + ma->member + "' alanı yok",
-                             "'" + objType.structName + "' struct tanımını kontrol edin — mevcut alanları görmek için `saqut symbols <dosya>` kullanın");
+                             "field '" + ma->member + "' not found in struct '" + objType.structName + "'",
+                             "check the '" + objType.structName + "' struct definition — use `saqut symbols <file>` to see available fields");
         } else {
             result = Type::error();
         }
@@ -682,65 +714,65 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         auto* cast = (CastExpressionNode*)node;
         Type srcType = checkExpr(cast->operand);
 
-        // Kaynak tip: struct/array cast yasak
+        // Source type: struct/array cast forbidden
         bool srcOk = srcType.isPrimitive() || srcType.isString() || srcType.isError();
         if (!srcOk) {
             diag_.report("E003", cast->loc,
-                "'" + srcType.toString() + "' tipi 'as' ile dönüştürülemez "
-                "(yalnızca int/float/bool/string)",
-                "as operatörü yalnızca skaler tipler arasında çalışır. Struct/array dönüşümü için elle dönüştürücü fonksiyon yazın");
+                "'" + srcType.toString() + "' cannot be cast with 'as' "
+                "(only int/float/bool/string)",
+                "'as' operator only works between scalar types. For struct/array conversion write a conversion function");
             result = Type::error();
             break;
         }
 
-        // Hedef tip çözümle
+        // Resolve target type
         Type targetBase = Type::fromName(cast->targetTypeName);
         if (targetBase.isError()) {
             diag_.report("E003", cast->loc,
-                "Bilinmeyen hedef tip: '" + cast->targetTypeName + "'",
-                "Geçerli hedef tipler: int, float, bool, string (veya nullable karşılıkları: int?, float?, ...)");
+                "unknown target type: '" + cast->targetTypeName + "'",
+                "valid target types: int, float, bool, string (or nullable variants: int?, float?, ...)");
             result = Type::error();
             break;
         }
         if (!targetBase.isPrimitive() && !targetBase.isString()) {
             diag_.report("E003", cast->loc,
-                "'" + cast->targetTypeName + "' as hedef tipi olamaz "
-                "(yalnızca int/float/bool/string)",
-                "Geçerli hedef tipler: int, float, bool, string. Struct/array dönüşümü için elle dönüştürücü fonksiyon yazın");
+                "'" + cast->targetTypeName + "' cannot be target of 'as' cast"
+                " (only int/float/bool/string)",
+                "valid target types: int, float, bool, string. For struct/array conversion write a conversion function");
             result = Type::error();
             break;
         }
 
-        // Dönüşüm matrisi — geçersiz kombinasyonlar
+        // Conversion matrix — invalid combinations
         bool srcIsStr  = srcType.isString();
         bool tgtIsStr  = targetBase.isString();
         bool srcIsBool = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Bool;
         bool tgtIsBool = targetBase.isPrimitive() && targetBase.prim == PrimitiveKind::Bool;
 
-        // bool↔int/float yasak (ADR-026: "başta yasak tutmak en güvenlisi")
+        // bool↔int/float forbidden (ADR-026: "keep forbidden from start for safety")
         bool srcIsNumeric = srcType.isPrimitive() && !srcIsBool;
         bool tgtIsNumeric = targetBase.isPrimitive() && !tgtIsBool;
 
         if (tgtIsBool && !srcIsBool && !srcType.isError()) {
             diag_.report("E003", cast->loc,
-                "bool hedef tipi olarak 'as' kullanılamaz",
-                "bool dönüşümü desteklenmez. bool almak için açık karşılaştırma kullanın: `deger != 0`");
+                "bool as target type not allowed with 'as'",
+                "bool conversion not supported. For bool use explicit comparison: `value != 0`");
             result = Type::error();
             break;
         }
         if (srcIsBool && !tgtIsBool && !tgtIsStr) {
             diag_.report("E003", cast->loc,
-                "bool yalnızca string'e dönüştürülebilir ('as string')",
-                "`deger as string` kullanın — sonuç \"true\" veya \"false\" olur");
+                "bool can only be cast to string ('as string')",
+                "use `value as string` — result will be \"true\" or \"false\"");
             result = Type::error();
             break;
         }
 
-        // string→bool yasak
+        // string→bool forbidden
         if (srcIsStr && tgtIsBool) {
             diag_.report("E003", cast->loc,
-                "string'den bool'a dönüşüm desteklenmiyor",
-                "bool almak için karşılaştırma kullanın: `deger == \"true\"` veya `deger != \"\"`");
+                "bool conversion from string not supported",
+                "for bool use comparison: `value == \"true\"` or `value != \"\"`");
             result = Type::error();
             break;
         }

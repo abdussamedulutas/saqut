@@ -20,9 +20,11 @@
 #include <string>
 #include <vector>
 #include "ir/instruction.hpp"
+#include "core/module_registry.hpp"
 
 struct IRFunction {
-    std::string              name;         // kaynak koddaki fonksiyon adı
+    std::string              name;       // kaynak koddaki fonksiyon adı
+    int                      moduleId = ModuleRegistry::INVALID_ID; // ait olduğu modülün ID'si (registry'den)
     int                      paramCount;   // kaç parametresi var
     int                      slotCount;    // frame boyutu (üretim sonunda doldurulur)
     std::vector<Instruction> instructions; // bu fonksiyonun talimat listesi

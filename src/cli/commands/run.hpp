@@ -39,13 +39,13 @@ inline int cmdRun(const CliArgs& args) {
     Parser parser;
     ASTNode* ast = parser.parse(tokens);
     if (!ast) {
-        std::cerr << "Hata: AST üretilemedi\n";
+        std::cerr << "error: failed to build AST\n";
         for (auto* t : tokens) delete t;
         return 1;
     }
 
-    // ── Aşama 3: Sembol toplama + semantik analiz ─────────────────────────
-    // Identifier'ların resolvedSymbol'ü doldurulur — IR generator buna ihtiyaç duyar.
+    // ── Phase 3: Symbol collection + semantic analysis ─────────────────────────
+    // Identifier's resolvedSymbol is filled — IR generator needs this.
     SymbolTable      symbolTable;
     DiagnosticEngine diag;
     SymbolCollector(symbolTable, diag).collect(ast);
@@ -53,35 +53,35 @@ inline int cmdRun(const CliArgs& args) {
     StructuralValidator(diag).validate(ast);
 
     if (diag.hasErrors()) {
-        std::cerr << "Derleme hataları var, program çalıştırılamaz:\n";
+        std::cerr << "compilation errors, cannot run program:\n";
         diag.printAll(std::cerr);
         delete ast;
         for (auto* t : tokens) delete t;
         return 1;
     }
 
-    // ── Aşama 4 (opsiyonel): Optimizasyon ────────────────────────────────
-    // --optimized: constant folding + DCE yerinde uygulanır, klon yok.
-    // Tek versiyon (optimize edilmiş) yeterli — ast komutu gibi karşılaştırma yok.
+    // ── Phase 4 (optional): Optimization ────────────────────────────────
+    // --optimized: constant folding + DCE applied in-place, no clone.
+    // Single version (optimized) is sufficient — no comparison like ast command.
     if (args.optimized) {
         CompilerConfig   cfg;
         DiagnosticEngine optDiag;
         OptimizationManager(cfg, optDiag).runPassesInPlace(ast, &symbolTable);
         if (optDiag.errorCount() + optDiag.warningCount() > 0)
-            optDiag.printAll(std::cerr); // W002 (derleme zamanı sıfıra bölme) vb.
+            optDiag.printAll(std::cerr); // W002 (compile-time division by zero) etc.
     }
 
-    // ── Aşama 5: IR üretimi ───────────────────────────────────────────────
+    // ── Phase 5: IR generation ───────────────────────────────────────────────
     IRGenerator irGenerator;
-    IRProgram   program = irGenerator.generate(ast, symbolTable);
+    IRProgram   program = irGenerator.generate(ast, symbolTable, filePath);
 
-    // ── Aşama 6: VM çalıştırma ────────────────────────────────────────────
+    // ── Phase 6: Run on VM ────────────────────────────────────────────
     int exitCode = 0;
     try {
         Interpreter vm(program);
         exitCode = vm.run();
     } catch (const std::exception& e) {
-        std::cerr << "Çalışma zamanı hatası: " << e.what() << "\n";
+        std::cerr << "runtime error: " << e.what() << "\n";
         exitCode = 1;
     }
 

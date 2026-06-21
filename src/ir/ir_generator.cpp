@@ -18,10 +18,16 @@ static constexpr int ERROR_FIELD_COUNT = 5;
 // generate — Ana giriş noktası
 // ─────────────────────────────────────────────────────────────────────────────
 
-IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable) {
+IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
+                                const std::string& sourceFilePath) {
     IRProgram program;
 
-    // 0. Geçiş: struct layout haritasını sembol tablosundan al
+    // 0. Modül adını registry'ye kaydet
+    if (!sourceFilePath.empty())
+        currentModuleId_ = program.moduleRegistry.intern(sourceFilePath);
+    // sourceFilePath boşsa currentModuleId_ = INVALID_ID (-1) kalır
+
+    // 1. Geçiş: struct layout haritasını sembol tablosundan al
     structLayouts_ = symbolTable.structLayouts;
 
     // 1. Geçiş: modül-düzeyi VariableDecl'leri topla ve kayıt et
@@ -36,6 +42,8 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable) 
             globalVars.push_back(vd);
         }
     }
+    // Tek modül: moduleId = "" ile slot sayısını kaydet
+    program.moduleGlobalCounts[currentModuleId_] = program.globalCount;
 
     // 2. Geçiş: fonksiyonları üret
     for (ASTNode* child : programNode->getChildren()) {
@@ -45,6 +53,7 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable) 
 
             auto* fnDecl = (FunctionDeclNode*)child;
             IRFunction irFn(fnDecl->name, (int)fnDecl->params.size());
+            irFn.moduleId = currentModuleId_;
             program.addFunction(std::move(irFn));
             currentFunction_ = program.findFunction(fnDecl->name);
 
@@ -148,7 +157,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
         if (rs->value) {
             returnSlot = generateExpression(rs->value);
         }
-        emitReturn(returnSlot);
+        emitReturn(returnSlot, rs->loc.line, rs->loc.column);
         break;
     }
 
@@ -423,7 +432,9 @@ void IRGenerator::generateStatement(ASTNode* node) {
         auto* th = (ThrowStatementNode*)node;
         int valSlot = th->value ? generateExpression(th->value) : freshSlot();
         Instruction ins(Opcode::THROW);
-        ins.src = valSlot;
+        ins.src        = valSlot;
+        ins.sourceLine = th->loc.line;
+        ins.sourceCol  = th->loc.column;
         currentFunction_->instructions.push_back(std::move(ins));
         break;
     }
@@ -537,7 +548,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 auto* idx = (IndexExpressionNode*)bin->Left;
                 int arrSlot = generateExpression(idx->object);
                 int idxSlot = generateExpression(idx->index);
-                emitArraySet(arrSlot, idxSlot, rhsSlot);
+                emitArraySet(arrSlot, idxSlot, rhsSlot, bin->loc.line, bin->loc.column);
                 return rhsSlot;
             }
 
@@ -549,7 +560,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 if (auto* exprObj = dynamic_cast<ExpressionNode*>(ma->object))
                     structName = exprObj->resolvedType.structName;
                 int idx2 = getStructFieldIndex(structName, ma->member);
-                if (idx2 >= 0) emitFieldSet(objSlot, idx2, rhsSlot);
+                if (idx2 >= 0) emitFieldSet(objSlot, idx2, rhsSlot, bin->loc.line, bin->loc.column);
                 return rhsSlot;
             }
 
@@ -724,6 +735,8 @@ int IRGenerator::generateExpression(ASTNode* node) {
             Instruction ins(Opcode::CALLHOST);
             ins.functionName = fnName;
             ins.argSlots     = argSlots;
+            ins.sourceLine   = call->loc.line;
+            ins.sourceCol    = call->loc.column;
             currentFunction_->instructions.push_back(std::move(ins));
             return -1; // Dönüş değeri yok
         } else {
@@ -733,6 +746,8 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.dest         = destSlot;
             ins.functionName = fnName;
             ins.argSlots     = argSlots;
+            ins.sourceLine   = call->loc.line;
+            ins.sourceCol    = call->loc.column;
             currentFunction_->instructions.push_back(std::move(ins));
             return destSlot;
         }
@@ -791,7 +806,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
         int arrSlot  = generateExpression(idx->object);
         int idxSlot  = generateExpression(idx->index);
         int destSlot = freshSlot();
-        emitArrayGet(destSlot, arrSlot, idxSlot);
+        emitArrayGet(destSlot, arrSlot, idxSlot, idx->loc.line, idx->loc.column);
         return destSlot;
     }
 
@@ -1000,11 +1015,14 @@ void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx) {
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitFieldSet(int objSlot, int fieldIdx, int valSlot) {
+void IRGenerator::emitFieldSet(int objSlot, int fieldIdx, int valSlot,
+                               int line, int col) {
     Instruction ins(Opcode::FIELD_SET);
-    ins.dest     = objSlot;
-    ins.intValue = fieldIdx;
-    ins.right    = valSlot;
+    ins.dest       = objSlot;
+    ins.intValue   = fieldIdx;
+    ins.right      = valSlot;
+    ins.sourceLine = line;
+    ins.sourceCol  = col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1015,19 +1033,25 @@ void IRGenerator::emitArrayNew(int destSlot, int capacity) {
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitArrayGet(int destSlot, int arrSlot, int idxSlot) {
+void IRGenerator::emitArrayGet(int destSlot, int arrSlot, int idxSlot,
+                               int line, int col) {
     Instruction ins(Opcode::ARRAY_GET);
-    ins.dest  = destSlot;
-    ins.left  = arrSlot;
-    ins.right = idxSlot;
+    ins.dest       = destSlot;
+    ins.left       = arrSlot;
+    ins.right      = idxSlot;
+    ins.sourceLine = line;
+    ins.sourceCol  = col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitArraySet(int arrSlot, int idxSlot, int valSlot) {
+void IRGenerator::emitArraySet(int arrSlot, int idxSlot, int valSlot,
+                               int line, int col) {
     Instruction ins(Opcode::ARRAY_SET);
-    ins.dest  = arrSlot;
-    ins.left  = idxSlot;
-    ins.right = valSlot;
+    ins.dest       = arrSlot;
+    ins.left       = idxSlot;
+    ins.right      = valSlot;
+    ins.sourceLine = line;
+    ins.sourceCol  = col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1069,9 +1093,11 @@ void IRGenerator::emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightS
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitReturn(int srcSlot) {
+void IRGenerator::emitReturn(int srcSlot, int line, int col) {
     Instruction ins(Opcode::RETURN);
-    ins.src = srcSlot;
+    ins.src        = srcSlot;
+    ins.sourceLine = line;
+    ins.sourceCol  = col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 

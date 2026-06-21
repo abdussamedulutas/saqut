@@ -15,7 +15,9 @@
 
 #include <vector>
 #include <optional>
+#include <unordered_map>
 #include "ir/ir_program.hpp"
+#include "core/module_registry.hpp"
 #include "vm/call_frame.hpp"
 #include "vm/object.hpp"
 
@@ -37,7 +39,8 @@ public:
 private:
     IRProgram&             program_;
     std::vector<CallFrame> callStack_;
-    std::vector<Value>     globalSlots_;
+    // Modül başına global slot vektörü. Key = ModuleRegistry ID (int).
+    std::unordered_map<int, std::vector<Value>> moduleSlots_;
     Heap                   heap_;
     std::vector<TryFrame>  tryStack_;                 // ADR-025: aktif try çerçeveleri
     std::optional<Value>   pendingThrow_;             // bekleyen istisna değeri
@@ -51,6 +54,10 @@ private:
     void executeHostFunction(const std::string& name,
                              const std::vector<Value>& slots,
                              const std::vector<int>&   argSlots);
+
+    // Mevcut callStack_'i gezerek stacktrace string'i üretir.
+    // pendingThrow_ set edilmeden ÖNCE çağrılmalı (unwind olmadan).
+    std::string buildTrace() const;
 };
 
 #endif // SAQUT_VM_INTERPRETER

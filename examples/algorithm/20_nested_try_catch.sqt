@@ -1,0 +1,14 @@
+int main() {
+    try {
+        try {
+            int x = 5 / 0;
+        } catch (Error e) {
+            print(e.code);
+            throw "ic catch'ten";
+        }
+    } catch (Error e) {
+        print(e.message);
+    }
+    print(1);
+    return 0;
+}

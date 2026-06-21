@@ -1,0 +1,19 @@
+int main() {
+    int a = 42;
+    float af = a as float;
+    string as_ = af as string;
+
+    float neg = -3.9;
+    int ni = neg as int;
+    print(ni);
+
+    string pi_s = "3.14";
+    int? parsed = pi_s as int?;
+    if (parsed == null) { print(0); } else { print(parsed); }
+
+    string bad = "3.14abc";
+    int? parsed2 = bad as int?;
+    if (parsed2 == null) { print(1); }
+
+    return 0;
+}

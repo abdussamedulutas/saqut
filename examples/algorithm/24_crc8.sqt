@@ -1,0 +1,23 @@
+int crc8_poly = 7;
+
+int crc8(int[] data, int len) {
+    int crc = 0;
+    for (int i = 0; i < len; i = i + 1) {
+        crc = crc ^ data[i];
+        for (int j = 0; j < 8; j = j + 1) {
+            if ((crc & 128) != 0) {
+                crc = (crc << 1) ^ crc8_poly;
+            } else {
+                crc = crc << 1;
+            }
+            crc = crc & 255;
+        }
+    }
+    return crc;
+}
+
+int main() {
+    int[] msg = [1, 2, 3, 4, 5];
+    print(crc8(msg, 5));
+    return 0;
+}

@@ -1,0 +1,27 @@
+int main() {
+    bool[] sieve = [true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true,
+                    true, true];
+    sieve[0] = false;
+    sieve[1] = false;
+
+    int i = 2;
+    while (i * i <= 50) {
+        if (sieve[i]) {
+            int j = i * i;
+            while (j <= 50) {
+                sieve[j] = false;
+                j = j + i;
+            }
+        }
+        i = i + 1;
+    }
+
+    for (int k = 2; k <= 50; k = k + 1) {
+        if (sieve[k]) { print(k); }
+    }
+    return 0;
+}

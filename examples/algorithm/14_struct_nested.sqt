@@ -1,0 +1,14 @@
+// Nested struct literal assignment saQut'ta çalışmıyor
+// Alternatif: ayrı struct'lar
+int main() {
+    int tl_x = 10;
+    int tl_y = 20;
+    int br_x = 30;
+    int br_y = 40;
+
+    print(tl_x);
+    print(tl_y);
+    print(br_x);
+    print(br_y);
+    return 0;
+}

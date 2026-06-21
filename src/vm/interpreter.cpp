@@ -117,13 +117,13 @@ int Interpreter::run() {
             break;
         case Opcode::DIV: {
             int d = frame.slots[instr.right].intValue;
-            if (d == 0) { pendingThrow_ = makeErrorValue("division by zero", "E_DIVZERO"); break; }
+            if (d == 0) { pendingThrow_ = makeErrorValue("division by zero", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
             frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue / d);
             break;
         }
         case Opcode::MOD: {
             int d = frame.slots[instr.right].intValue;
-            if (d == 0) { pendingThrow_ = makeErrorValue("division by zero (modulo)", "E_DIVZERO"); break; }
+            if (d == 0) { pendingThrow_ = makeErrorValue("division by zero (modulo)", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
             frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue % d);
             break;
         }
@@ -136,6 +136,10 @@ int Interpreter::run() {
         case Opcode::BOR:
             frame.slots[instr.dest] = Value::fromInt(
                 frame.slots[instr.left].intValue | frame.slots[instr.right].intValue);
+            break;
+        case Opcode::BXOR:
+            frame.slots[instr.dest] = Value::fromInt(
+                frame.slots[instr.left].intValue ^ frame.slots[instr.right].intValue);
             break;
         case Opcode::SHL:
             frame.slots[instr.dest] = Value::fromInt(
@@ -290,7 +294,7 @@ int Interpreter::run() {
             break;
         case Opcode::FDIV: {
             double r = frame.slots[instr.right].floatValue;
-            if (r == 0.0) { pendingThrow_ = makeErrorValue("float division by zero", "E_DIVZERO"); break; }
+            if (r == 0.0) { pendingThrow_ = makeErrorValue("float division by zero", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
             frame.slots[instr.dest] = Value::fromFloat(frame.slots[instr.left].floatValue / r);
             break;
         }
@@ -343,14 +347,15 @@ int Interpreter::run() {
         case Opcode::ARRAY_GET: {
             Value& arrVal = frame.slots[instr.left];
             if (arrVal.kind != ValueKind::Ref || !arrVal.ref) {
-                pendingThrow_ = makeErrorValue("expected array, got different type", "E_TYPE"); break;
+                pendingThrow_ = makeErrorValue("expected array, got different type", "E_TYPE", instr.sourceLine, instr.sourceCol); break;
             }
             auto* arr = (ArrayObject*)arrVal.ref;
             int idx = frame.slots[instr.right].intValue;
             if (idx < 0 || idx >= (int)arr->elements.size()) {
                 pendingThrow_ = makeErrorValue(
                     "array index out of bounds (index=" + std::to_string(idx) +
-                    ", length=" + std::to_string(arr->elements.size()) + ")", "E_OOB");
+                    ", length=" + std::to_string(arr->elements.size()) + ")", "E_OOB",
+                    instr.sourceLine, instr.sourceCol);
                 break;
             }
             frame.slots[instr.dest] = arr->elements[idx];
@@ -359,14 +364,15 @@ int Interpreter::run() {
         case Opcode::ARRAY_SET: {
             Value& arrVal = frame.slots[instr.dest];
             if (arrVal.kind != ValueKind::Ref || !arrVal.ref) {
-                pendingThrow_ = makeErrorValue("expected array, got different type", "E_TYPE"); break;
+                pendingThrow_ = makeErrorValue("expected array, got different type", "E_TYPE", instr.sourceLine, instr.sourceCol); break;
             }
             auto* arr = (ArrayObject*)arrVal.ref;
             int idx = frame.slots[instr.left].intValue;
             if (idx < 0 || idx >= (int)arr->elements.size()) {
                 pendingThrow_ = makeErrorValue(
                     "array index out of bounds (index=" + std::to_string(idx) +
-                    ", length=" + std::to_string(arr->elements.size()) + ")", "E_OOB");
+                    ", length=" + std::to_string(arr->elements.size()) + ")", "E_OOB",
+                    instr.sourceLine, instr.sourceCol);
                 break;
             }
             arr->elements[idx] = frame.slots[instr.right];
@@ -410,7 +416,8 @@ int Interpreter::run() {
             } catch (...) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
-                    "'" + s + "' cannot convert to int", "E_CAST");
+                    "'" + s + "' cannot convert to int", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
             }
             break;
         }
@@ -424,7 +431,8 @@ int Interpreter::run() {
             } catch (...) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
-                    "'" + s + "' cannot convert to float", "E_CAST");
+                    "'" + s + "' cannot convert to float", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
             }
             break;
         }
@@ -433,7 +441,8 @@ int Interpreter::run() {
             if (!std::isfinite(fv) || fv < (double)INT_MIN || fv > (double)INT_MAX) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
-                    "float value out of int range or NaN/Inf", "E_CAST");
+                    "float value out of int range or NaN/Inf", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
             } else {
                 frame.slots[instr.dest] = Value::fromInt((int)fv); // truncate to zero
             }

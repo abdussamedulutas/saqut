@@ -59,6 +59,7 @@ enum class Opcode {
     // --- Bitsel (tümü: slots[dest] = slots[left] OP slots[right]) ---
     BAND,          // slots[left] & slots[right]
     BOR,           // slots[left] | slots[right]
+    BXOR,          // slots[left] ^ slots[right]
     SHL,           // slots[left] << slots[right]
     SHR,           // slots[left] >> slots[right]
     BNOT,          // ~slots[src]  → slots[dest]  (tekli operatör; src kullanır, left/right değil)
@@ -153,6 +154,7 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::MOD:           return "MOD";
         case Opcode::BAND:          return "BAND";
         case Opcode::BOR:           return "BOR";
+        case Opcode::BXOR:          return "BXOR";
         case Opcode::SHL:           return "SHL";
         case Opcode::SHR:           return "SHR";
         case Opcode::BNOT:          return "BNOT";

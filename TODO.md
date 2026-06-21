@@ -1,179 +1,219 @@
-# TODO — Teknik Borçlar ve Ertelenen Kararlar
+# TODO — saQut Uygulama Sırası
 
-Bu dosya, kasıtlı olarak ertelenen teknik kararları ve ileride ele alınması gereken
-tasarım noktalarını tutar. Her giriş hangi issue'ya bağlı olduğunu belirtir.
+Issue #50'deki mimari haritaya ve mevcut pipeline durumuna göre kronolojik
+tavsiye listesi. Tamamlananlar arşiv olarak altta tutulur.
 
 ---
 
-## ✅ TAMAMLANDI — GC-hazır nesne modeli + array runtime (2026-06-20)
+## 🏁 SIRALANMIŞ İŞ LİSTESİ
 
-ADR-020…024 (değer/referans semantiği, null güvenliği, mark-sweep GC, eşitlik)
-doğrultusunda uçtan uca array çalışıyor:
+### 1 · Issue Kapatma (Hemen — commit zaten var)
+
+- [ ] **#63** `ConstantFoldingPass` double-free — commit `462c6ba` ile düzeltildi,
+      GitHub issue'su hâlâ açık; kapat.
+- [ ] **#64** struct dönüş tipli fonksiyonlarda E003 — commit `793e372` ile düzeltildi,
+      GitHub issue'su hâlâ açık; kapat.
+
+---
+
+### 2 · GC v2 — Mark-Sweep (#56)  ⚙️ IR / 🖥️ VM
+
+Nesne modeli GC-hazır (header: tip+mark biti+liste). Eksik: traversal + trigger.
+
+- [ ] `Heap::collect()` uygula: köklerden (VM frame slot'ları + globalSlots_) başlayan
+      işaret-tarama, erişilemeyen nesneleri serbest bırak.
+- [ ] Trigger: "her N tahsiste" `collect()` çağır (N = ayarlanabilir sabit, başlangıç 1024).
+- [ ] `ArrayObject` ve `StructObject` çocuk referanslarını doğru sayma (`markChildren()`).
+- [ ] Golden test: döngüsel referans oluşturan program bellek sızdırmıyor.
+
+---
+
+### ✅ 3 · IR Satır Tablosu / Stacktrace (2026-06-21)
+
+- `emitBinaryOp(op, dest, left, right, line, col)` — `sourceLine`/`sourceCol` eklendi.
+- `generateBinaryArithmetic` + tüm çağrı noktaları `bin->loc` iletiyor.
+- `makeErrorValue` çağrılarına `instr.sourceLine, instr.sourceCol` geçildi
+  (DIV, MOD, FDIV, ARRAY_GET, ARRAY_SET, CAST_* hataları).
+- `Error.line` doğru kaynak satırını gösteriyor; `Error.trace` fonksiyon zincirini içeriyor.
+- Golden test: `tests/golden/error/div_line.sqt` ✓
+
+---
+
+### ✅ 4 · Bitwise BXOR (^) ve ^= (2026-06-21)
+
+BAND/BOR/SHL/SHR/BNOT zaten vardı; BXOR ve `^=` eksikti.
+
+- `instruction.hpp` — `BXOR` opcode eklendi.
+- `ir_function.cpp` — `"^"` sembolü ve `isBinaryOp` case eklendi.
+- `ir_generator.cpp` — `CARET → BXOR`, `CARET_EQUAL → BXOR`.
+- `interpreter.cpp` — `BXOR` VM case eklendi.
+- `tests/golden/bitwise/basic.sqt` — `a ^ b` (12^10=6) ✓
+- `tests/golden/bitwise/compound.sqt` — `x ^= 3` ✓
+
+---
+
+### 5 · `print` Çoklu Argüman (#46)  🔌 FFI
+
+- [ ] Tip denetleyicide `print(a, b, c)` çoklu argümanı kabul et.
+- [ ] IR'da çoklu `CALL_HOST PRINT` veya yeni `PRINT_N` opcode.
+- [ ] VM: argümanları boşlukla/yeni satırla yazdır.
+
+---
+
+### 6 · FFI Seam + Builtin Kataloğu (#10, #11)  🔌 FFI
+
+Stdlib zincirinin köküdür: `#10 → #11 → #12`.
+
+- [ ] `callhost` imzasını resmileştir: `callhost <name> <argCount>` IR opcode'u,
+      host fonksiyon tablosu (`std::unordered_map<std::string, HostFn>`).
+- [ ] Builtin katalog: `len()`, `toString()`, `parseInt()`, `parseFloat()`, `type()`.
+- [ ] Tip denetleyicide builtin imzaları kayıt altına al.
+
+---
+
+### 7 · Minimal Stdlib (#12)  🔌 FFI
+
+Bekler: #10, #11.
+
+- [ ] **String:** `len(s)`, `substring(s,i,j)`, `indexOf(s,sub)`, `toUpper(s)`, `toLower(s)`.
+- [ ] **Math:** `abs(x)`, `min(a,b)`, `max(a,b)`, `sqrt(x)`, `floor(x)`, `ceil(x)`.
+- [ ] **Array:** `len(arr)`, `push(arr, v)`, `pop(arr)`, `slice(arr,i,j)`.
+- [ ] Her builtin için golden test.
+
+---
+
+### 8 · Enum (#8)  🔤 LEX / 🌳 PARSE / 🔎 SEM
+
+Tip genişletmelerinin en hazırı (keyword zaten rezerve).
+
+- [ ] `enum Color { Red, Green, Blue }` sözdizimi ayrıştır.
+- [ ] Sembol tablosuna enum tipi + üyeleri kaydet.
+- [ ] Tip denetleyicide `Color.Red` üye erişimi.
+- [ ] IR: enum değeri = int sabiti (basit codec).
+- [ ] `switch` ile entegrasyon (ADR-027'de zaten planlandı).
+
+---
+
+### 9 · Modül Sistemi (#3, #4, #5)  📦 DRV
+
+Büyük alt sistem; zincir sert: `#3 → #4 → #5`.
+
+**#3 Import sözdizimi:**
+- [ ] `import "path/to/file"` veya `import moduleName from "path"` lexer/parser.
+- [ ] Modül çözümleme: dosya yolu → `IRProgram` önbelleği.
+
+**#4 Görünürlük:**
+- [ ] `pub` anahtar kelimesi veya ön ek olmadan varsayılan private.
+- [ ] Sembol tablosunda `visibility` alanı.
+- [ ] Cross-module sembol erişiminde görünürlük denetimi.
+
+**#5 Çoklu dosya derleme:**
+- [ ] Derleyici sürücüsü: bağımlılık sırasını çözümle (DAG).
+- [ ] `IRProgram`'ları birleştir, CALL cross-modül olduğunda `moduleId` ara.
+
+**Modül sistemiyle birlikte (#53, #54):**
+- [ ] `IRFunction.moduleId` alanı ekle (#53).
+- [ ] `Interpreter.globalSlots_` → `moduleSlots_[moduleId]` (#53).
+- [ ] `Symbol.sourceModule` alanı ekle (#54).
+
+---
+
+### 10 · Tooling — Bağımsız Paralel Çalışabilir  🧰 TOOL
+
+Aşağıdakiler çekirdeğe bağlı değil; istediğinde sırayı değiştir.
+
+- [ ] **#24** CLI'da AST görüntüleme: `saqut ast --format=tree`, `--format=dot`.
+- [ ] **#14** Syntax highlighting grameri (TextMate / tree-sitter) — keyword listesi yeter.
+- [ ] **#15** `saqut fmt` — parse + pretty-printer.
+- [ ] **#20** Akıllı diagnostic ("neden / nasıl düzelt" açıklamaları).
+- [ ] **#18** Dil-içi test bloğu `test { }` + `saqut test` komutu.
+- [ ] **#13** LSP sunucusu (Tier 1 → Tier 4 kademeli).
+
+---
+
+### 11 · Gelecek Vizyon (Uzak)  📐 META
+
+Çekirdeğin oturmasını bekle.
+
+- [ ] **#6** Native decimal tipi.
+- [ ] **#7** Native date/time tipi.
+- [ ] **#19** Paket yöneticisi / registry (bekler: #5).
+- [ ] **#16** Zaman-yolculuğu hata ayıklama (deterministik VM avantajı).
+- [ ] **#17** WASM playground.
+- [ ] **#59** JIT backend (libgccjit / LLVM — çok uzak).
+- [ ] **#2** CFG/SSA gerekli mi? (ileri optimizasyon için karar).
+
+---
+
+## ✅ TAMAMLANDI (2026-06-20)
+
+### GC-hazır nesne modeli + array runtime
+ADR-020…024 doğrultusunda:
 - `src/vm/object.hpp` — Object, ArrayObject, Heap (v1: toplama yok, GC-hazır header)
-- `src/vm/value.hpp` — ValueKind::Ref + Null eklendi (dil anahtar sözcüğü `null`, `nil` DEĞİL)
-- `src/ir/instruction.hpp` — ARRAY_NEW/GET/SET/LEN eklendi
-- Array literal parser (`[1,2,3]`), `int[]` tip sözdizimi (Java/C# stili)
+- `src/vm/value.hpp` — ValueKind::Ref + Null
+- `src/ir/instruction.hpp` — ARRAY_NEW/GET/SET/LEN
+- Array literal `[1,2,3]`, `int[]` tip sözdizimi
 - Referans semantiği, kimlik `==` (ADR-023), sınır kontrolü
-- Golden test: `tests/golden/array/ref_semantics.sqt` ✓
+- `tests/golden/array/ref_semantics.sqt` ✓
 
-## ✅ TAMAMLANDI — Struct runtime + E010 revizyonu (2026-06-20)
+### Struct runtime + E010 revizyonu
+- `src/vm/object.hpp` — StructObject : Object
+- E010 revizyonu: `Node next` artık meşru (döngü kurulabilir, GC v2 ile toplanacak)
 
-ADR-020 doğrultusunda struct referans semantiğiyle uçtan uca çalışıyor:
-- `src/vm/object.hpp` — StructObject : Object, alan erişimi (GC-hazır header)
-- `src/vm/value.hpp` — ValueKind::Null eklendi (dil anahtar sözcüğü `null`)
-- E010 revizyonu: referansla tutulan `struct Node { Node next; }` artık meşru
-  (döngü kurulabilir, GC v2 ile toplanacak)
-
-## ✅ TAMAMLANDI — float/double aritmetik runtime (#44) (2026-06-20)
-
-- `src/vm/value.hpp` — ValueKind::Float + floatValue alanı
+### float/double aritmetik runtime (#44)
+- `src/vm/value.hpp` — ValueKind::Float
 - IR opcode'ları: FADD/FSUB/FMUL/FDIV + float karşılaştırma
-- Literal bağlama-göre tipleme korundu (sabit folding dahil)
 
-## ✅ TAMAMLANDI — String cilası (ADR-024) (2026-06-20)
+### String cilası (ADR-024)
+- `src/ir/instruction.hpp` — STRING_CONCAT opcode
+- `src/ir/ir_generator.cpp` — `+`/`+=` string için STRING_CONCAT
+- `src/vm/interpreter.cpp` — STRING_CONCAT çalışma zamanı
+- İçerik `==` / `!=` (ADR-023/024)
+- `tests/golden/string/concat.sqt` ✓
 
-- `src/core/type.hpp` — `isString()` yüklem yardımcısı eklendi
-- `src/ir/instruction.hpp` — `STRING_CONCAT` opcode eklendi
-- `src/semantic/type_checker.cpp` — `+` string için izin (her iki taraf `string` → sonuç `string`)
-- `src/ir/ir_generator.cpp` — `generateBinaryArithmetic` string tespiti: `ADD` → `STRING_CONCAT`; `+=` için de `STRING_CONCAT`
-- `src/vm/interpreter.cpp` — `STRING_CONCAT` case: `stringValue + stringValue`
-- `tests/golden/string/concat.sqt` — concat, `+=`, içerik `==` golden testi
-- İçerik `==` / `!=` VM'de zaten vardı (ADR-023/024); `print(string)` zaten çalışıyordu
+### Hata yönetimi — try/catch/throw (ADR-025, #57 ana kısım)
+- `TryStatement`, `ThrowStatement` AST + parser
+- `ENTER_TRY`, `LEAVE_TRY`, `THROW` IR opcode'ları
+- `TryFrame`, `pendingThrow_`, `makeErrorValue()` VM
+- Runtime hataları (DIV/0, OOB) yakalanabilir Error nesnesi olarak
+- `Error` builtin struct (line, col, message, trace, code)
+- `tests/golden/error/basic_catch.sqt` ✓
+- `tests/golden/error/throw_and_nested.sqt` ✓
+- ⚠️ **Trace alanı boş** (satır tablosu → Madde 3)
 
-## ✅ TAMAMLANDI — Hata yönetimi (ADR-025, #57) (2026-06-20)
+### Null akış-analizi (ADR-021)
+- `Type.nullable`, `asNullable()`, `asNonNull()`
+- `?` suffix parser (değişken, parametre, dönüş tipi)
+- `LOAD_NULL` opcode
+- `narrowedNonNull_` — nested + guard + `&&` narrowing
+- `tests/golden/null/` — 4 senaryo ✓
 
-- `src/parser/ast_node.hpp` — `TryStatement`, `ThrowStatement` ASTKind eklendi
-- `src/parser/nodes/statements.hpp/.cpp` — `TryStatementNode`, `ThrowStatementNode`
-- `src/parser/parser_base.hpp` + `parser.cpp` — `parseTryStatement()`, `parseThrowStatement()`
-- `src/ir/instruction.hpp` — `ENTER_TRY`, `LEAVE_TRY`, `THROW` opcode'ları
-- `src/ir/ir_generator.cpp` — try/catch/throw IR üretimi
-- `src/vm/interpreter.hpp` — `TryFrame` struct, `tryStack_`, `pendingThrow_`, `makeErrorValue()`
-- `src/vm/interpreter.cpp` — ENTER_TRY/LEAVE_TRY/THROW VM uygulaması; runtime hataları
-  (DIV/0, array OOB) `pendingThrow_` üzerinden Error nesnesi olarak yakalanabilir hale getirildi
-- `src/symbol/symbol_collector.cpp` — `Error` builtin struct kaydı (alan sırası: line,col,message,trace,code)
-- `src/semantic/type_checker.cpp` — TryStatement/ThrowStatement tip kontrolü (unchecked)
-- `tests/golden/error/basic_catch.sqt` — sıfıra bölme yakalama
-- `tests/golden/error/throw_and_nested.sqt` — iç içe fonksiyon unwind + array OOB + throw
-- **Not:** IR satır tablosu (stacktrace doldurma) ertelendi — trace alanı boş kalıyor
+### switch-case (ADR-027)
+- `SwitchStatementNode`, `CaseClause`
+- Çok-değerli `case 1,2,3:`, `default:` opsiyonel
+- Subject tip homojenlik, float W005 uyarısı, `case null:` guard
+- IR: EQUAL_EQUAL + JIF_TRUE/JIF_FALSE + JMP backpatch
+- `tests/golden/switch/` — 4 senaryo ✓
 
-## ✅ TAMAMLANDI — Null akış-analizi (ADR-021) (2026-06-20)
-
-- `src/core/type.hpp` — `bool nullable` alanı; `asNullable()`, `asNonNull()`, `equalsBase()`, `isNullLiteral()` yardımcıları; `fromName("int?")` desteği; `toString()` → `int?`
-- `src/parser/parser.cpp` — `?` suffix ayrıştırma (değişken, parametre, dönüş tipi); dispatch'te `int? f()` → `parseFunctionDecl()` yönlendirmesi düzeltildi
-- `src/ir/instruction.hpp` — `LOAD_NULL` opcode eklendi
-- `src/ir/ir_generator.cpp` — `LiteralType::BOŞ` → `LOAD_NULL`
-- `src/vm/interpreter.cpp` — `LOAD_NULL` case → `Value::null()`
-- `src/semantic/type_checker.hpp` — `narrowedNonNull_` set; `extractNullCheck()`, `alwaysExits()` yardımcıları
-- `src/semantic/type_checker.cpp`:
-  - `checkAssign`: `T? ← null` OK; `T ← T?` hata (E003); `T? ← T` OK (widening)
-  - `checkExpr Literal BOŞ`: null sentinel tipi (`Void+nullable`)
-  - `checkExpr Identifier`: `narrowedNonNull_`'dan non-null olduğu bilinenlerde nullable flag'i kaldırılıyor
-  - `checkExpr BinaryExpression`: `&&` sağ taraf narrowing; nullable operand hatası (E003)
-  - `checkExpr MemberAccess`: nullable nesne üstünde doğrudan erişim hatası
-  - `checkStmt Block`: guard pattern (`if (a == null) return;` → sonrasında `a` non-null)
-  - `checkStmt IfStatement`: nested narrowing (`if (a != null)` → then'de non-null, `if (a == null)` → else'de non-null)
-- `tests/golden/null/narrowing.sqt` — nested + guard narrowing, `int?` dönüş tipi ✓
-- `tests/golden/null/nullable_assign_error.sqt` — `T? → T` atama E003 ✓
-- `tests/golden/null/nullable_operand_error.sqt` — nullable aritmetik operand E003 ✓
-- `tests/golden/null/and_narrowing.sqt` — `&&` sağ taraf narrowing ✓
-
-## ✅ TAMAMLANDI — switch-case (ADR-027) (2026-06-20)
-
-- `src/parser/ast_node.hpp` — `SwitchStatement` ASTKind eklendi
-- `src/parser/nodes/statements.hpp/.cpp` — `CaseClause` (move-only), `SwitchStatementNode`
-- `src/parser/parser.cpp` — `parseSwitchStatement()`:
-  - case değerleri `parseExpression(3)` ile ayrıştırıldı (COLON tüketilmez)
-  - Çok-değerli `case 1, 2, 3:` (OR semantiği), `default:` opsiyonel
-- `src/semantic/structural_validator.hpp/.cpp` — `pureLoopDepth_` (continue için); switch sadece `loopDepth_` artırır
-- `src/semantic/type_checker.cpp` — subject tip doğrulama, case homojenlik, `case null:` nullable guard, float W005 uyarısı (IEEE 754 tam temsil)
-- `src/symbol/symbol_collector.cpp` — `SwitchStatement` `walkStmt` case eklendi (print gibi builtinlerin `resolvedSymbol` atanması için kritikti)
-- `src/ir/ir_generator.hpp` — `LoopContext.isSwitch = false`
-- `src/ir/ir_generator.cpp` — SwitchStatement IR: yeni opcode gereksiz; EQUAL_EQUAL + JIF_TRUE/JIF_FALSE + JMP backpatch; `continue` switch context'leri atlar
-- `src/ir/ir_function.cpp` — `JIF_TRUE` IR dump gösterimi eklendi
-- `src/vm/interpreter.cpp` — `EQUAL_EQUAL`/`NOT_EQUAL` null + float karşılaştırma düzeltildi
-- `tests/golden/switch/basic.sqt` — int switch, çok-değerli case, default ✓
-- `tests/golden/switch/string_switch.sqt` — string switch ✓
-- `tests/golden/switch/break_in_switch.sqt` — explicit break ✓
-- `tests/golden/switch/switch_in_loop.sqt` — döngü içi switch, continue döngüye gider ✓
-
-## ✅ TAMAMLANDI — Tip dönüşümü `as` (ADR-026, #42) (2026-06-20)
-
-- `src/tokenizer/tokenizer.hpp/.cpp` — `"as"` keyword olarak eklendi
-- `src/parser/token.hpp` — `KW_AS` enum + KEYWORD_MAP + precedence 12 (additive=13'ten gevşek)
-- `src/parser/ast_node.hpp` — `CastExpression` ASTKind eklendi
-- `src/parser/nodes/expressions.hpp/.cpp` — `CastExpressionNode` (operand + targetTypeName + targetNullable)
-- `src/parser/parser.cpp` — `KW_AS` left-denotation: tip adı + opsiyonel `?` ayrıştırma
-- `src/semantic/type_checker.cpp` — kaynak/hedef tip doğrulama; dönüşüm matrisi (bool↔int yasak;
-  struct/array yasak); resolvedType = hedef tip + nullable flag
-- `src/symbol/symbol_collector.cpp` — `CastExpression` + `ArrayLiteral` walkExpr case eklendi
-- `src/ir/instruction.hpp` — yeni opcode'lar: `CAST_INT_TO_STR`, `CAST_FLOAT_TO_STR`,
-  `CAST_BOOL_TO_STR`, `CAST_STR_TO_INT`, `CAST_STR_TO_FLOAT`, `CAST_FLOAT_TO_INT_CHECKED`
-- `src/ir/ir_generator.cpp` — CastExpression IR: kaynak+hedef resolvedType ile doğru opcode seçimi;
-  fallible dönüşümlerde `ins.left = nullable` (0=throw, 1=null)
-- `src/ir/ir_function.cpp` — yeni cast opcode dump gösterimleri
-- `src/vm/interpreter.cpp` — VM: infallible cast'ler doğrudan; fallible cast'ler `try/catch`
-  ile E_CAST fırlatır veya null döndürür; `<sstream>/<cmath>/<climits>` eklendi
-- `tests/golden/cast/basic.sqt` — int/float/bool/string arası temel cast ✓
-- `tests/golden/cast/nullable_cast.sqt` — `as int?` başarısızsa null ✓
-- `tests/golden/cast/cast_error.sqt` — `as int` başarısızsa E_CAST yakalanır ✓
-
-## 🚀 SIRADAKİ İŞ
-
-1. **mark-sweep GC v2 (#56)** — en son; özellik bloklamaz, en karmaşık. Trigger basit
-   "her N tahsiste" yeter; nesne modeli zaten GC-hazır.
-
-Açık mimari borçlar: **#56** (döngüsel referans → mark-sweep GC v2), **#57** (hata
-modeli görünürlük alt-ekseni).
-
-> ⚠️ **Terminoloji kilidi (Sonnet):** anlaşılan isimleri değiştirme/icat etme.
-> Dil anahtar sözcüğü **`null`** (`nil` değil), array literal **`[...]`** (`{...}` değil),
-> hata tipi **`Error`**. İsmi belirsizse **icat etme, Opus'a sor.** Ayrıntı:
-> `docs/sonnet-handoff.md` Bölüm 6 (terminoloji kilidi).
+### Tip dönüşümü `as` (ADR-026, #42)
+- `KW_AS` keyword + precedence 12
+- `CastExpressionNode` (operand + targetTypeName + targetNullable)
+- Cast matrisi (bool↔int yasak, struct/array yasak)
+- Fallible cast: `as int` → Error fırlatır; `as int?` → null
+- Yeni opcode'lar: CAST_INT_TO_STR, CAST_FLOAT_TO_STR, CAST_BOOL_TO_STR,
+  CAST_STR_TO_INT, CAST_STR_TO_FLOAT, CAST_FLOAT_TO_INT_CHECKED
+- `tests/golden/cast/` — 3 senaryo ✓
 
 ---
 
-## #modül-scope — IRFunction.moduleId: Modül-düzeyi değişken izolasyonu
+## 📋 MİMARİ BORÇ NOTU (#53, #54)
 
-**Etkilenen dosyalar:**
-- `src/ir/instruction.hpp` — `LOAD_GLOBAL` / `STORE_GLOBAL` yorumları
-- `src/ir/ir_program.hpp` — `globalCount`, `globalNames`
-- `src/vm/interpreter.hpp` — `globalSlots_`
-- `src/vm/interpreter.cpp` — `LOAD_GLOBAL` / `STORE_GLOBAL` case'leri
-
-**Mevcut durum (tek dosya):**
-`LOAD_GLOBAL dest, N` → `globalSlots_[N]` — düz vektör, tek modül varsayımı.
-Tek dosyada bu doğru çalışır; `globalSlots_[0]` her zaman bu dosyanın 0. modül-değişkenidir.
-
-**Çok modüllü derlemede yapılması gereken:**
-Her `IRFunction`'a `std::string moduleId` (veya `int moduleIndex`) alanı ekle.
-`Interpreter`'da `globalSlots_` yerine `std::unordered_map<std::string, std::vector<Value>> moduleSlots_` tut.
-`LOAD_GLOBAL` çalışırken `frame.function->moduleId` ile doğru modülün slot alanına bak.
-
-```
-// Hedef tasarım (modül sistemi gelince):
-case Opcode::LOAD_GLOBAL:
-    frame.slots[instr.dest] = moduleSlots_[frame.function->moduleId][instr.intValue];
-    break;
-```
-
-**Ne zaman:** Modül sistemi issue'ları (#3 import sözdizimi, #4 görünürlük, #5 çoklu dosya)
-ele alınırken bu değişikliği de kapsama al.
+`LOAD_GLOBAL`/`STORE_GLOBAL` ve `Symbol.sourceModule` değişiklikleri **modül sistemi
+gelene kadar ertelendi** (Madde 9). Detay: dosyanın eski versiyonundaki `#modül-scope`
+ve `#sembol-modül` bölümleri `docs/plan-53-54-57.md` dosyasına taşındı.
 
 ---
 
-## #sembol-modül — Symbol.sourceModule: Sembol tablosunda açık modül kimliği
-
-**Etkilenen dosyalar:**
-- `src/symbol/symbol.hpp` — `Symbol` struct
-
-**Mevcut durum:**
-`Symbol.definitionLoc.filePath` dosya yolunu tutuyor — modül bilgisi dolaylı olarak var.
-Ama doğrudan `moduleId` / `moduleName` alanı yok; filtre/lookup için her seferinde
-`definitionLoc.filePath`'i ayrıştırmak gerekir.
-
-**Yapılması gereken:**
-`Symbol` struct'ına `std::string sourceModule` alanı ekle (modül adı veya dosya yolu).
-Özellikle cross-module sembol çözümleme, LSP "tanıma git" ve hata mesajlarında
-"hangi modülden geldi" bilgisi için kritik.
-
-**Ne zaman:** `#3` (import sözdizimi) veya `#4` (görünürlük) issue'larında.
+> ⚠️ **Terminoloji kilidi:** Dil anahtar sözcüğü **`null`** (`nil` değil), array
+> literal **`[...]`** (`{...}` değil), hata tipi **`Error`**. İsim belirsizse
+> **icat etme, Opus'a sor.** Ayrıntı: `docs/sonnet-handoff.md` Bölüm 6.

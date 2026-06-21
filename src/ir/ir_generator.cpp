@@ -577,7 +577,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             return varSlot;
         }
 
-        // Birleşik atama: += -= *= /= %= &= |= <<= >>=
+        // Birleşik atama: += -= *= /= %= &= |= ^= <<= >>=
         // x OP= y  ≡  x = x OP y
         if (bin->Operator == TokenType::PLUS_EQUAL    ||
             bin->Operator == TokenType::MINUS_EQUAL   ||
@@ -586,6 +586,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             bin->Operator == TokenType::PERCENT_EQUAL ||
             bin->Operator == TokenType::AMPERSAND_EQUAL ||
             bin->Operator == TokenType::PIPE_EQUAL      ||
+            bin->Operator == TokenType::CARET_EQUAL     ||
             bin->Operator == TokenType::LSHIFT_EQUAL    ||
             bin->Operator == TokenType::RSHIFT_EQUAL) {
 
@@ -600,6 +601,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             else if (bin->Operator == TokenType::PERCENT_EQUAL)  arithOp = Opcode::MOD;
             else if (bin->Operator == TokenType::AMPERSAND_EQUAL) arithOp = Opcode::BAND;
             else if (bin->Operator == TokenType::PIPE_EQUAL)     arithOp = Opcode::BOR;
+            else if (bin->Operator == TokenType::CARET_EQUAL)    arithOp = Opcode::BXOR;
             else if (bin->Operator == TokenType::LSHIFT_EQUAL)   arithOp = Opcode::SHL;
             else if (bin->Operator == TokenType::RSHIFT_EQUAL)   arithOp = Opcode::SHR;
 
@@ -614,13 +616,15 @@ int IRGenerator::generateExpression(ASTNode* node) {
             if (isGlobal(varName)) {
                 int currentSlot = freshSlot();
                 emitLoadGlobal(currentSlot, getGlobalIndex(varName));
-                emitBinaryOp(arithOp, resultSlot, currentSlot, rhsSlot);
+                emitBinaryOp(arithOp, resultSlot, currentSlot, rhsSlot,
+                             bin->loc.line, bin->loc.column);
                 emitStoreGlobal(resultSlot, getGlobalIndex(varName));
                 return resultSlot;
             }
 
             int varSlot = lookupVariable(varName);
-            emitBinaryOp(arithOp, resultSlot, varSlot, rhsSlot);
+            emitBinaryOp(arithOp, resultSlot, varSlot, rhsSlot,
+                         bin->loc.line, bin->loc.column);
             emitLoadSlot(varSlot, resultSlot);
             return varSlot;
         }
@@ -634,12 +638,14 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 // -x → 0 - x
                 int zeroSlot = freshSlot();
                 emitLoadConst(zeroSlot, 0);
-                emitBinaryOp(Opcode::SUB, resultSlot, zeroSlot, operandSlot);
+                emitBinaryOp(Opcode::SUB, resultSlot, zeroSlot, operandSlot,
+                             bin->loc.line, bin->loc.column);
             } else if (bin->Operator == TokenType::BANG) {
                 // !x → (x == 0): sıfırsa 1, değilse 0
                 int zeroSlot = freshSlot();
                 emitLoadConst(zeroSlot, 0);
-                emitBinaryOp(Opcode::EQUAL_EQUAL, resultSlot, operandSlot, zeroSlot);
+                emitBinaryOp(Opcode::EQUAL_EQUAL, resultSlot, operandSlot, zeroSlot,
+                             bin->loc.line, bin->loc.column);
             } else if (bin->Operator == TokenType::TILDE) {
                 // ~x — bitsel değil
                 Instruction ins(Opcode::BNOT);
@@ -653,25 +659,27 @@ int IRGenerator::generateExpression(ASTNode* node) {
         }
 
         // Aritmetik operatörler
+        const int L = bin->loc.line, C = bin->loc.column;
         switch (bin->Operator) {
-            case TokenType::PLUS:    return generateBinaryArithmetic(Opcode::ADD,           bin->Left, bin->Right);
-            case TokenType::MINUS:   return generateBinaryArithmetic(Opcode::SUB,           bin->Left, bin->Right);
-            case TokenType::STAR:    return generateBinaryArithmetic(Opcode::MUL,           bin->Left, bin->Right);
-            case TokenType::SLASH:   return generateBinaryArithmetic(Opcode::DIV,           bin->Left, bin->Right);
-            case TokenType::PERCENT: return generateBinaryArithmetic(Opcode::MOD,           bin->Left, bin->Right);
+            case TokenType::PLUS:    return generateBinaryArithmetic(Opcode::ADD,           bin->Left, bin->Right, L, C);
+            case TokenType::MINUS:   return generateBinaryArithmetic(Opcode::SUB,           bin->Left, bin->Right, L, C);
+            case TokenType::STAR:    return generateBinaryArithmetic(Opcode::MUL,           bin->Left, bin->Right, L, C);
+            case TokenType::SLASH:   return generateBinaryArithmetic(Opcode::DIV,           bin->Left, bin->Right, L, C);
+            case TokenType::PERCENT: return generateBinaryArithmetic(Opcode::MOD,           bin->Left, bin->Right, L, C);
             // Karşılaştırma operatörleri
-            case TokenType::LESS:          return generateBinaryArithmetic(Opcode::LESS,          bin->Left, bin->Right);
-            case TokenType::LESS_EQUAL:    return generateBinaryArithmetic(Opcode::LESS_EQUAL,    bin->Left, bin->Right);
-            case TokenType::GREATER:       return generateBinaryArithmetic(Opcode::GREATER,       bin->Left, bin->Right);
-            case TokenType::GREATER_EQUAL: return generateBinaryArithmetic(Opcode::GREATER_EQUAL, bin->Left, bin->Right);
-            case TokenType::EQUAL_EQUAL:   return generateBinaryArithmetic(Opcode::EQUAL_EQUAL,   bin->Left, bin->Right);
-            case TokenType::BANG_EQUAL:    return generateBinaryArithmetic(Opcode::NOT_EQUAL,     bin->Left, bin->Right);
+            case TokenType::LESS:          return generateBinaryArithmetic(Opcode::LESS,          bin->Left, bin->Right, L, C);
+            case TokenType::LESS_EQUAL:    return generateBinaryArithmetic(Opcode::LESS_EQUAL,    bin->Left, bin->Right, L, C);
+            case TokenType::GREATER:       return generateBinaryArithmetic(Opcode::GREATER,       bin->Left, bin->Right, L, C);
+            case TokenType::GREATER_EQUAL: return generateBinaryArithmetic(Opcode::GREATER_EQUAL, bin->Left, bin->Right, L, C);
+            case TokenType::EQUAL_EQUAL:   return generateBinaryArithmetic(Opcode::EQUAL_EQUAL,   bin->Left, bin->Right, L, C);
+            case TokenType::BANG_EQUAL:    return generateBinaryArithmetic(Opcode::NOT_EQUAL,     bin->Left, bin->Right, L, C);
 
             // Bitsel operatörler
-            case TokenType::AMPERSAND: return generateBinaryArithmetic(Opcode::BAND, bin->Left, bin->Right);
-            case TokenType::PIPE:      return generateBinaryArithmetic(Opcode::BOR,  bin->Left, bin->Right);
-            case TokenType::LSHIFT:    return generateBinaryArithmetic(Opcode::SHL,  bin->Left, bin->Right);
-            case TokenType::RSHIFT:    return generateBinaryArithmetic(Opcode::SHR,  bin->Left, bin->Right);
+            case TokenType::AMPERSAND: return generateBinaryArithmetic(Opcode::BAND, bin->Left, bin->Right, L, C);
+            case TokenType::PIPE:      return generateBinaryArithmetic(Opcode::BOR,  bin->Left, bin->Right, L, C);
+            case TokenType::CARET:     return generateBinaryArithmetic(Opcode::BXOR, bin->Left, bin->Right, L, C);
+            case TokenType::LSHIFT:    return generateBinaryArithmetic(Opcode::SHL,  bin->Left, bin->Right, L, C);
+            case TokenType::RSHIFT:    return generateBinaryArithmetic(Opcode::SHR,  bin->Left, bin->Right, L, C);
 
             // Mantıksal operatörler: kısa devre dallanmasıyla üretilir (ADR-008).
             // NOT: sıradan ikili işlem değil — b, a'nın değerine göre atlanabilir.
@@ -878,7 +886,8 @@ int IRGenerator::generateExpression(ASTNode* node) {
 // generateBinaryArithmetic — İkili op için sol+sağ üret, talimat ekle
 // ─────────────────────────────────────────────────────────────────────────────
 
-int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTNode* rightNode) {
+int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTNode* rightNode,
+                                          int line, int col) {
     int leftSlot  = generateExpression(leftNode);
     int rightSlot = generateExpression(rightNode);
     int destSlot  = freshSlot();
@@ -901,7 +910,7 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
 
     // String birleştirme (ADR-024): + → STRING_CONCAT
     if ((leftIsString || rightIsString) && opcode == Opcode::ADD) {
-        emitBinaryOp(Opcode::STRING_CONCAT, destSlot, leftSlot, rightSlot);
+        emitBinaryOp(Opcode::STRING_CONCAT, destSlot, leftSlot, rightSlot, line, col);
         return destSlot;
     }
 
@@ -924,9 +933,9 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
         else if (opcode == Opcode::MUL) floatOp = Opcode::FMUL;
         else if (opcode == Opcode::DIV) floatOp = Opcode::FDIV;
         // karşılaştırma opcodeları aynı kalır (LESS, GREATER, vb.)
-        emitBinaryOp(floatOp, destSlot, leftSlot, rightSlot);
+        emitBinaryOp(floatOp, destSlot, leftSlot, rightSlot, line, col);
     } else {
-        emitBinaryOp(opcode, destSlot, leftSlot, rightSlot);
+        emitBinaryOp(opcode, destSlot, leftSlot, rightSlot, line, col);
     }
     return destSlot;
 }
@@ -1085,11 +1094,14 @@ int IRGenerator::getGlobalIndex(const std::string& name) const {
     return (it != nameToGlobal_.end()) ? it->second : -1;
 }
 
-void IRGenerator::emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot) {
+void IRGenerator::emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot,
+                               int line, int col) {
     Instruction ins(op);
-    ins.dest  = destSlot;
-    ins.left  = leftSlot;
-    ins.right = rightSlot;
+    ins.dest       = destSlot;
+    ins.left       = leftSlot;
+    ins.right      = rightSlot;
+    ins.sourceLine = line;
+    ins.sourceCol  = col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 

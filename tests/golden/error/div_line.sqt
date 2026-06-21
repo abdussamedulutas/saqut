@@ -1,0 +1,10 @@
+// DIV/0 hatasında e.line doğru satırı göstermeli
+int main() {
+    try {
+        int x = 10 / 0;
+    } catch (Error e) {
+        print(e.line);
+        print(e.code);
+    }
+    return 0;
+}

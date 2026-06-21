@@ -27,6 +27,7 @@ static const char* opSymbol(Opcode op) {
         case Opcode::MOD:           return "%";
         case Opcode::BAND:          return "&";
         case Opcode::BOR:           return "|";
+        case Opcode::BXOR:          return "^";
         case Opcode::SHL:           return "<<";
         case Opcode::SHR:           return ">>";
         case Opcode::LESS:          return "<";
@@ -44,7 +45,8 @@ static bool isBinaryOp(Opcode op) {
         case Opcode::ADD: case Opcode::SUB: case Opcode::MUL:
         case Opcode::DIV: case Opcode::MOD:
         case Opcode::FADD: case Opcode::FSUB: case Opcode::FMUL: case Opcode::FDIV:
-        case Opcode::BAND: case Opcode::BOR: case Opcode::SHL: case Opcode::SHR:
+        case Opcode::BAND: case Opcode::BOR: case Opcode::BXOR:
+        case Opcode::SHL: case Opcode::SHR:
         case Opcode::LESS: case Opcode::LESS_EQUAL:
         case Opcode::GREATER: case Opcode::GREATER_EQUAL:
         case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:

@@ -49,7 +49,8 @@ private:
     int generateExpression(ASTNode* node);
 
     // ── İkili operatör (binary op) için ortak yardımcı ───────────────────
-    int generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTNode* rightNode);
+    int generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTNode* rightNode,
+                                 int line = 0, int col = 0);
 
     // ── Slot yönetimi ─────────────────────────────────────────────────────
     int  freshSlot();                           // Yeni slot numarası al (nextSlot_++)
@@ -75,7 +76,8 @@ private:
     void emitArraySet(int arrSlot, int idxSlot, int valSlot,
                       int line = 0, int col = 0);
     void emitArrayLen(int destSlot, int arrSlot);
-    void emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot);
+    void emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot,
+                      int line = 0, int col = 0);
     void emitReturn(int srcSlot, int line = 0, int col = 0);
     // Koşulsuz atlama yazar; instruction indeksini döndürür (backpatch için).
     // Hedef bilinmiyorsa -1 geçilir, patchJump() ile doldurulur.

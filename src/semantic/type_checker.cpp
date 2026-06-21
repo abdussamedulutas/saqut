@@ -137,8 +137,12 @@ void TypeChecker::checkFunction(ASTNode* fnNode) {
     auto* fn = (FunctionDeclNode*)fnNode;
     inFunction_        = true;
     currentReturnType_ = Type::fromName(fn->returnType);
-    if (currentReturnType_.isError() && fn->returnType != "void")
-        currentReturnType_ = Type::Void(); // bilinmeyen dönüş tipi → void gibi davran
+    if (currentReturnType_.isError()) {
+        if (table_.structLayouts.count(fn->returnType))
+            currentReturnType_ = Type::structType(fn->returnType);
+        else if (fn->returnType != "void")
+            currentReturnType_ = Type::Void(); // bilinmeyen tip (E007 zaten raporlandı), hata yayılmasını bastır
+    }
 
     auto& ch = fn->getChildren();
     if (!ch.empty()) checkStmt(ch[0]); // body Block

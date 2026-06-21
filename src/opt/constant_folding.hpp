@@ -180,7 +180,6 @@ private:
                 int   result = computeUnary(bin->Operator, rv);
 
                 LiteralNode* lit = makeFoldedLit(result, bin->loc, bin->resolvedType);
-                delete bin->Right;
                 delete bin;
                 changed_ = true;
                 return lit;
@@ -209,8 +208,6 @@ private:
             int result = computeOp(bin->Operator, lv, rv);
             LiteralNode* lit = makeFoldedLit(result, bin->loc, bin->resolvedType);
 
-            delete bin->Left;
-            delete bin->Right;
             delete bin;
             changed_ = true;
             return lit;

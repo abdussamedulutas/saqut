@@ -25,7 +25,7 @@ inline int cmdIr(const CliArgs& args) {
     Parser parser;
     ASTNode* ast = parser.parse(tokens);
     if (!ast) {
-        std::cerr << "Hata: AST üretilemedi\n";
+        std::cerr << "error: failed to build AST\n";
         for (auto* t : tokens) delete t;
         return 1;
     }
@@ -43,8 +43,8 @@ inline int cmdIr(const CliArgs& args) {
         return 1;
     }
 
-    // --optimized: constant folding + DCE yerinde uygulanır, klon yok.
-    // IR dump için tek versiyon yeterli — ast komutu gibi karşılaştırma yok.
+    // --optimized: constant folding + DCE applied in-place, no clone.
+    // For IR dump, single version is sufficient — no comparison like ast command.
     if (args.optimized) {
         CompilerConfig   cfg;
         DiagnosticEngine optDiag;
@@ -54,7 +54,7 @@ inline int cmdIr(const CliArgs& args) {
     }
 
     IRGenerator irGenerator;
-    IRProgram   program = irGenerator.generate(ast, symbolTable);
+    IRProgram   program = irGenerator.generate(ast, symbolTable, filePath);
     program.dump();
 
     delete ast;

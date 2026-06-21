@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <vector>
 #include "ir/ir_function.hpp"
+#include "core/module_registry.hpp"
 
 struct IRProgram {
     // Fonksiyon adı → IRFunction (hızlı arama için)
@@ -29,13 +30,15 @@ struct IRProgram {
     // Ekleme sırası (dump'ta orijinal sırayla göstermek için)
     std::vector<std::string> functionOrder;
 
+    // Modül adı havuzu — dosya yolları burada, her yerde int ID kullanılır.
+    ModuleRegistry moduleRegistry;
+
     // Modül-düzeyi değişkenler (LOAD_GLOBAL / STORE_GLOBAL için)
-    // Bunlar "global" değil — bu IRProgram'ın temsil ettiği tek modüle aittir.
-    // Çok-modüllü derlemede her modülün kendi IRProgram'ı (veya ayrı slot alanı) olur.
-    // TODO(#modül-scope): moduleId alanı eklenince Interpreter bu alana
-    //   frame.function->moduleId üzerinden erişecek (bkz. TODO.md).
     int                      globalCount = 0;
     std::vector<std::string> globalNames; // index → isim (dump için)
+
+    // Modül başına global slot sayısı: moduleId (int) → slot count
+    std::unordered_map<int, int> moduleGlobalCounts;
 
     // Yeni fonksiyon ekle
     void addFunction(IRFunction fn) {

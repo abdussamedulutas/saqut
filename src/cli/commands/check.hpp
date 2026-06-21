@@ -26,7 +26,7 @@ inline int cmdCheck(const CliArgs& args) {
     DiagnosticEngine diag;
 
     if (!ast) {
-        diag.report("E000", SourceLocation{}, "AST üretilemedi");
+        diag.report("E000", SourceLocation{}, "failed to build AST");
         nlohmann::json out;
         out["file"]        = filePath;
         out["diagnostics"] = diag.toJsonObj();
@@ -38,8 +38,8 @@ inline int cmdCheck(const CliArgs& args) {
     SymbolTable table;
     SymbolCollector(table, diag).collect(ast);
 
-    // Sembol toplama hataları varsa tip denetimine geçme
-    // (çözümsüz semboller tip denetiminde sahte E003 üretir)
+    // If symbol collection errors exist, skip type checking
+    // (unresolved symbols produce spurious E003 in type checking)
     if (!diag.hasErrors()) {
         TypeChecker(table, diag).check(ast);
         StructuralValidator(diag).validate(ast);

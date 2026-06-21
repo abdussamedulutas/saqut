@@ -26,12 +26,15 @@ public:
     }
 
     // current scope'ta tanımla; duplicate → nullptr döner
-    Symbol* define(const std::string& name, SymbolKind k, Type t, SourceLocation loc) {
+    // moduleId: ModuleRegistry ID (-1 = main, 0 = __builtin__)
+    Symbol* define(const std::string& name, SymbolKind k, Type t, SourceLocation loc,
+                   int moduleId = -1) {
         auto s = std::make_unique<Symbol>();
-        s->name = name;
-        s->kind = k;
-        s->type = std::move(t);
+        s->name         = name;
+        s->kind         = k;
+        s->type         = std::move(t);
         s->definitionLoc = loc;
+        s->moduleId      = moduleId;
         Symbol* raw = s.get();
         if (!current_->defineLocal(raw)) return nullptr; // duplicate
         pool_.push_back(std::move(s));

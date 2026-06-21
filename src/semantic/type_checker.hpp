@@ -38,6 +38,8 @@ private:
     static std::pair<std::string, bool> extractNullCheck(ASTNode* cond);
     // Bir statement her zaman çıkış yapıyor mu? (return/throw/break/continue)
     static bool alwaysExits(ASTNode* stmt);
+    // Non-void fonksiyon kontrolü: tüm akış yolları return/throw ile bitiyor mu?
+    static bool pathAlwaysReturns(ASTNode* stmt);
 
     SymbolTable&      table_;
     DiagnosticEngine& diag_;

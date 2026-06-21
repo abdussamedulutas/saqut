@@ -27,8 +27,9 @@ private:
 
     Type typeFromName(const std::string& n, const SourceLocation& loc);
 
-    SymbolTable&     table_;
+    SymbolTable&      table_;
     DiagnosticEngine& diag_;
+    int               currentModuleId_ = -1;  // ModuleRegistry ID (-1 = main, 0 = __builtin__)
 
     // struct adı → içerdiği struct-tip alan adları (cycle check için)
     std::unordered_map<std::string, std::vector<std::string>> structFields_;

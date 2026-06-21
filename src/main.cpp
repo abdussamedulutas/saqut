@@ -35,52 +35,52 @@ int main(int argc, char* argv[]) {
     CliDispatcher cli;
 
     cli.registerCommand({"run",
-        "Pipeline'ı çalıştır (token → AST → IR)",
+        "run program (token → AST → IR → VM)",
         false, cmdRun});
 
     cli.registerCommand({"tokens",
-        "Token listesini göster",
+        "print token list",
         false, cmdTokens});
 
     cli.registerCommand({"ast",
-        "JSON formatında AST hiyerarşisi ve analiz",
+        "print AST hierarchy and analysis as JSON",
         false, cmdAst});
 
     cli.registerCommand({"symbols",
-        "Sembol tablosu (fonksiyonlar, değişkenler)",
+        "print symbol table (functions, variables)",
         false, cmdSymbols});
 
     cli.registerCommand({"check",
-        "Semantik analiz — tip denetimi + yapısal doğrulama",
+        "semantic analysis — type checking + structural validation",
         false, cmdCheck});
 
     cli.registerCommand({"ir",
-        "IR talimat listesini göster (ara temsil — bytecode öncesi)",
+        "print IR instruction list (intermediate representation)",
         false, cmdIr});
 
-    // --- Gelecek komutlar (TODO) ---
+    // --- Future commands (TODO) ---
     cli.registerCommand({"compile",
-        "TODO: Kaynak kodu derle",
+        "TODO: compile source to binary",
         false, [](const CliArgs&) {
-            std::cerr << "TODO: compile komutu henüz eklenmedi\n"; return 1;
+            std::cerr << "TODO: compile command not yet implemented\n"; return 1;
         }});
 
     cli.registerCommand({"parse",
-        "TODO: IR üret",
+        "TODO: generate IR",
         false, [](const CliArgs&) {
-            std::cerr << "TODO: parse komutu henüz eklenmedi\n"; return 1;
+            std::cerr << "TODO: parse command not yet implemented\n"; return 1;
         }});
 
     cli.registerCommand({"transpile",
-        "TODO: C koduna çevir",
+        "TODO: transpile to C code",
         false, [](const CliArgs&) {
-            std::cerr << "TODO: transpile komutu henüz eklenmedi\n"; return 1;
+            std::cerr << "TODO: transpile command not yet implemented\n"; return 1;
         }});
 
     cli.registerCommand({"interpret",
-        "TODO: Interpreter modu",
+        "TODO: interpreter mode",
         true, [](const CliArgs&) {
-            std::cerr << "TODO: interpret komutu henüz eklenmedi\n"; return 1;
+            std::cerr << "TODO: interpret command not yet implemented\n"; return 1;
         }});
 
     // Argümanları ayrıştır

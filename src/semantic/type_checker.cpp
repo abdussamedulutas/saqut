@@ -13,6 +13,30 @@
 // Yardımcılar
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Hint mesajlarında kullanmak için bir ifade düğümünden kısa kaynak metin üretir.
+static std::string nodeHintText(ASTNode* node) {
+    if (!node) return "<expression>";
+    if (node->kind == ASTKind::Literal) {
+        auto* lit = static_cast<LiteralNode*>(node);
+        if (lit->parserToken.token) return lit->parserToken.token->token;
+        if (lit->hasDirectValue)    return std::to_string(lit->directIntValue);
+        return "<literal>";
+    }
+    if (node->kind == ASTKind::Identifier) {
+        auto* id = static_cast<IdentifierNode*>(node);
+        if (id->parserToken.token) return id->parserToken.token->token;
+        return "<identifier>";
+    }
+    if (node->kind == ASTKind::BinaryExpression) {
+        auto* bin = static_cast<BinaryExpressionNode*>(node);
+        auto it = OPERATOR_MAP_REV.find(bin->Operator);
+        std::string op = (it != OPERATOR_MAP_REV.end()) ? std::string(it->second) : "?";
+        if (!bin->Left) return op + nodeHintText(bin->Right);
+        return nodeHintText(bin->Left) + " " + op + " " + nodeHintText(bin->Right);
+    }
+    return "<expression>";
+}
+
 int TypeChecker::numericRank(const Type& t) {
     if (!t.isPrimitive()) return -1;
     switch (t.prim) {
@@ -139,7 +163,8 @@ void TypeChecker::checkFunction(ASTNode* fnNode) {
 bool TypeChecker::checkAssign(const Type& target, const Type& src,
                                bool srcIsLiteral,
                                const SourceLocation& loc,
-                               const std::string& ctx) {
+                               const std::string& ctx,
+                               const std::string& hintExpr) {
     if (target.isError() || src.isError()) return true; // önceki hata, sessiz geç
 
     // ADR-021: null literal assignment
@@ -173,16 +198,18 @@ bool TypeChecker::checkAssign(const Type& target, const Type& src,
     if (tRank >= 0 && sRank >= 0) {
         if (tRank > sRank) {
             if (srcIsLiteral) return true;
+            const std::string castTarget = hintExpr.empty() ? ctx : hintExpr;
             diag_.report("W004", loc,
                 "'" + ctx + "': " + src.toString() +
                 " → " + target.toString() + " implicit widening",
-                "use explicit cast: `" + ctx + " as " + target.toString() + "` (to suppress this warning)");
+                "use explicit cast: `" + castTarget + " as " + target.toString() + "` (to suppress this warning)");
             return true;
         } else {
+            const std::string castTarget = hintExpr.empty() ? ctx : hintExpr;
             diag_.report("E003", loc,
                 "'" + ctx + "': " + src.toString() +
                 " → " + target.toString() + " narrowing conversion (possible data loss)",
-                "use explicit cast: `" + ctx + " as " + target.toString() + "` (data loss may occur)");
+                "use explicit cast: `" + castTarget + " as " + target.toString() + "` (data loss may occur)");
             return false;
         }
     }
@@ -259,7 +286,7 @@ void TypeChecker::checkStmt(ASTNode* node) {
         }
         Type valType = checkExpr(rs->value, currentReturnType_);
         bool isLit   = rs->value->kind == ASTKind::Literal;
-        checkAssign(currentReturnType_, valType, isLit, rs->loc, "return");
+        checkAssign(currentReturnType_, valType, isLit, rs->loc, "return", nodeHintText(rs->value));
         break;
     }
 

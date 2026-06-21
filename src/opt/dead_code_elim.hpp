@@ -54,7 +54,8 @@ private:
                             sn->isReachable = false;
                             changed_ = true;
                             diag_.report("W003", sn->loc,
-                                "Bu kod hiçbir zaman çalışmaz (return/break/continue sonrası)");
+                                "Bu kod hiçbir zaman çalışmaz (return/break/continue sonrası)",
+                                "Üstteki return/throw/break/continue'den sonra buraya ulaşılamaz — bu satırları kaldırın");
                         }
                     }
                 }

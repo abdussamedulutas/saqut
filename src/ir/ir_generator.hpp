@@ -31,8 +31,10 @@
 
 class IRGenerator {
 public:
-    // Ana giriş noktası: programNode = ProgramNode, tablo = sembol tablosu
-    IRProgram generate(ASTNode* programNode, SymbolTable& symbolTable);
+    // Ana giriş noktası.
+    // sourceFilePath: kaynak dosya yolu (ModuleRegistry'ye kaydedilir; "" = bilinmiyor)
+    IRProgram generate(ASTNode* programNode, SymbolTable& symbolTable,
+                       const std::string& sourceFilePath = "");
 
 private:
     // ── Fonksiyon üretimi ─────────────────────────────────────────────────
@@ -65,13 +67,16 @@ private:
     void emitStoreGlobal(int srcSlot, int globalIndex);
     void emitStructNew(int destSlot, const std::string& structType, int fieldCount);
     void emitFieldGet(int destSlot, int objSlot, int fieldIdx);
-    void emitFieldSet(int objSlot, int fieldIdx, int valSlot);
+    void emitFieldSet(int objSlot, int fieldIdx, int valSlot,
+                      int line = 0, int col = 0);
     void emitArrayNew(int destSlot, int capacity);
-    void emitArrayGet(int destSlot, int arrSlot, int idxSlot);
-    void emitArraySet(int arrSlot, int idxSlot, int valSlot);
+    void emitArrayGet(int destSlot, int arrSlot, int idxSlot,
+                      int line = 0, int col = 0);
+    void emitArraySet(int arrSlot, int idxSlot, int valSlot,
+                      int line = 0, int col = 0);
     void emitArrayLen(int destSlot, int arrSlot);
     void emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot);
-    void emitReturn(int srcSlot);
+    void emitReturn(int srcSlot, int line = 0, int col = 0);
     // Koşulsuz atlama yazar; instruction indeksini döndürür (backpatch için).
     // Hedef bilinmiyorsa -1 geçilir, patchJump() ile doldurulur.
     int  emitJumpUnconditional(int targetInstrIndex);
@@ -100,8 +105,9 @@ private:
     std::vector<LoopContext> loopContextStack_;
 
     // ── Per-function üretim durumu ────────────────────────────────────────
-    IRFunction* currentFunction_ = nullptr; // şu an üretilen fonksiyon
-    int         nextSlot_        = 0;       // sıradaki boş slot numarası
+    IRFunction* currentFunction_  = nullptr;               // şu an üretilen fonksiyon
+    int         nextSlot_         = 0;                     // sıradaki boş slot numarası
+    int         currentModuleId_  = ModuleRegistry::INVALID_ID; // registry ID
 
     // Değişken ismi → slot numarası (lokal).
     std::unordered_map<std::string, int> nameToSlot_;

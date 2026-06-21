@@ -201,7 +201,7 @@ private:
                 d.level   = DiagLevel::Warning;
                 d.code    = "W002";
                 d.loc     = bin->loc;
-                d.message = "Derleme zamanı sıfıra bölme — katlama yapılmadı";
+                d.message = "compile-time division by zero — folding skipped";
                 diag_.report(d);
                 return bin; // fold etme
             }

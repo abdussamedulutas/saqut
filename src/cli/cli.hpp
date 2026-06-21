@@ -64,18 +64,18 @@ public:
             }
         }
 
-        // Bilinmeyen komut
-        std::cerr << "Hata: Bilinmeyen komut '" << args.command << "'\n";
-        std::cerr << "Kullanılabilir komutlar için: saqut --help\n";
+        // Unknown command
+        std::cerr << "error: unknown command '" << args.command << "'\n";
+        std::cerr << "for available commands: saqut --help\n";
         return 1;
     }
 
     void printHelp() const {
-        std::cout << "saQut Compiler — Dil Bağımsız Derleyici Alet Çantası\n\n";
-        std::cout << "KULLANIM:\n";
-        std::cout << "  saqut <komut> [dosya] [seçenekler]\n";
-        std::cout << "  saqut -                          (stdin modu — TODO)\n\n";
-        std::cout << "KOMUTLAR:\n";
+        std::cout << "saQut Compiler — Language-Independent Compiler Toolbox\n\n";
+        std::cout << "USAGE:\n";
+        std::cout << "  saqut <command> [file] [options]\n";
+        std::cout << "  saqut -                          (stdin mode — TODO)\n\n";
+        std::cout << "COMMANDS:\n";
 
         for (auto& cmd : commands) {
             if (cmd.hidden) continue;
@@ -85,11 +85,11 @@ public:
             std::cout << std::string(pad, ' ') << cmd.description << "\n";
         }
 
-        std::cout << "\nSEÇENEKLER:\n";
-        std::cout << "  -o, --output <dosya>   Çıktı dosyası\n";
-        std::cout << "  --format <json|text>   Çıktı formatı (varsayılan: text)\n";
-        std::cout << "  -h, --help             Bu yardım metni\n\n";
-        std::cout << "ÖRNEK:\n";
+        std::cout << "\nOPTIONS:\n";
+        std::cout << "  -o, --output <file>    Output file\n";
+        std::cout << "  --format <json|text>   Output format (default: text)\n";
+        std::cout << "  -h, --help             Show this help\n\n";
+        std::cout << "EXAMPLES:\n";
         std::cout << "  saqut run source.sqt\n";
         std::cout << "  saqut tokens source.sqt\n";
         std::cout << "  saqut ast source.sqt --format=json\n";

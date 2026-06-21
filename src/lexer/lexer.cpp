@@ -116,19 +116,13 @@ int Lexer::setOffset(int n) {
 // --------------------------------------------------------------------------
 char Lexer::getchar(int additionalOffset) {
     int target = getOffset() + additionalOffset;
-    if (target >= size) {
-        std::cerr << "Lexer hatası: sınır aşımı\n";
-        return '\0';
-    }
+    if (target >= size) return '\0';
     return input.at(target);
 }
 
 char Lexer::getchar() {
     int target = getOffset();
-    if (target >= size) {
-        std::cerr << "Lexer hatası: sınır aşımı\n";
-        return '\0';
-    }
+    if (target >= size) return '\0';
     return input.at(target);
 }
 

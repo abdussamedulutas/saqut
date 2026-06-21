@@ -31,7 +31,7 @@ inline int cmdSymbols(const CliArgs& args) {
     if (ast) {
         SymbolCollector(table, diag).collect(ast);
     } else {
-        diag.report("E000", SourceLocation{}, "AST üretilemedi");
+        diag.report("E000", SourceLocation{}, "failed to build AST");
     }
 
     // ── JSON çıktı ──────────────────────────────────────────────────────────
@@ -51,6 +51,9 @@ inline int cmdSymbols(const CliArgs& args) {
             {"kind",           symbolKindName(s->kind)},
             {"type",           s->type.toString()},
             {"typeDetail",     s->type.toJsonObj()},
+            {"sourceModule",   s->moduleId == 0 ? "__builtin__"
+                                                : s->moduleId < 0  ? "<main>"
+                                                : "<module:" + std::to_string(s->moduleId) + ">"},
             {"definition",     s->definitionLoc.toJsonObj()},
             {"referenceCount", static_cast<int>(s->references.size())},
             {"references",     refs},

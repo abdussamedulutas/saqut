@@ -27,7 +27,7 @@ void SymbolCollector::seedBuiltins() {
     // TODO(#89 builtin kataloğu): geçici; ileride gerçek katalog gelecek.
     Symbol* s = table_.define("print", SymbolKind::Function,
                                Type::function(Type::Void(), {}),
-                               SourceLocation{});
+                               SourceLocation{}, 0 /* BUILTIN_ID */);
     if (s) s->isBuiltin = true;
 
     // ADR-025: Error builtin struct — try/catch için
@@ -39,7 +39,9 @@ void SymbolCollector::seedBuiltins() {
         {"trace",   Type::String()},
         {"code",    Type::String()}
     };
-    table_.define("Error", SymbolKind::Struct, Type::structType("Error"), {});
+    Symbol* errSym = table_.define("Error", SymbolKind::Struct,
+                                   Type::structType("Error"), {}, 0 /* BUILTIN_ID */);
+    if (errSym) errSym->isBuiltin = true;
     structFields_["Error"]; // cycle checker'a tanıt
 }
 
@@ -57,9 +59,9 @@ Type SymbolCollector::typeFromName(const std::string& n, const SourceLocation& l
     Type t = Type::fromName(n);
     if (!t.isError()) return t;
     if (structFields_.count(n)) return Type::structType(n);
-    // TODO(faz2/faz3): bilinmeyen tip tam E007 tanısı
-    diag_.report("E007", loc, "Bilinmeyen tip: '" + n + "'",
-        "Bilinen tipler: int, float, bool, string. Struct kullanıyorsanız önce tanımlayın: `struct " + n + " { ... }`");
+    // TODO(phase2/phase3): full E007 diagnostic for unknown type
+    diag_.report("E007", loc, "unknown type: '" + n + "'",
+        "known types: int, float, bool, string. if using a struct, define it first: `struct " + n + " { ... }`");
     return Type::error();
 }
 
@@ -83,8 +85,8 @@ void SymbolCollector::pass1Globals(ASTNode* program) {
                                       fn->loc);
             if (!s) {
                 Symbol* ex_ = table_.resolve(fn->name);
-                std::string h_ = ex_ ? "'" + fn->name + "' ilk kez " + ex_->definitionLoc.toString() + " konumunda tanımlı — farklı bir isim seçin" : "Farklı bir isim seçin";
-                diag_.report("E002", fn->loc, "'" + fn->name + "' zaten bu kapsamda tanımlı", h_);
+                std::string h_ = ex_ ? "'" + fn->name + "' first defined at " + ex_->definitionLoc.toString() + " — choose a different name" : "choose a different name";
+                diag_.report("E002", fn->loc, "'" + fn->name + "' already defined in this scope", h_);
             }
             break;
         }
@@ -95,12 +97,12 @@ void SymbolCollector::pass1Globals(ASTNode* program) {
                                       Type::structType(st->name), st->loc);
             if (!s) {
                 Symbol* ex_ = table_.resolve(st->name);
-                std::string h_ = ex_ ? "'" + st->name + "' ilk kez " + ex_->definitionLoc.toString() + " konumunda tanımlı — farklı bir isim seçin" : "Farklı bir isim seçin";
-                diag_.report("E002", st->loc, "'" + st->name + "' zaten bu kapsamda tanımlı", h_);
+                std::string h_ = ex_ ? "'" + st->name + "' first defined at " + ex_->definitionLoc.toString() + " — choose a different name" : "choose a different name";
+                diag_.report("E002", st->loc, "'" + st->name + "' already defined in this scope", h_);
                 break;
             }
-            // structFields_'e her zaman bir giriş aç (typeFromName için gerekli)
-            structFields_[st->name]; // boş vektör oluşturur; by-value döngü artık referans semantiğiyle meşru (ADR-020)
+            // Always open an entry in structFields_ (needed for typeFromName)
+            structFields_[st->name]; // creates empty vector; by-value cycles now valid with reference semantics (ADR-020)
 
             // structLayouts: tüm alanlar (isim + tip) sırayla — IR üreteci ve tip denetleyici için
             for (ASTNode* fieldNode : st->getChildren()) {
@@ -120,10 +122,10 @@ void SymbolCollector::pass1Globals(ASTNode* program) {
                                       vd->loc);
             if (!s) {
                 Symbol* ex_ = table_.resolve(vd->name);
-                std::string h_ = ex_ ? "'" + vd->name + "' ilk kez " + ex_->definitionLoc.toString() + " konumunda tanımlı — farklı bir isim seçin" : "Farklı bir isim seçin";
-                diag_.report("E002", vd->loc, "'" + vd->name + "' zaten bu kapsamda tanımlı", h_);
+                std::string h_ = ex_ ? "'" + vd->name + "' first defined at " + ex_->definitionLoc.toString() + " — choose a different name" : "choose a different name";
+                diag_.report("E002", vd->loc, "'" + vd->name + "' already defined in this scope", h_);
             }
-            // Sibling VariableDecl'ler (int a, b;)
+            // Sibling VariableDecl's (int a, b;)
             for (ASTNode* sib : vd->getChildren()) {
                 if (sib->kind == ASTKind::VariableDecl) {
                     auto* sv = (VariableDeclNode*)sib;
@@ -132,8 +134,8 @@ void SymbolCollector::pass1Globals(ASTNode* program) {
                                               sv->loc);
                     if (!ss) {
                         Symbol* ex_ = table_.resolve(sv->name);
-                        std::string h_ = ex_ ? "'" + sv->name + "' ilk kez " + ex_->definitionLoc.toString() + " konumunda tanımlı — farklı bir isim seçin" : "Farklı bir isim seçin";
-                        diag_.report("E002", sv->loc, "'" + sv->name + "' zaten bu kapsamda tanımlı", h_);
+                        std::string h_ = ex_ ? "'" + sv->name + "' first defined at " + ex_->definitionLoc.toString() + " — choose a different name" : "choose a different name";
+                        diag_.report("E002", sv->loc, "'" + sv->name + "' already defined in this scope", h_);
                     }
                 }
             }
@@ -174,11 +176,11 @@ void SymbolCollector::pass2Bodies(ASTNode* program) {
                                          typeFromName(p->varType, p->loc), p->loc);
                 if (!s) {
                     Symbol* ex_ = table_.resolve(p->name);
-                    std::string h_ = ex_ ? "'" + p->name + "' ilk kez " + ex_->definitionLoc.toString() + " konumunda tanımlı — farklı bir isim seçin" : "Farklı bir isim seçin";
-                    diag_.report("E002", p->loc, "Parametre '" + p->name + "' zaten tanımlı", h_);
+                    std::string h_ = ex_ ? "'" + p->name + "' first defined at " + ex_->definitionLoc.toString() + " — choose a different name" : "choose a different name";
+                    diag_.report("E002", p->loc, "parameter '" + p->name + "' already defined", h_);
                 }
             }
-            // gövdeyi gez (children[0] = BlockNode)
+            // walk body (children[0] = BlockNode)
             auto& ch = fn->getChildren();
             if (!ch.empty()) walkStmt(ch[0]);
             table_.exitScope();
@@ -226,17 +228,17 @@ void SymbolCollector::walkStmt(ASTNode* node) {
 
     case ASTKind::VariableDecl: {
         auto* vd = (VariableDeclNode*)node;
-        // Önce başlatıcıyı gez (kendini görmesin)
+        // First walk initializer (prevent self-reference)
         if (vd->initExpr) walkExpr(vd->initExpr);
-        // Sonra tanımla
+        // Then define
         Symbol* s = table_.define(vd->name, SymbolKind::Variable,
                                   typeFromName(vd->varType, vd->loc), vd->loc);
         if (!s) {
             Symbol* ex_ = table_.resolve(vd->name);
-            std::string h_ = ex_ ? "'" + vd->name + "' ilk kez " + ex_->definitionLoc.toString() + " konumunda tanımlı — farklı bir isim seçin" : "Farklı bir isim seçin";
-            diag_.report("E002", vd->loc, "'" + vd->name + "' zaten bu kapsamda tanımlı", h_);
+            std::string h_ = ex_ ? "'" + vd->name + "' first defined at " + ex_->definitionLoc.toString() + " — choose a different name" : "choose a different name";
+            diag_.report("E002", vd->loc, "'" + vd->name + "' already defined in this scope", h_);
         }
-        // Sibling VariableDecl'ler (int a, b;) — TODO: fibonacci'de yok
+        // Sibling VariableDecl's (int a, b;) — TODO: not in fibonacci
         for (ASTNode* sib : vd->getChildren()) {
             if (sib->kind == ASTKind::VariableDecl) {
                 auto* sv = (VariableDeclNode*)sib;
@@ -245,8 +247,8 @@ void SymbolCollector::walkStmt(ASTNode* node) {
                                           typeFromName(sv->varType, sv->loc), sv->loc);
                 if (!ss) {
                     Symbol* ex_ = table_.resolve(sv->name);
-                    std::string h_ = ex_ ? "'" + sv->name + "' ilk kez " + ex_->definitionLoc.toString() + " konumunda tanımlı — farklı bir isim seçin" : "Farklı bir isim seçin";
-                    diag_.report("E002", sv->loc, "'" + sv->name + "' zaten bu kapsamda tanımlı", h_);
+                    std::string h_ = ex_ ? "'" + sv->name + "' first defined at " + ex_->definitionLoc.toString() + " — choose a different name" : "choose a different name";
+                    diag_.report("E002", sv->loc, "'" + sv->name + "' already defined in this scope", h_);
                 }
             }
         }
@@ -366,9 +368,9 @@ void SymbolCollector::walkExpr(ASTNode* node) {
             for (auto* sym_ : table_.allSymbols()) cands_.push_back(sym_->name);
             std::string sug_ = suggestName(name, cands_);
             std::string h_ = sug_.empty()
-                ? "Kullanmadan önce tanımlayın: `int " + name + " = 0;` (tip ve değeri ayarlayın)"
-                : "Bunu mu demek istediniz: `" + sug_ + "`?";
-            diag_.report("E001", id->loc, "'" + name + "' tanımlı değil", h_);
+                ? "define it before use: `int " + name + " = 0;` (set type and value)"
+                : "did you mean: `" + sug_ + "`?";
+            diag_.report("E001", id->loc, "'" + name + "' is not defined", h_);
         }
         break;
     }

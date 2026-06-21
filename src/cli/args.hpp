@@ -119,8 +119,8 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
 // ============================================================================
 inline std::string readSource(const CliArgs& args) {
     if (args.stdinMode) {
-        // TODO: std::cin'den EOF'a kadar oku
-        std::cerr << "TODO: stdin modu henüz desteklenmiyor\n";
+        // TODO: read from std::cin until EOF
+        std::cerr << "TODO: stdin mode not yet supported\n";
         return "";
     }
     if (args.positional.empty()) return "";
@@ -128,7 +128,7 @@ inline std::string readSource(const CliArgs& args) {
     std::string path = args.positional[0];
     std::ifstream file(path, std::ios::in | std::ios::binary);
     if (!file.is_open()) {
-        std::cerr << "Hata: '" << path << "' dosyası açılamadı\n";
+        std::cerr << "error: cannot open file '" << path << "'\n";
         return "";
     }
     std::stringstream buffer;

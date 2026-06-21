@@ -74,19 +74,22 @@ void StructuralValidator::walkStmt(ASTNode* node) {
     case ASTKind::BreakStatement:
         if (loopDepth_ == 0)
             diag_.report("E004", node->loc,
-                "'break' döngü veya switch dışında kullanılamaz");
+                "'break' döngü veya switch dışında kullanılamaz",
+                "break yalnızca for, while, do-while veya switch içinde çalışır — bu ifadeyi bir döngü gövdesine taşıyın");
         break;
 
     case ASTKind::ContinueStatement:
         if (pureLoopDepth_ == 0)
             diag_.report("E004", node->loc,
-                "'continue' döngü dışında kullanılamaz");
+                "'continue' döngü dışında kullanılamaz",
+                "continue yalnızca for, while veya do-while içinde çalışır — bu ifadeyi bir döngü gövdesine taşıyın");
         break;
 
     case ASTKind::ReturnStatement:
         if (!inFunction_)
             diag_.report("E005", node->loc,
-                "'return' fonksiyon dışında kullanılamaz");
+                "'return' fonksiyon dışında kullanılamaz",
+                "return ifadesini bir fonksiyon gövdesine taşıyın: `func isim() : tip { return deger; }`");
         break;
 
     case ASTKind::VariableDecl: {

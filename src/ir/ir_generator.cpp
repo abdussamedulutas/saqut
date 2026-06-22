@@ -27,8 +27,9 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
         currentModuleId_ = program.moduleRegistry.intern(sourceFilePath);
     // sourceFilePath boşsa currentModuleId_ = INVALID_ID (-1) kalır
 
-    // 1. Geçiş: struct layout haritasını sembol tablosundan al
+    // 1. Geçiş: struct ve enum layout haritalarını sembol tablosundan al
     structLayouts_ = symbolTable.structLayouts;
+    enumLayouts_   = symbolTable.enumLayouts;
 
     // 1. Geçiş: modül-düzeyi VariableDecl'leri topla ve kayıt et
     // "Global" değil — bu dosyanın (modülün) kendi değişkenleri.
@@ -784,7 +785,22 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
     // ── Üye erişimi okuma: p.x ───────────────────────────────────────────
     case ASTKind::MemberAccess: {
-        auto* ma     = (MemberAccessNode*)node;
+        auto* ma = (MemberAccessNode*)node;
+        // Enum üye erişimi: Color.Red → LOAD_INT sabiti
+        if (ma->object && ma->object->kind == ASTKind::Identifier) {
+            auto* id = (IdentifierNode*)ma->object;
+            const std::string& idName = id->parserToken.token ? id->parserToken.token->token : "";
+            auto it = enumLayouts_.find(idName);
+            if (it != enumLayouts_.end()) {
+                int destSlot = freshSlot();
+                int val = -1;
+                for (auto& p : it->second)
+                    if (p.first == ma->member) { val = p.second; break; }
+                emitLoadConst(destSlot, val);
+                ma->resolvedType = Type::enumType(idName);
+                return destSlot;
+            }
+        }
         int objSlot  = generateExpression(ma->object);
         int destSlot = freshSlot();
         // Nesnenin struct adını resolvedType üstünden al (tip denetleyici yazdı)

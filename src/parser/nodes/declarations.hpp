@@ -35,4 +35,18 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
+struct EnumMember {
+    std::string name;
+    int         value = 0;
+};
+
+class EnumDeclNode : public ASTNode {
+public:
+    std::string              name;
+    std::vector<EnumMember>  members;
+    EnumDeclNode();
+    void log(int indent = 0) override;
+    std::string toJson(int depth = 0) override;
+};
+
 #endif

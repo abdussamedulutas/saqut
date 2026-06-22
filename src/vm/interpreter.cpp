@@ -164,22 +164,38 @@ int Interpreter::run() {
             break;
 
         // ── Karşılaştırma ─────────────────────────────────────────────────
-        case Opcode::LESS:
+        case Opcode::LESS: {
+            auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue < frame.slots[instr.right].intValue ? 1 : 0);
+                (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                    ? (lv.floatValue < rv.floatValue ? 1 : 0)
+                    : (lv.intValue < rv.intValue ? 1 : 0));
             break;
-        case Opcode::LESS_EQUAL:
+        }
+        case Opcode::LESS_EQUAL: {
+            auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue <= frame.slots[instr.right].intValue ? 1 : 0);
+                (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                    ? (lv.floatValue <= rv.floatValue ? 1 : 0)
+                    : (lv.intValue <= rv.intValue ? 1 : 0));
             break;
-        case Opcode::GREATER:
+        }
+        case Opcode::GREATER: {
+            auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue > frame.slots[instr.right].intValue ? 1 : 0);
+                (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                    ? (lv.floatValue > rv.floatValue ? 1 : 0)
+                    : (lv.intValue > rv.intValue ? 1 : 0));
             break;
-        case Opcode::GREATER_EQUAL:
+        }
+        case Opcode::GREATER_EQUAL: {
+            auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue >= frame.slots[instr.right].intValue ? 1 : 0);
+                (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                    ? (lv.floatValue >= rv.floatValue ? 1 : 0)
+                    : (lv.intValue >= rv.intValue ? 1 : 0));
             break;
+        }
         case Opcode::EQUAL_EQUAL: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;

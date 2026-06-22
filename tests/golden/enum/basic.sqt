@@ -1,0 +1,12 @@
+enum Color { Red, Green, Blue }
+
+void main() {
+    Color c = Color.Green;
+    print(c);
+
+    switch (c) {
+        case Color.Red:   print(0);
+        case Color.Green: print(1);
+        case Color.Blue:  print(2);
+    }
+}

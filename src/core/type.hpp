@@ -42,7 +42,7 @@
 
 enum class PrimitiveKind { Int, Float, Double, Char, String, Bool, Void };
 
-enum class TypeKind { Primitive, Array, Struct, Function, Error };
+enum class TypeKind { Primitive, Array, Struct, Enum, Function, Error };
 
 // ============================================================================
 // Type — Bir veri tipi
@@ -73,6 +73,7 @@ struct Type {
     std::shared_ptr<Type> returnType;                 // kind == Function
     std::vector<Type>     paramTypes;                 // kind == Function
     std::string           structName;                 // kind == Struct
+    std::string           enumName;                   // kind == Enum
     bool                  nullable = false;           // ADR-021: Type? sözdizimi
 
     // ------------------------------------------------------------------ //
@@ -111,6 +112,12 @@ struct Type {
         t.structName = std::move(name);
         return t;
     }
+    static Type enumType(std::string name) {
+        Type t;
+        t.kind = TypeKind::Enum;
+        t.enumName = std::move(name);
+        return t;
+    }
     static Type error() {
         return Type{}; // varsayılan = Error
     }
@@ -122,6 +129,7 @@ struct Type {
     bool isPrimitive() const { return kind == TypeKind::Primitive; }
     bool isArray()     const { return kind == TypeKind::Array; }
     bool isStruct()    const { return kind == TypeKind::Struct; }
+    bool isEnum()      const { return kind == TypeKind::Enum; }
     bool isFunction()  const { return kind == TypeKind::Function; }
     bool isVoid()      const { return kind == TypeKind::Primitive && prim == PrimitiveKind::Void; }
 
@@ -161,6 +169,8 @@ struct Type {
                        elementType->equals(*o.elementType);
             case TypeKind::Struct:
                 return structName == o.structName;
+            case TypeKind::Enum:
+                return enumName == o.enumName;
             case TypeKind::Function: {
                 if (!returnType || !o.returnType) return false;
                 if (!returnType->equals(*o.returnType)) return false;
@@ -230,6 +240,8 @@ struct Type {
                 base = (elementType ? elementType->toString() : "<?>") + "[]"; break;
             case TypeKind::Struct:
                 base = "struct " + structName; break;
+            case TypeKind::Enum:
+                base = enumName; break;
             case TypeKind::Function: {
                 base = "fn(";
                 for (size_t i = 0; i < paramTypes.size(); ++i) {
@@ -263,6 +275,10 @@ struct Type {
             case TypeKind::Struct:
                 j["kind"] = "struct";
                 j["name"] = structName;
+                break;
+            case TypeKind::Enum:
+                j["kind"] = "enum";
+                j["name"] = enumName;
                 break;
             case TypeKind::Function: {
                 j["kind"]    = "function";

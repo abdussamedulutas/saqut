@@ -371,14 +371,15 @@ void TypeChecker::checkStmt(ASTNode* node) {
         Type baseType = subjectType;
         baseType.nullable = false;
 
-        // Geçerli switch tipleri: int, float, bool, string (aggregate değil)
+        // Geçerli switch tipleri: int, float, bool, string, enum (aggregate değil)
         bool subjectOk = baseType.isPrimitive() || baseType.isString()
+                         || baseType.isEnum()
                          || baseType.isVoid(); // void = bilinmeyen, hata zaten raporlandı
         if (!subjectOk && !baseType.isError()) {
             diag_.report("E003", sw->subject->loc,
                 "switch subject '" + subjectType.toString() +
-                "' type not supported (expected int/float/bool/string)",
-                "switch only works with int, float, bool or string values — use if-else for struct/array");
+                "' type not supported (expected int/float/bool/string/enum)",
+                "switch only works with int, float, bool, string or enum values — use if-else for struct/array");
         }
 
         for (auto& clause : sw->cases) {
@@ -717,7 +718,17 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             result = Type::error();
             break;
         }
-        if (objType.isStruct()) {
+        if (objType.isEnum()) {
+            // Color.Red — enum üye erişimi
+            if (!table_.hasEnumMember(objType.enumName, ma->member)) {
+                diag_.report("E001", node->loc,
+                    "'" + ma->member + "' is not a member of enum '" + objType.enumName + "'",
+                    "check the '" + objType.enumName + "' enum definition");
+                result = Type::error();
+            } else {
+                result = Type::enumType(objType.enumName);
+            }
+        } else if (objType.isStruct()) {
             result = table_.getFieldType(objType.structName, ma->member);
             if (result.isError())
                 diag_.report("E001", node->loc,

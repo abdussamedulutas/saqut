@@ -38,6 +38,7 @@ private:
     ASTNode* parseDeclaration();
     ASTNode* parseFunctionDecl();
     ASTNode* parseStructDecl();
+    ASTNode* parseEnumDecl();
     ASTNode* parseVariableDecl();
 
     // --- Statement'lar ---

@@ -1,0 +1,18 @@
+enum Status { Ok = 0, NotFound = 404, Error = 500 }
+
+void main() {
+    Status s = Status.NotFound;
+    print(s);
+
+    if (s == Status.NotFound) {
+        print(1);
+    } else {
+        print(0);
+    }
+
+    if (s == Status.Ok) {
+        print(1);
+    } else {
+        print(0);
+    }
+}

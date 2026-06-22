@@ -62,6 +62,9 @@ enum class ASTKind {
     StructDecl,           // struct tanımı.
                           //   children: [name], [members: VariableDecl...]
                           //   Örn: struct Point { int x; int y; };
+    EnumDecl,             // enum tanımı.
+                          //   members: [(isim, değer)] — int-tabanlı sabit küme
+                          //   Örn: enum Color { Red, Green, Blue }
     VariableDecl,         // Değişken tanımı.
                           //   children: [type?], [name], [initializer?]
                           //   Örn: int x = 5; veya string name;

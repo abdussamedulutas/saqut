@@ -59,9 +59,9 @@ Type SymbolCollector::typeFromName(const std::string& n, const SourceLocation& l
     Type t = Type::fromName(n);
     if (!t.isError()) return t;
     if (structFields_.count(n)) return Type::structType(n);
-    // TODO(phase2/phase3): full E007 diagnostic for unknown type
+    if (table_.isEnumName(n)) return Type::enumType(n);
     diag_.report("E007", loc, "unknown type: '" + n + "'",
-        "known types: int, float, bool, string. if using a struct, define it first: `struct " + n + " { ... }`");
+        "known types: int, float, bool, string. if using a struct, define it first: `struct " + n + " { ... }`, or an enum: `enum " + n + " { ... }`");
     return Type::error();
 }
 
@@ -88,6 +88,22 @@ void SymbolCollector::pass1Globals(ASTNode* program) {
                 std::string h_ = ex_ ? "'" + fn->name + "' first defined at " + ex_->definitionLoc.toString() + " — choose a different name" : "choose a different name";
                 diag_.report("E002", fn->loc, "'" + fn->name + "' already defined in this scope", h_);
             }
+            break;
+        }
+
+        case ASTKind::EnumDecl: {
+            auto* en = (EnumDeclNode*)child;
+            Symbol* s = table_.define(en->name, SymbolKind::Enum,
+                                      Type::enumType(en->name), en->loc);
+            if (!s) {
+                Symbol* ex_ = table_.resolve(en->name);
+                std::string h_ = ex_ ? "'" + en->name + "' first defined at " + ex_->definitionLoc.toString() : "choose a different name";
+                diag_.report("E002", en->loc, "'" + en->name + "' already defined in this scope", h_);
+                break;
+            }
+            auto& layout = table_.enumLayouts[en->name];
+            for (auto& m : en->members)
+                layout.push_back({m.name, m.value});
             break;
         }
 
@@ -202,6 +218,7 @@ void SymbolCollector::pass2Bodies(ASTNode* program) {
         }
 
         case ASTKind::StructDecl:
+        case ASTKind::EnumDecl:
             break; // pass2'de gövde gezme gerekmez
 
         default:

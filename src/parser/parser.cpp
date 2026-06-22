@@ -433,6 +433,43 @@ ASTNode* Parser::parseStructDecl() {
     return st;
 }
 
+ASTNode* Parser::parseEnumDecl() {
+    EnumDeclNode* en = new EnumDeclNode();
+    en->loc = currentToken().token->loc;
+    nextToken(); // 'enum' tüket
+    if (currentToken().type == TokenType::IDENTIFIER) {
+        en->name = currentToken().token->token;
+        nextToken();
+    }
+    if (currentToken().type == TokenType::LBRACE) {
+        nextToken();
+        int nextVal = 0;
+        while (currentToken().type != TokenType::RBRACE &&
+               currentToken().type != TokenType::SVR_VOID) {
+            if (currentToken().type != TokenType::IDENTIFIER) break;
+            EnumMember m;
+            m.name = currentToken().token->token;
+            nextToken();
+            // İsteğe bağlı açık değer: Red = 5
+            if (currentToken().type == TokenType::EQUAL) {
+                nextToken();
+                if (currentToken().type == TokenType::NUMBER) {
+                    m.value = std::stoi(currentToken().token->token);
+                    nextToken();
+                    nextVal = m.value + 1;
+                }
+            } else {
+                m.value = nextVal++;
+            }
+            en->members.push_back(m);
+            if (currentToken().type == TokenType::COMMA) nextToken();
+        }
+        if (currentToken().type == TokenType::RBRACE) nextToken();
+    }
+    if (currentToken().type == TokenType::SEMICOLON) nextToken();
+    return en;
+}
+
 ASTNode* Parser::parseVariableDecl() {
     VariableDeclNode* vd = new VariableDeclNode();
     vd->loc = currentToken().token->loc;
@@ -560,6 +597,9 @@ ASTNode* Parser::parseStatement() {
 
     if (ct.type == TokenType::KW_STRUCT)
         return parseStructDecl();
+
+    if (ct.type == TokenType::KW_ENUM)
+        return parseEnumDecl();
 
     // Kullanıcı tanımlı struct tipiyle değişken bildirimi: Point p; veya Point p = ...;
     if (ct.type == TokenType::IDENTIFIER) {

@@ -1,0 +1,35 @@
+// Out-of-Memory risk: çok sayıda büyük array biriktir
+int main() {
+    int[] arr1 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0];  // 50 eleman
+
+    int[] arr2 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    int[] arr3 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    // Hepsi birlikte aynı scope'ta — scope bitene kadar GC toplamaz
+    // Ancak return'de tetiklenir
+
+    for (int i = 0; i < 50; i = i + 1) {
+        arr1[i] = i;
+        arr2[i] = i * 2;
+        arr3[i] = i * 3;
+    }
+
+    print(arr1[49]);
+    print(arr2[49]);
+    print(arr3[49]);
+
+    return 0;
+}

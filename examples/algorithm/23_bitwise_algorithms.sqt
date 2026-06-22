@@ -1,0 +1,32 @@
+int popcount(int n) {
+    int count = 0;
+    while (n != 0) {
+        count = count + (n & 1);
+        n = n >> 1;
+    }
+    return count;
+}
+
+bool isPowerOf2(int n) {
+    if (n <= 0) { return false; }
+    return (n & (n - 1)) == 0;
+}
+
+int main() {
+    print(popcount(7));
+    print(popcount(256));
+    print(popcount(0));
+
+    if (isPowerOf2(8)) { print(1); } else { print(0); }
+    if (isPowerOf2(7)) { print(1); } else { print(0); }
+
+    int a = 42;
+    int b = 17;
+    a = a ^ b;
+    b = a ^ b;
+    a = a ^ b;
+    print(a);
+    print(b);
+
+    return 0;
+}

@@ -1,0 +1,20 @@
+// Her döngüde yeni array — GC düzgün topluyorsa bellek sabit tutulmalı
+int main() {
+    int sum = 0;
+
+    // 5000 kez yeni array oluştur
+    for (int k = 0; k < 5000; k = k + 1) {
+        int[] arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                     1, 2, 3, 4, 5, 6, 7, 8, 9, 10];  // 20 eleman
+
+        // Array üzerinde işlem
+        for (int i = 0; i < 20; i = i + 1) {
+            sum = sum + arr[i];
+        }
+
+        // k çıkışında arr scope'tan çıkar ve GC'ye hazır
+    }
+
+    print(sum);
+    return 0;
+}

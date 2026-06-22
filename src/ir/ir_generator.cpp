@@ -124,14 +124,26 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
         if (vd->initExpr) {
             int initSlot = generateExpression(vd->initExpr);
-            // float/double değişkenine int sabit atama → INT_TO_FLOAT
-            bool targetIsFloat = (vd->varType == "float" || vd->varType == "double");
-            bool srcIsInt = false;
+            bool targetIsFloat   = (vd->varType == "float" || vd->varType == "double");
+            bool targetIsDecimal = (vd->varType == "decimal");
+            Type srcType = Type::error();
             if (auto* e = dynamic_cast<ExpressionNode*>(vd->initExpr))
-                srcIsInt = e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Int;
+                srcType = e->resolvedType;
+            bool srcIsInt   = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Int;
+            bool srcIsFloat = srcType.isPrimitive() &&
+                              (srcType.prim == PrimitiveKind::Float ||
+                               srcType.prim == PrimitiveKind::Double);
             if (targetIsFloat && srcIsInt) {
                 int conv = freshSlot();
                 emitIntToFloat(conv, initSlot);
+                initSlot = conv;
+            } else if (targetIsDecimal && srcIsInt) {
+                int conv = freshSlot();
+                emitIntToDecimal(conv, initSlot);
+                initSlot = conv;
+            } else if (targetIsDecimal && srcIsFloat) {
+                int conv = freshSlot();
+                emitFloatToDecimal(conv, initSlot);
                 initSlot = conv;
             }
             if (initSlot != varSlot) emitLoadSlot(varSlot, initSlot);
@@ -461,11 +473,17 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
         switch (lit->literalType) {
             case LiteralType::INTEGER: {
-                // Float/double bağlamında tam sayı literali → LOAD_FLOAT (bağlama-göre tip, ADR-010)
-                bool asFloat = lit->resolvedType.isPrimitive() &&
-                               (lit->resolvedType.prim == PrimitiveKind::Float ||
-                                lit->resolvedType.prim == PrimitiveKind::Double);
-                if (asFloat) {
+                bool asDecimal = lit->resolvedType.isPrimitive() &&
+                                 lit->resolvedType.prim == PrimitiveKind::Decimal;
+                bool asFloat   = lit->resolvedType.isPrimitive() &&
+                                 (lit->resolvedType.prim == PrimitiveKind::Float ||
+                                  lit->resolvedType.prim == PrimitiveKind::Double);
+                if (asDecimal) {
+                    std::string s = "0";
+                    if (lit->hasDirectValue) s = std::to_string(lit->directIntValue);
+                    else if (lit->parserToken.token) s = lit->parserToken.token->token;
+                    emitLoadDecimal(slot, DecimalValue::fromString(s));
+                } else if (asFloat) {
                     double val = 0.0;
                     if (lit->hasDirectValue) val = (double)lit->directIntValue;
                     else if (lit->parserToken.token) val = std::stod(lit->parserToken.token->token);
@@ -508,10 +526,19 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 break;
             }
             case LiteralType::FLOAT: {
-                double val = 0.0;
-                if (lit->parserToken.token)
-                    val = std::stod(lit->parserToken.token->token);
-                emitLoadFloat(slot, val);
+                bool asDecimal = lit->resolvedType.isPrimitive() &&
+                                 lit->resolvedType.prim == PrimitiveKind::Decimal;
+                if (asDecimal) {
+                    // String'den direkt parse — binary float üzerinden geçmez (ADR-028)
+                    std::string s = "0";
+                    if (lit->parserToken.token) s = lit->parserToken.token->token;
+                    emitLoadDecimal(slot, DecimalValue::fromString(s));
+                } else {
+                    double val = 0.0;
+                    if (lit->parserToken.token)
+                        val = std::stod(lit->parserToken.token->token);
+                    emitLoadFloat(slot, val);
+                }
                 break;
             }
             case LiteralType::BOŞ:
@@ -636,11 +663,27 @@ int IRGenerator::generateExpression(ASTNode* node) {
             int resultSlot  = freshSlot();
 
             if (bin->Operator == TokenType::MINUS) {
-                // -x → 0 - x
-                int zeroSlot = freshSlot();
-                emitLoadConst(zeroSlot, 0);
-                emitBinaryOp(Opcode::SUB, resultSlot, zeroSlot, operandSlot,
-                             bin->loc.line, bin->loc.column);
+                bool operandIsDecimal = false, operandIsFloat = false;
+                if (auto* e = dynamic_cast<ExpressionNode*>(bin->Right)) {
+                    operandIsDecimal = e->resolvedType.isDecimal();
+                    operandIsFloat   = e->resolvedType.isPrimitive() &&
+                                       (e->resolvedType.prim == PrimitiveKind::Float ||
+                                        e->resolvedType.prim == PrimitiveKind::Double);
+                }
+                if (operandIsDecimal) {
+                    Instruction ins(Opcode::DNEG);
+                    ins.dest = resultSlot; ins.src = operandSlot;
+                    currentFunction_->instructions.push_back(std::move(ins));
+                } else if (operandIsFloat) {
+                    Instruction ins(Opcode::FNEG);
+                    ins.dest = resultSlot; ins.src = operandSlot;
+                    currentFunction_->instructions.push_back(std::move(ins));
+                } else {
+                    int zeroSlot = freshSlot();
+                    emitLoadConst(zeroSlot, 0);
+                    emitBinaryOp(Opcode::SUB, resultSlot, zeroSlot, operandSlot,
+                                 bin->loc.line, bin->loc.column);
+                }
             } else if (bin->Operator == TokenType::BANG) {
                 // !x → (x == 0): sıfırsa 1, değilse 0
                 int zeroSlot = freshSlot();
@@ -848,22 +891,36 @@ int IRGenerator::generateExpression(ASTNode* node) {
         Type tgtType = cast->resolvedType;
         tgtType.nullable = false; // base type
 
-        bool srcIsStr   = srcType.isString();
-        bool srcIsFloat = srcType.isPrimitive() &&
-                          (srcType.prim == PrimitiveKind::Float ||
-                           srcType.prim == PrimitiveKind::Double);
-        bool srcIsInt   = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Int;
-        bool srcIsBool  = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Bool;
-        bool tgtIsStr   = tgtType.isString();
-        bool tgtIsFloat = tgtType.isPrimitive() &&
-                          (tgtType.prim == PrimitiveKind::Float ||
-                           tgtType.prim == PrimitiveKind::Double);
-        bool tgtIsInt   = tgtType.isPrimitive() && tgtType.prim == PrimitiveKind::Int;
+        bool srcIsStr     = srcType.isString();
+        bool srcIsFloat   = srcType.isPrimitive() &&
+                            (srcType.prim == PrimitiveKind::Float ||
+                             srcType.prim == PrimitiveKind::Double);
+        bool srcIsInt     = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Int;
+        bool srcIsBool    = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Bool;
+        bool srcIsDecimal = srcType.isDecimal();
+        bool tgtIsStr     = tgtType.isString();
+        bool tgtIsFloat   = tgtType.isPrimitive() &&
+                            (tgtType.prim == PrimitiveKind::Float ||
+                             tgtType.prim == PrimitiveKind::Double);
+        bool tgtIsInt     = tgtType.isPrimitive() && tgtType.prim == PrimitiveKind::Int;
+        bool tgtIsDecimal = tgtType.isDecimal();
 
         Opcode op;
         bool infallible = false;
         if (srcIsInt && tgtIsFloat) {
             op = Opcode::INT_TO_FLOAT; infallible = true;
+        } else if (srcIsInt && tgtIsDecimal) {
+            op = Opcode::INT_TO_DECIMAL; infallible = true;
+        } else if (srcIsFloat && tgtIsDecimal) {
+            op = Opcode::FLOAT_TO_DECIMAL; infallible = true;
+        } else if (srcIsDecimal && tgtIsStr) {
+            op = Opcode::CAST_DECIMAL_TO_STR; infallible = true;
+        } else if (srcIsDecimal && tgtIsFloat) {
+            op = Opcode::CAST_DECIMAL_TO_FLOAT; infallible = true;
+        } else if (srcIsDecimal && tgtIsInt) {
+            op = Opcode::CAST_DECIMAL_TO_INT;
+        } else if (srcIsStr && tgtIsDecimal) {
+            op = Opcode::CAST_STR_TO_DECIMAL;
         } else if (srcIsFloat && tgtIsInt) {
             op = Opcode::CAST_FLOAT_TO_INT_CHECKED;
         } else if (srcIsInt && tgtIsStr) {
@@ -908,20 +965,23 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
     int rightSlot = generateExpression(rightNode);
     int destSlot  = freshSlot();
 
-    // Float tip kontrolü — resolvedType üstünden (tip denetleyici tarafından yazıldı)
-    bool leftIsFloat  = false, rightIsFloat = false;
-    bool leftIsString = false, rightIsString = false;
+    // Tip tespiti — resolvedType üstünden (tip denetleyici tarafından yazıldı)
+    bool leftIsDecimal = false, rightIsDecimal = false;
+    bool leftIsFloat   = false, rightIsFloat   = false;
+    bool leftIsString  = false, rightIsString  = false;
     if (auto* e = dynamic_cast<ExpressionNode*>(leftNode)) {
-        leftIsFloat  = e->resolvedType.isPrimitive() &&
-                       (e->resolvedType.prim == PrimitiveKind::Float ||
-                        e->resolvedType.prim == PrimitiveKind::Double);
-        leftIsString = e->resolvedType.isString();
+        leftIsDecimal = e->resolvedType.isDecimal();
+        leftIsFloat   = e->resolvedType.isPrimitive() &&
+                        (e->resolvedType.prim == PrimitiveKind::Float ||
+                         e->resolvedType.prim == PrimitiveKind::Double);
+        leftIsString  = e->resolvedType.isString();
     }
     if (auto* e = dynamic_cast<ExpressionNode*>(rightNode)) {
-        rightIsFloat = e->resolvedType.isPrimitive() &&
-                       (e->resolvedType.prim == PrimitiveKind::Float ||
-                        e->resolvedType.prim == PrimitiveKind::Double);
-        rightIsString = e->resolvedType.isString();
+        rightIsDecimal = e->resolvedType.isDecimal();
+        rightIsFloat   = e->resolvedType.isPrimitive() &&
+                         (e->resolvedType.prim == PrimitiveKind::Float ||
+                          e->resolvedType.prim == PrimitiveKind::Double);
+        rightIsString  = e->resolvedType.isString();
     }
 
     // String birleştirme (ADR-024): + → STRING_CONCAT
@@ -930,8 +990,29 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
         return destSlot;
     }
 
+    // Decimal aritmetik (ADR-028): en az bir operand decimal ise decimal path
+    if (leftIsDecimal || rightIsDecimal) {
+        if (!leftIsDecimal && leftIsFloat) {
+            int conv = freshSlot(); emitFloatToDecimal(conv, leftSlot); leftSlot = conv;
+        } else if (!leftIsDecimal) {
+            int conv = freshSlot(); emitIntToDecimal(conv, leftSlot); leftSlot = conv;
+        }
+        if (!rightIsDecimal && rightIsFloat) {
+            int conv = freshSlot(); emitFloatToDecimal(conv, rightSlot); rightSlot = conv;
+        } else if (!rightIsDecimal) {
+            int conv = freshSlot(); emitIntToDecimal(conv, rightSlot); rightSlot = conv;
+        }
+        Opcode decOp = opcode;
+        if      (opcode == Opcode::ADD) decOp = Opcode::DADD;
+        else if (opcode == Opcode::SUB) decOp = Opcode::DSUB;
+        else if (opcode == Opcode::MUL) decOp = Opcode::DMUL;
+        else if (opcode == Opcode::DIV) decOp = Opcode::DDIV;
+        else if (opcode == Opcode::MOD) decOp = Opcode::DMOD;
+        emitBinaryOp(decOp, destSlot, leftSlot, rightSlot, line, col);
+        return destSlot;
+    }
+
     if (leftIsFloat || rightIsFloat) {
-        // Int operandı float'a çevir
         if (!leftIsFloat) {
             int conv = freshSlot();
             emitIntToFloat(conv, leftSlot);
@@ -942,13 +1023,11 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
             emitIntToFloat(conv, rightSlot);
             rightSlot = conv;
         }
-        // Float opcode eşleştirmesi
         Opcode floatOp = opcode;
         if      (opcode == Opcode::ADD) floatOp = Opcode::FADD;
         else if (opcode == Opcode::SUB) floatOp = Opcode::FSUB;
         else if (opcode == Opcode::MUL) floatOp = Opcode::FMUL;
         else if (opcode == Opcode::DIV) floatOp = Opcode::FDIV;
-        // karşılaştırma opcodeları aynı kalır (LESS, GREATER, vb.)
         emitBinaryOp(floatOp, destSlot, leftSlot, rightSlot, line, col);
     } else {
         emitBinaryOp(opcode, destSlot, leftSlot, rightSlot, line, col);
@@ -1019,6 +1098,27 @@ void IRGenerator::emitLoadFloat(int destSlot, double value) {
 
 void IRGenerator::emitIntToFloat(int destSlot, int srcSlot) {
     Instruction ins(Opcode::INT_TO_FLOAT);
+    ins.dest = destSlot;
+    ins.src  = srcSlot;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitLoadDecimal(int destSlot, const DecimalValue& value) {
+    Instruction ins(Opcode::LOAD_DECIMAL);
+    ins.dest         = destSlot;
+    ins.decimalValue = value;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitIntToDecimal(int destSlot, int srcSlot) {
+    Instruction ins(Opcode::INT_TO_DECIMAL);
+    ins.dest = destSlot;
+    ins.src  = srcSlot;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::emitFloatToDecimal(int destSlot, int srcSlot) {
+    Instruction ins(Opcode::FLOAT_TO_DECIMAL);
     ins.dest = destSlot;
     ins.src  = srcSlot;
     currentFunction_->instructions.push_back(std::move(ins));

@@ -1,0 +1,14 @@
+void main() {
+    decimal a = 1.5;
+    decimal b = 2.5;
+    decimal c = a + b;
+    print(c);
+
+    decimal x = 10;
+    decimal y = 3;
+    decimal q = x / y;
+    print(q);
+
+    decimal neg = -a;
+    print(neg);
+}

@@ -1,0 +1,16 @@
+void main() {
+    decimal a = 0.1;
+    decimal b = 0.2;
+    decimal c = a + b;
+
+    if (c == 0.3) {
+        print(1);
+    } else {
+        print(0);
+    }
+
+    decimal price = 19.99;
+    decimal tax   = 1.18;
+    decimal total = price * tax;
+    print(total);
+}

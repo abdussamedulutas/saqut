@@ -31,6 +31,7 @@
 
 #include <string>
 #include <vector>
+#include "core/decimal.hpp"
 
 // ----------------------------------------------------------------------------
 // Opcode — Sanal Makinenin Anlayacağı İşlem Kodları
@@ -135,6 +136,22 @@ enum class Opcode {
     CAST_STR_TO_FLOAT,  // slots[dest] = parse_float(slots[src])
     CAST_FLOAT_TO_INT_CHECKED,  // slots[dest] = (int)slots[src]; NaN/Inf/taşma → fallible
 
+    // --- Decimal aritmetik (ADR-028) ---
+    LOAD_DECIMAL,       // slots[dest] = decimalValue (decimal sabit yükle)
+    DADD,               // slots[dest] = slots[left] + slots[right]  (decimal)
+    DSUB,               // slots[dest] = slots[left] - slots[right]  (decimal)
+    DMUL,               // slots[dest] = slots[left] * slots[right]  (decimal)
+    DDIV,               // slots[dest] = slots[left] / slots[right]  (sıfır → Error)
+    DMOD,               // slots[dest] = slots[left] % slots[right]  (sıfır → Error)
+    DNEG,               // slots[dest] = -slots[src]                 (tekli eksi)
+    INT_TO_DECIMAL,     // slots[dest] = decimal(slots[src])         — gizli int→decimal terfi
+    FLOAT_TO_DECIMAL,   // slots[dest] = decimal(slots[src])         — gizli float→decimal terfi
+    // Decimal cast'ler (ADR-026 genişlemesi):
+    CAST_DECIMAL_TO_STR,    // slots[dest] = slots[src].toString()         — hatasız
+    CAST_DECIMAL_TO_FLOAT,  // slots[dest] = (double)slots[src]            — hatasız
+    CAST_DECIMAL_TO_INT,    // slots[dest] = trunc(slots[src])             — fallible (taşma)
+    CAST_STR_TO_DECIMAL,    // slots[dest] = decimal::fromString(slots[src]) — fallible
+
     // --- Dış dünya (FFI — Foreign Function Interface) ---
     CALLHOST,      // Host (C++) fonksiyonunu çağır. Şu an sadece "print" destekli.
                    //   Dönüş değeri yok; sadece yan etki (stdout'a yazmak gibi).
@@ -172,6 +189,19 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::CAST_STR_TO_INT:         return "CAST_STR_TO_INT";
         case Opcode::CAST_STR_TO_FLOAT:       return "CAST_STR_TO_FLOAT";
         case Opcode::CAST_FLOAT_TO_INT_CHECKED: return "CAST_FLOAT_TO_INT_CHECKED";
+        case Opcode::LOAD_DECIMAL:          return "LOAD_DECIMAL";
+        case Opcode::DADD:                  return "DADD";
+        case Opcode::DSUB:                  return "DSUB";
+        case Opcode::DMUL:                  return "DMUL";
+        case Opcode::DDIV:                  return "DDIV";
+        case Opcode::DMOD:                  return "DMOD";
+        case Opcode::DNEG:                  return "DNEG";
+        case Opcode::INT_TO_DECIMAL:        return "INT_TO_DECIMAL";
+        case Opcode::FLOAT_TO_DECIMAL:      return "FLOAT_TO_DECIMAL";
+        case Opcode::CAST_DECIMAL_TO_STR:   return "CAST_DECIMAL_TO_STR";
+        case Opcode::CAST_DECIMAL_TO_FLOAT: return "CAST_DECIMAL_TO_FLOAT";
+        case Opcode::CAST_DECIMAL_TO_INT:   return "CAST_DECIMAL_TO_INT";
+        case Opcode::CAST_STR_TO_DECIMAL:   return "CAST_STR_TO_DECIMAL";
         case Opcode::STRUCT_NEW:    return "STRUCT_NEW";
         case Opcode::FIELD_GET:     return "FIELD_GET";
         case Opcode::FIELD_SET:     return "FIELD_SET";
@@ -226,7 +256,10 @@ struct Instruction {
     int         intValue    =  0;
 
     // LOAD_FLOAT için yüklenecek double sabiti (#44)
-    double      floatValue  = 0.0;
+    double       floatValue   = 0.0;
+
+    // LOAD_DECIMAL için yüklenecek decimal sabiti (ADR-028)
+    DecimalValue decimalValue;
 
     // LOAD_STRING için yüklenecek metin sabiti (tırnak işaretleri olmadan)
     std::string stringValue;

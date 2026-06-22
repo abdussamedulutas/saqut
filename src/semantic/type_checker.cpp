@@ -40,9 +40,10 @@ static std::string nodeHintText(ASTNode* node) {
 int TypeChecker::numericRank(const Type& t) {
     if (!t.isPrimitive()) return -1;
     switch (t.prim) {
-        case PrimitiveKind::Int:    return 0;
-        case PrimitiveKind::Float:  return 1;
-        case PrimitiveKind::Double: return 2;
+        case PrimitiveKind::Int:     return 0;
+        case PrimitiveKind::Float:   return 1;
+        case PrimitiveKind::Double:  return 2;
+        case PrimitiveKind::Decimal: return 3;
         default: return -1;
     }
 }
@@ -482,16 +483,18 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
 
         switch (lit->literalType) {
             case LiteralType::INTEGER:
-                // Bağlam daha geniş sayısal tip ise literal o tip olarak tiplenir.
-                if (expRank > 0) result = expected; // float veya double bekleniyor
-                else             result = Type::Int();
+                // Bağlam daha geniş sayısal tip ise literal o tip olarak tiplenir (ADR-010/028).
+                if (!expected.isError() && expected.isDecimal()) result = Type::Decimal();
+                else if (expRank > 0) result = expected; // float veya double bekleniyor
+                else                  result = Type::Int();
                 break;
             case LiteralType::FLOAT:
-                // float literal → double bağlamında double olur; int bağlamında E003.
-                if (!expected.isError() && expected.equals(Type::Double()))
+                // float literal → decimal bağlamında decimal olur (ADR-028); int bağlamında E003.
+                if (!expected.isError() && expected.isDecimal())
+                    result = Type::Decimal();
+                else if (!expected.isError() && expected.equals(Type::Double()))
                     result = Type::Double();
                 else if (!expected.isError() && numericRank(expected) == 0) {
-                    // int expected but float literal: E003
                     diag_.report("E003", lit->loc,
                         "float literal cannot be used in int context (data loss)",
                         "use an integer literal (e.g. 3 instead of 3.0) or change the variable type to float: `float variable = ...;`");
@@ -761,7 +764,7 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         if (!srcOk) {
             diag_.report("E003", cast->loc,
                 "'" + srcType.toString() + "' cannot be cast with 'as' "
-                "(only int/float/bool/string)",
+                "(only int/float/decimal/bool/string)",
                 "'as' operator only works between scalar types. For struct/array conversion write a conversion function");
             result = Type::error();
             break;

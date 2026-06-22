@@ -131,11 +131,26 @@ Aşağıdakiler çekirdeğe bağlı değil; istediğinde sırayı değiştir.
 
 ---
 
+### ✅ 11a · Native Decimal Tipi (#6)  🔤 LEX / 🌳 PARSE / 🔎 SEM / ⚙️ IR / 🖥️ VM
+
+- `PrimitiveKind::Decimal` + `Type::Decimal()`, `isDecimal()`
+- `DecimalValue` — `core/decimal.hpp` (coefficient × 10^exponent, ~18 basamak)
+- `ValueKind::Decimal` + `Value::fromDecimal()`
+- 14 yeni IR opcode: `LOAD_DECIMAL`, `DADD/DSUB/DMUL/DDIV/DMOD`, `DNEG`,
+  `INT_TO_DECIMAL`, `FLOAT_TO_DECIMAL`, `CAST_DECIMAL_TO_STR/INT/FLOAT`, `CAST_STR_TO_DECIMAL`
+- `numericRank(Decimal) = 3` — karışık ifadede decimal kazanır
+- Literal bağlam-güdümlü (`decimal e = 1.1;`) — string'den parse (binary float'tan geçmez)
+- `0.1 + 0.2 == 0.3 → true` ✓
+- `tests/golden/decimal/basic.sqt`, `precision.sqt`, `promotion.sqt`, `cast.sqt` ✓
+- ADR-028 yazıldı
+
+---
+
 ### 11 · Gelecek Vizyon (Uzak)  📐 META
 
 Çekirdeğin oturmasını bekle.
 
-- [ ] **#6** Native decimal tipi.
+- [x] **#6** Native decimal tipi. ✅ (Bkz. Madde 11a)
 - [ ] **#7** Native date/time tipi.
 - [ ] **#19** Paket yöneticisi / registry (bekler: #5).
 - [ ] **#16** Zaman-yolculuğu hata ayıklama (deterministik VM avantajı).

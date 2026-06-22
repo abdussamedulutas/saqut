@@ -61,7 +61,7 @@ Type SymbolCollector::typeFromName(const std::string& n, const SourceLocation& l
     if (structFields_.count(n)) return Type::structType(n);
     if (table_.isEnumName(n)) return Type::enumType(n);
     diag_.report("E007", loc, "unknown type: '" + n + "'",
-        "known types: int, float, bool, string. if using a struct, define it first: `struct " + n + " { ... }`, or an enum: `enum " + n + " { ... }`");
+        "known types: int, float, double, decimal, bool, string. if using a struct, define it first: `struct " + n + " { ... }`, or an enum: `enum " + n + " { ... }`");
     return Type::error();
 }
 

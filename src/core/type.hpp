@@ -40,7 +40,7 @@
 // Enum'lar
 // ============================================================================
 
-enum class PrimitiveKind { Int, Float, Double, Char, String, Bool, Void };
+enum class PrimitiveKind { Int, Float, Double, Decimal, Char, String, Bool, Void };
 
 enum class TypeKind { Primitive, Array, Struct, Enum, Function, Error };
 
@@ -85,10 +85,11 @@ struct Type {
         t.prim = p;
         return t;
     }
-    static Type Int()    { return primitive(PrimitiveKind::Int); }
-    static Type Float()  { return primitive(PrimitiveKind::Float); }
-    static Type Double() { return primitive(PrimitiveKind::Double); }
-    static Type Char()   { return primitive(PrimitiveKind::Char); }
+    static Type Int()     { return primitive(PrimitiveKind::Int); }
+    static Type Float()   { return primitive(PrimitiveKind::Float); }
+    static Type Double()  { return primitive(PrimitiveKind::Double); }
+    static Type Decimal() { return primitive(PrimitiveKind::Decimal); }
+    static Type Char()    { return primitive(PrimitiveKind::Char); }
     static Type String() { return primitive(PrimitiveKind::String); }
     static Type Bool()   { return primitive(PrimitiveKind::Bool); }
     static Type Void()   { return primitive(PrimitiveKind::Void); }
@@ -136,9 +137,14 @@ struct Type {
     // Aritmetik/karşılaştırma operatörlerine uygun sayısal tip mi?
     bool isNumeric() const {
         return kind == TypeKind::Primitive &&
-               (prim == PrimitiveKind::Int ||
-                prim == PrimitiveKind::Float ||
-                prim == PrimitiveKind::Double);
+               (prim == PrimitiveKind::Int     ||
+                prim == PrimitiveKind::Float   ||
+                prim == PrimitiveKind::Double  ||
+                prim == PrimitiveKind::Decimal);
+    }
+
+    bool isDecimal() const {
+        return kind == TypeKind::Primitive && prim == PrimitiveKind::Decimal;
     }
 
     bool isString() const {
@@ -193,13 +199,14 @@ struct Type {
     // ------------------------------------------------------------------ //
     static const char* primName(PrimitiveKind p) {
         switch (p) {
-            case PrimitiveKind::Int:    return "int";
-            case PrimitiveKind::Float:  return "float";
-            case PrimitiveKind::Double: return "double";
-            case PrimitiveKind::Char:   return "char";
-            case PrimitiveKind::String: return "string";
-            case PrimitiveKind::Bool:   return "bool";
-            case PrimitiveKind::Void:   return "void";
+            case PrimitiveKind::Int:     return "int";
+            case PrimitiveKind::Float:   return "float";
+            case PrimitiveKind::Double:  return "double";
+            case PrimitiveKind::Decimal: return "decimal";
+            case PrimitiveKind::Char:    return "char";
+            case PrimitiveKind::String:  return "string";
+            case PrimitiveKind::Bool:    return "bool";
+            case PrimitiveKind::Void:    return "void";
         }
         return "?";
     }
@@ -213,10 +220,11 @@ struct Type {
             if (!base.isError()) return base.asNullable();
             return error();
         }
-        if (n == "int")    return Int();
-        if (n == "float")  return Float();
-        if (n == "double") return Double();
-        if (n == "char")   return Char();
+        if (n == "int")     return Int();
+        if (n == "float")   return Float();
+        if (n == "double")  return Double();
+        if (n == "decimal") return Decimal();
+        if (n == "char")    return Char();
         if (n == "string") return String();
         if (n == "bool")   return Bool();
         if (n == "void")   return Void();

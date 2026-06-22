@@ -1,0 +1,13 @@
+void main() {
+    decimal d = 10.5;
+    int     i = 2;
+    decimal r = d + i;
+    print(r);
+
+    decimal s = d * i;
+    print(s);
+
+    float   f = 1.5;
+    decimal p = d + f;
+    print(p);
+}

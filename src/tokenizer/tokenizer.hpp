@@ -33,7 +33,7 @@ inline constexpr std::string_view keywords[] = {
     "return",   "try",      "catch",    "finally",  "throw",
     "throws",   "assert",
     "void",     "int",      "float",    "double",   "char",
-    "string",   "bool",
+    "string",   "bool",     "decimal",
     "true",     "false",    "null",
     "class",    "struct",   "interface","enum",     "extends",  "implements",
     "new",      "public",   "private",  "protected",

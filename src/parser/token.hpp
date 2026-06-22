@@ -171,6 +171,7 @@ enum class TokenType : uint16_t {
     KW_CHAR,         // char (8-bit karakter)
                      //   Tek tırnak içindeki karakterler için: 'A'
     KW_STRING_TYPE,  // string (metin tipi)
+    KW_DECIMAL,      // decimal (ondalık hassasiyet — ADR-028)
                      //   string.h'daki string işlevleriyle çakışmaz.
 
     /* ====== Literal Keyword'ler ====== */
@@ -457,6 +458,7 @@ inline const std::unordered_map<std::string_view, TokenType> KEYWORD_MAP = {
     {"double",      TokenType::KW_DOUBLE},
     {"char",        TokenType::KW_CHAR},
     {"string",      TokenType::KW_STRING_TYPE},
+    {"decimal",     TokenType::KW_DECIMAL},
 
     // --- Literals ---
     {"true",        TokenType::KW_TRUE},

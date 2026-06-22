@@ -1187,3 +1187,84 @@ eşleşme yoksa no-op.
 | 025 | Hata yönetimi | Struct-tabanlı yakalanabilir hata (değer Swift gibi, OOP yok); standart `Error{line,col,message,trace,code}`; klasik `try{}catch{}` **unchecked** (fonksiyon işaretsiz, Java usulü); runtime null-deref/OOB yakalanabilir (esasen FFI backstop); deterministik stacktrace (IR satır tablosu); tuple→ertelendi; finally→`defer`; #57 |
 | 026 | Tip dönüşümü | `as` (infix, sola-bağlı), yalnızca skaler+string; struct/array cast YOK (elle yapıcı fonksiyon); başarısızlık hedef nullable'lığıyla (`as int` fırlatır / `as int?` null); float→int kırpma; #42 |
 | 027 | switch-case | Statement (expression sonra); implicit fallthrough YOK (çok-değerli `case 1,2,3:`); case'ler tip-homojen (exhaustiveness DEĞİL, `default` opsiyonel); domen int/float/bool/char/string/enum (struct/array yok); float izinli + tam-temsil-edilemeyen literal → W-uyarı |
+| 028 | decimal tipi | İki virgüllü tip: `float` (binary) + `decimal` (ondalık, finansal). Hiyerarşi `int < float < decimal`; karışık ifadede en geniş tip kazanır. İç temsil: `int64_t coefficient × 10^exponent`. Literal bağlam-güdümlü, suffix yok. NaN/Inf yok — taşma/sıfır-bölme Error fırlatır. `as` ile cast: decimal↔int/float/string; `float + decimal` sessiz decimal'e terfi. |
+
+---
+
+## ADR-028: `decimal` Tipi — İki Virgüllü Tip, Ondalık Aritmetik
+
+### Bağlam
+
+Developer'ın ne kodlayacağını önceden bilemeyiz: fibonacci fibonacci için `float`
+yeter, finansal algoritma için binary float'ın `0.1 + 0.2 ≠ 0.3` sorunu bir bug
+kaynağıdır. Bir dil olarak her iki kullanım alanına kapı açmak zorunludur.
+
+### Karar
+
+✅ **İki ayrı virgüllü tip:**
+- `float` (mevcut) = C++ `double` arkaplanlı, binary IEEE 754, ~15-16 basamak.
+  Genel hesap, hız öncelikli.
+- `decimal` (yeni) = ondalık hassasiyet, finansal/bilimsel kullanım.
+  İç temsil: `int64_t coefficient × 10^exponent` (~18 ondalık basamak).
+  Bağımlılık sıfır, taşınabilir.
+
+✅ **Tip hiyerarşisi (genişletildi):** `int < float < decimal`
+Karışık ifadede **en geniş tip kazanır:**
+```
+int + decimal   → decimal   (int sessizce decimal'e terfi)
+float + decimal → decimal   (float sessizce decimal'e terfi — IEEE pislikleri kabul)
+decimal + int   → decimal
+decimal op decimal → decimal
+```
+Gerekçe: `float → decimal` terfi **bilinçli bir seçim** — developer `decimal`
+kullanarak "bu hesapta hassasiyet istiyorum" demiş demektir. Float'ın binary
+bozukluğunu içeri almak onun sorumluluğundadır; biz gizlemek yerine aydınlatıyoruz.
+
+✅ **Literal: bağlam-güdümlü, suffix yok (ADR-010 kuralına uyar):**
+```saQut
+decimal price = 19.99;    // parser "19.99" stringini decimal'e tam çevirir
+decimal x     = 1;        // int literal → decimal terfi
+float   f     = 1.1;      // float literal → binary double (değişmez)
+```
+`m` veya `d` gibi literal suffix'i **reddedildi**: ADR-010 bağlam-güdümlü tipin
+zaten bu işi yapabileceğini kararlaştırdı; `19.99m` karmaşıklık katar, kazanç yok.
+
+✅ **NaN/Inf yasak; taşma/sıfır-bölme Error fırlatır:**
+`float`'ın IEEE 754 NaN/Inf davranışı korunur (C++ double mecburi). Ama `decimal`'de:
+- Sıfıra bölme → `Error` (kod: `"E-DECIMAL-DIVZERO"`)
+- Katsayı taşması → `Error` (kod: `"E-DECIMAL-OVERFLOW"`)
+- Alt-taşma (underflow, çok küçük): sessizce sıfıra yuvarlanır.
+Gerekçe: "sonsuz diye bir şey bilgisayarda yoktur" — belirsiz özel değerler yerine
+her zaman belirli bir hata veya sıfır.
+
+✅ **`as` cast (ADR-026 genişlemesi):**
+| Dönüşüm | Hatasız mı? |
+|---|---|
+| `int as decimal` | ✅ hatasız |
+| `float as decimal` | ✅ hatasız (float'ın binary temsili kabul edilir) |
+| `string as decimal` | ⚠️ fallible — parse edilemezse Error/null |
+| `decimal as int` | ⚠️ fallible — sıfıra kırpar; taşma → Error/null |
+| `decimal as float` | ✅ hatasız (kesinlik kaybı kabul: kullanıcı bilinçli seçti) |
+| `decimal as string` | ✅ hatasız |
+
+✅ **`==` semantiği (ADR-023 ile tutarlı):**
+`decimal` primitiftir → değer karşılaştırması. `0.30 == 0.3` → `true`
+(her ikisi normalize edilince aynı coefficient+exponent).
+
+### Elenen alternatifler
+
+- **`std::decimal` (C++ TR 24733):** Standart dışı; GCC uzantısı, MSVC/Clang taşınabilirliği kırık.
+- **`mpdecimal` kütüphanesi:** Güçlü ama dış bağımlılık; saQut'un sıfır-bağımlılık ilkesiyle çelişir.
+- **`float as decimal` derleme hatası:** C#'ın katı yaklaşımı. saQut için fazla kısıtlayıcı; user "decimal fonksiyona float argüman geç" dediğinde sürpriz üretir.
+- **Literal suffix (`19.99m`):** Bağlam-güdümlü tip zaten yeterli; ADR-010'a saygı.
+
+### Etkilenen bileşenler
+
+- `PrimitiveKind::Decimal` + `Type::Decimal()` (type.hpp)
+- `DecimalValue` struct — `core/decimal.hpp` (yeni dosya)
+- `ValueKind::Decimal` + `Value::fromDecimal()` (value.hpp)
+- 14 yeni IR opcode'u: `LOAD_DECIMAL`, `DADD/DSUB/DMUL/DDIV/DMOD`, `DNEG`,
+  `INT_TO_DECIMAL`, `FLOAT_TO_DECIMAL`, `CAST_DECIMAL_TO_STR/INT/FLOAT`, `CAST_STR_TO_DECIMAL`
+- Tip denetleyicisi: `numericRank(Decimal) = 3`
+- IR üreteci: binary aritmetik + literal + variable decl + cast
+- VM interpreter: tüm decimal opcode'ları

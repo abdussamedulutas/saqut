@@ -166,34 +166,46 @@ int Interpreter::run() {
         // ── Karşılaştırma ─────────────────────────────────────────────────
         case Opcode::LESS: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
-            frame.slots[instr.dest] = Value::fromInt(
-                (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                    ? (lv.floatValue < rv.floatValue ? 1 : 0)
-                    : (lv.intValue < rv.intValue ? 1 : 0));
+            int r;
+            if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+                r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) < 0 ? 1 : 0;
+            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                r = (lv.floatValue < rv.floatValue ? 1 : 0);
+            else r = (lv.intValue < rv.intValue ? 1 : 0);
+            frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
         case Opcode::LESS_EQUAL: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
-            frame.slots[instr.dest] = Value::fromInt(
-                (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                    ? (lv.floatValue <= rv.floatValue ? 1 : 0)
-                    : (lv.intValue <= rv.intValue ? 1 : 0));
+            int r;
+            if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+                r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) <= 0 ? 1 : 0;
+            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                r = (lv.floatValue <= rv.floatValue ? 1 : 0);
+            else r = (lv.intValue <= rv.intValue ? 1 : 0);
+            frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
         case Opcode::GREATER: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
-            frame.slots[instr.dest] = Value::fromInt(
-                (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                    ? (lv.floatValue > rv.floatValue ? 1 : 0)
-                    : (lv.intValue > rv.intValue ? 1 : 0));
+            int r;
+            if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+                r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) > 0 ? 1 : 0;
+            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                r = (lv.floatValue > rv.floatValue ? 1 : 0);
+            else r = (lv.intValue > rv.intValue ? 1 : 0);
+            frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
         case Opcode::GREATER_EQUAL: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
-            frame.slots[instr.dest] = Value::fromInt(
-                (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                    ? (lv.floatValue >= rv.floatValue ? 1 : 0)
-                    : (lv.intValue >= rv.intValue ? 1 : 0));
+            int r;
+            if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+                r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) >= 0 ? 1 : 0;
+            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
+                r = (lv.floatValue >= rv.floatValue ? 1 : 0);
+            else r = (lv.intValue >= rv.intValue ? 1 : 0);
+            frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
         case Opcode::EQUAL_EQUAL: {
@@ -208,6 +220,8 @@ int Interpreter::run() {
                 r = (lv.ref == rv.ref ? 1 : 0); // ADR-023: array/struct kimlik
             else if (lv.kind == ValueKind::String)
                 r = (lv.stringValue == rv.stringValue ? 1 : 0);
+            else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+                r = (lv.decimalValue == rv.decimalValue ? 1 : 0);
             else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
                 r = (lv.floatValue == rv.floatValue ? 1 : 0);
             else
@@ -226,6 +240,8 @@ int Interpreter::run() {
                 r = (lv.ref != rv.ref ? 1 : 0);
             else if (lv.kind == ValueKind::String)
                 r = (lv.stringValue != rv.stringValue ? 1 : 0);
+            else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+                r = (lv.decimalValue != rv.decimalValue ? 1 : 0);
             else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
                 r = (lv.floatValue != rv.floatValue ? 1 : 0);
             else
@@ -461,6 +477,115 @@ int Interpreter::run() {
                     instr.sourceLine, instr.sourceCol);
             } else {
                 frame.slots[instr.dest] = Value::fromInt((int)fv); // truncate to zero
+            }
+            break;
+        }
+
+        // ── Decimal aritmetik (ADR-028) ──────────────────────────────────
+        case Opcode::LOAD_DECIMAL:
+            frame.slots[instr.dest] = Value::fromDecimal(instr.decimalValue);
+            break;
+        case Opcode::DADD: {
+            auto r = DecimalValue::add(frame.slots[instr.left].decimalValue,
+                                       frame.slots[instr.right].decimalValue);
+            if (r.isOverflow()) {
+                pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
+                                               instr.sourceLine, instr.sourceCol); break;
+            }
+            frame.slots[instr.dest] = Value::fromDecimal(r);
+            break;
+        }
+        case Opcode::DSUB: {
+            auto r = DecimalValue::sub(frame.slots[instr.left].decimalValue,
+                                       frame.slots[instr.right].decimalValue);
+            if (r.isOverflow()) {
+                pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
+                                               instr.sourceLine, instr.sourceCol); break;
+            }
+            frame.slots[instr.dest] = Value::fromDecimal(r);
+            break;
+        }
+        case Opcode::DMUL: {
+            auto r = DecimalValue::mul(frame.slots[instr.left].decimalValue,
+                                       frame.slots[instr.right].decimalValue);
+            if (r.isOverflow()) {
+                pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
+                                               instr.sourceLine, instr.sourceCol); break;
+            }
+            frame.slots[instr.dest] = Value::fromDecimal(r);
+            break;
+        }
+        case Opcode::DDIV: {
+            const DecimalValue& divisor = frame.slots[instr.right].decimalValue;
+            if (divisor.coeff == 0) {
+                pendingThrow_ = makeErrorValue("decimal division by zero", "E_DECIMAL_DIVZERO",
+                                               instr.sourceLine, instr.sourceCol); break;
+            }
+            auto r = DecimalValue::div(frame.slots[instr.left].decimalValue, divisor);
+            if (r.isOverflow()) {
+                pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
+                                               instr.sourceLine, instr.sourceCol); break;
+            }
+            frame.slots[instr.dest] = Value::fromDecimal(r);
+            break;
+        }
+        case Opcode::DMOD: {
+            const DecimalValue& divisor = frame.slots[instr.right].decimalValue;
+            if (divisor.coeff == 0) {
+                pendingThrow_ = makeErrorValue("decimal modulo by zero", "E_DECIMAL_DIVZERO",
+                                               instr.sourceLine, instr.sourceCol); break;
+            }
+            auto r = DecimalValue::mod(frame.slots[instr.left].decimalValue, divisor);
+            if (r.isOverflow()) {
+                pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
+                                               instr.sourceLine, instr.sourceCol); break;
+            }
+            frame.slots[instr.dest] = Value::fromDecimal(r);
+            break;
+        }
+        case Opcode::DNEG:
+            frame.slots[instr.dest] = Value::fromDecimal(
+                DecimalValue::neg(frame.slots[instr.src].decimalValue));
+            break;
+        case Opcode::INT_TO_DECIMAL:
+            frame.slots[instr.dest] = Value::fromDecimal(
+                DecimalValue::fromInt(frame.slots[instr.src].intValue));
+            break;
+        case Opcode::FLOAT_TO_DECIMAL:
+            frame.slots[instr.dest] = Value::fromDecimal(
+                DecimalValue::fromDouble(frame.slots[instr.src].floatValue));
+            break;
+        case Opcode::CAST_DECIMAL_TO_STR:
+            frame.slots[instr.dest] = Value::fromString(
+                frame.slots[instr.src].decimalValue.toString());
+            break;
+        case Opcode::CAST_DECIMAL_TO_FLOAT:
+            frame.slots[instr.dest] = Value::fromFloat(
+                frame.slots[instr.src].decimalValue.toDouble());
+            break;
+        case Opcode::CAST_DECIMAL_TO_INT: {
+            const DecimalValue& dv = frame.slots[instr.src].decimalValue;
+            DecimalValue trunc = DecimalValue::truncate(dv);
+            if (trunc.coeff < INT_MIN || trunc.coeff > INT_MAX) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "decimal value out of int range", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
+            } else {
+                frame.slots[instr.dest] = Value::fromInt((int)trunc.coeff);
+            }
+            break;
+        }
+        case Opcode::CAST_STR_TO_DECIMAL: {
+            const std::string& s = frame.slots[instr.src].stringValue;
+            try {
+                DecimalValue dv = DecimalValue::fromString(s);
+                frame.slots[instr.dest] = Value::fromDecimal(dv);
+            } catch (...) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "'" + s + "' cannot convert to decimal", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
             }
             break;
         }

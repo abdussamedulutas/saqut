@@ -63,6 +63,9 @@ private:
     void emitLoadConst(int destSlot, int value);
     void emitLoadFloat(int destSlot, double value);
     void emitIntToFloat(int destSlot, int srcSlot);
+    void emitLoadDecimal(int destSlot, const DecimalValue& value);
+    void emitIntToDecimal(int destSlot, int srcSlot);
+    void emitFloatToDecimal(int destSlot, int srcSlot);
     void emitLoadSlot(int destSlot, int srcSlot);
     void emitLoadGlobal(int destSlot, int globalIndex);
     void emitStoreGlobal(int srcSlot, int globalIndex);

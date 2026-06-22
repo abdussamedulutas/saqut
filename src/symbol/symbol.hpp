@@ -6,15 +6,17 @@
 #include "core/type.hpp"
 #include "core/location.hpp"
 
-enum class SymbolKind { Variable, Function, Parameter, Struct, Field };
+enum class SymbolKind { Variable, Function, Parameter, Struct, Field, Enum, EnumValue };
 
 inline const char* symbolKindName(SymbolKind k) {
     switch (k) {
-        case SymbolKind::Variable:  return "variable";
-        case SymbolKind::Function:  return "function";
-        case SymbolKind::Parameter: return "parameter";
-        case SymbolKind::Struct:    return "struct";
-        case SymbolKind::Field:     return "field";
+        case SymbolKind::Variable:   return "variable";
+        case SymbolKind::Function:   return "function";
+        case SymbolKind::Parameter:  return "parameter";
+        case SymbolKind::Struct:     return "struct";
+        case SymbolKind::Field:      return "field";
+        case SymbolKind::Enum:       return "enum";
+        case SymbolKind::EnumValue:  return "enum_value";
     }
     return "?";
 }

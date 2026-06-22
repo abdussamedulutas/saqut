@@ -122,6 +122,9 @@ private:
     // Sembol tablosundan generate() başında kopyalanır.
     std::unordered_map<std::string, std::vector<std::pair<std::string, Type>>> structLayouts_;
 
+    // Enum üye düzeni: enum adı → sıralı [(üye adı, int değer)] listesi
+    std::unordered_map<std::string, std::vector<std::pair<std::string, int>>> enumLayouts_;
+
     int getStructFieldIndex(const std::string& structType, const std::string& fieldName) const;
     int getStructFieldCount(const std::string& structType) const;
 

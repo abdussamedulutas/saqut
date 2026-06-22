@@ -58,6 +58,27 @@ public:
     // Sembol toplayıcı doldurur; tip denetleyici ve IR üreteci okur.
     std::unordered_map<std::string, std::vector<std::pair<std::string, Type>>> structLayouts;
 
+    // Enum üye düzeni: enum adı → sıralı [(üye adı, int değer)] listesi
+    std::unordered_map<std::string, std::vector<std::pair<std::string, int>>> enumLayouts;
+
+    bool isEnumName(const std::string& name) const {
+        return enumLayouts.count(name) > 0;
+    }
+    int getEnumMemberValue(const std::string& enumName, const std::string& member) const {
+        auto it = enumLayouts.find(enumName);
+        if (it == enumLayouts.end()) return -1;
+        for (auto& p : it->second)
+            if (p.first == member) return p.second;
+        return -1;
+    }
+    bool hasEnumMember(const std::string& enumName, const std::string& member) const {
+        auto it = enumLayouts.find(enumName);
+        if (it == enumLayouts.end()) return false;
+        for (auto& p : it->second)
+            if (p.first == member) return true;
+        return false;
+    }
+
     int getFieldIndex(const std::string& structName, const std::string& fieldName) const {
         auto it = structLayouts.find(structName);
         if (it == structLayouts.end()) return -1;

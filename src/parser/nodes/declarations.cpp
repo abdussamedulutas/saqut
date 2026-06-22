@@ -40,6 +40,27 @@ std::string VariableDeclNode::toJson(int depth) {
     return obj.str();
 }
 
+// EnumDeclNode
+EnumDeclNode::EnumDeclNode() { kind = ASTKind::EnumDecl; }
+void EnumDeclNode::log(int indent) {
+    std::cout << jsonIndent(indent) << "EnumDecl (" << name << ")\n";
+    for (auto& m : members)
+        std::cout << jsonIndent(indent + 1) << m.name << " = " << m.value << "\n";
+}
+std::string EnumDeclNode::toJson(int depth) {
+    JsonObject obj(depth);
+    obj.add("kind", "EnumDecl");
+    obj.add("name", name);
+    obj.addArray("members", [&]() {
+        for (auto& m : members) {
+            std::string entry = "{\"name\":\"" + m.name + "\",\"value\":" + std::to_string(m.value) + "}";
+            obj.addItem(entry);
+        }
+    });
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
+}
+
 // StructDeclNode
 StructDeclNode::StructDeclNode() { kind = ASTKind::StructDecl; }
 void StructDeclNode::log(int indent) {

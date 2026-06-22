@@ -82,15 +82,15 @@ Bekler: #10, #11.
 
 ---
 
-### 8 · Enum (#8)  🔤 LEX / 🌳 PARSE / 🔎 SEM
+### ✅ 8 · Enum (#8)  🔤 LEX / 🌳 PARSE / 🔎 SEM / ⚙️ IR / 🖥️ VM
 
-Tip genişletmelerinin en hazırı (keyword zaten rezerve).
-
-- [ ] `enum Color { Red, Green, Blue }` sözdizimi ayrıştır.
-- [ ] Sembol tablosuna enum tipi + üyeleri kaydet.
-- [ ] Tip denetleyicide `Color.Red` üye erişimi.
-- [ ] IR: enum değeri = int sabiti (basit codec).
-- [ ] `switch` ile entegrasyon (ADR-027'de zaten planlandı).
+- `EnumDeclNode` + `ASTKind::EnumDecl` + parser (`enum Color { Red = 0, Green, Blue }`)
+- `TypeKind::Enum` + `Type::enumType()`, `isEnum()`
+- `SymbolKind::Enum/EnumValue` + `table_.enumLayouts`
+- `typeFromName` enum tiplerini tanıyor
+- Tip denetleyici: `Color.Red` üye erişimi, switch subject enum, `==` karşılaştırma
+- IR: `MemberAccess` → `LOAD_INT` (enum member int değeri)
+- `tests/golden/enum/basic.sqt` ✓ / `tests/golden/enum/explicit_values.sqt` ✓
 
 ---
 

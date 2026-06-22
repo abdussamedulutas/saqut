@@ -33,7 +33,7 @@ saQut; programlanabilir ve incelenebilir bir derleyici alet çantası (toolbox) 
 - Yazılımın kaynak kodunu incelemek ve değiştirmek.
 - Değiştirilmiş veya değiştirilmemiş kopyaları ticari olmayan koşullarda dağıtmak. Ancak dağıtılan her kopya; (a) işbu lisansa tabi kalmalı, (b) kaynağı açık (source-available) kalmalı ve (c) aşağıdaki Atıf Şartı'na uymalıdır.
 
-#### 4. Çıktı ve Sonuç İstisnası (KRİTİK)
+#### 4. Çıktı ve Sonuç İstisnası
 Yazılımı kullanan geliştiricilerin özgürlüğünü güvence altına almak amacıyla:
 - **Çıktı sizindir.** Bölüm 2'de tanımlanan tüm Çıktı, işbu lisansın kısıtlamalarına **tabi değildir.** Geliştiriciler kendi Çıktılarını diledikleri gibi kullanma, kapatma (kapalı kaynak yapma), lisanslama ve **ticari olarak satma** hakkına tam olarak sahiptir.
 - **Gelir, Çıktıdan elde edilir.** Yazılımı kendi makinenizde (kişisel veya kurumsal) özel bir araç olarak kullanıp ürettiğiniz programları, bağımsız çalıştırılabilir dosyaları veya işlenmiş verileri (örneğin bir Excel raporu veya bir veritabanı sonucu) satmanız serbesttir. Bu durumda Üçüncü Taraf, Yazılımı değil yalnızca sonucu alır.

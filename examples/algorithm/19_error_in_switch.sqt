@@ -1,0 +1,26 @@
+void test_error(int kind) {
+    if (kind == 1) {
+        int x = 10 / 0;
+    }
+    if (kind == 2) {
+        int[] arr = [1];
+        int bad = arr[5];
+    }
+    if (kind == 3) {
+        string s = "abc";
+        int bad = s as int;
+    }
+}
+
+int main() {
+    int i = 1;
+    while (i <= 3) {
+        try {
+            test_error(i);
+        } catch (Error e) {
+            print(e.code);
+        }
+        i = i + 1;
+    }
+    return 0;
+}

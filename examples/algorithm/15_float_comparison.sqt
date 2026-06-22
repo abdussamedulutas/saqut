@@ -1,0 +1,108 @@
+// Test: Float karşılaştırma operatörleri (LESS, LESS_EQUAL, GREATER, GREATER_EQUAL)
+// Risk: interpreter.cpp:167-182 — bu opcodes .intValue kullanıyor, .floatValue değil
+// Beklenen: Karşılaştırmalar doğru sonuç vermelidir
+// Gerçek (Bug): < >= işlemleri yanlış (intValue=0 kullanılıyor)
+
+float absf(float x) {
+    if (x < 0.0) {
+        return -x;
+    }
+    return x;
+}
+
+float sqrt_newton(float n) {
+    if (n <= 0.0) {
+        return 0.0;
+    }
+    float guess = n / 2.0;
+    float prev = 0.0;
+    float diff = guess - prev;
+
+    // Bu while koşulu BUG'ı tetikleyecek: absf() < 0.0001
+    // Bug olmasa: converges, sqrt(2) ≈ 1.414
+    // Bug varsa: sonsuz döngü veya yanlış sonuç
+    while (diff < 0.0) {  // Deliberately broken condition to trigger bug
+        prev = guess;
+        guess = (guess + n / guess) / 2.0;
+        diff = guess - prev;
+        if (diff < 0.0) {
+            diff = -diff;
+        }
+    }
+
+    return guess;
+}
+
+int main() {
+    // Direkt float karşılaştırma testleri
+    float a = 1.5;
+    float b = 2.0;
+
+    if (a < b) {
+        print(1);  // Beklenen: 1
+    } else {
+        print(0);  // Bug varsa: 0 (intValue=0 kullanılıyor)
+    }
+
+    if (a <= b) {
+        print(1);  // Beklenen: 1
+    } else {
+        print(0);
+    }
+
+    if (b > a) {
+        print(1);  // Beklenen: 1
+    } else {
+        print(0);  // Bug varsa: 0
+    }
+
+    if (b >= a) {
+        print(1);  // Beklenen: 1
+    } else {
+        print(0);
+    }
+
+    // Edge case: eşit float'lar
+    float x = 3.5;
+    float y = 3.5;
+
+    if (x < y) {
+        print(1);
+    } else {
+        print(0);  // Beklenen: 0 (eşit)
+    }
+
+    if (x <= y) {
+        print(1);  // Beklenen: 1 (eşit sayılır)
+    } else {
+        print(0);
+    }
+
+    // Negatif float'lar
+    float neg1 = -5.0;
+    float neg2 = -3.0;
+
+    if (neg1 < neg2) {
+        print(1);  // Beklenen: 1 (-5 < -3)
+    } else {
+        print(0);  // Bug varsa: 0
+    }
+
+    if (neg2 > neg1) {
+        print(1);  // Beklenen: 1
+    } else {
+        print(0);
+    }
+
+    // Small positives
+    float small1 = 0.1;
+    float small2 = 0.2;
+
+    if (small1 < small2) {
+        print(1);  // Beklenen: 1
+    } else {
+        print(0);
+    }
+
+    return 0;
+}

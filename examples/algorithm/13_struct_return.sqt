@@ -1,0 +1,62 @@
+// Test: Struct döndüren fonksiyonlar — #64 regresyon testi
+// Risk: TypeChecker struct return type resolved as void hatası (#64)
+// Beklenen: Struct döndüren fn başarıyla derlenir ve çalışır
+// Test: Point + addPoints() zincirlemesi
+
+struct Point {
+    int x;
+    int y;
+}
+
+Point makePoint(int x, int y) {
+    Point p;
+    p.x = x;
+    p.y = y;
+    return p;
+}
+
+Point addPoints(Point a, Point b) {
+    Point result;
+    result.x = a.x + b.x;
+    result.y = a.y + b.y;
+    return result;
+}
+
+Point subtract(Point a, Point b) {
+    Point result;
+    result.x = a.x - b.x;
+    result.y = a.y - b.y;
+    return result;
+}
+
+int main() {
+    // Tek struct return
+    Point p1 = makePoint(1, 2);
+    print(p1.x);  // 1
+    print(p1.y);  // 2
+
+    // Struct param + return
+    Point p2 = makePoint(2, 3);
+    Point p3 = addPoints(p1, p2);
+    print(p3.x);  // 3
+    print(p3.y);  // 5
+
+    // Zincirlenmiş struct return (en riskli: addPoints() döndüğü struct geçici)
+    Point p4 = addPoints(p3, p2);
+    print(p4.x);  // 5
+    print(p4.y);  // 8
+
+    // Triple zincir
+    Point p5 = makePoint(10, 20);
+    Point p6 = makePoint(5, 5);
+    Point result = addPoints(addPoints(p5, p6), p2);
+    print(result.x);  // (10+5) + 2 = 17
+    print(result.y);  // (20+5) + 3 = 28
+
+    // Subtraction zincir
+    Point p7 = subtract(result, p6);
+    print(p7.x);  // 17 - 5 = 12
+    print(p7.y);  // 28 - 5 = 23
+
+    return 0;
+}

@@ -1,0 +1,24 @@
+// Büyük array — bellek testi
+int main() {
+    int[] big = [0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0];  // 50 eleman
+
+    // Massive loop — array erişimini 100k kez yap
+    int sum = 0;
+    for (int i = 0; i < 100000; i = i + 1) {
+        int idx = i % 50;
+        big[idx] = i;
+        sum = sum + big[idx];
+    }
+
+    print(sum);
+    return 0;
+}

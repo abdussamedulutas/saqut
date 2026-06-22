@@ -148,9 +148,9 @@ Constant folding and DCE run in a fixpoint loop until nothing changes.
 | IR generator + bytecode VM | ✅ |
 | `saqut run` executes fibonacci | ✅ |
 | `string` type | ✅ |
-| `struct` | 🚧 |
-| `int[]` arrays | 🚧 |
-| Standard library / FFI beyond `print` | 🚧 |
+| `struct` | ✅ |
+| `int[]` arrays | ✅ |
+| Standard library / FFI beyond `print` | ✅ |
 
 ---
 

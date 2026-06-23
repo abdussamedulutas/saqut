@@ -118,12 +118,9 @@ void IRGenerator::generateStatement(ASTNode* node) {
     case ASTKind::VariableDecl: {
         auto* vd = (VariableDeclNode*)node;
 
-        // Bu değişken için yeni bir slot ayır
-        int varSlot = freshSlot();
-        registerVariable(vd->name, varSlot);
-
         if (vd->initExpr) {
             int initSlot = generateExpression(vd->initExpr);
+
             bool targetIsFloat   = (vd->varType == "float" || vd->varType == "double");
             bool targetIsDecimal = (vd->varType == "decimal");
             Type srcType = Type::error();
@@ -133,6 +130,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
             bool srcIsFloat = srcType.isPrimitive() &&
                               (srcType.prim == PrimitiveKind::Float ||
                                srcType.prim == PrimitiveKind::Double);
+
             if (targetIsFloat && srcIsInt) {
                 int conv = freshSlot();
                 emitIntToFloat(conv, initSlot);
@@ -146,11 +144,35 @@ void IRGenerator::generateStatement(ASTNode* node) {
                 emitFloatToDecimal(conv, initSlot);
                 initSlot = conv;
             }
-            if (initSlot != varSlot) emitLoadSlot(varSlot, initSlot);
+
+            // initSlot başka bir değişken tarafından zaten kullanılıyorsa kopyala
+            bool slotShared = false;
+            for (auto& [n, s] : nameToSlot_)
+                if (s == initSlot) { slotShared = true; break; }
+
+            if (slotShared) {
+                int varSlot = freshSlot();
+                registerVariable(vd->name, varSlot);
+                emitLoadSlot(varSlot, initSlot);
+            } else {
+                registerVariable(vd->name, initSlot);
+            }
+
         } else if (structLayouts_.count(vd->varType)) {
             // Struct değişkeni: init ifadesi yoksa boş StructObject oluştur
+            int varSlot = freshSlot();
+            registerVariable(vd->name, varSlot);
             int fc = getStructFieldCount(vd->varType);
             emitStructNew(varSlot, vd->varType, fc);
+        } else if (vd->varType.size() > 2 &&
+                   vd->varType.substr(vd->varType.size() - 2) == "[]") {
+            // Array değişkeni: init ifadesi yoksa boş dizi (kapasite=0)
+            int varSlot = freshSlot();
+            registerVariable(vd->name, varSlot);
+            emitArrayNew(varSlot, 0);
+        } else {
+            int varSlot = freshSlot();
+            registerVariable(vd->name, varSlot);
         }
 
         // Sibling VariableDecl'ler: int a, b; → children'da diğer VariableDecl'ler

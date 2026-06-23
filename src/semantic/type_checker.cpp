@@ -141,8 +141,24 @@ void TypeChecker::checkFunction(ASTNode* fnNode) {
     if (currentReturnType_.isError()) {
         if (table_.structLayouts.count(fn->returnType))
             currentReturnType_ = Type::structType(fn->returnType);
-        else if (fn->returnType != "void")
-            currentReturnType_ = Type::Void(); // bilinmeyen tip (E007 zaten raporlandı), hata yayılmasını bastır
+        else {
+            std::function<Type(const std::string&)> resolveType = [&](const std::string& name) -> Type {
+                Type t = Type::fromName(name);
+                if (!t.isError()) return t;
+                if (table_.structLayouts.count(name)) return Type::structType(name);
+                if (table_.isEnumName(name)) return Type::enumType(name);
+                if (name.size() > 2 && name.substr(name.size() - 2) == "[]") {
+                    Type elem = resolveType(name.substr(0, name.size() - 2));
+                    if (!elem.isError()) return Type::array(elem);
+                }
+                return Type::error();
+            };
+            Type resolved = resolveType(fn->returnType);
+            if (!resolved.isError())
+                currentReturnType_ = resolved;
+            else if (fn->returnType != "void")
+                currentReturnType_ = Type::Void();
+        }
     }
 
     auto& ch = fn->getChildren();
@@ -261,6 +277,20 @@ void TypeChecker::checkStmt(ASTNode* node) {
         Type targetType = Type::fromName(vd->varType);
         if (targetType.isError() && table_.structLayouts.count(vd->varType))
             targetType = Type::structType(vd->varType);
+        if (targetType.isError()) {
+            std::function<Type(const std::string&)> resolveType = [&](const std::string& name) -> Type {
+                Type t = Type::fromName(name);
+                if (!t.isError()) return t;
+                if (table_.structLayouts.count(name)) return Type::structType(name);
+                if (table_.isEnumName(name)) return Type::enumType(name);
+                if (name.size() > 2 && name.substr(name.size() - 2) == "[]") {
+                    Type elem = resolveType(name.substr(0, name.size() - 2));
+                    if (!elem.isError()) return Type::array(elem);
+                }
+                return Type::error();
+            };
+            targetType = resolveType(vd->varType);
+        }
         if (vd->initExpr) {
             Type srcType = checkExpr(vd->initExpr, targetType);
             bool isLit   = vd->initExpr->kind == ASTKind::Literal;

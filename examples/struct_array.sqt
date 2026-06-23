@@ -1,0 +1,24 @@
+struct Point {
+    int x;
+    int y;
+}
+
+void main() {
+    Point p1;
+    p1.x = 10;
+    p1.y = 20;
+
+    Point p2;
+    p2.x = 30;
+    p2.y = 40;
+
+    Point[] arr = [p1, p2];
+
+    print(arr[0].x);
+    print(arr[0].y);
+    print(arr[1].x);
+    print(arr[1].y);
+
+    arr[0].x = 99;
+    print(arr[0].x);
+}

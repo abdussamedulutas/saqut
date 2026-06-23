@@ -113,10 +113,15 @@ ASTNode* Parser::parseDeclaration() {
         }
         if (la1.type == TokenType::IDENTIFIER)
             return parseVariableDecl();
-        // "TypeName[] varName" — struct/enum array bildirimi
-        if (la1.type == TokenType::LBRACKET && la2.type == TokenType::RBRACKET &&
-            lookahead(3).type == TokenType::IDENTIFIER)
-            return parseVariableDecl();
+        // "TypeName[]...[] varName" — çok boyutlu struct/enum array bildirimi
+        if (la1.type == TokenType::LBRACKET) {
+            int off = 1;
+            while (lookahead(off).type == TokenType::LBRACKET &&
+                   lookahead(off + 1).type == TokenType::RBRACKET)
+                off += 2;
+            if (lookahead(off).type == TokenType::IDENTIFIER)
+                return parseVariableDecl();
+        }
     }
 
     return parseStatement();
@@ -384,8 +389,8 @@ ASTNode* Parser::parseFunctionDecl() {
             if (!isTypeKw || !typeTok.token) break;
             std::string paramType = typeTok.token->token;
             nextToken();
-            // int[] a — tip sonrasında [] varsa array tipi
-            if (currentToken().type == TokenType::LBRACKET) {
+            // int[][] a — tip sonrasında [] boyutları
+            while (currentToken().type == TokenType::LBRACKET) {
                 nextToken();
                 if (currentToken().type == TokenType::RBRACKET)
                     nextToken();
@@ -480,8 +485,8 @@ ASTNode* Parser::parseVariableDecl() {
     vd->varType = currentToken().token->token;
     nextToken();
 
-    // Java/C# stili: int[] x — tip adından hemen sonra [] gelir
-    if (currentToken().type == TokenType::LBRACKET) {
+    // Java/C# stili: int[][] x — tip adından hemen sonra [] boyutları gelir
+    while (currentToken().type == TokenType::LBRACKET) {
         nextToken();
         if (currentToken().type == TokenType::RBRACKET)
             nextToken();
@@ -615,10 +620,15 @@ ASTNode* Parser::parseStatement() {
         // "TypeName? varName" (ADR-021 nullable struct) — la1=TERNARY, la2=IDENTIFIER
         if (la1.type == TokenType::TERNARY && la2.type == TokenType::IDENTIFIER)
             return parseVariableDecl();
-        // "TypeName[] varName" — struct/enum array bildirimi
-        if (la1.type == TokenType::LBRACKET && la2.type == TokenType::RBRACKET &&
-            lookahead(3).type == TokenType::IDENTIFIER)
-            return parseVariableDecl();
+        // "TypeName[]...[] varName" — çok boyutlu struct/enum array bildirimi
+        if (la1.type == TokenType::LBRACKET) {
+            int off = 1;
+            while (lookahead(off).type == TokenType::LBRACKET &&
+                   lookahead(off + 1).type == TokenType::RBRACKET)
+                off += 2;
+            if (lookahead(off).type == TokenType::IDENTIFIER)
+                return parseVariableDecl();
+        }
     }
 
     return parseExpressionStatement();

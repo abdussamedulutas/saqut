@@ -36,6 +36,12 @@ static const char* opSymbol(Opcode op) {
         case Opcode::GREATER_EQUAL: return ">=";
         case Opcode::EQUAL_EQUAL:   return "==";
         case Opcode::NOT_EQUAL:     return "!=";
+        case Opcode::STRING_CONCAT: return "++";
+        case Opcode::DADD:          return "+d";
+        case Opcode::DSUB:          return "-d";
+        case Opcode::DMUL:          return "*d";
+        case Opcode::DDIV:          return "/d";
+        case Opcode::DMOD:          return "%d";
         default:                    return "?";
     }
 }
@@ -50,6 +56,9 @@ static bool isBinaryOp(Opcode op) {
         case Opcode::LESS: case Opcode::LESS_EQUAL:
         case Opcode::GREATER: case Opcode::GREATER_EQUAL:
         case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:
+        case Opcode::STRING_CONCAT:
+        case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
+        case Opcode::DDIV: case Opcode::DMOD:
             return true;
         default: return false;
     }
@@ -85,8 +94,8 @@ void IRFunction::dump() const {
         // Satır numarası
         std::cout << "  " << std::setw(3) << std::right << i << "  ";
 
-        // Opcode sütunu (12 karakter genişlik)
-        std::cout << std::left << std::setw(12) << opcodeName(ins.opcode);
+        // Opcode sütunu (16 karakter genişlik — en uzun opcode STRING_CONCAT=13)
+        std::cout << std::left << std::setw(16) << opcodeName(ins.opcode);
 
         // Operandlar — opcode'a göre farklı format
         if (ins.opcode == Opcode::LOAD_CONST) {
@@ -186,8 +195,46 @@ void IRFunction::dump() const {
         } else if (ins.opcode == Opcode::STORE_GLOBAL) {
             std::cout << "global[" << ins.intValue << "] = " << slot(ins.src);
 
-        } else if (ins.opcode == Opcode::RETURN) {
+        } else if (ins.opcode == Opcode::LOAD_NULL) {
+            std::cout << slot(ins.dest) << " = null";
+
+        } else if (ins.opcode == Opcode::LOAD_DECIMAL) {
+            std::cout << slot(ins.dest) << " = " << ins.decimalValue.toString() << "d";
+
+        } else if (ins.opcode == Opcode::INT_TO_DECIMAL) {
+            std::cout << slot(ins.dest) << " = (decimal)" << slot(ins.src);
+
+        } else if (ins.opcode == Opcode::FLOAT_TO_DECIMAL) {
+            std::cout << slot(ins.dest) << " = (decimal)" << slot(ins.src);
+
+        } else if (ins.opcode == Opcode::DNEG) {
+            std::cout << slot(ins.dest) << " = -d " << slot(ins.src);
+
+        } else if (ins.opcode == Opcode::CAST_DECIMAL_TO_STR) {
+            std::cout << slot(ins.dest) << " = str(" << slot(ins.src) << ")";
+
+        } else if (ins.opcode == Opcode::CAST_DECIMAL_TO_FLOAT) {
+            std::cout << slot(ins.dest) << " = float(" << slot(ins.src) << ")";
+
+        } else if (ins.opcode == Opcode::CAST_DECIMAL_TO_INT) {
+            std::cout << slot(ins.dest) << " = int(" << slot(ins.src) << ")"
+                      << (ins.left ? " [null]" : " [throw]");
+
+        } else if (ins.opcode == Opcode::CAST_STR_TO_DECIMAL) {
+            std::cout << slot(ins.dest) << " = decimal?(" << slot(ins.src) << ")"
+                      << (ins.left ? " [null]" : " [throw]");
+
+        } else if (ins.opcode == Opcode::ENTER_TRY) {
+            std::cout << "err→" << slot(ins.dest) << "  catch→" << ins.jumpTarget;
+
+        } else if (ins.opcode == Opcode::LEAVE_TRY) {
+            // operand yok
+
+        } else if (ins.opcode == Opcode::THROW) {
             std::cout << slot(ins.src);
+
+        } else if (ins.opcode == Opcode::RETURN) {
+            std::cout << "return " << slot(ins.src);
         }
 
         std::cout << "\n";

@@ -60,6 +60,12 @@ Type SymbolCollector::typeFromName(const std::string& n, const SourceLocation& l
     if (!t.isError()) return t;
     if (structFields_.count(n)) return Type::structType(n);
     if (table_.isEnumName(n)) return Type::enumType(n);
+    // "Point[]", "Color[]" vb. — struct veya enum array tipi
+    if (n.size() > 2 && n.substr(n.size() - 2) == "[]") {
+        Type elem = typeFromName(n.substr(0, n.size() - 2), loc);
+        if (!elem.isError()) return Type::array(elem);
+        return Type::error(); // taban tip zaten E007 raporladı
+    }
     diag_.report("E007", loc, "unknown type: '" + n + "'",
         "known types: int, float, double, decimal, bool, string. if using a struct, define it first: `struct " + n + " { ... }`, or an enum: `enum " + n + " { ... }`");
     return Type::error();

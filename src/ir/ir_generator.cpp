@@ -151,6 +151,10 @@ void IRGenerator::generateStatement(ASTNode* node) {
             // Struct değişkeni: init ifadesi yoksa boş StructObject oluştur
             int fc = getStructFieldCount(vd->varType);
             emitStructNew(varSlot, vd->varType, fc);
+        } else if (vd->varType.size() > 2 &&
+                   vd->varType.substr(vd->varType.size() - 2) == "[]") {
+            // Array değişkeni: init ifadesi yoksa boş dizi (kapasite=0)
+            emitArrayNew(varSlot, 0);
         }
 
         // Sibling VariableDecl'ler: int a, b; → children'da diğer VariableDecl'ler

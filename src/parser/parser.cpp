@@ -113,6 +113,10 @@ ASTNode* Parser::parseDeclaration() {
         }
         if (la1.type == TokenType::IDENTIFIER)
             return parseVariableDecl();
+        // "TypeName[] varName" — struct/enum array bildirimi
+        if (la1.type == TokenType::LBRACKET && la2.type == TokenType::RBRACKET &&
+            lookahead(3).type == TokenType::IDENTIFIER)
+            return parseVariableDecl();
     }
 
     return parseStatement();
@@ -604,11 +608,16 @@ ASTNode* Parser::parseStatement() {
     // Kullanıcı tanımlı struct tipiyle değişken bildirimi: Point p; veya Point p = ...;
     if (ct.type == TokenType::IDENTIFIER) {
         auto la1 = lookahead(1);
+        auto la2 = lookahead(2);
         // "TypeName varName" → değişken bildirimi
         if (la1.type == TokenType::IDENTIFIER)
             return parseVariableDecl();
         // "TypeName? varName" (ADR-021 nullable struct) — la1=TERNARY, la2=IDENTIFIER
-        if (la1.type == TokenType::TERNARY && lookahead(2).type == TokenType::IDENTIFIER)
+        if (la1.type == TokenType::TERNARY && la2.type == TokenType::IDENTIFIER)
+            return parseVariableDecl();
+        // "TypeName[] varName" — struct/enum array bildirimi
+        if (la1.type == TokenType::LBRACKET && la2.type == TokenType::RBRACKET &&
+            lookahead(3).type == TokenType::IDENTIFIER)
             return parseVariableDecl();
     }
 

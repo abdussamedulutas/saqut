@@ -141,7 +141,14 @@ void TypeChecker::checkFunction(ASTNode* fnNode) {
     if (currentReturnType_.isError()) {
         if (table_.structLayouts.count(fn->returnType))
             currentReturnType_ = Type::structType(fn->returnType);
-        else if (fn->returnType != "void")
+        else if (fn->returnType.size() > 2 &&
+                 fn->returnType.substr(fn->returnType.size() - 2) == "[]") {
+            std::string base = fn->returnType.substr(0, fn->returnType.size() - 2);
+            if (table_.structLayouts.count(base))
+                currentReturnType_ = Type::array(Type::structType(base));
+            else if (table_.isEnumName(base))
+                currentReturnType_ = Type::array(Type::enumType(base));
+        } else if (fn->returnType != "void")
             currentReturnType_ = Type::Void(); // bilinmeyen tip (E007 zaten raporlandı), hata yayılmasını bastır
     }
 
@@ -261,6 +268,14 @@ void TypeChecker::checkStmt(ASTNode* node) {
         Type targetType = Type::fromName(vd->varType);
         if (targetType.isError() && table_.structLayouts.count(vd->varType))
             targetType = Type::structType(vd->varType);
+        if (targetType.isError() && vd->varType.size() > 2 &&
+            vd->varType.substr(vd->varType.size() - 2) == "[]") {
+            std::string base = vd->varType.substr(0, vd->varType.size() - 2);
+            if (table_.structLayouts.count(base))
+                targetType = Type::array(Type::structType(base));
+            else if (table_.isEnumName(base))
+                targetType = Type::array(Type::enumType(base));
+        }
         if (vd->initExpr) {
             Type srcType = checkExpr(vd->initExpr, targetType);
             bool isLit   = vd->initExpr->kind == ASTKind::Literal;

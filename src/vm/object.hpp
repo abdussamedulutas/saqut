@@ -1,6 +1,7 @@
 #ifndef SAQUT_VM_OBJECT
 #define SAQUT_VM_OBJECT
 
+#include <string>
 #include <vector>
 
 // ADR-022: Taşımasız, stop-the-world, deterministik mark-sweep GC.
@@ -45,7 +46,8 @@ struct ArrayObject : Object {
 // ── StructObject ─────────────────────────────────────────────────────────────
 
 struct StructObject : Object {
-    std::vector<Value> fields;
+    std::vector<Value>       fields;
+    std::vector<std::string> fieldNames; // IR üretiminde doldurulur; toJson/dump için
 
     explicit StructObject(int fieldCount = 0) {
         type = ObjectType::Struct;

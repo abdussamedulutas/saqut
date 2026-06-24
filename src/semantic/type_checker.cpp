@@ -752,6 +752,22 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             result = Type::error();
             break;
         }
+        // Struct TİP ADI değişken gibi kullanılmış: Efsane.message → hata
+        if (objType.isStruct() && ma->object->kind == ASTKind::Identifier) {
+            auto* idNode = static_cast<IdentifierNode*>(ma->object);
+            std::string idName = (idNode->parserToken.token)
+                                 ? idNode->parserToken.token->token : "";
+            Symbol* sym = idName.empty() ? nullptr : table_.resolve(idName);
+            if (sym && sym->kind == SymbolKind::Struct) {
+                diag_.report("E001", node->loc,
+                    "'" + idName + "' is a struct type, not a variable",
+                    "declare an instance first: `" + idName + " myVar;` then use `myVar." + ma->member + "`",
+                    (int)idName.size());
+                result = Type::error();
+                break;
+            }
+        }
+
         if (objType.isEnum()) {
             // Color.Red — enum üye erişimi
             if (!table_.hasEnumMember(objType.enumName, ma->member)) {

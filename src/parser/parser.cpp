@@ -753,6 +753,9 @@ ASTNode* Parser::parseStatement() {
     if (ct.type == TokenType::KW_ENUM)
         return parseEnumDecl();
 
+    if (ct.type == TokenType::KW_IMPORT)
+        return parseImportDecl();
+
     // Kullanıcı tanımlı struct tipiyle değişken bildirimi: Point p; veya Point p = ...;
     if (ct.type == TokenType::IDENTIFIER) {
         auto la1 = lookahead(1);

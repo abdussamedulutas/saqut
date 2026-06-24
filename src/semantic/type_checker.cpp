@@ -757,7 +757,8 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             if (!table_.hasEnumMember(objType.enumName, ma->member)) {
                 diag_.report("E001", node->loc,
                     "'" + ma->member + "' is not a member of enum '" + objType.enumName + "'",
-                    "check the '" + objType.enumName + "' enum definition");
+                    "check the '" + objType.enumName + "' enum definition",
+                    (int)ma->member.size());
                 result = Type::error();
             } else {
                 result = Type::enumType(objType.enumName);
@@ -767,7 +768,8 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             if (result.isError())
                 diag_.report("E001", node->loc,
                              "field '" + ma->member + "' not found in struct '" + objType.structName + "'",
-                             "check the '" + objType.structName + "' struct definition — use `saqut symbols <file>` to see available fields");
+                             "check the '" + objType.structName + "' struct definition — use `saqut symbols <file>` to see available fields",
+                             (int)ma->member.size());
         } else {
             result = Type::error();
         }

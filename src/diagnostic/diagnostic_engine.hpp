@@ -49,8 +49,11 @@ public:
     void report(const std::string& code,
                 const SourceLocation& loc,
                 const std::string& message,
-                const std::string& hint = "") {
-        diagnostics_.push_back(makeDiagnostic(code, loc, message, hint));
+                const std::string& hint = "",
+                int tokenLength = 1) {
+        auto d = makeDiagnostic(code, loc, message, hint);
+        d.tokenLength = tokenLength;
+        diagnostics_.push_back(d);
     }
 
     // Kolaylık: seviyeyi açıkça vererek
@@ -58,9 +61,11 @@ public:
                 const std::string& code,
                 const SourceLocation& loc,
                 const std::string& message,
-                const std::string& hint = "") {
+                const std::string& hint = "",
+                int tokenLength = 1) {
         Diagnostic d;
-        d.level = level; d.code = code; d.loc = loc; d.message = message; d.hint = hint;
+        d.level = level; d.code = code; d.loc = loc; d.message = message;
+        d.hint = hint; d.tokenLength = tokenLength;
         diagnostics_.push_back(d);
     }
 
@@ -109,7 +114,7 @@ public:
             auto pos = d.loc.toLspPosition();
             item["range"] = {
                 {"start", {{"line", pos.line}, {"character", pos.character}}},
-                {"end",   {{"line", pos.line}, {"character", pos.character + 1}}}
+                {"end",   {{"line", pos.line}, {"character", pos.character + d.tokenLength}}}
             };
             item["severity"] = (d.level == DiagLevel::Error) ? 1 : 2;
             item["code"]     = d.code;

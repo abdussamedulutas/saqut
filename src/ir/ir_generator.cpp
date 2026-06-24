@@ -19,6 +19,56 @@ static constexpr int ERROR_FIELD_COUNT = 5;
 // generate — Ana giriş noktası
 // ─────────────────────────────────────────────────────────────────────────────
 
+IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symbolTable) {
+    IRProgram program;
+    structLayouts_ = symbolTable.structLayouts;
+    enumLayouts_   = symbolTable.enumLayouts;
+
+    for (auto& unit : graph.units) {
+        currentModuleId_ = unit.moduleId;
+        program.moduleRegistry.intern(unit.filePath);
+
+        // Modül-düzeyi değişkenleri topla
+        std::vector<VariableDeclNode*> globalVars;
+        nameToGlobal_.clear();
+        for (ASTNode* child : unit.ast->getChildren()) {
+            if (child->kind != ASTKind::VariableDecl) continue;
+            auto* vd = static_cast<VariableDeclNode*>(child);
+            nameToGlobal_[vd->name] = globalCount_++;
+            program.globalCount++;
+            program.globalNames.push_back(vd->name);
+            globalVars.push_back(vd);
+        }
+        program.moduleGlobalCounts[currentModuleId_] = (int)globalVars.size();
+
+        // Fonksiyonları üret
+        for (ASTNode* child : unit.ast->getChildren()) {
+            if (child->kind != ASTKind::FunctionDecl) continue;
+            auto* fnDecl = static_cast<FunctionDeclNode*>(child);
+            nameToSlot_.clear();
+            nextSlot_ = 0;
+
+            IRFunction irFn(fnDecl->name, (int)fnDecl->params.size());
+            irFn.moduleId = currentModuleId_;
+            program.addFunction(std::move(irFn));
+            currentFunction_ = program.findFunction(fnDecl->name);
+
+            if (fnDecl->name == "main") {
+                for (VariableDeclNode* gv : globalVars) {
+                    if (gv->initExpr) {
+                        int initSlot = generateExpression(gv->initExpr);
+                        emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
+                    }
+                }
+            }
+
+            generateFunction(child);
+            currentFunction_->slotCount = nextSlot_;
+        }
+    }
+    return program;
+}
+
 IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
                                 const std::string& sourceFilePath) {
     IRProgram program;

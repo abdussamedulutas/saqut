@@ -75,8 +75,101 @@ ASTNode* Parser::parseProgram() {
     return program;
 }
 
+ASTNode* Parser::parseImportDecl() {
+    auto* node = new ImportDeclNode();
+    node->loc = currentToken().token->loc;
+    nextToken(); // 'import' tüket
+
+    // { bekleniyor
+    if (currentToken().type != TokenType::LBRACE) return node;
+    nextToken();
+
+    // virgülle ayrılmış isimler: { add, Vector, ... }
+    while (!currentToken().is({TokenType::RBRACE, TokenType::SVR_VOID})) {
+        if (currentToken().type == TokenType::IDENTIFIER) {
+            node->importedNames.push_back(currentToken().token->token);
+            nextToken();
+        }
+        if (currentToken().type == TokenType::COMMA) nextToken();
+    }
+
+    // } bekleniyor
+    if (currentToken().type == TokenType::RBRACE) nextToken();
+
+    // contextual keyword: from
+    if (currentToken().type == TokenType::IDENTIFIER &&
+        currentToken().token->token == "from") {
+        nextToken();
+    }
+
+    // string literal: "file.sqt"
+    if (currentToken().type == TokenType::STRING) {
+        auto* st = static_cast<StringToken*>(currentToken().token);
+        node->sourcePath = st->context;
+        nextToken();
+    }
+
+    // ;
+    if (currentToken().type == TokenType::SEMICOLON) nextToken();
+
+    return node;
+}
+
+ASTNode* Parser::parseExportDecl() {
+    nextToken(); // 'export' tüket
+
+    auto ct = currentToken();
+
+    if (ct.type == TokenType::KW_STRUCT) {
+        auto* node = static_cast<StructDeclNode*>(parseStructDecl());
+        if (node) node->isExported = true;
+        return node;
+    }
+
+    if (ct.type == TokenType::KW_ENUM) {
+        auto* node = static_cast<EnumDeclNode*>(parseEnumDecl());
+        if (node) node->isExported = true;
+        return node;
+    }
+
+    // Dönüş tipli fonksiyon: export void/int/... name( ...
+    // veya struct dönüş tipli: export TypeName name(
+    bool isFunctionReturnType = ct.is({
+        TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BOOL,
+        TokenType::KW_CHAR, TokenType::KW_STRING_TYPE
+    });
+
+    bool isIdentifierReturnType = (ct.type == TokenType::IDENTIFIER);
+
+    if (isFunctionReturnType || isIdentifierReturnType) {
+        auto la1 = lookahead(1);
+        auto la2 = lookahead(2);
+        bool isNullable = (la1.type == TokenType::TERNARY);
+        bool isFnDecl = isNullable
+            ? (la2.type == TokenType::IDENTIFIER && lookahead(3).type == TokenType::LPAREN)
+            : (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN);
+
+        if (isFnDecl) {
+            auto* node = static_cast<FunctionDeclNode*>(parseFunctionDecl());
+            if (node) node->isExported = true;
+            return node;
+        }
+    }
+
+    // Buraya gelindiyse export edilemeyen bir bildirim (VariableDecl vb.)
+    // SymbolCollector E_INVALID_EXPORT üretecek — parser sessizce parse eder.
+    return parseDeclaration();
+}
+
 ASTNode* Parser::parseDeclaration() {
     auto ct = currentToken();
+
+    if (ct.type == TokenType::KW_IMPORT)
+        return parseImportDecl();
+
+    if (ct.type == TokenType::KW_EXPORT)
+        return parseExportDecl();
 
     if (ct.is({
         TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,

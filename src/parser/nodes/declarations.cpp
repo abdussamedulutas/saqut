@@ -71,8 +71,31 @@ std::string StructDeclNode::toJson(int depth) {
     JsonObject obj(depth);
     obj.add("kind", "StructDecl");
     obj.add("name", name);
+    obj.add("isExported", isExported);
     obj.addArray("children", [&]() {
         for (auto* child : children) obj.addItem(child->toJson(depth + 2));
+    });
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
+}
+
+// ImportDeclNode
+ImportDeclNode::ImportDeclNode() { kind = ASTKind::ImportDecl; }
+void ImportDeclNode::log(int indent) {
+    std::cout << jsonIndent(indent) << "ImportDecl from \"" << sourcePath << "\": {";
+    for (size_t i = 0; i < importedNames.size(); i++) {
+        if (i) std::cout << ", ";
+        std::cout << importedNames[i];
+    }
+    std::cout << "}\n";
+}
+std::string ImportDeclNode::toJson(int depth) {
+    JsonObject obj(depth);
+    obj.add("kind", "ImportDecl");
+    obj.add("sourcePath", sourcePath);
+    obj.addArray("importedNames", [&]() {
+        for (auto& n : importedNames)
+            obj.addItem("\"" + n + "\"");
     });
     obj.addRaw("location", loc.toJson());
     return obj.str();

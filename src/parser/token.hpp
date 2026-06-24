@@ -193,8 +193,10 @@ enum class TokenType : uint16_t {
     KW_ASSERT,       // assert (debug assertions — C/Java tarzı)
 
     /* ====== Modül/Paket ====== */
-    KW_IMPORT,       // import (modül içe aktarma — Java/Python tarzı)
-                     //   Sözdizimi: import java.util.List;
+    KW_IMPORT,       // import (modül içe aktarma)
+                     //   Sözdizimi: import {add, Vector} from "math.sqt";
+    KW_EXPORT,       // export (sembol dışa aktarma — fonksiyon/struct/enum)
+                     //   Sözdizimi: export void add(int a, int b) { ... }
     KW_PACKAGE,      // package (modül bildirimi — Java tarzı)
                      //   Sözdizimi: package com.saqut.compiler;
 
@@ -475,6 +477,7 @@ inline const std::unordered_map<std::string_view, TokenType> KEYWORD_MAP = {
 
     // --- Modules/packages ---
     {"import",      TokenType::KW_IMPORT},
+    {"export",      TokenType::KW_EXPORT},
     {"package",     TokenType::KW_PACKAGE},
 
     // --- C/C++ specific ---

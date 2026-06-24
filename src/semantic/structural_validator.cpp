@@ -18,7 +18,6 @@ void StructuralValidator::walkDecl(ASTNode* node) {
         if (!ch.empty()) walkStmt(ch[0]);
         inFunction_ = false;
     }
-    // VariableDecl / StructDecl: yapısal kural yok
 }
 
 void StructuralValidator::walkStmt(ASTNode* node) {
@@ -92,15 +91,42 @@ void StructuralValidator::walkStmt(ASTNode* node) {
                 "move the return statement into a function body: `func name() : type { return value; }`");
         break;
 
+    case ASTKind::StructDecl:
+        if (inFunction_)
+            diag_.report("E011", node->loc,
+                "struct declaration is not allowed inside a function",
+                "move the struct definition to the top level, outside all functions");
+        break;
+
+    case ASTKind::EnumDecl:
+        if (inFunction_)
+            diag_.report("E011", node->loc,
+                "enum declaration is not allowed inside a function",
+                "move the enum definition to the top level, outside all functions");
+        break;
+
+    case ASTKind::ImportDecl:
+        if (inFunction_)
+            diag_.report("E011", node->loc,
+                "import declaration is not allowed inside a function",
+                "move the import statement to the top of the file, outside all functions");
+        break;
+
+    case ASTKind::FunctionDecl:
+        if (inFunction_)
+            diag_.report("E011", node->loc,
+                "nested function declaration is not allowed",
+                "saQut does not support nested functions — move this declaration to the top level");
+        break;
+
     case ASTKind::VariableDecl: {
-        // sibling'leri de gez
         for (ASTNode* sib : node->getChildren())
             if (sib->kind == ASTKind::VariableDecl) walkStmt(sib);
         break;
     }
 
     case ASTKind::ExpressionStatement:
-        break; // ifade içinde return/break olamaz
+        break;
 
     default:
         break;

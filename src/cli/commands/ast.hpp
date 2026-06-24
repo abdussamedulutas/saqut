@@ -64,13 +64,17 @@ inline int cmdAst(const CliArgs& args) {
         if (outFile.is_open()) out = &outFile;
     }
 
-    *out << "{\n"
-         << "  \"ast\":\n"
-         << jsonIndent(2) << astToJson(displayAst, 2) << ",\n"
-         << "  \"analysis\": {\n"
-         << analysisToJson(analysis) << "\n"
-         << "  }\n"
-         << "}\n";
+    if (args.jsonOutput) {
+        *out << "{\n"
+             << "  \"ast\":\n"
+             << jsonIndent(2) << astToJson(displayAst, 2) << ",\n"
+             << "  \"analysis\": {\n"
+             << analysisToJson(analysis) << "\n"
+             << "  }\n"
+             << "}\n";
+    } else {
+        displayAst->log(0);
+    }
 
     // Optimizasyon uyarılarını (W002 vb.) stderr'e yazdır
     if (args.optimized) diag.printAll(std::cerr);

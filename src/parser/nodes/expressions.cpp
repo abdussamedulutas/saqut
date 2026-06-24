@@ -4,7 +4,10 @@
 // ScopeCallNode — built-in metod çağrısı: E::method(args)
 ScopeCallNode::ScopeCallNode() { kind = ASTKind::ScopeCall; }
 void ScopeCallNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "ScopeCall " << leftTypeName << "::" << methodName << "\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "ScopeCall" << Color::Reset
+              << " " << Color::SoftPembe << leftTypeName << Color::Reset
+              << Color::SoftGri << "::" << Color::Reset
+              << Color::SoftYesil << methodName << Color::Reset << "\n";
     for (auto* arg : arguments) arg->log(indent + 1);
 }
 std::string ScopeCallNode::toJson(int depth) {
@@ -24,7 +27,10 @@ std::string ScopeCallNode::toJson(int depth) {
 // PostfixNode
 PostfixNode::PostfixNode() { kind = ASTKind::Postfix; }
 void PostfixNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "Postfix (" << (OPERATOR_MAP_REV.count(Operator) ? OPERATOR_MAP_REV.at(Operator) : "?") << ")\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "Postfix" << Color::Reset
+              << " (" << Color::SoftMor
+              << (OPERATOR_MAP_REV.count(Operator) ? OPERATOR_MAP_REV.at(Operator) : "?")
+              << Color::Reset << ")\n";
     if (operand) operand->log(indent + 1);
 }
 std::string PostfixNode::toJson(int depth) {
@@ -40,7 +46,7 @@ std::string PostfixNode::toJson(int depth) {
 // CallExpressionNode
 CallExpressionNode::CallExpressionNode() { kind = ASTKind::Call; }
 void CallExpressionNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "Call\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "Call" << Color::Reset << "\n";
     if (callee) callee->log(indent + 1);
     for (auto* arg : arguments) arg->log(indent + 1);
 }
@@ -59,7 +65,9 @@ std::string CallExpressionNode::toJson(int depth) {
 // MemberAccessNode
 MemberAccessNode::MemberAccessNode() { kind = ASTKind::MemberAccess; }
 void MemberAccessNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "MemberAccess (" << (arrow ? "->" : ".") << member << ")\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "MemberAccess" << Color::Reset
+              << " (" << Color::SoftGri << (arrow ? "->" : ".") << Color::Reset
+              << Color::SoftYesil << member << Color::Reset << ")\n";
     if (object) object->log(indent + 1);
 }
 std::string MemberAccessNode::toJson(int depth) {
@@ -76,7 +84,9 @@ std::string MemberAccessNode::toJson(int depth) {
 // ArrayLiteralNode
 ArrayLiteralNode::ArrayLiteralNode() { kind = ASTKind::ArrayLiteral; }
 void ArrayLiteralNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "ArrayLiteral [" << elements.size() << " eleman]\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "ArrayLiteral" << Color::Reset
+              << " [" << Color::SoftTuruncu << elements.size() << Color::Reset
+              << Color::SoftGri << " eleman" << Color::Reset << "]\n";
     for (auto* e : elements) e->log(indent + 1);
 }
 std::string ArrayLiteralNode::toJson(int depth) {
@@ -93,8 +103,10 @@ std::string ArrayLiteralNode::toJson(int depth) {
 // CastExpressionNode (ADR-026)
 CastExpressionNode::CastExpressionNode() { kind = ASTKind::CastExpression; }
 void CastExpressionNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "CastExpression as " << targetTypeName
-              << (targetNullable ? "?" : "") << "\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "CastExpression" << Color::Reset
+              << " " << Color::SoftGri << "as" << Color::Reset << " "
+              << Color::SoftPembe << targetTypeName << Color::Reset
+              << (targetNullable ? std::string(Color::SoftTuruncu) + "?" + Color::Reset : "") << "\n";
     if (operand) operand->log(indent + 1);
 }
 std::string CastExpressionNode::toJson(int depth) {
@@ -110,7 +122,7 @@ std::string CastExpressionNode::toJson(int depth) {
 // IndexExpressionNode
 IndexExpressionNode::IndexExpressionNode() { kind = ASTKind::IndexExpression; }
 void IndexExpressionNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "IndexExpression\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "IndexExpression" << Color::Reset << "\n";
     if (object) object->log(indent + 1);
     if (index) index->log(indent + 1);
 }

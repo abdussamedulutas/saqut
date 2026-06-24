@@ -34,6 +34,7 @@ struct CliArgs {
     bool stdinMode  = false;
     bool compact    = false;  // --compact: boşluksuz JSON
     bool optimized  = false;  // --optimized: sabit katlama + ölü kod eleme
+    bool jsonOutput = false;  // --json: JSON çıktı üret (varsayılan: düz metin)
 };
 
 // ============================================================================
@@ -73,6 +74,10 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
             args.compact = true;
             continue;
         }
+        if (arg == "--json") {
+            args.jsonOutput = true;
+            continue;
+        }
         if (arg == "--optimized") {
             args.optimized = true;
             continue;
@@ -94,7 +99,7 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         if (args.command.empty() && i == 1) {
             if (arg == "run"    || arg == "tokens"  || arg == "ast" ||
                 arg == "symbols" || arg == "check"   || arg == "ir"      ||
-                arg == "exec"    ||
+                arg == "exec"    || arg == "lsp"     || arg == "dap"     ||
                 arg == "compile" || arg == "parse"   || arg == "transpile" ||
                 arg == "interpret") {
                 args.command = arg;

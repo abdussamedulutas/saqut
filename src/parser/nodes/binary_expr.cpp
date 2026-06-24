@@ -7,7 +7,10 @@ BinaryExpressionNode::BinaryExpressionNode() {
 
 void BinaryExpressionNode::log(int indent) {
     std::string in = jsonIndent(indent);
-    std::cout << in << "BinaryExpression (" << (OPERATOR_MAP_REV.count(Operator) ? OPERATOR_MAP_REV.at(Operator) : "?") << ")\n";
+    std::cout << in << Color::SoftMavi << "BinaryExpression" << Color::Reset
+              << " (" << Color::SoftMor
+              << (OPERATOR_MAP_REV.count(Operator) ? OPERATOR_MAP_REV.at(Operator) : "?")
+              << Color::Reset << ")\n";
     if (Left)  Left->log(indent + 1);
     if (Right) Right->log(indent + 1);
 }

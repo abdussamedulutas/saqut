@@ -7,7 +7,7 @@ ProgramNode::ProgramNode() {
 
 void ProgramNode::log(int indent) {
     std::string in = jsonIndent(indent);
-    std::cout << in << "Program\n";
+    std::cout << in << Color::SoftMavi << "Program" << Color::Reset << "\n";
     for (auto* child : children) {
         child->log(indent + 1);
     }

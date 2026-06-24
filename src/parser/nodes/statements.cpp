@@ -4,7 +4,7 @@
 // BlockNode
 BlockNode::BlockNode() { kind = ASTKind::Block; }
 void BlockNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "Block\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "Block" << Color::Reset << "\n";
     for (auto* child : children) child->log(indent + 1);
 }
 std::string BlockNode::toJson(int depth) {
@@ -21,7 +21,7 @@ std::string BlockNode::toJson(int depth) {
 // IfStatementNode
 IfStatementNode::IfStatementNode() { kind = ASTKind::IfStatement; }
 void IfStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "IfStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "IfStatement" << Color::Reset << "\n";
     if (condition) condition->log(indent + 1);
     if (thenBranch) thenBranch->log(indent + 1);
     if (elseBranch) elseBranch->log(indent + 1);
@@ -40,7 +40,7 @@ std::string IfStatementNode::toJson(int depth) {
 // WhileStatementNode
 WhileStatementNode::WhileStatementNode() { kind = ASTKind::WhileStatement; }
 void WhileStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "WhileStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "WhileStatement" << Color::Reset << "\n";
     if (condition) condition->log(indent + 1);
     if (body) body->log(indent + 1);
 }
@@ -57,7 +57,7 @@ std::string WhileStatementNode::toJson(int depth) {
 // ForStatementNode
 ForStatementNode::ForStatementNode() { kind = ASTKind::ForStatement; }
 void ForStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "ForStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "ForStatement" << Color::Reset << "\n";
     if (init) init->log(indent + 1);
     if (condition) condition->log(indent + 1);
     if (update) update->log(indent + 1);
@@ -78,7 +78,7 @@ std::string ForStatementNode::toJson(int depth) {
 // DoWhileStatementNode
 DoWhileStatementNode::DoWhileStatementNode() { kind = ASTKind::DoWhileStatement; }
 void DoWhileStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "DoWhileStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "DoWhileStatement" << Color::Reset << "\n";
     if (body) body->log(indent + 1);
     if (condition) condition->log(indent + 1);
 }
@@ -95,7 +95,7 @@ std::string DoWhileStatementNode::toJson(int depth) {
 // ReturnStatementNode
 ReturnStatementNode::ReturnStatementNode() { kind = ASTKind::ReturnStatement; }
 void ReturnStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "ReturnStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "ReturnStatement" << Color::Reset << "\n";
     if (value) value->log(indent + 1);
 }
 std::string ReturnStatementNode::toJson(int depth) {
@@ -110,7 +110,7 @@ std::string ReturnStatementNode::toJson(int depth) {
 // BreakStatementNode
 BreakStatementNode::BreakStatementNode() { kind = ASTKind::BreakStatement; }
 void BreakStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "BreakStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "BreakStatement" << Color::Reset << "\n";
 }
 std::string BreakStatementNode::toJson(int depth) {
     JsonObject obj(depth);
@@ -123,7 +123,7 @@ std::string BreakStatementNode::toJson(int depth) {
 // ContinueStatementNode
 ContinueStatementNode::ContinueStatementNode() { kind = ASTKind::ContinueStatement; }
 void ContinueStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "ContinueStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "ContinueStatement" << Color::Reset << "\n";
 }
 std::string ContinueStatementNode::toJson(int depth) {
     JsonObject obj(depth);
@@ -136,7 +136,7 @@ std::string ContinueStatementNode::toJson(int depth) {
 // ExpressionStatementNode
 ExpressionStatementNode::ExpressionStatementNode() { kind = ASTKind::ExpressionStatement; }
 void ExpressionStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "ExpressionStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "ExpressionStatement" << Color::Reset << "\n";
     if (expression) expression->log(indent + 1);
 }
 std::string ExpressionStatementNode::toJson(int depth) {
@@ -151,7 +151,9 @@ std::string ExpressionStatementNode::toJson(int depth) {
 // TryStatementNode (ADR-025)
 TryStatementNode::TryStatementNode() { kind = ASTKind::TryStatement; }
 void TryStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "TryStatement (catch " << catchVar << ")\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "TryStatement" << Color::Reset
+              << " (" << Color::SoftGri << "catch" << Color::Reset << " "
+              << Color::SoftYesil << catchVar << Color::Reset << ")\n";
     if (body)    body->log(indent + 1);
     if (handler) handler->log(indent + 1);
 }
@@ -169,7 +171,7 @@ std::string TryStatementNode::toJson(int depth) {
 // ThrowStatementNode (ADR-025)
 ThrowStatementNode::ThrowStatementNode() { kind = ASTKind::ThrowStatement; }
 void ThrowStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "ThrowStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "ThrowStatement" << Color::Reset << "\n";
     if (value) value->log(indent + 1);
 }
 std::string ThrowStatementNode::toJson(int depth) {
@@ -184,15 +186,15 @@ std::string ThrowStatementNode::toJson(int depth) {
 // SwitchStatementNode (ADR-027)
 SwitchStatementNode::SwitchStatementNode() { kind = ASTKind::SwitchStatement; }
 void SwitchStatementNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "SwitchStatement\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "SwitchStatement" << Color::Reset << "\n";
     if (subject) subject->log(indent + 1);
     for (auto& c : cases) {
         if (c.isDefault)
-            std::cout << jsonIndent(indent + 1) << "default:\n";
+            std::cout << jsonIndent(indent + 1) << Color::SoftMor << "default" << Color::Reset << ":\n";
         else {
-            std::cout << jsonIndent(indent + 1) << "case ";
+            std::cout << jsonIndent(indent + 1) << Color::SoftMor << "case" << Color::Reset << " ";
             for (size_t i = 0; i < c.values.size(); i++) {
-                if (i) std::cout << ", ";
+                if (i) std::cout << Color::SoftGri << ", " << Color::Reset;
                 if (c.values[i]) c.values[i]->log(0);
             }
             std::cout << "\n";

@@ -435,6 +435,10 @@ nlohmann::json LspHandler::handleCompletion(const nlohmann::json& id,
         }
 
         if (objSym) {
+            // Tip adı (SymbolKind::Struct) üzerinde alan tamamlama yapma
+            if (objSym->kind == SymbolKind::Struct)
+                return JsonRpc::makeResponse(id, items); // boş
+
             Type t = objSym->type;
             // Nullable wrapper'ı soy
             while (t.isArray() && t.elementType) t = *t.elementType;

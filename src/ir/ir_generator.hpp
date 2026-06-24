@@ -27,6 +27,7 @@
 #include "ir/ir_program.hpp"
 #include "symbol/symbol_table.hpp"
 #include "core/type.hpp"
+#include "core/location.hpp"
 #include "parser/ast_node.hpp"
 #include "module/module_graph.hpp"
 
@@ -63,25 +64,38 @@ private:
     // ── Talimat yazma yardımcıları ────────────────────────────────────────
     // Talimatları currentFunction_->instructions'a ekler.
 
-    void emitLoadConst(int destSlot, int value);
-    void emitLoadFloat(int destSlot, double value);
-    void emitIntToFloat(int destSlot, int srcSlot);
-    void emitLoadDecimal(int destSlot, const DecimalValue& value);
-    void emitIntToDecimal(int destSlot, int srcSlot);
-    void emitFloatToDecimal(int destSlot, int srcSlot);
-    void emitLoadSlot(int destSlot, int srcSlot);
-    void emitLoadGlobal(int destSlot, int globalIndex);
-    void emitStoreGlobal(int srcSlot, int globalIndex);
-    void emitStructNew(int destSlot, const std::string& structType, int fieldCount);
-    void emitFieldGet(int destSlot, int objSlot, int fieldIdx);
+    void emitLoadConst(int destSlot, int value,
+                       const SourceLocation& loc = {});
+    void emitLoadFloat(int destSlot, double value,
+                       const SourceLocation& loc = {});
+    void emitIntToFloat(int destSlot, int srcSlot,
+                        const SourceLocation& loc = {});
+    void emitLoadDecimal(int destSlot, const DecimalValue& value,
+                         const SourceLocation& loc = {});
+    void emitIntToDecimal(int destSlot, int srcSlot,
+                          const SourceLocation& loc = {});
+    void emitFloatToDecimal(int destSlot, int srcSlot,
+                            const SourceLocation& loc = {});
+    void emitLoadSlot(int destSlot, int srcSlot,
+                      const SourceLocation& loc = {});
+    void emitLoadGlobal(int destSlot, int globalIndex,
+                        const SourceLocation& loc = {});
+    void emitStoreGlobal(int srcSlot, int globalIndex,
+                         const SourceLocation& loc = {});
+    void emitStructNew(int destSlot, const std::string& structType,
+                       int fieldCount, const SourceLocation& loc = {});
+    void emitFieldGet(int destSlot, int objSlot, int fieldIdx,
+                      const SourceLocation& loc = {});
     void emitFieldSet(int objSlot, int fieldIdx, int valSlot,
                       int line = 0, int col = 0);
-    void emitArrayNew(int destSlot, int capacity);
+    void emitArrayNew(int destSlot, int capacity,
+                      const SourceLocation& loc = {});
     void emitArrayGet(int destSlot, int arrSlot, int idxSlot,
                       int line = 0, int col = 0);
     void emitArraySet(int arrSlot, int idxSlot, int valSlot,
                       int line = 0, int col = 0);
-    void emitArrayLen(int destSlot, int arrSlot);
+    void emitArrayLen(int destSlot, int arrSlot,
+                      const SourceLocation& loc = {});
     void emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot,
                       int line = 0, int col = 0);
     void emitReturn(int srcSlot, int line = 0, int col = 0);

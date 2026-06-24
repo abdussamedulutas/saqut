@@ -38,6 +38,16 @@
 //
 // ============================================================================
 
+struct LspPosition {
+    int line;      // 0-tabanlı
+    int character; // 0-tabanlı
+};
+
+struct LspRange {
+    LspPosition start;
+    LspPosition end;
+};
+
 struct SourceLocation {
     std::string filePath;
     int line   = 0;    // 1-tabanlı, 0 = geçersiz
@@ -78,6 +88,11 @@ struct SourceLocation {
     }
 
     std::string toJson() const { return toJsonObj().dump(); }
+
+    LspPosition toLspPosition() const {
+        return { line > 0 ? line - 1 : 0,
+                 column > 0 ? column - 1 : 0 };
+    }
 };
 
 #endif // SAQUT_CORE_LOCATION

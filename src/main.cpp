@@ -30,6 +30,8 @@
 #include "cli/commands/check.hpp"
 #include "cli/commands/ir.hpp"
 #include "cli/commands/exec.hpp"
+#include "cli/commands/lsp.hpp"
+#include "cli/commands/dap.hpp"
 
 int main(int argc, char* argv[]) {
     // Komutları kaydet
@@ -62,6 +64,14 @@ int main(int argc, char* argv[]) {
     cli.registerCommand({"exec",
         "evaluate an expression and print the result  (saqut exec \"1+2\")",
         false, cmdExec});
+
+    cli.registerCommand({"lsp",
+        "start LSP server (JSON-RPC on stdin/stdout)",
+        false, cmdLsp});
+
+    cli.registerCommand({"dap",
+        "start DAP debug adapter (JSON-RPC on stdin/stdout)",
+        false, cmdDap});
 
     // --- Future commands (TODO) ---
     cli.registerCommand({"compile",

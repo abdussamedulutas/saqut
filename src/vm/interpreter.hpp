@@ -55,6 +55,11 @@ private:
                              const std::vector<Value>& slots,
                              const std::vector<int>&   argSlots);
 
+    // Built-in metod dispatch — sabit runtimeId ile O(1) tablo lookup
+    Value dispatchBuiltinMethod(int runtimeId,
+                                const std::vector<Value>& args,
+                                Heap& heap);
+
     // Mevcut callStack_'i gezerek stacktrace string'i üretir.
     // pendingThrow_ set edilmeden ÖNCE çağrılmalı (unwind olmadan).
     std::string buildTrace() const;

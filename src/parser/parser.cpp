@@ -155,12 +155,59 @@ ASTNode* Parser::parseExpression(uint16_t precedence) {
     return left;
 }
 
+// E::method(args) kalıbını ayrıştır: hem type-keyword hem IDENTIFIER başlangıçları için.
+// Koşul: (type_kw | IDENTIFIER) COLON_COLON IDENTIFIER LPAREN
+static bool isScopeCallPattern(const ParserToken& ct, const ParserToken& la1,
+                                const ParserToken& la2, const ParserToken& la3)
+{
+    bool leftIsType = ct.is({
+        TokenType::KW_INT, TokenType::KW_FLOAT_TYPE, TokenType::KW_DOUBLE,
+        TokenType::KW_DECIMAL, TokenType::KW_BOOL, TokenType::KW_CHAR,
+        TokenType::KW_STRING_TYPE
+    }) || ct.type == TokenType::IDENTIFIER;
+    return leftIsType
+        && la1.type == TokenType::COLON_COLON
+        && la2.type == TokenType::IDENTIFIER
+        && la3.type == TokenType::LPAREN;
+}
+
 ASTNode* Parser::parseNullDenotation() {
     auto ct = currentToken();
 
     if (ct.type == TokenType::SVR_VOID) {
         std::cerr << "parser error: unexpected end of file\n";
         return nullptr;
+    }
+
+    // ── E::method(args) — built-in scope-call ────────────────────────────────
+    if (isScopeCallPattern(ct, lookahead(1), lookahead(2), lookahead(3))) {
+        ScopeCallNode* sc = new ScopeCallNode();
+        sc->loc = ct.token ? ct.token->loc : SourceLocation{};
+
+        // sol tip adını oku
+        sc->leftTypeName = ct.token ? ct.token->token : "";
+        nextToken(); // tüket: type-keyword veya identifier
+
+        nextToken(); // tüket: ::
+
+        // metod adını oku
+        auto methodTok = currentToken();
+        sc->methodName = methodTok.token ? methodTok.token->token : "";
+        nextToken(); // tüket: method identifier
+
+        // argüman listesini oku: ( expr, expr, ... )
+        if (currentToken().type == TokenType::LPAREN)
+            nextToken(); // tüket: (
+        if (currentToken().type != TokenType::RPAREN) {
+            sc->arguments.push_back(parseExpression(0));
+            while (currentToken().type == TokenType::COMMA) {
+                nextToken();
+                sc->arguments.push_back(parseExpression(0));
+            }
+        }
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken(); // tüket: )
+        return sc;
     }
 
     if (ct.type == TokenType::LPAREN) {
@@ -601,6 +648,9 @@ ASTNode* Parser::parseStatement() {
         TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BOOL,
         TokenType::KW_CHAR, TokenType::KW_STRING_TYPE
     })) {
+        if (lookahead(1).type == TokenType::COLON_COLON) {
+            return parseExpressionStatement();
+        }
         return parseVariableDecl();
     }
 

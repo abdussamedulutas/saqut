@@ -1,0 +1,8 @@
+int main() {
+    bool[] b = [true, false];
+    print(bool::length(b));
+    print(bool::contains(b, false));
+    print(bool::push(b, true));
+    print(bool::length(b));
+    return 0;
+}

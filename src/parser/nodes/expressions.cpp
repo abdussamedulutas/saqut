@@ -1,6 +1,26 @@
 #include "parser/nodes/expressions.hpp"
 #include "parser/ast_json.hpp"
 
+// ScopeCallNode — built-in metod çağrısı: E::method(args)
+ScopeCallNode::ScopeCallNode() { kind = ASTKind::ScopeCall; }
+void ScopeCallNode::log(int indent) {
+    std::cout << jsonIndent(indent) << "ScopeCall " << leftTypeName << "::" << methodName << "\n";
+    for (auto* arg : arguments) arg->log(indent + 1);
+}
+std::string ScopeCallNode::toJson(int depth) {
+    JsonObject obj(depth);
+    obj.add("kind",       "ScopeCall");
+    obj.add("leftType",   leftTypeName);
+    obj.add("method",     methodName);
+    obj.add("builtinId",  builtinId);
+    obj.addArray("arguments", [&]() {
+        for (auto* arg : arguments) obj.addItem(arg->toJson(depth + 2));
+    });
+    obj.addRaw("resolvedType", resolvedTypeJson());
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
+}
+
 // PostfixNode
 PostfixNode::PostfixNode() { kind = ASTKind::Postfix; }
 void PostfixNode::log(int indent) {

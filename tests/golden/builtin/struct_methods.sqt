@@ -1,0 +1,15 @@
+struct Person {
+    string name;
+    int age;
+}
+
+int main() {
+    Person p;
+    p.name = "Alice";
+    p.age = 30;
+
+    string info = Person::dump(p);
+    print(info);
+
+    return 0;
+}

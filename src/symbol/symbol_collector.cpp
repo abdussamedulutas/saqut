@@ -437,6 +437,12 @@ void SymbolCollector::walkExpr(ASTNode* node) {
         break;
     }
 
+    case ASTKind::ScopeCall: {
+        auto* sc = (ScopeCallNode*)node;
+        for (ASTNode* arg : sc->arguments) walkExpr(arg);
+        break;
+    }
+
     case ASTKind::CastExpression: {  // ADR-026
         auto* cast = (CastExpressionNode*)node;
         if (cast->operand) walkExpr(cast->operand);

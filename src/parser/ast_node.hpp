@@ -117,6 +117,10 @@ enum class ASTKind {
                           //   children: [element0, element1, ...]
     CastExpression,       // Tip dönüşümü: expr as TargetType[?]  (ADR-026)
                           //   operand: kaynak ifade; targetTypeName: hedef tip adı
+    ScopeCall,            // Built-in metod çağrısı: E::method(args)
+                          //   leftTypeName: "int", "string", "Person" ...
+                          //   methodName: "push", "upper", "toJson" ...
+                          //   arguments: argümanlar (receiver dahil)
 };
 
 // ============================================================================

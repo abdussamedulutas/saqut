@@ -1,0 +1,16 @@
+int main() {
+    string s = "  Hello World  ";
+    print(string::length(s));
+    print(string::upper(s));
+    print(string::lower(s));
+    print(string::trim(s));
+
+    string csv = "a,b,c";
+    string[] parts = string::split(csv, ",");
+    print(string::length(parts));
+    print(parts[0]);
+    print(parts[1]);
+    print(parts[2]);
+
+    return 0;
+}

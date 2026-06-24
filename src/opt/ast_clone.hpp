@@ -272,6 +272,24 @@ inline ASTNode* deepClone(ASTNode* node) {
         return dst;
     }
 
+    // ── ScopeCallNode ────────────────────────────────────────────────────────
+    case ASTKind::ScopeCall: {
+        auto* src = static_cast<ScopeCallNode*>(node);
+        auto* dst = new ScopeCallNode();
+        dst->loc           = src->loc;
+        dst->resolvedType  = src->resolvedType;
+        dst->isConstant    = src->isConstant;
+        dst->leftTypeName  = src->leftTypeName;
+        dst->methodName    = src->methodName;
+        dst->builtinId     = src->builtinId;
+        for (auto* arg : src->arguments) {
+            ASTNode* ca = deepClone(arg);
+            ca->parent = dst;
+            dst->arguments.push_back(ca);
+        }
+        return dst;
+    }
+
     // ── UnaryExpression ──────────────────────────────────────────────────────
     // UnaryExpression şu anda ayrı bir sınıf değil; parser tarafından
     // BinaryExpression veya PostfixNode olarak temsil ediliyor.

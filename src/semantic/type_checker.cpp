@@ -6,6 +6,7 @@
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/identifier.hpp"
 #include "parser/nodes/literal.hpp"
+#include "builtin/builtin_methods.hpp"
 #include <cmath>
 #include <climits>
 
@@ -781,6 +782,105 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             result = *objType.elementType;
         else
             result = Type::Int(); // varsayılan (tip çıkarımı tam değil)
+        break;
+    }
+
+    // ── ScopeCall: E::method(args) — built-in metod çağrısı ───────────────
+    case ASTKind::ScopeCall: {
+        auto* sc = (ScopeCallNode*)node;
+        const auto& reg = BuiltinMethodRegistry::instance();
+
+        // leftTypeName'den element tipini ve struct olup olmadığını belirle
+        bool isStruct = false;
+        Type elemType = BuiltinMethodRegistry::resolveElemType(sc->leftTypeName);
+        if (elemType.isError()) {
+            // Bilinen scalar değil — struct mı?
+            if (table_.hasStruct(sc->leftTypeName)) {
+                isStruct  = true;
+                elemType  = Type::structType(sc->leftTypeName);
+            } else {
+                diag_.report("E001", sc->loc,
+                    "unknown type '" + sc->leftTypeName + "' in scope call",
+                    "use a known scalar type (int, float, string, ...) or a defined struct");
+                for (auto* arg : sc->arguments) checkExpr(arg);
+                result = Type::error();
+                break;
+            }
+        } else if (elemType.isStruct()) {
+            isStruct = true;
+        }
+
+        std::vector<Type> argTypes;
+        for (auto* arg : sc->arguments) {
+            argTypes.push_back(checkExpr(arg));
+        }
+
+        bool isReceiverArray = false;
+        if (!argTypes.empty()) {
+            isReceiverArray = argTypes[0].isArray();
+        }
+
+        const BuiltinMethod* bm = reg.lookup(sc->leftTypeName, sc->methodName, isStruct, isReceiverArray);
+        if (!bm) {
+            // Hata mesajında hangi tiplerin bu metodu desteklediğini söyle
+            diag_.report("E001", sc->loc,
+                "'" + sc->methodName + "' is not a built-in method for type '" + sc->leftTypeName + "'",
+                std::string("use one of: length, push, pop, insert, remove, slice, reverse, concat, contains, indexOf, clear")
+                + (sc->leftTypeName == "string"
+                    ? " — or string methods: upper, lower, trim, split, substring, replace, repeat, charAt, indexOf, contains, startsWith, endsWith"
+                    : "")
+                + (isStruct ? " — or struct methods: toJson, dump" : ""));
+            result = Type::error();
+            break;
+        }
+
+        // Argüman sayısı kontrolü
+        if (sc->arguments.size() != bm->params.size()) {
+            diag_.report("E008", sc->loc,
+                sc->leftTypeName + "::" + sc->methodName + " expects " +
+                std::to_string(bm->params.size()) + " argument(s), " +
+                std::to_string(sc->arguments.size()) + " given",
+                "check the method signature");
+            result = Type::error();
+            break;
+        }
+
+        // Her argümanı kontrol et
+        bool anyError = false;
+        for (size_t i = 0; i < sc->arguments.size(); ++i) {
+            Type argType = argTypes[i];
+            const ParamRule& pr = bm->params[i];
+
+            Type expectedType;
+            switch (pr.kind) {
+                case ParamKind::Fixed:     expectedType = pr.fixedType; break;
+                case ParamKind::ElemType:  expectedType = elemType; break;
+                case ParamKind::ElemArray: expectedType = Type::array(elemType); break;
+                case ParamKind::StringVal: expectedType = Type::String(); break;
+            }
+
+            bool isLit = sc->arguments[i]->kind == ASTKind::Literal;
+            if (!argType.isError() && !expectedType.isError()) {
+                if (!checkAssign(expectedType, argType, isLit,
+                                 sc->arguments[i]->loc,
+                                 sc->leftTypeName + "::" + sc->methodName + " arg " + std::to_string(i + 1)))
+                    anyError = true;
+            }
+        }
+        if (anyError) {
+            result = Type::error();
+            break;
+        }
+
+        // Dönüş tipini hesapla
+        switch (bm->ret.kind) {
+            case ReturnKind::Fixed:     result = bm->ret.fixedType; break;
+            case ReturnKind::ElemType:  result = elemType; break;
+            case ReturnKind::ElemArray: result = Type::array(elemType); break;
+        }
+
+        // builtinId'yi node'a yaz (IR codegen kullanır)
+        sc->builtinId = bm->runtimeId;
         break;
     }
 

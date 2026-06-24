@@ -1,0 +1,18 @@
+int main() {
+    string s = "hello world";
+    
+    // indexOf returns int? (which might print as null or the value)
+    print(string::indexOf(s, "world"));
+    print(string::indexOf(s, "saqut"));
+    
+    print(string::contains(s, "world"));
+    print(string::contains(s, "saqut"));
+    
+    print(string::startsWith(s, "hello"));
+    print(string::startsWith(s, "world"));
+    
+    print(string::endsWith(s, "world"));
+    print(string::endsWith(s, "hello"));
+    
+    return 0;
+}

@@ -18,7 +18,7 @@ static const std::unordered_map<std::string_view, std::string_view> KW_MAP = {
     {"enum","enum"},{"extends","extends"},{"implements","implements"},
     {"new","new"},{"public","public"},{"private","private"},
     {"protected","protected"},{"static","static"},{"final","final"},
-    {"abstract","abstract"},{"import","import"},{"package","package"},
+    {"abstract","abstract"},{"import","import"},{"export","export"},{"package","package"},
     {"const","const"},{"extern","extern"},{"typedef","typedef"},
     {"sizeof","sizeof"},{"auto","auto"},{"constexpr","constexpr"},
     {"noexcept","noexcept"},{"native","native"},

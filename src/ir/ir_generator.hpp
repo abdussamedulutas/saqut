@@ -28,13 +28,16 @@
 #include "symbol/symbol_table.hpp"
 #include "core/type.hpp"
 #include "parser/ast_node.hpp"
+#include "module/module_graph.hpp"
 
 class IRGenerator {
 public:
-    // Ana giriş noktası.
-    // sourceFilePath: kaynak dosya yolu (ModuleRegistry'ye kaydedilir; "" = bilinmiyor)
+    // Tek dosya — geriye dönük uyumluluk
     IRProgram generate(ASTNode* programNode, SymbolTable& symbolTable,
                        const std::string& sourceFilePath = "");
+
+    // Çok dosya: tüm modülleri tek IRProgram'a derle
+    IRProgram generateModuleGraph(ModuleGraph& graph, SymbolTable& symbolTable);
 
 private:
     // ── Fonksiyon üretimi ─────────────────────────────────────────────────

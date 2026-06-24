@@ -1,12 +1,7 @@
 // ============================================================================
 // saQut CLI — run komutu
 //
-// Tam derleme + çalıştırma pipeline'ı:
-//   tokenize → parse → sembol topla → [opsiyonel: optimize] → IR üret → VM çalıştır
-//
-// --optimized bayrağı: AST yerinde optimize edilir (klon yok — sadece tek versiyon
-// gerekiyor). ast komutu orijinali saklaması gerektiği için klon kullanır; run/ir
-// kullanmaz. Aynı pattern ir.hpp'de de var — paralel değişikliklerde ikisine bak.
+// Pipeline: ModuleLoader → 3-geçiş SymbolCollect → TypeCheck → Opt → IRGen → VM
 // ============================================================================
 
 #ifndef SAQUT_CLI_RUN
@@ -14,68 +9,71 @@
 
 #include <iostream>
 #include "cli/args.hpp"
-#include "tokenizer/tokenizer.hpp"
-#include "parser/parser.hpp"
+#include "module/module_loader.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
 #include "semantic/type_checker.hpp"
 #include "semantic/structural_validator.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
 #include "core/config.hpp"
+#include "core/module_registry.hpp"
 #include "opt/optimization_manager.hpp"
 #include "ir/ir_generator.hpp"
 #include "vm/interpreter.hpp"
 
 inline int cmdRun(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
-    std::string source   = readSource(args);
-    if (source.empty()) return 1;
+    if (filePath.empty()) { std::cerr << "error: no input file\n"; return 1; }
 
-    // ── Aşama 1: Tokenize ────────────────────────────────────────────────
-    Tokenizer tokenizer;
-    auto tokens = tokenizer.scan(source, filePath);
+    // ── Aşama 1: Tüm modülleri yükle (BFS parse) ─────────────────────────
+    ModuleRegistry   registry;
+    DiagnosticEngine diag;
+    ModuleLoader     loader(registry, diag);
+    ModuleGraph      graph = loader.load(filePath);
 
-    // ── Aşama 2: Parse ───────────────────────────────────────────────────
-    Parser parser;
-    ASTNode* ast = parser.parse(tokens);
-    if (!ast) {
-        std::cerr << "error: failed to build AST\n";
-        for (auto* t : tokens) delete t;
+    if (diag.hasErrors()) {
+        diag.printAll(std::cerr);
         return 1;
     }
 
-    // ── Phase 3: Symbol collection + semantic analysis ─────────────────────────
-    // Identifier's resolvedSymbol is filled — IR generator needs this.
-    SymbolTable      symbolTable;
-    DiagnosticEngine diag;
-    SymbolCollector(symbolTable, diag).collect(ast);
-    TypeChecker(symbolTable, diag).check(ast);
-    StructuralValidator(diag).validate(ast);
+    // ── Aşama 2: 3-geçiş sembol toplama + import doğrulama ───────────────
+    SymbolTable symbolTable;
+    SymbolCollector collector(symbolTable, diag);
+    collector.collectModuleGraph(graph);
 
     if (diag.hasErrors()) {
         std::cerr << "compilation errors, cannot run program:\n";
         diag.printAll(std::cerr);
-        delete ast;
-        for (auto* t : tokens) delete t;
         return 1;
     }
 
-    // ── Phase 4 (optional): Optimization ────────────────────────────────
-    // --optimized: constant folding + DCE applied in-place, no clone.
-    // Single version (optimized) is sufficient — no comparison like ast command.
+    // ── Aşama 3: Tip denetimi + yapısal doğrulama ─────────────────────────
+    for (auto& unit : graph.units)
+        TypeChecker(symbolTable, diag).check(unit.ast);
+    for (auto& unit : graph.units)
+        StructuralValidator(diag).validate(unit.ast);
+
+    if (diag.hasErrors()) {
+        std::cerr << "compilation errors, cannot run program:\n";
+        diag.printAll(std::cerr);
+        return 1;
+    }
+
+    // ── Aşama 4 (opsiyonel): Optimizasyon ────────────────────────────────
     if (args.optimized) {
         CompilerConfig   cfg;
         DiagnosticEngine optDiag;
-        OptimizationManager(cfg, optDiag).runPassesInPlace(ast, &symbolTable);
+        for (auto& unit : graph.units)
+            OptimizationManager(cfg, optDiag).runPassesInPlace(unit.ast, &symbolTable);
         if (optDiag.errorCount() + optDiag.warningCount() > 0)
-            optDiag.printAll(std::cerr); // W002 (compile-time division by zero) etc.
+            optDiag.printAll(std::cerr);
     }
 
-    // ── Phase 5: IR generation ───────────────────────────────────────────────
+    // ── Aşama 5: IR üretimi ───────────────────────────────────────────────
     IRGenerator irGenerator;
-    IRProgram   program = irGenerator.generate(ast, symbolTable, filePath);
+    IRProgram   program = irGenerator.generateModuleGraph(graph, symbolTable);
 
-    // ── Phase 6: Run on VM ────────────────────────────────────────────
+    // ── Aşama 6: VM çalıştır ──────────────────────────────────────────────
     int exitCode = 0;
     try {
         Interpreter vm(program);
@@ -85,8 +83,6 @@ inline int cmdRun(const CliArgs& args) {
         exitCode = 1;
     }
 
-    delete ast;
-    for (auto* t : tokens) delete t;
     return exitCode;
 }
 

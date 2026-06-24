@@ -29,6 +29,7 @@
 #include "cli/commands/symbols.hpp"
 #include "cli/commands/check.hpp"
 #include "cli/commands/ir.hpp"
+#include "cli/commands/exec.hpp"
 
 int main(int argc, char* argv[]) {
     // Komutları kaydet
@@ -57,6 +58,10 @@ int main(int argc, char* argv[]) {
     cli.registerCommand({"ir",
         "print IR instruction list (intermediate representation)",
         false, cmdIr});
+
+    cli.registerCommand({"exec",
+        "evaluate an expression and print the result  (saqut exec \"1+2\")",
+        false, cmdExec});
 
     // --- Future commands (TODO) ---
     cli.registerCommand({"compile",

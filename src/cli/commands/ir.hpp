@@ -3,62 +3,50 @@
 
 #include <iostream>
 #include "cli/args.hpp"
-#include "tokenizer/tokenizer.hpp"
-#include "parser/parser.hpp"
+#include "module/module_loader.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
 #include "semantic/type_checker.hpp"
 #include "semantic/structural_validator.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
-#include "ir/ir_generator.hpp"
+#include "core/module_registry.hpp"
 #include "core/config.hpp"
 #include "opt/optimization_manager.hpp"
+#include "ir/ir_generator.hpp"
 
 inline int cmdIr(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
-    std::string source   = readSource(args);
-    if (source.empty()) return 1;
+    if (filePath.empty()) return 1;
 
-    Tokenizer tokenizer;
-    auto tokens = tokenizer.scan(source, filePath);
-
-    Parser parser;
-    ASTNode* ast = parser.parse(tokens);
-    if (!ast) {
-        std::cerr << "error: failed to build AST\n";
-        for (auto* t : tokens) delete t;
-        return 1;
-    }
-
-    SymbolTable      symbolTable;
+    ModuleRegistry   registry;
     DiagnosticEngine diag;
-    SymbolCollector(symbolTable, diag).collect(ast);
-    TypeChecker(symbolTable, diag).check(ast);
-    StructuralValidator(diag).validate(ast);
+    ModuleGraph      graph = ModuleLoader(registry, diag).load(filePath);
+
+    SymbolTable symbolTable;
+    SymbolCollector(symbolTable, diag).collectModuleGraph(graph);
+    if (!diag.hasErrors()) {
+        for (auto& unit : graph.units) TypeChecker(symbolTable, diag).check(unit.ast);
+        for (auto& unit : graph.units) StructuralValidator(diag).validate(unit.ast);
+    }
 
     if (diag.hasErrors()) {
         diag.printAll(std::cerr);
-        delete ast;
-        for (auto* t : tokens) delete t;
         return 1;
     }
 
-    // --optimized: constant folding + DCE applied in-place, no clone.
-    // For IR dump, single version is sufficient — no comparison like ast command.
     if (args.optimized) {
         CompilerConfig   cfg;
         DiagnosticEngine optDiag;
-        OptimizationManager(cfg, optDiag).runPassesInPlace(ast, &symbolTable);
+        for (auto& unit : graph.units)
+            OptimizationManager(cfg, optDiag).runPassesInPlace(unit.ast, &symbolTable);
         if (optDiag.errorCount() + optDiag.warningCount() > 0)
-            optDiag.printAll(std::cerr); // W002 vb. uyarılar stderr'e
+            optDiag.printAll(std::cerr);
     }
 
     IRGenerator irGenerator;
-    IRProgram   program = irGenerator.generate(ast, symbolTable, filePath);
+    IRProgram   program = irGenerator.generateModuleGraph(graph, symbolTable);
     program.dump();
 
-    delete ast;
-    for (auto* t : tokens) delete t;
     return 0;
 }
 

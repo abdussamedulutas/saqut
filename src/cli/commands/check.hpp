@@ -3,56 +3,38 @@
 
 #include <iostream>
 #include "cli/args.hpp"
-#include "tokenizer/tokenizer.hpp"
-#include "parser/parser.hpp"
+#include "module/module_loader.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
 #include "semantic/type_checker.hpp"
 #include "semantic/structural_validator.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
+#include "core/module_registry.hpp"
 #include "vendor/nlohmann/json.hpp"
 
 inline int cmdCheck(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
-    std::string source   = readSource(args);
-    if (source.empty()) return 1;
+    if (filePath.empty()) return 1;
 
-    Tokenizer tokenizer;
-    auto tokens = tokenizer.scan(source, filePath);
-
-    Parser parser;
-    ASTNode* ast = parser.parse(tokens);
-
+    ModuleRegistry   registry;
     DiagnosticEngine diag;
+    ModuleGraph      graph = ModuleLoader(registry, diag).load(filePath);
 
-    if (!ast) {
-        diag.report("E000", SourceLocation{}, "failed to build AST");
-        nlohmann::json out;
-        out["file"]        = filePath;
-        out["diagnostics"] = diag.toJsonObj();
-        std::cout << (args.compact ? out.dump() : out.dump(2)) << "\n";
-        for (auto* t : tokens) delete t;
-        return 1;
-    }
-
-    SymbolTable table;
-    SymbolCollector(table, diag).collect(ast);
-
-    // If symbol collection errors exist, skip type checking
-    // (unresolved symbols produce spurious E003 in type checking)
     if (!diag.hasErrors()) {
-        TypeChecker(table, diag).check(ast);
-        StructuralValidator(diag).validate(ast);
+        SymbolTable table;
+        SymbolCollector(table, diag).collectModuleGraph(graph);
+
+        if (!diag.hasErrors()) {
+            for (auto& unit : graph.units) TypeChecker(table, diag).check(unit.ast);
+            for (auto& unit : graph.units) StructuralValidator(diag).validate(unit.ast);
+        }
     }
 
     nlohmann::json out;
     out["file"]        = filePath;
     out["diagnostics"] = diag.toJsonObj();
-
     std::cout << (args.compact ? out.dump() : out.dump(2)) << "\n";
 
-    delete ast;
-    for (auto* t : tokens) delete t;
     return diag.hasErrors() ? 1 : 0;
 }
 

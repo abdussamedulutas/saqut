@@ -1176,7 +1176,12 @@ void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int
     Instruction ins(Opcode::STRUCT_NEW);
     ins.dest         = destSlot;
     ins.intValue     = fieldCount;
-    ins.functionName = structType; // struct tip adı
+    ins.functionName = structType;
+    // Alan adlarını struct layout'tan al — toJson/dump'ta kullanılır
+    auto it = structLayouts_.find(structType);
+    if (it != structLayouts_.end())
+        for (const auto& kv : it->second)
+            ins.fieldNames.push_back(kv.first);
     currentFunction_->instructions.push_back(std::move(ins));
 }
 

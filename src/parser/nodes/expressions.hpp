@@ -53,6 +53,20 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
+// Built-in metod çağrısı: E::method(args)  (ör. int::push(arr, 12))
+class ScopeCallNode : public ExpressionNode {
+public:
+    std::string leftTypeName;   // "int", "float", "string", "Person", ...
+    std::string methodName;     // "push", "pop", "upper", "toJson", ...
+    std::vector<ASTNode*> arguments;
+    int         builtinId = -1; // TypeChecker çözer; IR codegen kullanır
+
+    ScopeCallNode();
+    ~ScopeCallNode() override { for (auto* a : arguments) delete a; }
+    void log(int indent = 0) override;
+    std::string toJson(int depth = 0) override;
+};
+
 // ADR-026: expr as TargetType[?]
 class CastExpressionNode : public ExpressionNode {
 public:

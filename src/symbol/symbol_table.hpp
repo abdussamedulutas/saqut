@@ -64,6 +64,10 @@ public:
     bool isEnumName(const std::string& name) const {
         return enumLayouts.count(name) > 0;
     }
+    bool hasStruct(const std::string& name) const {
+        return structLayouts.count(name) > 0;
+    }
+
     int getEnumMemberValue(const std::string& enumName, const std::string& member) const {
         auto it = enumLayouts.find(enumName);
         if (it == enumLayouts.end()) return -1;

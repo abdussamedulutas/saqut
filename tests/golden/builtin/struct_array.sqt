@@ -1,0 +1,40 @@
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point[] arr = [];
+
+    Point p1;
+    p1.x = 10;
+    p1.y = 20;
+
+    Point p2;
+    p2.x = 30;
+    p2.y = 40;
+
+    int idx1 = Point::push(arr, p1);
+    int idx2 = Point::push(arr, p2);
+    print(idx1);
+    print(idx2);
+    print(Point::length(arr));
+
+    print(arr[0].x);
+    print(arr[1].y);
+
+    print(Point::contains(arr, p1));
+    print(Point::contains(arr, p2));
+
+    Point::reverse(arr);
+    print(arr[0].x);
+
+    Point popped = Point::pop(arr);
+    print(popped.x);
+    print(Point::length(arr));
+
+    Point::clear(arr);
+    print(Point::length(arr));
+
+    return 0;
+}

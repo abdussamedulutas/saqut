@@ -1,0 +1,7 @@
+int main() {
+    float[] f = [1.5, 2.5, 3.5];
+    print(float::length(f));
+    print(float::pop(f));
+    print(float::length(f));
+    return 0;
+}

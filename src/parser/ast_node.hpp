@@ -56,6 +56,9 @@ enum class ASTKind {
                           //   Tüm .cpp/.sqt dosyası tek bir Program düğümüdür.
 
     /* ====== Tanımlar (Declarations) ====== */
+    ImportDecl,           // import {name, ...} from "file.sqt";
+                          //   importedNames: içe aktarılan isimler listesi
+                          //   sourcePath: kaynak dosya yolu (ham string)
     FunctionDecl,         // Fonksiyon tanımı.
                           //   children: [returnType?], [name], [params...], [body: Block]
                           //   Örn: int main() { ... }

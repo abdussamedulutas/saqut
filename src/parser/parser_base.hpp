@@ -40,6 +40,8 @@ private:
     ASTNode* parseStructDecl();
     ASTNode* parseEnumDecl();
     ASTNode* parseVariableDecl();
+    ASTNode* parseImportDecl();   // import {name, ...} from "file.sqt";
+    ASTNode* parseExportDecl();   // export struct/enum/function ...
 
     // --- Statement'lar ---
     ASTNode* parseStatement();

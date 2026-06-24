@@ -9,7 +9,8 @@ class FunctionDeclNode : public ASTNode {
 public:
     std::string name;
     std::string returnType;
-    std::vector<VariableDeclNode*> params; // TODO(faz2): parametreler
+    std::vector<VariableDeclNode*> params;
+    bool isExported = false;
     FunctionDeclNode();
     ~FunctionDeclNode() override;
     void log(int indent = 0) override;
@@ -30,6 +31,7 @@ public:
 class StructDeclNode : public ASTNode {
 public:
     std::string name;
+    bool isExported = false;
     StructDeclNode();
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
@@ -44,7 +46,18 @@ class EnumDeclNode : public ASTNode {
 public:
     std::string              name;
     std::vector<EnumMember>  members;
+    bool isExported = false;
     EnumDeclNode();
+    void log(int indent = 0) override;
+    std::string toJson(int depth = 0) override;
+};
+
+// import {name1, name2} from "file.sqt";
+class ImportDeclNode : public ASTNode {
+public:
+    std::vector<std::string> importedNames;  // {"add", "Vector"}
+    std::string              sourcePath;     // "math.sqt" (ham, çözümlenmemiş)
+    ImportDeclNode();
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };

@@ -94,6 +94,7 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         if (args.command.empty() && i == 1) {
             if (arg == "run"    || arg == "tokens"  || arg == "ast" ||
                 arg == "symbols" || arg == "check"   || arg == "ir"      ||
+                arg == "exec"    ||
                 arg == "compile" || arg == "parse"   || arg == "transpile" ||
                 arg == "interpret") {
                 args.command = arg;

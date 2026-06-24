@@ -7,6 +7,7 @@
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/identifier.hpp"
 #include "parser/nodes/literal.hpp"
+#include "builtin/builtin_methods.hpp"
 #include <stdexcept>
 #include <string>
 
@@ -825,6 +826,31 @@ int IRGenerator::generateExpression(ASTNode* node) {
             currentFunction_->instructions.push_back(std::move(ins));
             return destSlot;
         }
+    }
+
+    // ── ScopeCall: E::method(args) — built-in metod ─────────────────────
+    case ASTKind::ScopeCall: {
+        auto* sc = (ScopeCallNode*)node;
+
+        // Her argümanı hesapla
+        std::vector<int> argSlots;
+        for (ASTNode* arg : sc->arguments)
+            argSlots.push_back(generateExpression(arg));
+
+        // CALLHOST: functionName = "__builtin_method__", intValue = builtinId
+        // dest slotu: void dönüşlü metod için -1
+        bool returnsVoid = sc->resolvedType.isVoid();
+        int destSlot = returnsVoid ? -1 : freshSlot();
+
+        Instruction ins(Opcode::CALLHOST);
+        ins.functionName = "__builtin_method__";
+        ins.intValue     = sc->builtinId;
+        ins.argSlots     = std::move(argSlots);
+        ins.dest         = destSlot;
+        ins.sourceLine   = sc->loc.line;
+        ins.sourceCol    = sc->loc.column;
+        currentFunction_->instructions.push_back(std::move(ins));
+        return destSlot;
     }
 
     // ── Postfix: i++, i-- ────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 #include "ir/ir_function.hpp"
+#include "builtin/builtin_methods.hpp"
 #include <iomanip>
 #include <iostream>
 #include <string>
@@ -130,12 +131,26 @@ void IRFunction::dump() const {
             std::cout << ")";
 
         } else if (ins.opcode == Opcode::CALLHOST) {
-            std::cout << ins.functionName << "(";
-            for (int j = 0; j < (int)ins.argSlots.size(); j++) {
-                if (j) std::cout << ", ";
-                std::cout << slot(ins.argSlots[j]);
+            if (ins.functionName == "__builtin_method__") {
+                // Built-in metod: method adını registry'den al
+                const auto* bm = BuiltinMethodRegistry::instance().byId(ins.intValue);
+                std::string methodLabel = bm ? bm->name : ("id" + std::to_string(ins.intValue));
+                if (ins.dest >= 0)
+                    std::cout << slot(ins.dest) << " = ";
+                std::cout << "builtin::" << methodLabel << "(";
+                for (int j = 0; j < (int)ins.argSlots.size(); j++) {
+                    if (j) std::cout << ", ";
+                    std::cout << slot(ins.argSlots[j]);
+                }
+                std::cout << ")";
+            } else {
+                std::cout << ins.functionName << "(";
+                for (int j = 0; j < (int)ins.argSlots.size(); j++) {
+                    if (j) std::cout << ", ";
+                    std::cout << slot(ins.argSlots[j]);
+                }
+                std::cout << ")";
             }
-            std::cout << ")";
 
         } else if (ins.opcode == Opcode::BNOT) {
             std::cout << slot(ins.dest) << " = ~" << slot(ins.src);

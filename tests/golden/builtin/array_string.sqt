@@ -1,0 +1,10 @@
+int main() {
+    string[] s = ["hello"];
+    print(string::length(s));
+    string::push(s, "world");
+    print(string::length(s));
+    print(s[1]);
+    print(string::pop(s));
+    print(string::length(s));
+    return 0;
+}

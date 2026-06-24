@@ -759,7 +759,7 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
                                  ? idNode->parserToken.token->token : "";
             Symbol* sym = idName.empty() ? nullptr : table_.resolve(idName);
             if (sym && sym->kind == SymbolKind::Struct) {
-                diag_.report("E001", node->loc,
+                diag_.report("E001", ma->object->loc,
                     "'" + idName + "' is a struct type, not a variable",
                     "declare an instance first: `" + idName + " myVar;` then use `myVar." + ma->member + "`",
                     (int)idName.size());

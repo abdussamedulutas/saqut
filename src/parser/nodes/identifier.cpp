@@ -6,7 +6,10 @@ IdentifierNode::IdentifierNode() { kind = ASTKind::Identifier; }
 
 void IdentifierNode::log(int indent) {
     std::cout << padRight("", indent)
-              << "Identifier {" << (parserToken.token ? parserToken.token->token : "?") << "}\n";
+              << Color::SoftMavi << "Identifier" << Color::Reset
+              << " {" << Color::SoftYesil
+              << (parserToken.token ? parserToken.token->token : "?")
+              << Color::Reset << "}\n";
 }
 
 std::string IdentifierNode::toJson(int depth) {

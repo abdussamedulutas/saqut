@@ -3,6 +3,7 @@ int gcd(int a, int b) {
     return gcd(b, a % b);
 }
 
+
 int main() {
     print(gcd(48, 18));
     print(gcd(1, 1));
@@ -14,6 +15,7 @@ int main() {
     } catch (Error e) {
         print(e.code);
     }
+
 
     return 0;
 }

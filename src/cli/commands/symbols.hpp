@@ -6,6 +6,7 @@
 #define SAQUT_CLI_SYMBOLS
 
 #include <iostream>
+#include "tools.hpp"
 #include "cli/args.hpp"
 #include "tokenizer/tokenizer.hpp"
 #include "parser/parser.hpp"
@@ -34,36 +35,65 @@ inline int cmdSymbols(const CliArgs& args) {
         diag.report("E000", SourceLocation{}, "failed to build AST");
     }
 
-    // ── JSON çıktı ──────────────────────────────────────────────────────────
-    nlohmann::json out;
-    out["file"] = filePath;
+    if (args.jsonOutput) {
+        // ── JSON çıktı ──────────────────────────────────────────────────────
+        nlohmann::json out;
+        out["file"] = filePath;
 
-    nlohmann::json symArray = nlohmann::json::array();
-    for (Symbol* s : table.allSymbols()) {
-        if (s->isBuiltin) continue;
+        nlohmann::json symArray = nlohmann::json::array();
+        for (Symbol* s : table.allSymbols()) {
+            if (s->isBuiltin) continue;
 
-        nlohmann::json refs = nlohmann::json::array();
-        for (const SourceLocation& r : s->references)
-            refs.push_back(r.toJsonObj());
+            nlohmann::json refs = nlohmann::json::array();
+            for (const SourceLocation& r : s->references)
+                refs.push_back(r.toJsonObj());
 
-        symArray.push_back({
-            {"name",           s->name},
-            {"kind",           symbolKindName(s->kind)},
-            {"type",           s->type.toString()},
-            {"typeDetail",     s->type.toJsonObj()},
-            {"sourceModule",   s->moduleId == 0 ? "__builtin__"
-                                                : s->moduleId < 0  ? "<main>"
-                                                : "<module:" + std::to_string(s->moduleId) + ">"},
-            {"definition",     s->definitionLoc.toJsonObj()},
-            {"referenceCount", static_cast<int>(s->references.size())},
-            {"references",     refs},
-            {"isBuiltin",      s->isBuiltin}
-        });
+            symArray.push_back({
+                {"name",           s->name},
+                {"kind",           symbolKindName(s->kind)},
+                {"type",           s->type.toString()},
+                {"typeDetail",     s->type.toJsonObj()},
+                {"sourceModule",   s->moduleId == 0 ? "__builtin__"
+                                                    : s->moduleId < 0  ? "<main>"
+                                                    : "<module:" + std::to_string(s->moduleId) + ">"},
+                {"definition",     s->definitionLoc.toJsonObj()},
+                {"referenceCount", static_cast<int>(s->references.size())},
+                {"references",     refs},
+                {"isBuiltin",      s->isBuiltin}
+            });
+        }
+        out["symbols"]     = symArray;
+        out["diagnostics"] = diag.toJsonObj();
+
+        std::cout << (args.compact ? out.dump() : out.dump(2)) << "\n";
+    } else {
+        // ── Düz metin çıktı ─────────────────────────────────────────────────
+        for (Symbol* s : table.allSymbols()) {
+            if (s->isBuiltin) continue;
+
+            // "<def_loc>  <tip>  <isim>" — fonksiyonlarda kind parantezde
+            std::string defLoc = s->definitionLoc.isValid()
+                ? s->definitionLoc.toString()
+                : "<unknown>";
+            std::string kindSuffix = (s->kind != SymbolKind::Variable &&
+                                      s->kind != SymbolKind::Parameter)
+                ? std::string(" (") + symbolKindName(s->kind) + ")"
+                : "";
+            std::cout << Color::SoftGri << defLoc << Color::Reset << "  "
+                      << Color::SoftPembe << s->type.toString() << Color::Reset << "  "
+                      << Color::SoftYesil << s->name << Color::Reset
+                      << Color::SoftMor << kindSuffix << Color::Reset << "\n";
+
+            if (!s->references.empty()) {
+                std::cout << "\t" << Color::SoftTurkuaz << "refs" << Color::Reset;
+                for (const SourceLocation& r : s->references)
+                    std::cout << "  " << Color::SoftGri << r.toString() << Color::Reset;
+                std::cout << "\n";
+            }
+        }
+        if (diag.hasErrors() || diag.warningCount() > 0)
+            diag.printAll(std::cerr);
     }
-    out["symbols"]     = symArray;
-    out["diagnostics"] = diag.toJsonObj();
-
-    std::cout << (args.compact ? out.dump() : out.dump(2)) << "\n";
 
     delete ast;
     for (auto* t : tokens) delete t;

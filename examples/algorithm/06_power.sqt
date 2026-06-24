@@ -14,5 +14,7 @@ int main() {
     print(pow_fast(2, 10));
     print(pow_fast(2, 30));
     print(pow_fast(0, 5));
+
+
     return 0;
 }

@@ -8,11 +8,12 @@ void LiteralNode::log(int indent) {
     std::string val = hasDirectValue ? std::to_string(directIntValue)
                                      : (parserToken.token ? parserToken.token->token : "?");
     std::cout << padRight("", indent)
-              << "Literal {" << val << "} "
-              << literalTypeToString(literalType);
-    if (isConstant) std::cout << " [folded]";
+              << Color::SoftMavi << "Literal" << Color::Reset
+              << " {" << Color::SoftTuruncu << val << Color::Reset << "} "
+              << Color::SoftGri << literalTypeToString(literalType) << Color::Reset;
+    if (isConstant) std::cout << " " << Color::SoftTurkuaz << "[folded]" << Color::Reset;
     if (literalType == LiteralType::INTEGER && literalBase != 10)
-        std::cout << " (base " << literalBase << ")";
+        std::cout << " " << Color::SoftGri << "(base " << literalBase << ")" << Color::Reset;
     std::cout << "\n";
 }
 

@@ -1,4 +1,21 @@
 #include "lsp/json_rpc.hpp"
+#include <fstream>
+#include <chrono>
+#include <ctime>
+
+static void lspLog(const char* dir, const nlohmann::json& msg) {
+    static std::ofstream log("/tmp/saqut-lsp.log", std::ios::app);
+    if (!log.is_open()) return;
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    char ts[20];
+    std::strftime(ts, sizeof(ts), "%H:%M:%S", std::localtime(&t));
+    std::string method = msg.contains("method") ? msg["method"].get<std::string>() : "";
+    log << "[" << ts << "] " << dir;
+    if (!method.empty()) log << " " << method;
+    log << "\n" << msg.dump(2) << "\n---\n";
+    log.flush();
+}
 
 nlohmann::json JsonRpc::readMessage(std::istream& in) {
     int contentLength = 0;
@@ -12,10 +29,13 @@ nlohmann::json JsonRpc::readMessage(std::istream& in) {
     if (contentLength <= 0) return nullptr;
     std::string body(contentLength, '\0');
     in.read(body.data(), contentLength);
-    return nlohmann::json::parse(body, nullptr, false);
+    auto msg = nlohmann::json::parse(body, nullptr, false);
+    if (!msg.is_discarded()) lspLog("<<<", msg);
+    return msg;
 }
 
 void JsonRpc::writeMessage(std::ostream& out, const nlohmann::json& msg) {
+    lspLog(">>>", msg);
     std::string body = msg.dump();
     out << "Content-Length: " << body.size() << "\r\n\r\n" << body;
     out.flush();

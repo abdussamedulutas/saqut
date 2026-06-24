@@ -1,25 +1,66 @@
 {
   "name": "saqut",
   "displayName": "saQut Language",
+  "description": "saQut dil desteği: sözdizimi renklendirme, LSP ve DAP entegrasyonu",
   "version": "0.1.0",
-  "engines": { "vscode": "^1.75.0" },
-  "categories": ["Programming Languages"],
-  "activationEvents": ["onLanguage:sqt"],
-  "contributes": {
-    "languages": [{
-      "id": "sqt",
-      "aliases": ["saQut"],
-      "extensions": [".sqt"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "sqt",
-      "scopeName": "source.sqt",
-      "path": "./syntaxes/sqt.tmLanguage.json"
-    }]
+  "publisher": "saqut",
+  "engines": {
+    "vscode": "^1.75.0"
   },
-  "main": "./extension.js",
+  "categories": [
+    "Programming Languages",
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onLanguage:sqt"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "sqt",
+        "aliases": [
+          "saQut",
+          "sqt"
+        ],
+        "extensions": [
+          ".sqt"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sqt",
+        "scopeName": "source.sqt",
+        "path": "./syntaxes/sqt.tmLanguage.json"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "sqt",
+        "label": "saQut Debug",
+        "languages": [
+          "sqt"
+        ],
+        "program": "./extension.js",
+        "runtime": "node"
+      }
+    ]
+  },
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "esbuild extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --target=node18",
+    "watch": "esbuild extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --target=node18 --watch",
+    "package": "npm run compile && vsce package --no-dependencies"
+  },
   "dependencies": {
-    "vscode-languageclient": "^8.0.0"
+    "vscode-languageclient": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.0.0"
   }
 }

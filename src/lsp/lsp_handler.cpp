@@ -51,6 +51,15 @@ nlohmann::json LspHandler::dispatch(const nlohmann::json& msg) {
     if (method == "textDocument/references")
         return handleReferences(id, params);
 
+    if (method == "textDocument/documentSymbol")
+        return handleDocumentSymbol(id, params);
+
+    if (method == "textDocument/documentHighlight")
+        return handleDocumentHighlight(id, params);
+
+    if (method == "textDocument/completion")
+        return handleCompletion(id, params);
+
     // Bilinmeyen metod — null döndür (notification) veya boş cevap
     if (!id.is_null())
         return JsonRpc::makeError(id, -32601, "Method not found: " + method);
@@ -68,7 +77,11 @@ nlohmann::json LspHandler::handleInitialize(const nlohmann::json& id,
         {"definitionProvider",        true},
         {"referencesProvider",        true},
         {"hoverProvider",             true},
+        {"documentSymbolProvider",    true},
         {"documentHighlightProvider", true},
+        {"completionProvider", {
+            {"triggerCharacters", nlohmann::json::array({":", "."})}
+        }},
     };
     nlohmann::json result = {
         {"capabilities", capabilities},
@@ -181,10 +194,28 @@ nlohmann::json LspHandler::handleHover(const nlohmann::json& id,
     Symbol* sym = findSymbolAt(*state, line, ch);
     if (!sym) return JsonRpc::makeResponse(id, nullptr);
 
-    std::string kindStr = symbolKindName(sym->kind);
-    std::string typeStr = sym->type.toString();
-    std::string content = "**" + sym->name + "**: " + typeStr +
-                          " (" + kindStr + ")";
+    std::string content;
+    if (sym->kind == SymbolKind::Function && sym->type.isFunction()) {
+        // "int gcd(int a, int b)"
+        std::string ret = sym->type.returnType ? sym->type.returnType->toString() : "void";
+        std::string sig = ret + " " + sym->name + "(";
+        for (size_t i = 0; i < sym->type.paramTypes.size(); ++i) {
+            if (i > 0) sig += ", ";
+            sig += sym->type.paramTypes[i].toString();
+            if (i < sym->paramNames.size())
+                sig += " " + sym->paramNames[i];
+        }
+        sig += ")";
+        content = "```sqt\n" + sig + "\n```";
+    } else if (sym->kind == SymbolKind::Struct) {
+        content = "```sqt\nstruct " + sym->name + "\n```";
+    } else if (sym->kind == SymbolKind::Enum) {
+        content = "```sqt\nenum " + sym->name + "\n```";
+    } else {
+        // değişken / parametre / alan
+        std::string typeStr = sym->type.toString();
+        content = "```sqt\n" + typeStr + " " + sym->name + "\n```";
+    }
 
     nlohmann::json result = {
         {"contents", {{"kind", "markdown"}, {"value", content}}}
@@ -232,4 +263,286 @@ nlohmann::json LspHandler::handleReferences(const nlohmann::json& id,
     }
 
     return JsonRpc::makeResponse(id, locs);
+}
+
+// LSP SymbolKind sayıları: Function=12, Variable=13, Struct=23, Enum=10, EnumMember=22, Field=8
+static int lspSymbolKind(SymbolKind k) {
+    switch (k) {
+        case SymbolKind::Function:   return 12;
+        case SymbolKind::Struct:     return 23;
+        case SymbolKind::Enum:       return 10;
+        case SymbolKind::EnumValue:  return 22;
+        case SymbolKind::Field:      return 8;
+        case SymbolKind::Variable:   return 13;
+        case SymbolKind::Parameter:  return 13;
+    }
+    return 13;
+}
+
+nlohmann::json LspHandler::handleDocumentSymbol(const nlohmann::json& id,
+                                                 const nlohmann::json& params) {
+    std::string uri = params["textDocument"]["uri"].get<std::string>();
+    DocumentState* state = store_.get(uri);
+    if (!state) return JsonRpc::makeResponse(id, nlohmann::json::array());
+
+    nlohmann::json symbols = nlohmann::json::array();
+
+    for (Symbol* sym : state->symbolTable.allSymbols()) {
+        // Parametre ve alan sembollerini gizle — gürültü yapar
+        if (sym->kind == SymbolKind::Parameter) continue;
+        if (sym->kind == SymbolKind::Field)     continue;
+        if (!sym->definitionLoc.isValid())      continue;
+
+        auto pos = sym->definitionLoc.toLspPosition();
+        int  end = pos.character + static_cast<int>(sym->name.size());
+
+        nlohmann::json range = {
+            {"start", {{"line", pos.line}, {"character", pos.character}}},
+            {"end",   {{"line", pos.line}, {"character", end}}}
+        };
+
+        symbols.push_back({
+            {"name",            sym->name},
+            {"kind",            lspSymbolKind(sym->kind)},
+            {"range",           range},
+            {"selectionRange",  range}
+        });
+    }
+
+    return JsonRpc::makeResponse(id, symbols);
+}
+
+// HighlightKind: Text=1, Read=2, Write=3
+nlohmann::json LspHandler::handleDocumentHighlight(const nlohmann::json& id,
+                                                    const nlohmann::json& params) {
+    std::string uri  = params["textDocument"]["uri"].get<std::string>();
+    int         line = params["position"]["line"].get<int>();
+    int         ch   = params["position"]["character"].get<int>();
+
+    DocumentState* state = store_.get(uri);
+    if (!state) return JsonRpc::makeResponse(id, nlohmann::json::array());
+
+    Symbol* sym = findSymbolAt(*state, line, ch);
+    if (!sym)   return JsonRpc::makeResponse(id, nlohmann::json::array());
+
+    nlohmann::json highlights = nlohmann::json::array();
+
+    auto makeHighlight = [&](const SourceLocation& loc, int kind) {
+        auto pos = loc.toLspPosition();
+        int  end = pos.character + static_cast<int>(sym->name.size());
+        highlights.push_back({
+            {"range", {
+                {"start", {{"line", pos.line}, {"character", pos.character}}},
+                {"end",   {{"line", pos.line}, {"character", end}}}
+            }},
+            {"kind", kind}
+        });
+    };
+
+    if (sym->definitionLoc.isValid())
+        makeHighlight(sym->definitionLoc, 3); // Write — tanım noktası
+
+    for (const auto& ref : sym->references)
+        makeHighlight(ref, 2); // Read — kullanım noktaları
+
+    return JsonRpc::makeResponse(id, highlights);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Completion
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Satırda imlecin solundaki tanımlayıcıyı döndürür (prefix)
+static std::string wordPrefix(const std::string& content, int line, int ch) {
+    int curLine = 0;
+    size_t i = 0;
+    while (i < content.size() && curLine < line) {
+        if (content[i++] == '\n') ++curLine;
+    }
+    size_t lineStart = i;
+    size_t end = lineStart + static_cast<size_t>(ch);
+    if (end > content.size()) end = content.size();
+    size_t start = end;
+    while (start > lineStart &&
+           (std::isalnum(static_cast<unsigned char>(content[start-1])) ||
+            content[start-1] == '_')) {
+        --start;
+    }
+    return content.substr(start, end - start);
+}
+
+// İmleç konumundaki satırı, imlece kadar döndürür
+static std::string lineUpToCursor(const std::string& content, int line, int ch) {
+    int curLine = 0;
+    size_t i = 0;
+    while (i < content.size() && curLine < line) {
+        if (content[i++] == '\n') ++curLine;
+    }
+    size_t lineStart = i;
+    size_t end = lineStart + static_cast<size_t>(ch);
+    if (end > content.size()) end = content.size();
+    return content.substr(lineStart, end - lineStart);
+}
+
+// Satır metninin sonundaki tanımlayıcıyı döndürür ("efsane." → "efsane")
+static std::string wordBefore(const std::string& lineText, char delim1, char delim2 = 0) {
+    if (lineText.empty()) return "";
+    size_t end = lineText.size();
+    // Sondaki delimiteri atla
+    if (end > 0 && lineText[end-1] == delim1) --end;
+    if (delim2 && end > 0 && lineText[end-1] == delim2) --end;
+    size_t start = end;
+    while (start > 0 && (std::isalnum(static_cast<unsigned char>(lineText[start-1]))
+                         || lineText[start-1] == '_'))
+        --start;
+    return lineText.substr(start, end - start);
+}
+
+// CompletionItemKind: Function=3, Variable=6, Field=5, Struct=22, Enum=13, EnumMember=20, Keyword=14
+static int completionKind(SymbolKind k) {
+    switch (k) {
+        case SymbolKind::Function:   return 3;
+        case SymbolKind::Variable:   return 6;
+        case SymbolKind::Parameter:  return 6;
+        case SymbolKind::Field:      return 5;
+        case SymbolKind::Struct:     return 22;
+        case SymbolKind::Enum:       return 13;
+        case SymbolKind::EnumValue:  return 20;
+    }
+    return 6;
+}
+
+nlohmann::json LspHandler::handleCompletion(const nlohmann::json& id,
+                                             const nlohmann::json& params) {
+    std::string uri  = params["textDocument"]["uri"].get<std::string>();
+    int         line = params["position"]["line"].get<int>();
+    int         ch   = params["position"]["character"].get<int>();
+
+    DocumentState* state = store_.get(uri);
+    if (!state) return JsonRpc::makeResponse(id, nlohmann::json::array());
+
+    nlohmann::json items = nlohmann::json::array();
+    std::string lineText = lineUpToCursor(state->content, line, ch);
+
+    // ── "expr." → struct alan tamamlama ──────────────────────────────────────
+    if (!lineText.empty() && lineText.back() == '.') {
+        std::string objName = wordBefore(lineText, '.');
+
+        // Sembol tablosunda bul, tipini al
+        Symbol* objSym = nullptr;
+        for (Symbol* s : state->symbolTable.allSymbols()) {
+            if (s->name == objName) { objSym = s; break; }
+        }
+
+        if (objSym) {
+            Type t = objSym->type;
+            // Nullable wrapper'ı soy
+            while (t.isArray() && t.elementType) t = *t.elementType;
+            std::string sName = t.isStruct() ? t.structName : "";
+
+            if (!sName.empty() && state->symbolTable.hasStruct(sName)) {
+                auto it = state->symbolTable.structLayouts.find(sName);
+                if (it != state->symbolTable.structLayouts.end()) {
+                    for (auto& [fieldName, fieldType] : it->second) {
+                        items.push_back({
+                            {"label",  fieldName},
+                            {"kind",   5},  // Field
+                            {"detail", fieldType.toString()},
+                        });
+                    }
+                }
+                return JsonRpc::makeResponse(id, items);
+            }
+        }
+        // struct değilse boş döndür — bilinmeyen nesneye alan önermiyoruz
+        return JsonRpc::makeResponse(id, items);
+    }
+
+    // ── "expr::" → built-in method tamamlama ─────────────────────────────────
+    if (lineText.size() >= 2 &&
+        lineText[lineText.size()-1] == ':' &&
+        lineText[lineText.size()-2] == ':') {
+
+        struct BuiltinMethod { const char* name; const char* sig; const char* detail; };
+        static const BuiltinMethod builtins[] = {
+            // genel
+            {"toStr",      "toStr()",                    "() → string"},
+            {"toJson",     "toJson()",                   "() → string"},
+            {"dump",       "dump()",                     "() → string"},
+            // sayısal
+            {"abs",        "abs()",                      "() → T"},
+            {"toInt",      "toInt()",                    "() → int"},
+            {"toFloat",    "toFloat()",                  "() → float"},
+            // string
+            {"len",        "len()",                      "() → int"},
+            {"toUpper",    "toUpper()",                  "() → string"},
+            {"toLower",    "toLower()",                  "() → string"},
+            {"trim",       "trim()",                     "() → string"},
+            {"startsWith", "startsWith(prefix)",         "(prefix: string) → bool"},
+            {"endsWith",   "endsWith(suffix)",           "(suffix: string) → bool"},
+            {"indexOf",    "indexOf(s)",                 "(s: string) → int"},
+            {"substr",     "substr(start, len)",         "(start: int, len: int) → string"},
+            {"split",      "split(sep)",                 "(sep: string) → string[]"},
+            {"replace",    "replace(from, to)",          "(from: string, to: string) → string"},
+            {"contains",   "contains(value)",            "(value) → bool"},
+            // array
+            {"push",       "push(value)",                "(value) → void"},
+            {"pop",        "pop()",                      "() → T"},
+            {"keys",       "keys()",                     "() → string[]"},
+            {"values",     "values()",                   "() → T[]"},
+        };
+        for (auto& b : builtins) {
+            items.push_back({
+                {"label",             b.name},
+                {"kind",              2},   // Method
+                {"detail",            b.detail},
+                {"insertText",        b.sig},
+                {"insertTextFormat",  2},  // Snippet
+            });
+        }
+        return JsonRpc::makeResponse(id, items);
+    }
+
+    // ── Normal prefix tamamlama — semboller + anahtar kelimeler ──────────────
+    std::string prefix = wordPrefix(state->content, line, ch);
+
+    for (Symbol* sym : state->symbolTable.allSymbols()) {
+        if (sym->kind == SymbolKind::Field) continue; // alanlar sadece . ile gelir
+        if (!prefix.empty() && sym->name.rfind(prefix, 0) != 0) continue;
+
+        std::string detail;
+        if (sym->kind == SymbolKind::Function && sym->type.isFunction()) {
+            std::string ret = sym->type.returnType ? sym->type.returnType->toString() : "void";
+            detail = ret + " " + sym->name + "(";
+            for (size_t i = 0; i < sym->type.paramTypes.size(); ++i) {
+                if (i > 0) detail += ", ";
+                detail += sym->type.paramTypes[i].toString();
+                if (i < sym->paramNames.size()) detail += " " + sym->paramNames[i];
+            }
+            detail += ")";
+        } else {
+            detail = sym->type.toString();
+        }
+
+        items.push_back({
+            {"label",  sym->name},
+            {"kind",   completionKind(sym->kind)},
+            {"detail", detail},
+        });
+    }
+
+    static const std::vector<std::string> keywords = {
+        "int","float","bool","string","void",
+        "if","else","while","for","return",
+        "true","false","null",
+        "struct","enum","import","export",
+        "break","continue","throw","try","catch",
+        "switch","case","default","as"
+    };
+    for (const auto& kw : keywords) {
+        if (!prefix.empty() && kw.rfind(prefix, 0) != 0) continue;
+        items.push_back({{"label", kw}, {"kind", 14}});
+    }
+
+    return JsonRpc::makeResponse(id, items);
 }

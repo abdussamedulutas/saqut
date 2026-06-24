@@ -182,14 +182,20 @@ void SymbolCollector::pass1bResolveLayouts(ASTNode* program, int moduleId) {
 
             // pass1a'da stub olarak tanımlandı; şimdi doğru tipini set et.
             // resolve() ile bul, sembolü güncelle (redefine yerine güncelleme).
+            std::vector<std::string> paramNames;
+            for (auto* p : fn->params)
+                paramNames.push_back(p->name);
+
             Symbol* existing = table_.resolve(fn->name);
             if (existing && existing->kind == SymbolKind::Function) {
-                existing->type = Type::function(retType, paramTypes);
+                existing->type       = Type::function(retType, paramTypes);
+                existing->paramNames = paramNames;
             } else if (!existing) {
                 // pass1a'da çakışma nedeniyle eklenmemişti — şimdi dene.
                 Symbol* s = table_.define(fn->name, SymbolKind::Function,
                                           Type::function(retType, paramTypes),
                                           fn->loc, moduleId);
+                if (s) s->paramNames = paramNames;
                 if (!s) {
                     Symbol* ex_ = table_.resolve(fn->name);
                     std::string h_ = ex_ ? "'" + fn->name + "' first defined at " + ex_->definitionLoc.toString() : "choose a different name";
@@ -568,7 +574,7 @@ void SymbolCollector::walkExpr(ASTNode* node) {
             std::string h_ = sug_.empty()
                 ? "define it before use: `int " + name + " = 0;` (set type and value)"
                 : "did you mean: `" + sug_ + "`?";
-            diag_.report("E001", id->loc, "'" + name + "' is not defined", h_);
+            diag_.report("E001", id->loc, "'" + name + "' is not defined", h_, (int)name.size());
         }
         break;
     }

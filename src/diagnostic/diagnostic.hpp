@@ -25,6 +25,7 @@
 //   E008  Fonksiyon çağrısı argüman sayısı/tipi uyuşmuyor                  Faz 3
 //   E009  Array boyutu sabit değil / geçersiz                             Faz 3
 //   E010  Özyinelemeli/döngüsel struct (by-value çevrim → sonsuz boyut)   Faz 2/3
+//   E011  struct/fonksiyon bildirimi fonksiyon gövdesi içinde             Faz 3
 //   W001  Kullanılmayan değişken                                          Faz 4
 //   W002  Sıfıra bölme (sabit folding)                                    Faz 4
 //   W003  Erişilemez (ölü) kod                                            Faz 4
@@ -71,10 +72,11 @@ inline const char* diagLevelName(DiagLevel l) {
 
 struct Diagnostic {
     DiagLevel      level = DiagLevel::Error;
-    std::string    code;     // "E003" (katalog kodu; boş olabilir)
-    SourceLocation loc;      // hatanın kaynak koddaki yeri
-    std::string    message;  // bağlama özel açıklama
-    std::string    hint;     // opsiyonel "şunu dene" önerisi
+    std::string    code;
+    SourceLocation loc;
+    std::string    message;
+    std::string    hint;
+    int            tokenLength = 1; // LSP range genişliği (karakter sayısı)
 
     nlohmann::json toJsonObj() const {
         nlohmann::json j;
@@ -115,6 +117,7 @@ inline const std::vector<DiagInfo>& diagnosticCatalog() {
         {"E008", DiagLevel::Error,   "Function call argument mismatch"},
         {"E009", DiagLevel::Error,   "Array size is not constant / invalid"},
         {"E010", DiagLevel::Error,   "Recursive/cyclic struct definition"},
+        {"E011", DiagLevel::Error,   "struct/function declaration inside a function body"},
         {"W001", DiagLevel::Warning, "Unused variable"},
         {"W002", DiagLevel::Warning, "Division by zero (constant expression)"},
         {"W003", DiagLevel::Warning, "Unreachable (dead) code"},

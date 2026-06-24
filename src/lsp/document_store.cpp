@@ -30,14 +30,30 @@ void DocumentStore::close(const std::string& uri) {
     store_.erase(uri);
 }
 
+static std::string uriToPath(const std::string& uri) {
+    std::string s = uri;
+    if (s.rfind("file://", 0) == 0)
+        s = s.substr(7);
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '%' && i + 2 < s.size()) {
+            int hi = std::isdigit(s[i+1]) ? s[i+1]-'0' : std::tolower(s[i+1])-'a'+10;
+            int lo = std::isdigit(s[i+2]) ? s[i+2]-'0' : std::tolower(s[i+2])-'a'+10;
+            out += static_cast<char>(hi * 16 + lo);
+            i += 2;
+        } else {
+            out += s[i];
+        }
+    }
+    return out;
+}
+
 void DocumentStore::runPipeline(DocumentState& state) {
     state.diagnostics = DiagnosticEngine{};
     state.symbolTable = SymbolTable{};
 
-    // URI'den dosya yolu çıkar (file:///... → /...)
-    std::string filePath = state.uri;
-    if (filePath.rfind("file://", 0) == 0)
-        filePath = filePath.substr(7);
+    std::string filePath = uriToPath(state.uri);
 
     ModuleRegistry registry;
     ModuleGraph    graph = ModuleLoader(registry, state.diagnostics)

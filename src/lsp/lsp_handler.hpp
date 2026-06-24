@@ -29,6 +29,12 @@ private:
                                const nlohmann::json& params);
     nlohmann::json handleReferences(const nlohmann::json& id,
                                     const nlohmann::json& params);
+    nlohmann::json handleDocumentSymbol(const nlohmann::json& id,
+                                        const nlohmann::json& params);
+    nlohmann::json handleDocumentHighlight(const nlohmann::json& id,
+                                           const nlohmann::json& params);
+    nlohmann::json handleCompletion(const nlohmann::json& id,
+                                    const nlohmann::json& params);
 
     void publishDiagnostics(const std::string& uri,
                             const DiagnosticEngine& diag);

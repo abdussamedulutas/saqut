@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions,
-         ServerOptions } from 'vscode-languageclient/node';
+         ServerOptions, Trace } from 'vscode-languageclient/node';
 
 let client: LanguageClient;
 
@@ -10,7 +10,9 @@ export function activate(ctx: vscode.ExtensionContext) {
         args: ['lsp']
     };
     const clientOptions: LanguageClientOptions = {
-        documentSelector: [{ scheme: 'file', language: 'sqt' }]
+        documentSelector: [{ scheme: 'file', language: 'sqt' }],
+        outputChannelName: 'saQut Language Server',
+        traceOutputChannel: vscode.window.createOutputChannel('saQut LSP Trace')
     };
     client = new LanguageClient('saQut', 'saQut Language Server',
                                  serverOptions, clientOptions);
@@ -20,7 +22,8 @@ export function activate(ctx: vscode.ExtensionContext) {
             return new vscode.DebugAdapterExecutable('saqut', ['dap']);
         }
     };
-    ctx.subscriptions.push(client.start());
+    client.start().then(() => client.setTrace(Trace.Verbose));
+    ctx.subscriptions.push(client);
     ctx.subscriptions.push(
         vscode.debug.registerDebugAdapterDescriptorFactory('sqt', debugFactory)
     );

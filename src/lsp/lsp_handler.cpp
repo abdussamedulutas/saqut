@@ -467,41 +467,66 @@ nlohmann::json LspHandler::handleCompletion(const nlohmann::json& id,
         lineText[lineText.size()-1] == ':' &&
         lineText[lineText.size()-2] == ':') {
 
-        struct BuiltinMethod { const char* name; const char* sig; const char* detail; };
-        static const BuiltinMethod builtins[] = {
-            // genel
-            {"toStr",      "toStr()",                    "() → string"},
-            {"toJson",     "toJson()",                   "() → string"},
-            {"dump",       "dump()",                     "() → string"},
-            // sayısal
-            {"abs",        "abs()",                      "() → T"},
-            {"toInt",      "toInt()",                    "() → int"},
-            {"toFloat",    "toFloat()",                  "() → float"},
-            // string
-            {"len",        "len()",                      "() → int"},
-            {"toUpper",    "toUpper()",                  "() → string"},
-            {"toLower",    "toLower()",                  "() → string"},
-            {"trim",       "trim()",                     "() → string"},
-            {"startsWith", "startsWith(prefix)",         "(prefix: string) → bool"},
-            {"endsWith",   "endsWith(suffix)",           "(suffix: string) → bool"},
-            {"indexOf",    "indexOf(s)",                 "(s: string) → int"},
-            {"substr",     "substr(start, len)",         "(start: int, len: int) → string"},
-            {"split",      "split(sep)",                 "(sep: string) → string[]"},
-            {"replace",    "replace(from, to)",          "(from: string, to: string) → string"},
-            {"contains",   "contains(value)",            "(value) → bool"},
-            // array
-            {"push",       "push(value)",                "(value) → void"},
-            {"pop",        "pop()",                      "() → T"},
-            {"keys",       "keys()",                     "() → string[]"},
-            {"values",     "values()",                   "() → T[]"},
+        std::string objName = wordBefore(lineText, ':', ':');
+
+        // Sembolü bul
+        Symbol* objSym = nullptr;
+        for (Symbol* s : state->symbolTable.allSymbols()) {
+            if (s->name == objName) { objSym = s; break; }
+        }
+
+        // Tip adına (struct/enum) :: koymak anlamsız — boş dön
+        if (objSym && (objSym->kind == SymbolKind::Struct ||
+                       objSym->kind == SymbolKind::Enum))
+            return JsonRpc::makeResponse(id, items);
+
+        // Değişkenin tipini belirle
+        struct BM { const char* name; const char* sig; const char* detail; int mask; };
+        // mask: 1=int/float, 2=string, 4=array, 8=struct, 16=genel
+        static const BM builtins[] = {
+            {"toStr",      "toStr()",               "() → string",                          1|2|8|16},
+            {"toJson",     "toJson()",              "() → string",                              8|16},
+            {"dump",       "dump()",                "() → string",                              8|16},
+            {"abs",        "abs()",                 "() → T",                                      1},
+            {"toInt",      "toInt()",               "() → int",                                  1|2},
+            {"toFloat",    "toFloat()",             "() → float",                                1|2},
+            {"len",        "len()",                 "() → int",                                  2|4},
+            {"toUpper",    "toUpper()",             "() → string",                                 2},
+            {"toLower",    "toLower()",             "() → string",                                 2},
+            {"trim",       "trim()",                "() → string",                                 2},
+            {"startsWith", "startsWith(prefix)",    "(prefix: string) → bool",                     2},
+            {"endsWith",   "endsWith(suffix)",      "(suffix: string) → bool",                     2},
+            {"indexOf",    "indexOf(s)",            "(s: string) → int",                           2},
+            {"substr",     "substr(start, len)",    "(start: int, len: int) → string",             2},
+            {"split",      "split(sep)",            "(sep: string) → string[]",                    2},
+            {"replace",    "replace(from, to)",     "(from: string, to: string) → string",         2},
+            {"contains",   "contains(value)",       "(value) → bool",                            2|4},
+            {"push",       "push(value)",           "(value) → void",                              4},
+            {"pop",        "pop()",                 "() → T",                                      4},
+            {"keys",       "keys()",                "() → string[]",                               4},
+            {"values",     "values()",              "() → T[]",                                    4},
         };
+
+        // Hangi maskeler geçerli?
+        int allowed = 16; // genel her zaman
+        if (objSym) {
+            Type t = objSym->type;
+            if (t.isArray())  allowed |= 4;
+            else if (t.isString()) allowed |= 2;
+            else if (t.isStruct()) allowed |= 8;
+            else if (t.isPrimitive()) allowed |= 1; // int/float/bool
+        } else {
+            allowed = 0xFF; // bilinmeyen → hepsini göster
+        }
+
         for (auto& b : builtins) {
+            if (!(b.mask & allowed)) continue;
             items.push_back({
-                {"label",             b.name},
-                {"kind",              2},   // Method
-                {"detail",            b.detail},
-                {"insertText",        b.sig},
-                {"insertTextFormat",  2},  // Snippet
+                {"label",            b.name},
+                {"kind",             2},
+                {"detail",           b.detail},
+                {"insertText",       b.sig},
+                {"insertTextFormat", 2},
             });
         }
         return JsonRpc::makeResponse(id, items);

@@ -345,7 +345,8 @@ int Interpreter::run() {
         // ── Struct (ADR-020: referans semantiği) ──────────────────────────
         case Opcode::STRUCT_NEW: {
             StructObject* obj = heap_.allocStruct(instr.intValue);
-            frame.slots[instr.dest] = Value::fromRef(obj);
+            obj->fieldNames   = instr.fieldNames;
+            callStack_.back().slots[instr.dest] = Value::fromRef(obj);
             break;
         }
         case Opcode::FIELD_GET: {
@@ -731,7 +732,10 @@ static std::string structToJson(StructObject* obj) {
     std::string s = "{";
     for (size_t i = 0; i < obj->fields.size(); ++i) {
         if (i) s += ",";
-        s += "\"field" + std::to_string(i) + "\":" + valueToJsonStr(obj->fields[i]);
+        std::string key = (i < obj->fieldNames.size())
+                          ? obj->fieldNames[i]
+                          : ("field" + std::to_string(i));
+        s += "\"" + key + "\":" + valueToJsonStr(obj->fields[i]);
     }
     s += "}";
     return s;
@@ -1028,7 +1032,10 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
             std::string s = "struct{";
             for (size_t i = 0; i < obj->fields.size(); ++i) {
                 if (i) s += ", ";
-                s += "field" + std::to_string(i) + "=" + obj->fields[i].toString();
+                std::string key = (i < obj->fieldNames.size())
+                                  ? obj->fieldNames[i]
+                                  : ("field" + std::to_string(i));
+                s += key + "=" + obj->fields[i].toString();
             }
             s += "}";
             return Value::fromString(s);

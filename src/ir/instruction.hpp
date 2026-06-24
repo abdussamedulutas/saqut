@@ -277,6 +277,9 @@ struct Instruction {
     // CALL / CALLHOST için argüman slot indeksleri (sırayla)
     std::vector<int> argSlots;
 
+    // STRUCT_NEW için alan adları (sırasıyla) — toJson/dump'ta kullanılır
+    std::vector<std::string> fieldNames;
+
     // Kaynak konum — yalnızca hata-odaklı opcode'larda (CALL, RETURN, THROW,
     // ARRAY_GET/SET, FIELD_SET) set edilir. filePath IRFunction::moduleId'den
     // türetilir; burada sadece satır/sütun tutulur.

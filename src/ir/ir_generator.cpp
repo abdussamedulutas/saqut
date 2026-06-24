@@ -1159,74 +1159,114 @@ int IRGenerator::lookupVariable(const std::string& name) {
 // Talimat yazma yardımcıları
 // ─────────────────────────────────────────────────────────────────────────────
 
-void IRGenerator::emitLoadConst(int destSlot, int value) {
+void IRGenerator::emitLoadConst(int destSlot, int value,
+                                const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_CONST);
-    ins.dest     = destSlot;
-    ins.intValue = value;
+    ins.dest       = destSlot;
+    ins.intValue   = value;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitLoadSlot(int destSlot, int srcSlot) {
+void IRGenerator::emitLoadSlot(int destSlot, int srcSlot,
+                                const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_SLOT);
-    ins.dest = destSlot;
-    ins.src  = srcSlot;
+    ins.dest       = destSlot;
+    ins.src        = srcSlot;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitLoadGlobal(int destSlot, int globalIndex) {
+void IRGenerator::emitLoadGlobal(int destSlot, int globalIndex,
+                                  const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_GLOBAL);
-    ins.dest     = destSlot;
-    ins.intValue = globalIndex;
+    ins.dest       = destSlot;
+    ins.intValue   = globalIndex;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitStoreGlobal(int srcSlot, int globalIndex) {
+void IRGenerator::emitStoreGlobal(int srcSlot, int globalIndex,
+                                   const SourceLocation& loc) {
     Instruction ins(Opcode::STORE_GLOBAL);
-    ins.src      = srcSlot;
-    ins.intValue = globalIndex;
+    ins.src        = srcSlot;
+    ins.intValue   = globalIndex;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitLoadFloat(int destSlot, double value) {
+void IRGenerator::emitLoadFloat(int destSlot, double value,
+                                 const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_FLOAT);
     ins.dest       = destSlot;
     ins.floatValue = value;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitIntToFloat(int destSlot, int srcSlot) {
+void IRGenerator::emitIntToFloat(int destSlot, int srcSlot,
+                                  const SourceLocation& loc) {
     Instruction ins(Opcode::INT_TO_FLOAT);
-    ins.dest = destSlot;
-    ins.src  = srcSlot;
+    ins.dest       = destSlot;
+    ins.src        = srcSlot;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitLoadDecimal(int destSlot, const DecimalValue& value) {
+void IRGenerator::emitLoadDecimal(int destSlot, const DecimalValue& value,
+                                   const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_DECIMAL);
     ins.dest         = destSlot;
     ins.decimalValue = value;
+    ins.sourceLine   = loc.line;
+    ins.sourceCol    = loc.column;
+    ins.sourceFile   = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitIntToDecimal(int destSlot, int srcSlot) {
+void IRGenerator::emitIntToDecimal(int destSlot, int srcSlot,
+                                    const SourceLocation& loc) {
     Instruction ins(Opcode::INT_TO_DECIMAL);
-    ins.dest = destSlot;
-    ins.src  = srcSlot;
+    ins.dest       = destSlot;
+    ins.src        = srcSlot;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitFloatToDecimal(int destSlot, int srcSlot) {
+void IRGenerator::emitFloatToDecimal(int destSlot, int srcSlot,
+                                      const SourceLocation& loc) {
     Instruction ins(Opcode::FLOAT_TO_DECIMAL);
-    ins.dest = destSlot;
-    ins.src  = srcSlot;
+    ins.dest       = destSlot;
+    ins.src        = srcSlot;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int fieldCount) {
+void IRGenerator::emitStructNew(int destSlot, const std::string& structType,
+                                 int fieldCount, const SourceLocation& loc) {
     Instruction ins(Opcode::STRUCT_NEW);
     ins.dest         = destSlot;
     ins.intValue     = fieldCount;
     ins.functionName = structType;
+    ins.sourceLine   = loc.line;
+    ins.sourceCol    = loc.column;
+    ins.sourceFile   = loc.filePath;
     // Alan adlarını struct layout'tan al — toJson/dump'ta kullanılır
     auto it = structLayouts_.find(structType);
     if (it != structLayouts_.end())
@@ -1235,11 +1275,15 @@ void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx) {
+void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx,
+                                const SourceLocation& loc) {
     Instruction ins(Opcode::FIELD_GET);
-    ins.dest     = destSlot;
-    ins.src      = objSlot;
-    ins.intValue = fieldIdx;
+    ins.dest       = destSlot;
+    ins.src        = objSlot;
+    ins.intValue   = fieldIdx;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1254,10 +1298,14 @@ void IRGenerator::emitFieldSet(int objSlot, int fieldIdx, int valSlot,
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitArrayNew(int destSlot, int capacity) {
+void IRGenerator::emitArrayNew(int destSlot, int capacity,
+                                const SourceLocation& loc) {
     Instruction ins(Opcode::ARRAY_NEW);
-    ins.dest     = destSlot;
-    ins.intValue = capacity;
+    ins.dest       = destSlot;
+    ins.intValue   = capacity;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1283,10 +1331,14 @@ void IRGenerator::emitArraySet(int arrSlot, int idxSlot, int valSlot,
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitArrayLen(int destSlot, int arrSlot) {
+void IRGenerator::emitArrayLen(int destSlot, int arrSlot,
+                                const SourceLocation& loc) {
     Instruction ins(Opcode::ARRAY_LEN);
-    ins.dest = destSlot;
-    ins.src  = arrSlot;
+    ins.dest       = destSlot;
+    ins.src        = arrSlot;
+    ins.sourceLine = loc.line;
+    ins.sourceCol  = loc.column;
+    ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 

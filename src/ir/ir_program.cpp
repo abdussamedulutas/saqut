@@ -1,13 +1,16 @@
 #include "ir/ir_program.hpp"
+#include "tools.hpp"
 #include <iostream>
 
 void IRProgram::dump() const {
-    std::cout << "IR DUMP\n\n";
+    std::cout << Color::Bold << Color::SoftMor << "IR DUMP" << Color::Reset << "\n\n";
 
     if (globalCount > 0) {
-        std::cout << "GLOBALS (" << globalCount << ")\n";
+        std::cout << Color::SoftTurkuaz << "GLOBALS" << Color::Reset
+                  << " (" << Color::SoftTuruncu << globalCount << Color::Reset << ")\n";
         for (int i = 0; i < (int)globalNames.size(); i++)
-            std::cout << "  global[" << i << "] = " << globalNames[i] << "\n";
+            std::cout << "  " << Color::SoftGri << "global[" << i << "] =" << Color::Reset
+                      << " " << Color::SoftYesil << globalNames[i] << Color::Reset << "\n";
         std::cout << "\n";
     }
 
@@ -15,5 +18,5 @@ void IRProgram::dump() const {
         auto it = functions.find(name);
         if (it != functions.end()) it->second.dump();
     }
-    std::cout << "END\n";
+    std::cout << Color::SoftTurkuaz << "END" << Color::Reset << "\n";
 }

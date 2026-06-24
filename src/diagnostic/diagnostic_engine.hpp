@@ -49,8 +49,11 @@ public:
     void report(const std::string& code,
                 const SourceLocation& loc,
                 const std::string& message,
-                const std::string& hint = "") {
-        diagnostics_.push_back(makeDiagnostic(code, loc, message, hint));
+                const std::string& hint = "",
+                int tokenLength = 1) {
+        auto d = makeDiagnostic(code, loc, message, hint);
+        d.tokenLength = tokenLength;
+        diagnostics_.push_back(d);
     }
 
     // Kolaylık: seviyeyi açıkça vererek
@@ -58,9 +61,11 @@ public:
                 const std::string& code,
                 const SourceLocation& loc,
                 const std::string& message,
-                const std::string& hint = "") {
+                const std::string& hint = "",
+                int tokenLength = 1) {
         Diagnostic d;
-        d.level = level; d.code = code; d.loc = loc; d.message = message; d.hint = hint;
+        d.level = level; d.code = code; d.loc = loc; d.message = message;
+        d.hint = hint; d.tokenLength = tokenLength;
         diagnostics_.push_back(d);
     }
 
@@ -101,6 +106,25 @@ public:
     }
 
     std::string toJson() const { return toJsonObj().dump(); }
+
+    nlohmann::json toLspDiagnostics() const {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& d : diagnostics_) {
+            nlohmann::json item;
+            auto pos = d.loc.toLspPosition();
+            item["range"] = {
+                {"start", {{"line", pos.line}, {"character", pos.character}}},
+                {"end",   {{"line", pos.line}, {"character", pos.character + d.tokenLength}}}
+            };
+            item["severity"] = (d.level == DiagLevel::Error) ? 1 : 2;
+            item["code"]     = d.code;
+            item["message"]  = d.hint.empty() ? d.message
+                                              : d.message + "\n" + d.hint;
+            item["source"]   = "saQut";
+            arr.push_back(item);
+        }
+        return arr;
+    }
 
 private:
     std::vector<Diagnostic> diagnostics_;

@@ -5,7 +5,9 @@
 FunctionDeclNode::FunctionDeclNode() { kind = ASTKind::FunctionDecl; }
 FunctionDeclNode::~FunctionDeclNode() { for (auto* p : params) delete p; }
 void FunctionDeclNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "FunctionDecl (" << name << " : " << returnType << ")\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "FunctionDecl" << Color::Reset
+              << " (" << Color::SoftYesil << name << Color::Reset
+              << " : " << Color::SoftPembe << returnType << Color::Reset << ")\n";
     for (auto* child : children) child->log(indent + 1);
 }
 std::string FunctionDeclNode::toJson(int depth) {
@@ -26,7 +28,9 @@ std::string FunctionDeclNode::toJson(int depth) {
 // VariableDeclNode
 VariableDeclNode::VariableDeclNode() { kind = ASTKind::VariableDecl; }
 void VariableDeclNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "VariableDecl (" << name << " : " << varType << ")\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "VariableDecl" << Color::Reset
+              << " (" << Color::SoftYesil << name << Color::Reset
+              << " : " << Color::SoftPembe << varType << Color::Reset << ")\n";
     if (initExpr) initExpr->log(indent + 1);
 }
 std::string VariableDeclNode::toJson(int depth) {
@@ -43,9 +47,12 @@ std::string VariableDeclNode::toJson(int depth) {
 // EnumDeclNode
 EnumDeclNode::EnumDeclNode() { kind = ASTKind::EnumDecl; }
 void EnumDeclNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "EnumDecl (" << name << ")\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "EnumDecl" << Color::Reset
+              << " (" << Color::SoftYesil << name << Color::Reset << ")\n";
     for (auto& m : members)
-        std::cout << jsonIndent(indent + 1) << m.name << " = " << m.value << "\n";
+        std::cout << jsonIndent(indent + 1) << Color::SoftYesil << m.name << Color::Reset
+                  << " " << Color::SoftGri << "=" << Color::Reset << " "
+                  << Color::SoftTuruncu << m.value << Color::Reset << "\n";
 }
 std::string EnumDeclNode::toJson(int depth) {
     JsonObject obj(depth);
@@ -64,7 +71,8 @@ std::string EnumDeclNode::toJson(int depth) {
 // StructDeclNode
 StructDeclNode::StructDeclNode() { kind = ASTKind::StructDecl; }
 void StructDeclNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "StructDecl (" << name << ")\n";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "StructDecl" << Color::Reset
+              << " (" << Color::SoftYesil << name << Color::Reset << ")\n";
     for (auto* child : children) child->log(indent + 1);
 }
 std::string StructDeclNode::toJson(int depth) {
@@ -82,10 +90,12 @@ std::string StructDeclNode::toJson(int depth) {
 // ImportDeclNode
 ImportDeclNode::ImportDeclNode() { kind = ASTKind::ImportDecl; }
 void ImportDeclNode::log(int indent) {
-    std::cout << jsonIndent(indent) << "ImportDecl from \"" << sourcePath << "\": {";
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "ImportDecl" << Color::Reset
+              << " " << Color::SoftGri << "from" << Color::Reset << " \""
+              << Color::SoftPembe << sourcePath << Color::Reset << "\": {";
     for (size_t i = 0; i < importedNames.size(); i++) {
-        if (i) std::cout << ", ";
-        std::cout << importedNames[i];
+        if (i) std::cout << Color::SoftGri << ", " << Color::Reset;
+        std::cout << Color::SoftYesil << importedNames[i] << Color::Reset;
     }
     std::cout << "}\n";
 }

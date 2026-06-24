@@ -27,11 +27,12 @@ struct Symbol {
     std::string                 name;
     SymbolKind                  kind = SymbolKind::Variable;
     Type                        type;
-    int                         moduleId = -1;   // ModuleRegistry ID; -1 = "<main>", 0 = "__builtin__"
+    int                         moduleId = -1;
     SourceLocation              definitionLoc;
     std::vector<SourceLocation> references;
     Scope*                      scope    = nullptr;
     bool                        isBuiltin = false;
+    std::vector<std::string>    paramNames; // Function: parametre isimleri (type.paramTypes ile sıra eşleşir)
 };
 
 #endif // SAQUT_SYMBOL_SYMBOL

@@ -15,7 +15,9 @@
 
 #include <vector>
 #include <optional>
+#include <set>
 #include <unordered_map>
+#include <utility>
 #include "ir/ir_program.hpp"
 #include "core/module_registry.hpp"
 #include "vm/call_frame.hpp"
@@ -36,14 +38,41 @@ public:
     // Tamamlandığında main'in dönüş değerini (int) döndürür.
     int run();
 
+    // ── DAP API ───────────────────────────────────────────────────────────────
+    enum class RunState { Running, Paused, Finished };
+
+    void setBreakpoint(const std::string& file, int line);
+    void clearBreakpoint(const std::string& file, int line);
+    void clearAllBreakpoints();
+
+    RunState    state() const { return state_; }
+    void        resume();
+    void        stepInstruction();
+    void        stepOver();
+
+    int         currentSourceLine() const;
+    std::string currentSourceFile() const;
+    int         callDepth() const;
+    std::string frameFunctionName(int depth) const;
+    int         frameSourceLine(int depth) const;
+
+    Value       readSlotInFrame(int frameDepth, int slotIndex) const;
+    std::string slotName(int /*frameDepth*/, int /*slotIndex*/) const { return ""; }
+
 private:
     IRProgram&             program_;
     std::vector<CallFrame> callStack_;
-    // Modül başına global slot vektörü. Key = ModuleRegistry ID (int).
     std::unordered_map<int, std::vector<Value>> moduleSlots_;
     Heap                   heap_;
-    std::vector<TryFrame>  tryStack_;                 // ADR-025: aktif try çerçeveleri
-    std::optional<Value>   pendingThrow_;             // bekleyen istisna değeri
+    std::vector<TryFrame>  tryStack_;
+    std::optional<Value>   pendingThrow_;
+
+    // DAP durumu
+    RunState state_ = RunState::Running;
+    std::set<std::pair<std::string,int>> breakpoints_;  // {file, line}
+
+    bool isBreakpoint() const;
+    void checkBreakpoint();
 
     // Error StructObject oluştur (ADR-025): [line, col, message, trace, code]
     Value makeErrorValue(const std::string& message,

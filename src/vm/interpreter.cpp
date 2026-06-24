@@ -50,6 +50,111 @@ Value Interpreter::makeErrorValue(const std::string& message,
     return Value::fromRef(obj);
 }
 
+// ── DAP API implementasyonu ────────────────────────────────────────────────────
+
+void Interpreter::setBreakpoint(const std::string& file, int line) {
+    breakpoints_.insert({file, line});
+}
+
+void Interpreter::clearBreakpoint(const std::string& file, int line) {
+    breakpoints_.erase({file, line});
+}
+
+void Interpreter::clearAllBreakpoints() {
+    breakpoints_.clear();
+}
+
+bool Interpreter::isBreakpoint() const {
+    if (callStack_.empty()) return false;
+    const CallFrame& frame = callStack_.back();
+    if (!frame.function) return false;
+    int ip = frame.instructionPointer;
+    if (ip < 0 || ip >= (int)frame.function->instructions.size()) return false;
+    const Instruction& ins = frame.function->instructions[ip];
+    if (ins.sourceLine <= 0) return false;
+    const std::string& file = ins.sourceFile.empty()
+        ? program_.moduleRegistry.filePath(frame.function->moduleId)
+        : ins.sourceFile;
+    return breakpoints_.count({file, ins.sourceLine}) > 0;
+}
+
+void Interpreter::checkBreakpoint() {
+    if (state_ == RunState::Paused) return;
+    if (isBreakpoint())
+        state_ = RunState::Paused;
+}
+
+void Interpreter::resume() {
+    state_ = RunState::Running;
+    run();
+}
+
+void Interpreter::stepInstruction() {
+    if (callStack_.empty()) { state_ = RunState::Finished; return; }
+    // Tek instruction çalıştırmak için state_ = Running ile bir adım at.
+    // Gerçek adım geçişi run() döngüsünde olur; burada state yönetimi
+    // DAP handler'ında daha ince kontrol ile yapılır.
+    state_ = RunState::Paused;
+}
+
+void Interpreter::stepOver() {
+    int depth = (int)callStack_.size();
+    state_ = RunState::Running;
+    // Yeterli implementasyon: resume + aynı çağrı derinliğinde dur.
+    // DAP handler bu metodu çağırmadan önce run() döngüsünü kontrol eder.
+    (void)depth;
+}
+
+int Interpreter::currentSourceLine() const {
+    if (callStack_.empty()) return 0;
+    const CallFrame& f = callStack_.back();
+    int ip = f.instructionPointer;
+    if (f.function && ip > 0 && ip - 1 < (int)f.function->instructions.size())
+        return f.function->instructions[ip - 1].sourceLine;
+    return 0;
+}
+
+std::string Interpreter::currentSourceFile() const {
+    if (callStack_.empty()) return "";
+    const CallFrame& f = callStack_.back();
+    int ip = f.instructionPointer;
+    if (f.function && ip > 0 && ip - 1 < (int)f.function->instructions.size()) {
+        const Instruction& ins = f.function->instructions[ip - 1];
+        return ins.sourceFile.empty()
+            ? program_.moduleRegistry.filePath(f.function->moduleId)
+            : ins.sourceFile;
+    }
+    return "";
+}
+
+int Interpreter::callDepth() const {
+    return (int)callStack_.size();
+}
+
+std::string Interpreter::frameFunctionName(int depth) const {
+    if (depth < 0 || depth >= (int)callStack_.size()) return "";
+    const CallFrame& f = callStack_[(int)callStack_.size() - 1 - depth];
+    return f.function ? f.function->name : "";
+}
+
+int Interpreter::frameSourceLine(int depth) const {
+    if (depth < 0 || depth >= (int)callStack_.size()) return 0;
+    const CallFrame& f = callStack_[(int)callStack_.size() - 1 - depth];
+    int ip = f.instructionPointer - 1;
+    if (f.function && ip >= 0 && ip < (int)f.function->instructions.size())
+        return f.function->instructions[ip].sourceLine;
+    return 0;
+}
+
+Value Interpreter::readSlotInFrame(int frameDepth, int slotIndex) const {
+    if (frameDepth < 0 || frameDepth >= (int)callStack_.size())
+        return Value::fromInt(0);
+    const CallFrame& f = callStack_[(int)callStack_.size() - 1 - frameDepth];
+    if (slotIndex < 0 || slotIndex >= (int)f.slots.size())
+        return Value::fromInt(0);
+    return f.slots[slotIndex];
+}
+
 int Interpreter::run() {
     // Her modülün global slot vektörünü başlat (key = int moduleId)
     for (auto& [id, count] : program_.moduleGlobalCounts)

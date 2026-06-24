@@ -283,8 +283,9 @@ struct Instruction {
     // Kaynak konum — yalnızca hata-odaklı opcode'larda (CALL, RETURN, THROW,
     // ARRAY_GET/SET, FIELD_SET) set edilir. filePath IRFunction::moduleId'den
     // türetilir; burada sadece satır/sütun tutulur.
-    int sourceLine = 0;
-    int sourceCol  = 0;
+    int         sourceLine = 0;
+    int         sourceCol  = 0;
+    std::string sourceFile;
 
     explicit Instruction(Opcode op) : opcode(op) {}
 };

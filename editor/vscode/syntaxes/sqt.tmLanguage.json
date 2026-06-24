@@ -1,0 +1,84 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "saQut",
+  "scopeName": "source.sqt",
+  "fileTypes": ["sqt"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords_control" },
+    { "include": "#keywords_type" },
+    { "include": "#keywords_module" },
+    { "include": "#keywords_other" },
+    { "include": "#constants" },
+    { "include": "#numbers" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.sqt",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.sqt",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.sqt",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.sqt", "match": "\\\\." }
+      ]
+    },
+    "keywords_control": {
+      "name": "keyword.control.sqt",
+      "match": "\\b(if|else|for|while|do|return|break|continue|switch|case|default|try|catch|throw)\\b"
+    },
+    "keywords_type": {
+      "name": "storage.type.sqt",
+      "match": "\\b(int|float|double|bool|string|void|decimal|char|auto)\\b"
+    },
+    "keywords_module": {
+      "name": "keyword.other.sqt",
+      "match": "\\b(import|export|from|struct|enum|as)\\b"
+    },
+    "keywords_other": {
+      "name": "keyword.other.sqt",
+      "match": "\\b(new|class|interface|extends|implements|const|extern|static|final)\\b"
+    },
+    "constants": {
+      "name": "constant.language.sqt",
+      "match": "\\b(true|false|null)\\b"
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.sqt",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.sqt",
+          "match": "\\b0[bB][01]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.sqt",
+          "match": "\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.sqt",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "name": "keyword.operator.sqt",
+      "match": "(\\+\\+|--|\\+=|-=|\\*=|/=|%=|==|!=|<=|>=|&&|\\|\\||[+\\-*/%<>=!&|^~])"
+    }
+  }
+}

@@ -126,8 +126,18 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   devam ediyor — kök neden #2 kapandı. `DocumentStore::runPipeline`'daki
   erken `return`'ler kaldırıldı: sözdizimi hatası olsa da hatanın dışındaki
   fonksiyonlar için hover/definition/documentSymbol çalışmaya devam ediyor.
-  `tests/lsp/` 9 senaryo (`09_syntax_error_recovery` yeni). Faz 3 (konum
-  doğruluğu: encoding, token-tabanlı sorgu, çok-dosya URI) sırada.
+  `tests/lsp/` 9 senaryo (`09_syntax_error_recovery` yeni). Faz 3 tamam —
+  konum birimi anlaşması (`initialize`'da `positionEncoding`, `src/lsp/
+  position.hpp` UTF-16↔byte dönüştürücüleri); `findSymbolAt` artık isim-
+  uzunluğu aralık eşleştirmesi değil token binary search + (offset→Symbol*)
+  indeksi (`DocumentState::tokens`/`symbolByOffset`) — kök neden #3 kapandı.
+  `definition`/`references`/`documentSymbol`/`documentHighlight` artık
+  sorgulanan değil TANIMIN bulunduğu dosyanın URI'sini döndürüyor
+  (`DocumentStore::uriForPath`); diagnostics dosyaya göre gruplanıp ayrı
+  `publishDiagnostics` ile gönderiliyor — kök neden #4 kapandı. `tests/lsp/`
+  12 senaryo (`10_turkish_encoding`, `11_scoped_definition`,
+  `12_cross_file_definition` yeni). Faz 4 (completion'ı token/sembol
+  tabanlı yeniden kurma) sırada.
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası

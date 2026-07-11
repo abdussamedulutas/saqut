@@ -1,0 +1,4 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/turkish.sqt","languageId":"sqt","version":1,"text":"int topla(int a, int b) {\n    return a + b;\n}\n\nint main() {\n    /* çşğüöı */ int deger = topla(2, 3);\n    string s = \"İşçi çalışıyor\"; print(deger);\n    return 0;\n}\n"}}}
+{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://%FIXDIR%/turkish.sqt"},"position":{"line":6,"character":39}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://%FIXDIR%/turkish.sqt"},"position":{"line":6,"character":39}}}

@@ -1,0 +1,4 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/scoped.sqt","languageId":"sqt","version":1,"text":"int f() {\n    int x = 1;\n    return x;\n}\n\nint g() {\n    int x = 2;\n    return x;\n}\n"}}}
+{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://%FIXDIR%/scoped.sqt"},"position":{"line":7,"character":11}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://%FIXDIR%/scoped.sqt"},"position":{"line":2,"character":11}}}

@@ -2,6 +2,10 @@
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol.hpp"
 #include "core/type.hpp"
+#include "lsp/uri.hpp"
+#include "lsp/position.hpp"
+#include <algorithm>
+#include <map>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // dispatch — gelen JSON-RPC mesajını yönlendir
@@ -71,9 +75,27 @@ nlohmann::json LspHandler::dispatch(const nlohmann::json& msg) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 nlohmann::json LspHandler::handleInitialize(const nlohmann::json& id,
-                                             const nlohmann::json& /*params*/) {
+                                             const nlohmann::json& params) {
+    // Faz 3: konum birimi anlaşması. LSP varsayılanı UTF-16'dır; istemci
+    // general.positionEncodings'te "utf-8" listeliyorsa onu seçiyoruz —
+    // SourceLocation.column zaten byte/UTF-8 code unit saydığı için bu
+    // durumda hiç dönüşüm gerekmez (src/lsp/position.hpp devre dışı kalır).
+    positionEncoding_ = "utf-16";
+    if (params.contains("capabilities") && params["capabilities"].contains("general")) {
+        auto& general = params["capabilities"]["general"];
+        if (general.contains("positionEncodings") && general["positionEncodings"].is_array()) {
+            for (auto& enc : general["positionEncodings"]) {
+                if (enc.is_string() && enc.get<std::string>() == "utf-8") {
+                    positionEncoding_ = "utf-8";
+                    break;
+                }
+            }
+        }
+    }
+
     nlohmann::json capabilities = {
         {"textDocumentSync", 1},
+        {"positionEncoding", positionEncoding_},
         {"definitionProvider",        true},
         {"referencesProvider",        true},
         {"hoverProvider",             true},
@@ -97,7 +119,7 @@ void LspHandler::handleDidOpen(const nlohmann::json& params) {
     int         version = doc.value("version", 0);
 
     DocumentState& state = store_.update(uri, content, version);
-    publishDiagnostics(uri, state.diagnostics);
+    publishDiagnosticsGrouped(state);
 }
 
 void LspHandler::handleDidChange(const nlohmann::json& params) {
@@ -110,7 +132,7 @@ void LspHandler::handleDidChange(const nlohmann::json& params) {
     }
 
     DocumentState& state = store_.update(uri, content, version);
-    publishDiagnostics(uri, state.diagnostics);
+    publishDiagnosticsGrouped(state);
 }
 
 void LspHandler::handleDidClose(const nlohmann::json& params) {
@@ -123,39 +145,92 @@ void LspHandler::handleDidClose(const nlohmann::json& params) {
     JsonRpc::writeMessage(out_, notif);
 }
 
-void LspHandler::publishDiagnostics(const std::string& uri,
-                                     const DiagnosticEngine& diag) {
-    auto notif = JsonRpc::makeNotification("textDocument/publishDiagnostics", {
-        {"uri",         uri},
-        {"diagnostics", diag.toLspDiagnostics()}
-    });
-    JsonRpc::writeMessage(out_, notif);
+// Faz 3: state.diagnostics artık modül grafiğindeki TÜM dosyalardan gelen
+// tanıları içerebilir (bir import edilen modülün hatası da burada olabilir).
+// Eskiden hepsi sorgulanan `uri`'ye basılıyordu (kök neden #4 — import edilen
+// modülün hatası ana dosyada görünüyordu). Şimdi loc.filePath'e göre gruplayıp
+// her dosya için ayrı publishDiagnostics gönderiyoruz. std::map (sıralı) —
+// bildirim SIRASI testte önemli, unordered_map olsaydı çalıştırmalar arası
+// deterministik olmazdı.
+void LspHandler::publishDiagnosticsGrouped(DocumentState& state) {
+    std::map<std::string, nlohmann::json> byFile;
+    byFile[state.filePath] = nlohmann::json::array(); // sorgulanan dosya her zaman bir bildirim alır (stale temizliği)
+
+    for (const auto& d : state.diagnostics.all()) {
+        // Konumsuz tanılar (ör. E_MODULE_NOT_FOUND — SourceLocation{} boş
+        // filePath'le gelir) sorgulanan dosyaya düşer; eski davranışla aynı.
+        std::string fp = d.loc.filePath.empty() ? state.filePath : d.loc.filePath;
+        std::string content = (fp == state.filePath) ? state.content : store_.contentForPath(fp);
+        LspPosition pos = toLspPos(content, d.loc);
+
+        nlohmann::json item;
+        item["range"] = {
+            {"start", {{"line", pos.line}, {"character", pos.character}}},
+            {"end",   {{"line", pos.line}, {"character", pos.character + d.tokenLength}}}
+        };
+        item["severity"] = (d.level == DiagLevel::Error) ? 1 : 2;
+        item["code"]     = d.code;
+        item["message"]  = d.hint.empty() ? d.message : d.message + "\n" + d.hint;
+        item["source"]   = "saQut";
+
+        byFile[fp].push_back(item);
+    }
+
+    for (auto& [fp, diagsJson] : byFile) {
+        auto notif = JsonRpc::makeNotification("textDocument/publishDiagnostics", {
+            {"uri",         store_.uriForPath(fp)},
+            {"diagnostics", diagsJson}
+        });
+        JsonRpc::writeMessage(out_, notif);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Faz 3 — pozisyon dönüşümü yardımcıları
+// ─────────────────────────────────────────────────────────────────────────────
+
+int LspHandler::toByteColumn(const std::string& content, int line, int character) const {
+    if (positionEncoding_ == "utf-8") return character + 1; // zaten byte birimi
+    return lspToByteCol(content, line, character);
+}
+
+LspPosition LspHandler::toLspPos(const std::string& content, const SourceLocation& loc) const {
+    if (!loc.isValid()) return {0, 0};
+    if (positionEncoding_ == "utf-8" || content.empty())
+        return loc.toLspPosition(); // byte==utf-8-birim; içerik yoksa en iyi çaba
+    return { loc.line - 1, byteColToLsp(content, loc.line - 1, loc.column) };
+}
+
+std::string LspHandler::contentForLoc(DocumentState& state, const SourceLocation& loc) const {
+    if (loc.filePath == state.filePath) return state.content;
+    return store_.contentForPath(loc.filePath);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tier 1 — Sembol bilgisi metodları
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Faz 3: token binary search + (offset→Symbol*) indeksi (kök neden #3).
+// 1) İstemci pozisyonunu (utf-16 veya utf-8) bu belgenin byte offset'ine çevir.
+// 2) O offset'i kapsayan token'ı state.tokens'ta binary search ile bul.
+// 3) Token identifier değilse (keyword/operator/...) sembol yok.
+// 4) Token'ın başlangıç offset'i state.symbolByOffset'te varsa, scope-doğru
+//    çözülmüş sembolü döndür (runPipeline'da SymbolCollector'ın resolvedSymbol
+//    ataması sırasında toplanan referans/definition offsetlerinden kurulur).
 Symbol* LspHandler::findSymbolAt(DocumentState& state, int line, int character) {
-    // 0-tabanlı LSP konumunu 1-tabanlı SourceLocation'a çevir
-    int srcLine = line + 1;
-    int srcCol  = character + 1;
+    int byteCol = toByteColumn(state.content, line, character);
+    int offset  = lspLineStartOffset(state.content, line) + (byteCol - 1);
 
-    for (Symbol* sym : state.symbolTable.allSymbols()) {
-        if (sym->definitionLoc.line == srcLine &&
-            sym->definitionLoc.column <= srcCol &&
-            srcCol <= sym->definitionLoc.column + (int)sym->name.size()) {
-            return sym;
-        }
-        for (const auto& ref : sym->references) {
-            if (ref.line == srcLine &&
-                ref.column <= srcCol &&
-                srcCol <= ref.column + (int)sym->name.size()) {
-                return sym;
-            }
-        }
-    }
-    return nullptr;
+    const auto& toks = state.tokens;
+    auto it = std::upper_bound(toks.begin(), toks.end(), offset,
+        [](int off, Token* t) { return off < t->start; });
+    if (it == toks.begin()) return nullptr;
+    Token* tok = *std::prev(it);
+    if (offset < tok->start || offset >= tok->end) return nullptr;
+    if (tok->gettype() != "identifier") return nullptr;
+
+    auto found = state.symbolByOffset.find(tok->start);
+    return (found != state.symbolByOffset.end()) ? found->second : nullptr;
 }
 
 nlohmann::json LspHandler::handleDefinition(const nlohmann::json& id,
@@ -171,9 +246,13 @@ nlohmann::json LspHandler::handleDefinition(const nlohmann::json& id,
     if (!sym || !sym->definitionLoc.isValid())
         return JsonRpc::makeResponse(id, nullptr);
 
-    auto pos = sym->definitionLoc.toLspPosition();
+    // Faz 3: tanım sorgulanan dosyada olmayabilir (import edilen sembol) —
+    // artık HER ZAMAN sorgulanan URI değil, sym->definitionLoc.filePath'in
+    // gerçek URI'si döner (kök neden #4).
+    std::string targetContent = contentForLoc(*state, sym->definitionLoc);
+    LspPosition pos = toLspPos(targetContent, sym->definitionLoc);
     nlohmann::json result = {
-        {"uri", uri},
+        {"uri", store_.uriForPath(sym->definitionLoc.filePath)},
         {"range", {
             {"start", {{"line", pos.line}, {"character", pos.character}}},
             {"end",   {{"line", pos.line}, {"character", pos.character + (int)sym->name.size()}}}
@@ -240,27 +319,24 @@ nlohmann::json LspHandler::handleReferences(const nlohmann::json& id,
 
     nlohmann::json locs = nlohmann::json::array();
 
-    if (includeDecl && sym->definitionLoc.isValid()) {
-        auto pos = sym->definitionLoc.toLspPosition();
+    // Faz 3: her konum KENDİ dosyasının URI'siyle döner — sym->references
+    // farklı dosyalardan gelebilir (bu sembolü import eden başka bir modül),
+    // eskiden hepsi sorgulanan `uri`'ye kopyalanıyordu (kök neden #4).
+    auto addLoc = [&](const SourceLocation& loc) {
+        if (!loc.isValid()) return;
+        std::string content = contentForLoc(*state, loc);
+        LspPosition pos = toLspPos(content, loc);
         locs.push_back({
-            {"uri", uri},
+            {"uri", store_.uriForPath(loc.filePath)},
             {"range", {
                 {"start", {{"line", pos.line}, {"character", pos.character}}},
                 {"end",   {{"line", pos.line}, {"character", pos.character + (int)sym->name.size()}}}
             }}
         });
-    }
+    };
 
-    for (const auto& ref : sym->references) {
-        auto pos = ref.toLspPosition();
-        locs.push_back({
-            {"uri", uri},
-            {"range", {
-                {"start", {{"line", pos.line}, {"character", pos.character}}},
-                {"end",   {{"line", pos.line}, {"character", pos.character + (int)sym->name.size()}}}
-            }}
-        });
-    }
+    if (includeDecl) addLoc(sym->definitionLoc);
+    for (const auto& ref : sym->references) addLoc(ref);
 
     return JsonRpc::makeResponse(id, locs);
 }
@@ -292,8 +368,12 @@ nlohmann::json LspHandler::handleDocumentSymbol(const nlohmann::json& id,
         if (sym->kind == SymbolKind::Parameter) continue;
         if (sym->kind == SymbolKind::Field)     continue;
         if (!sym->definitionLoc.isValid())      continue;
+        // Faz 3: symbolTable tüm modül grafiğini kapsar (import edilen
+        // dosyaların sembolleri de içinde) — yalnızca BU belgeye ait olanları
+        // listele (kök neden #4).
+        if (sym->definitionLoc.filePath != state->filePath) continue;
 
-        auto pos = sym->definitionLoc.toLspPosition();
+        LspPosition pos = toLspPos(state->content, sym->definitionLoc);
         int  end = pos.character + static_cast<int>(sym->name.size());
 
         nlohmann::json range = {
@@ -328,7 +408,11 @@ nlohmann::json LspHandler::handleDocumentHighlight(const nlohmann::json& id,
     nlohmann::json highlights = nlohmann::json::array();
 
     auto makeHighlight = [&](const SourceLocation& loc, int kind) {
-        auto pos = loc.toLspPosition();
+        // documentHighlight protokolde tek bir belgeye özeldir (uri alanı
+        // yok) — başka dosyadaki referansları BURAYA sızdırmıyoruz (kök
+        // neden #4'ün documentHighlight varyantı).
+        if (!loc.isValid() || loc.filePath != state->filePath) return;
+        LspPosition pos = toLspPos(state->content, loc);
         int  end = pos.character + static_cast<int>(sym->name.size());
         highlights.push_back({
             {"range", {

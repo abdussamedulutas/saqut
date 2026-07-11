@@ -21,13 +21,16 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   gerekirse libgccjit/LLVM'e bağlanılır (çok uzak). Bellek = host C++ heap; özel
   allocator yok. (ADR-015)
 - **Dil kimliği:** prosedürel, C-ailesi sözdizimi, zorunlu class/main boilerplate
-  yok. **Semantik (ADR-020):** primitive (`int`/`float`/`bool`) = **değer**;
+  yok. **Semantik (ADR-020):** primitive (`int`/`float`/`bool`/`decimal`) = **değer**;
   bileşik (`struct`/`array`/`string`) = **referans** (JS/Java/C# modeli). "Pointer
   yok" = kullanıcıya `&`/`*` **sözdizimi** verilmez; derleyici/runtime içeride ve
-  çalışma zamanında referansı sonuna kadar kullanır. **Yok:** OOP, closure,
-  generic, auto/tip çıkarımı, gizli int↔float (tek istisna sabit folding). **Var:**
-  struct, tipli fonksiyonlar, array (`int[]`). `class`/`function` sözdizimsel
-  **rezerve** (semantik ileride). `interface` **ertelendi** (ADR-018).
+  çalışma zamanında referansı sonuna kadar kullanır. **Nested struct:** iç struct
+  alanları VarDecl anında özyinelemeli tahsis edilir (STRUCT_NEW zinciri, IR'de
+  görünür); `b = a` sonrası b ve a dış yapıyı VE iç struct'ları referansla paylaşır
+  (derin kopya değil) — ADR-029. **Yok:** OOP, closure, generic, auto/tip çıkarımı,
+  gizli int↔float (tek istisna sabit folding). **Var:** struct, tipli fonksiyonlar,
+  array (`int[]`). `class`/`function` sözdizimsel **rezerve** (semantik ileride).
+  `interface` **ertelendi** (ADR-018).
   ⚠️ Referans semantiği döngüsel-referans **sızıntısını** açtı → GC/döngü
   toplayıcı borcu (**#56**, `karar-gerekli`).
 - **Null güvenliği (ADR-021, REVİZE):** varsayılan non-null; nullable açıkça `Type?`
@@ -94,25 +97,41 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - Sembol tablosu (iki-geçişli toplayıcı, döngüsel struct tespiti)
   - Tip sistemi (`src/core/type.hpp`) + diagnostic motoru (`src/diagnostic/`)
   - Tip denetleyici + yapısal doğrulayıcı (`src/semantic/`)
-  - Optimizasyon: constant folding (int/bool/logical) + dead code elimination
+  - Optimizasyon: constant folding (int/bool/logical) + dead code elimination (W003 dahil)
   - IR üreteci (3-adresli, slot tabanlı) + bytecode VM (yorumlayıcı döngü)
-  - CLI: `tokens` / `ast` / `symbols` / `check` / `ir` / `run` (6 komut)
-- **Henüz YOK (bilinen eksikler):**
-  - float/double codegen (tip sistemi var, IR opcode'u yok)
-  - struct IR (parse/semantik var, codegen yok)
-  - array IR (parse/semantik var, codegen yok)
-  - `%=` operatörü IR'da eksik (#37)
-  - Global değişken IR üretimi sessizce atlıyor (#38)
-  - W003 ölü kod uyarısı üretilmiyor (#36)
-  - DCE silinen düğümleri `delete` etmiyor — bellek sızıntısı (#35)
+  - CLI: `tokens` / `ast` / `symbols` / `check` / `ir` / `run` / `exec` / `bench` / `lsp` / `dap`
+  - **Tipler:** `int`, `float`, `bool`, `string`, `decimal`, `enum`, `struct` (nested dahil), `array`, nullable `T?`
+  - **Operatörler:** aritmetik, bitwise, mantıksal, karşılaştırma, tüm bileşik atamalar (`%=` dahil)
+  - **Kontrol akışı:** `if/else`, `for`, `while`, `do-while`, `switch-case`, `break`/`continue`/`return`
+  - **Hata yönetimi:** `try/catch/throw` (ADR-025), cast `as` (ADR-026)
+  - **Global değişkenler:** LOAD_GLOBAL/STORE_GLOBAL (issue #38 kapatıldı)
+  - **Modül sistemi:** `import`/`export`, çok modüllü derleme
+  - **Nested struct:** struct-tipli alanlar VarDecl anında özyinelemeli tahsis (ADR-029)
+- **Henüz YOK (gerçek eksikler):**
+  - `byte` tipi (henüz tanımlanmadı)
+  - GC `collect()` tetiklenmiyor — iskelet var, arena gibi çalışıyor (#77)
+  - Modül döngüsü tespiti — `A→B→A` sessiz kısa devre, derleme hatası yok (#78, ADR-031)
+  - DAP satır bazlı adımlama + sembol adları — ham prototip (#79)
+- **LSP/DAP kurtarma planı** (`docs/prompt-lsp-dap-kurtarma.md`, Faz 0–6):
+  Faz 0 tamam — `tests/lsp/` golden test altyapısı kuruldu (7 senaryo,
+  Python sürücü `tests/lsp/lsp_test_driver.py`, ctest'e bağlı). Kod
+  düzeltmesi YOK; mevcut davranış (bozukları dahil, `wip_` önekiyle
+  `WILL_FAIL` işaretli) kilitlendi. Faz 1 (kaynak overlay) sırada.
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası
 - `readme.md` — toolbox çerçevesi, built-vs-planned, dil kimliği, çalıştırma modeli.
 - `docs/fikirler.md` — ADR-001…005 (backend stratejisi, parser, header-only, token, IR).
-- `docs/adr-frontend-analiz.md` — ADR-006…027 (frontend, analiz/optimizasyon,
+- `docs/adr-frontend-analiz.md` — ADR-006…028 (frontend, analiz/optimizasyon,
   çalıştırma modeli, FFI, interface, bellek, **değer/referans semantiği, null
-  güvenliği, mark-sweep GC, eşitlik, string, hata yönetimi, tip dönüşümü, switch-case**).
+  güvenliği, mark-sweep GC, eşitlik, string, hata yönetimi, tip dönüşümü, switch-case,
+  decimal**).
+- `docs/adr/ADR-029-nested-struct-tahsis.md` — Nested struct alanları VarDecl anında
+  özyinelemeli STRUCT_NEW zinciriyle tahsis edilir; referans paylaşımı iç içe de geçerli.
+- `docs/adr/ADR-030-heavyir-lightir-ayrim.md` — heavyIR (full meta + alan adları) vs
+  lightIR (sade opcode) ayrımı; `--optimized` bayrağıyla seçim.
+- `docs/adr/ADR-031-modul-dongus-politikasi.md` — Modül döngüsü tespiti: `seen_` seti
+  sonsuz döngüyü önler ama döngüde açık hata üretmez (TODO).
 - `docs/sonnet-handoff.md` — **Sonnet için uygulama promptu** (ADR-020…024'ü koda
   döken sıralı görev planı; ilk görev: GC-hazır nesne modeli + array runtime).
 - `docs/roadmap-frontend.md` — faz-faz uygulama planı (Faz 0–4 → fibonacci).

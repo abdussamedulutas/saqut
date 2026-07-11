@@ -1,0 +1,9 @@
+int topla(int a, int b) {
+    return a + b;
+}
+
+int main() {
+    /* çşğüöı */ int deger = topla(2, 3);
+    string s = "İşçi çalışıyor"; print(deger);
+    return 0;
+}

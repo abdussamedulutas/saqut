@@ -15,11 +15,20 @@ Uygulama dili **C++** (header-only eğilimli, ADR-003). CMake + Ninja. `build/`
 git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` ile yeniden oluştur).
 
 ## Kilitli kararlar (değiştirme — gerekçeler ADR'lerde)
-- **Çalıştırma modeli: IR + bytecode VM (yorumlayıcı döngü).** Tree-walker DEĞİL,
-  gerçek makine-kodu JIT DEĞİL (kapsam dışı; öncelik determinizm + incelenebilirlik,
-  ham hız değil). C'ye transpile ileride geçerli 2. backend. İleride makine kodu
-  gerekirse libgccjit/LLVM'e bağlanılır (çok uzak). Bellek = host C++ heap; özel
-  allocator yok. (ADR-015)
+- **Çalıştırma modeli (ADR-015, ADR-032 ile REVİZE):** IR + bytecode VM
+  **referans backend** olarak kalır (yeni opcode önce VM'de doğrulanır); ikinci
+  çalıştırma yolu **MIR tabanlı JIT** (#80) + **gömülü-runtime AOT** `saqut build`
+  (#81, `deno compile` modeli: runtime kopyası + IR gömülü tek exe, linker'sız).
+  **Kısıt: kullanıcı makinesinde sıfır harici toolchain** → C transpile ELENDİ
+  (C derleyicisi ister), libgccjit ELENDİ (içeride binutils'e şell atar),
+  **LLVM fiilen kapalı — muhtemelen hiç yapılmayacak** (tek getirisi agresif
+  optimizasyon, ki istemiyoruz; determinizmin düşmanı). Hedef ham hız değil,
+  "kabul edilebilir normal hız" (MIR ≈ GCC -O2'nin %70-90'ı). GC kökleri JIT'te
+  **shadow stack** ile bulunur (deterministik + incelenebilir). VM ve JIT aynı
+  IR'de aynı çıktıyı vermek ZORUNDA (diferansiyel test). IR = **dar bel**: yeni
+  özellik önce var olan opcodelara desugar edilmeye çalışılır. Tree-walker DEĞİL.
+  Bellek = host C++ heap; özel allocator yok. WASM multi-backend planında,
+  tarayıcı/playground en son.
 - **Dil kimliği:** prosedürel, C-ailesi sözdizimi, zorunlu class/main boilerplate
   yok. **Semantik (ADR-020):** primitive (`int`/`float`/`bool`/`decimal`) = **değer**;
   bileşik (`struct`/`array`/`string`) = **referans** (JS/Java/C# modeli). "Pointer
@@ -112,11 +121,34 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - GC `collect()` tetiklenmiyor — iskelet var, arena gibi çalışıyor (#77)
   - Modül döngüsü tespiti — `A→B→A` sessiz kısa devre, derleme hatası yok (#78, ADR-031)
   - DAP satır bazlı adımlama + sembol adları — ham prototip (#79)
+  - MIR JIT backend (#80) ve gömülü-runtime AOT `saqut build` (#81) — ADR-032
+    ile kararlaştırıldı, henüz başlanmadı
 - **LSP/DAP kurtarma planı** (`docs/prompt-lsp-dap-kurtarma.md`, Faz 0–6):
-  Faz 0 tamam — `tests/lsp/` golden test altyapısı kuruldu (7 senaryo,
-  Python sürücü `tests/lsp/lsp_test_driver.py`, ctest'e bağlı). Kod
-  düzeltmesi YOK; mevcut davranış (bozukları dahil, `wip_` önekiyle
-  `WILL_FAIL` işaretli) kilitlendi. Faz 1 (kaynak overlay) sırada.
+  Faz 0 tamam — `tests/lsp/` golden test altyapısı kuruldu. Faz 1 tamam —
+  `ModuleLoader` artık bir `SourceOverlay` seam'i (`src/module/module_loader.hpp`)
+  kabul ediyor; `DocumentStore::runPipeline` açık tüm belgeleri overlay olarak
+  sağlıyor, LSP artık diski değil editör buffer'ını derliyor (kök neden #1
+  kapandı). `uriToPath`/`pathToUri` `src/lsp/uri.hpp`'de ortak yardımcı oldu.
+  `tests/lsp/` 8 senaryo (`07_buffer_overlay`, `08_didchange_overlay` yeni).
+  Faz 2 tamam — Parser artık opsiyonel bir `DiagnosticEngine*` alıyor
+  (`ModuleLoader` bağlıyor); sözdizimi hataları konumlu `E9xx` tanısına
+  dönüşüp panic-mode recovery (`Parser::synchronizeAndMakeError`, yeni
+  `ASTKind::Error`/`ErrorNode`) ile bilinen bir sınıra kadar atlayıp parse'a
+  devam ediyor — kök neden #2 kapandı. `DocumentStore::runPipeline`'daki
+  erken `return`'ler kaldırıldı: sözdizimi hatası olsa da hatanın dışındaki
+  fonksiyonlar için hover/definition/documentSymbol çalışmaya devam ediyor.
+  `tests/lsp/` 9 senaryo (`09_syntax_error_recovery` yeni). Faz 3 tamam —
+  konum birimi anlaşması (`initialize`'da `positionEncoding`, `src/lsp/
+  position.hpp` UTF-16↔byte dönüştürücüleri); `findSymbolAt` artık isim-
+  uzunluğu aralık eşleştirmesi değil token binary search + (offset→Symbol*)
+  indeksi (`DocumentState::tokens`/`symbolByOffset`) — kök neden #3 kapandı.
+  `definition`/`references`/`documentSymbol`/`documentHighlight` artık
+  sorgulanan değil TANIMIN bulunduğu dosyanın URI'sini döndürüyor
+  (`DocumentStore::uriForPath`); diagnostics dosyaya göre gruplanıp ayrı
+  `publishDiagnostics` ile gönderiliyor — kök neden #4 kapandı. `tests/lsp/`
+  12 senaryo (`10_turkish_encoding`, `11_scoped_definition`,
+  `12_cross_file_definition` yeni). Faz 4 (completion'ı token/sembol
+  tabanlı yeniden kurma) sırada.
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası
@@ -132,6 +164,9 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   lightIR (sade opcode) ayrımı; `--optimized` bayrağıyla seçim.
 - `docs/adr/ADR-031-modul-dongus-politikasi.md` — Modül döngüsü tespiti: `seen_` seti
   sonsuz döngüyü önler ama döngüde açık hata üretmez (TODO).
+- `docs/adr/ADR-032-mir-jit-gomulu-runtime-aot.md` — İkinci backend: MIR JIT +
+  gömülü-runtime AOT (`saqut build`); shadow stack GC kökleri; C transpile/libgccjit
+  elendi, LLVM fiilen kapalı; VM referans backend, diferansiyel test zorunlu.
 - `docs/sonnet-handoff.md` — **Sonnet için uygulama promptu** (ADR-020…024'ü koda
   döken sıralı görev planı; ilk görev: GC-hazır nesne modeli + array runtime).
 - `docs/roadmap-frontend.md` — faz-faz uygulama planı (Faz 0–4 → fibonacci).
@@ -156,6 +191,8 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
     Format: Giriş/Gelişme/**Açık Sorular** (başarı kriteri YOK).
   - **#99–105** `test-senaryosu` — kaynak kod + beklenen çıktı içeren golden-test'ler.
   - **#106–110** `cli-ux`/`kalite-mimari` — CLI fikirleri, C/Java/Go tarzı tavsiyeler.
+  - **#80–81** `enhancement`+`ir-vm` — ADR-032 backend işleri: MIR JIT (#80),
+    gömülü-runtime AOT `saqut build` (#81).
   - LSP (#91) ve CLI (#107) **Tier 0–4** katmanlı yetenek haritası olarak yazıldı;
     #111 ekosistem bağımlılık sırası.
 

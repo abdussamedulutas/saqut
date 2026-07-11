@@ -124,6 +124,16 @@ enum class ASTKind {
                           //   leftTypeName: "int", "string", "Person" ...
                           //   methodName: "push", "upper", "toJson" ...
                           //   arguments: argümanlar (receiver dahil)
+
+    /* ====== Hata Kurtarma (Faz 2 — LSP/DAP kurtarma planı) ====== */
+    Error,                // Panic-mode kurtarma yer tutucusu: parser bu noktada
+                          //   sözdizimsel olarak beklenmedik bir token gördü,
+                          //   bir tanı (E9xx) üretti ve bilinen bir sınıra
+                          //   (';', '}', statement-başlangıcı) kadar atlayıp
+                          //   ağacı bu düğümle doldurdu. children: yok.
+                          //   SymbolCollector/TypeChecker/StructuralValidator
+                          //   switch/default ile bunu sessizce atlar — AST'nin
+                          //   geri kalanı analiz edilmeye devam eder.
 };
 
 // ============================================================================

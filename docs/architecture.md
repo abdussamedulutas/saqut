@@ -69,26 +69,29 @@ yoktur (o C++'tır); C, struct + fonksiyonun yettiğini kanıtlar.
 
 ---
 
-## Çalıştırma modeli (kilitli): IR + bytecode VM
+## Çalıştırma modeli: IR + bytecode VM (referans) + MIR JIT (ADR-032)
 
-saQut, kendi **IR**'sine derler ve bu IR'yi bir **yorumlayıcı döngü (bytecode
-VM)** ile çalıştırır.
+saQut, kendi **IR**'sine derler. Birincil ve **referans** çalıştırıcı bir
+**yorumlayıcı döngü (bytecode VM)**; ikinci çalıştırma yolu **MIR tabanlı JIT**
++ **gömülü-runtime AOT** (`saqut build`) — bkz.
+`docs/adr/ADR-032-mir-jit-gomulu-runtime-aot.md`.
 
 - **Tree-walker DEĞİL** (çok yavaş).
-- **Gerçek makine-kodu JIT DEĞİL.** Makine kodu üretimi (register allocation,
-  ABI/çağırma sözleşmeleri, çalıştırılabilir `mmap` bellek) **kapsam dışıdır** —
-  tek faydası ham hızdır ve hız burada öncelik değildir. Öncelikler
-  **determinizm** ve **incelenebilirliktir**; bytecode VM ikisini de doğrudan
-  sağlar.
+- **VM = referans backend.** Yeni bir IR opcode'u önce VM'de doğrulanır; JIT
+  eşlemesi sonra yazılır. VM ve JIT aynı IR'de **aynı çıktıyı** vermek
+  zorundadır (diferansiyel test).
+- **MIR JIT (#80):** saf C, sıfır bağımlılık, statik linklenir → kullanıcı
+  makinesinde **hiçbir harici toolchain gerekmez**. Hedef ham hız değil,
+  "kabul edilebilir normal hız" (~GCC -O2'nin %70-90'ı). GC kökleri **shadow
+  stack** ile deterministik ve incelenebilir bulunur.
+- **Gömülü-runtime AOT (#81):** `saqut build` runtime kopyası + gömülü IR'den
+  linker'sız **tek bağımsız exe** üretir (`deno compile` modeli).
 - **Bellek bu modelde kolaydır:** host (C++) heap'i kullanılır; v0 için özel
   runtime allocator gerekmez.
-- **C'ye transpile, geçerli bir İKİNCİ backend olarak ileride kalır** (frontend
-  backend-bağımsızdır — middle-end ayrımının amacı budur, ADR-006). İleride
-  makine kodu istenirse elle code generator yazmak yerine **libgccjit / LLVM'e
-  bağlanılır** — ama bu çok uzak gelecektir.
-
-> Eski belge/konuşmalarda geçen "JIT" terimi yanlış yönlendiricidir; doğru
-> çerçeve **IR + VM**'dir.
+- **ELENDİ:** C'ye transpile ve libgccjit (ikisi de kullanıcıya harici
+  toolchain bağımlılığı getirir); **LLVM fiilen kapalı, muhtemelen hiç
+  yapılmayacak** (tek getirisi agresif optimizasyon — istenmiyor, determinizmin
+  düşmanı). WASM multi-backend planında; tarayıcı/playground en son.
 
 ---
 
@@ -168,12 +171,14 @@ IR ─────────────────────  (planlanan) 
 # --- çalışıyor ---
 saqut tokens   file:kaynak.sqt      # token listesi
 saqut ast      file:kaynak.sqt      # AST (JSON)
-saqut symbols  file:kaynak.sqt      # sembol tablosu (iskelet)
-
-# --- planlanan ---
+saqut symbols  file:kaynak.sqt      # sembol tablosu
 saqut run      file:kaynak.sqt      # IR üret + bytecode VM ile çalıştır
 saqut ast      file:kaynak.sqt --optimized   # klon, optimize edilmiş AST (öncesi/sonrası)
-saqut transpile file:kaynak.sqt -o prog.c    # ikinci backend (ileride)
+
+# --- planlanan (ADR-032) ---
+saqut run --jit file:kaynak.sqt     # MIR JIT ile çalıştır (#80)
+saqut mir      file:kaynak.sqt      # MIR dökümü (incelenebilirlik)
+saqut build    kaynak.sqt -o prog   # gömülü-runtime AOT: tek bağımsız exe (#81)
 ```
 
 Tasarım gereği her aşamanın çıktısı erken bir noktada dosyalanabilir/loglanabilir

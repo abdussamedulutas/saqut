@@ -157,12 +157,30 @@ void LspHandler::publishDiagnosticsGrouped(DocumentState& state) {
     std::map<std::string, nlohmann::json> byFile;
     byFile[state.filePath] = nlohmann::json::array(); // sorgulanan dosya her zaman bir bildirim alır (stale temizliği)
 
+    // Tanı sayısı büyük olabilir (üretilmiş dosyada binlerce W) → dosya
+    // başına içerik + satır indeksini bir kez kur.
+    std::map<std::string, std::pair<std::string, std::vector<int>>> fileCache;
     for (const auto& d : state.diagnostics.all()) {
         // Konumsuz tanılar (ör. E_MODULE_NOT_FOUND — SourceLocation{} boş
         // filePath'le gelir) sorgulanan dosyaya düşer; eski davranışla aynı.
         std::string fp = d.loc.filePath.empty() ? state.filePath : d.loc.filePath;
-        std::string content = (fp == state.filePath) ? state.content : store_.contentForPath(fp);
-        LspPosition pos = toLspPos(content, d.loc);
+        const std::string* content;
+        const std::vector<int>* starts;
+        if (fp == state.filePath) {
+            content = &state.content;
+            starts  = &state.lineStarts;
+        } else {
+            auto it = fileCache.find(fp);
+            if (it == fileCache.end()) {
+                std::string c = store_.contentForPath(fp);
+                it = fileCache.emplace(fp,
+                        std::make_pair(std::move(c), std::vector<int>{})).first;
+                it->second.second = buildLineStarts(it->second.first);
+            }
+            content = &it->second.first;
+            starts  = &it->second.second;
+        }
+        LspPosition pos = toLspPos(*content, *starts, d.loc);
 
         nlohmann::json item;
         item["range"] = {
@@ -200,6 +218,15 @@ LspPosition LspHandler::toLspPos(const std::string& content, const SourceLocatio
     if (positionEncoding_ == "utf-8" || content.empty())
         return loc.toLspPosition(); // byte==utf-8-birim; içerik yoksa en iyi çaba
     return { loc.line - 1, byteColToLsp(content, loc.line - 1, loc.column) };
+}
+
+LspPosition LspHandler::toLspPos(const std::string& content,
+                                 const std::vector<int>& lineStarts,
+                                 const SourceLocation& loc) const {
+    if (!loc.isValid()) return {0, 0};
+    if (positionEncoding_ == "utf-8" || content.empty())
+        return loc.toLspPosition();
+    return { loc.line - 1, byteColToLspAt(content, lineStarts, loc.line - 1, loc.column) };
 }
 
 std::string LspHandler::contentForLoc(DocumentState& state, const SourceLocation& loc) const {
@@ -323,10 +350,27 @@ nlohmann::json LspHandler::handleReferences(const nlohmann::json& id,
     // Faz 3: her konum KENDİ dosyasının URI'siyle döner — sym->references
     // farklı dosyalardan gelebilir (bu sembolü import eden başka bir modül),
     // eskiden hepsi sorgulanan `uri`'ye kopyalanıyordu (kök neden #4).
+    // Referans sayısı büyük olabilir → dosya başına satır indeksi bir kez kur.
+    std::map<std::string, std::pair<std::string, std::vector<int>>> fileCache;
     auto addLoc = [&](const SourceLocation& loc) {
         if (!loc.isValid()) return;
-        std::string content = contentForLoc(*state, loc);
-        LspPosition pos = toLspPos(content, loc);
+        const std::string* content;
+        const std::vector<int>* starts;
+        if (loc.filePath == state->filePath) {
+            content = &state->content;
+            starts  = &state->lineStarts;
+        } else {
+            auto it = fileCache.find(loc.filePath);
+            if (it == fileCache.end()) {
+                std::string c = store_.contentForPath(loc.filePath);
+                it = fileCache.emplace(loc.filePath,
+                        std::make_pair(std::move(c), std::vector<int>{})).first;
+                it->second.second = buildLineStarts(it->second.first);
+            }
+            content = &it->second.first;
+            starts  = &it->second.second;
+        }
+        LspPosition pos = toLspPos(*content, *starts, loc);
         locs.push_back({
             {"uri", store_.uriForPath(loc.filePath)},
             {"range", {
@@ -374,7 +418,7 @@ nlohmann::json LspHandler::handleDocumentSymbol(const nlohmann::json& id,
         // listele (kök neden #4).
         if (sym->definitionLoc.filePath != state->filePath) continue;
 
-        LspPosition pos = toLspPos(state->content, sym->definitionLoc);
+        LspPosition pos = toLspPos(state->content, state->lineStarts, sym->definitionLoc);
         int  end = pos.character + static_cast<int>(sym->name.size());
 
         nlohmann::json range = {
@@ -413,7 +457,7 @@ nlohmann::json LspHandler::handleDocumentHighlight(const nlohmann::json& id,
         // yok) — başka dosyadaki referansları BURAYA sızdırmıyoruz (kök
         // neden #4'ün documentHighlight varyantı).
         if (!loc.isValid() || loc.filePath != state->filePath) return;
-        LspPosition pos = toLspPos(state->content, loc);
+        LspPosition pos = toLspPos(state->content, state->lineStarts, loc);
         int  end = pos.character + static_cast<int>(sym->name.size());
         highlights.push_back({
             {"range", {

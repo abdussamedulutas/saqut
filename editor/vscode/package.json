@@ -2,7 +2,7 @@
   "name": "saqut",
   "displayName": "saQut Language",
   "description": "saQut dil desteği: sözdizimi renklendirme, LSP ve DAP entegrasyonu",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "publisher": "saqut",
   "engines": {
     "vscode": "^1.75.0"
@@ -35,6 +35,11 @@
         "path": "./syntaxes/sqt.tmLanguage.json"
       }
     ],
+    "breakpoints": [
+      {
+        "language": "sqt"
+      }
+    ],
     "debuggers": [
       {
         "type": "sqt",
@@ -43,7 +48,48 @@
           "sqt"
         ],
         "program": "./extension.js",
-        "runtime": "node"
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Çalıştırılacak .sqt dosyası",
+                "default": "${file}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Programın ilk satırında dur",
+                "default": true
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "sqt",
+            "request": "launch",
+            "name": "saQut Debug",
+            "program": "${file}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "saQut: Dosyayı Debug Et",
+            "description": "Açık .sqt dosyasını saQut debugger ile başlat",
+            "body": {
+              "type": "sqt",
+              "request": "launch",
+              "name": "saQut Debug",
+              "program": "^\"\\${file}\"",
+              "stopOnEntry": true
+            }
+          }
+        ]
       }
     ]
   },

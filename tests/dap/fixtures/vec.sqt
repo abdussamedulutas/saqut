@@ -1,0 +1,23 @@
+struct Vec { int x; int y; int z; }
+
+void main() {
+    Vec[] vecs;
+
+    Vec a;
+    a.x = 1; a.y = 2; a.z = 3;
+    Vec b;
+    b.x = 4; b.y = 5; b.z = 6;
+
+    vecs = [a, b];
+
+    print(vecs[0].z);
+    print(vecs[1].x);
+
+    int i = 0;
+    int sum = 0;
+    while (i < 2) {
+        sum = sum + vecs[i].x + vecs[i].y + vecs[i].z;
+        i = i + 1;
+    }
+    print(sum);
+}

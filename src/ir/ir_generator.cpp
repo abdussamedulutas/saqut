@@ -886,6 +886,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.argSlots     = argSlots;
             ins.sourceLine   = call->loc.line;
             ins.sourceCol    = call->loc.column;
+            ins.sourceFile   = call->loc.filePath;
             currentFunction_->instructions.push_back(std::move(ins));
             return -1; // Dönüş değeri yok
         } else {
@@ -897,6 +898,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.argSlots     = argSlots;
             ins.sourceLine   = call->loc.line;
             ins.sourceCol    = call->loc.column;
+            ins.sourceFile   = call->loc.filePath;
             currentFunction_->instructions.push_back(std::move(ins));
             return destSlot;
         }

@@ -154,6 +154,37 @@ if(PYTHON3_EXECUTABLE)
             set_tests_properties("lsp_${SCEN_BASE}" PROPERTIES WILL_FAIL TRUE)
         endif()
     endforeach()
+# DAP golden testleri — tests/dap/*.jsonl senaryolarını otomatik keşfet.
+# Format LSP testleriyle aynı. "wip_" önekli senaryolar WILL_FAIL.
+file(GLOB ALL_DAP_SCENARIOS CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/tests/dap/*.jsonl"
+)
+foreach(SCEN_FILE ${ALL_DAP_SCENARIOS})
+    get_filename_component(SCEN_NAME "${SCEN_FILE}" NAME)
+    if(SCEN_NAME MATCHES "\\.expected\\.jsonl$")
+        continue()
+    endif()
+    string(REGEX REPLACE "\\.jsonl$" "" SCEN_BASE "${SCEN_NAME}")
+    set(SCEN_EXPECTED "${CMAKE_SOURCE_DIR}/tests/dap/${SCEN_BASE}.expected.jsonl")
+    if(NOT EXISTS "${SCEN_EXPECTED}")
+        continue()
+    endif()
+
+    add_test(
+        NAME "dap_${SCEN_BASE}"
+        COMMAND "${PYTHON3_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tests/dap/dap_test_driver.py"
+            --binary "${SAQUT_BINARY}"
+            --fixtures "${CMAKE_SOURCE_DIR}/tests/dap/fixtures"
+            --scenario "${SCEN_FILE}"
+            --expected "${SCEN_EXPECTED}"
+    )
+
+    if(SCEN_BASE MATCHES "^wip_")
+        set_tests_properties("dap_${SCEN_BASE}" PROPERTIES WILL_FAIL TRUE)
+    endif()
+endforeach()
+
 else()
     message(WARNING "python3 bulunamadı — LSP golden testleri (tests/lsp/) atlanıyor")
 endif()

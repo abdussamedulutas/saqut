@@ -1,0 +1,2 @@
+{"body": {"supportTerminateDebuggee": true, "supportsConditionalBreakpoints": false, "supportsConfigurationDoneRequest": true, "supportsExceptionInfoRequest": false, "supportsFunctionBreakpoints": false, "supportsGotoTargetsRequest": false, "supportsHitConditionalBreakpoints": false, "supportsSetVariable": false, "supportsStepBack": false, "supportsStepInTargetsRequest": false, "supportsTerminateRequest": true}, "command": "initialize", "request_seq": 1, "seq": 100, "success": true, "type": "response"}
+{"body": null, "event": "initialized", "seq": 101, "type": "event"}

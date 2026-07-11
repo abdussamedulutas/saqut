@@ -86,8 +86,8 @@ void Interpreter::checkBreakpoint() {
 }
 
 void Interpreter::resume() {
-    // Faz 5: run() değil, mevcut durumdan devam
-    runUntilEvent(INT_MAX, -1);
+    // Faz 5: run() değil, mevcut durumdan devam (bütçe -1 = sınırsız)
+    runUntilEvent(-1, -1);
 }
 
 void Interpreter::stepInstruction() {
@@ -100,21 +100,21 @@ void Interpreter::stepOver() {
     if (callStack_.empty()) { state_ = RunState::Finished; return; }
     // Faz 5: aynı çağrı derinliğinde satır değişene kadar ilerle
     int depth = (int)callStack_.size();
-    runUntilEvent(INT_MAX, depth);
+    runUntilEvent(-1, depth);
 }
 
 // Faz 5: sourceLine değişene kadar ilerle
 void Interpreter::stepLine() {
     if (callStack_.empty()) { state_ = RunState::Finished; return; }
     int depth = (int)callStack_.size();
-    runUntilEvent(INT_MAX, depth); // stepOver ile aynı mantık
+    runUntilEvent(-1, depth); // stepOver ile aynı mantık
 }
 
 // Faz 5: callDepth azalana kadar ilerle
 void Interpreter::stepOut() {
     if (callStack_.empty()) { state_ = RunState::Finished; return; }
     int depth = (int)callStack_.size() - 1; // şu anki fonksiyondan çıkış
-    runUntilEvent(INT_MAX, depth);
+    runUntilEvent(-1, depth);
 }
 
 int Interpreter::currentSourceLine() const {
@@ -141,6 +141,25 @@ std::string Interpreter::currentSourceFile() const {
 
 int Interpreter::callDepth() const {
     return (int)callStack_.size();
+}
+
+std::string Interpreter::frameSourceFile(int depth) const {
+    if (depth < 0 || depth >= (int)callStack_.size()) return "";
+    const CallFrame& f = callStack_[(int)callStack_.size() - 1 - depth];
+    int ip = f.instructionPointer - 1;
+    if (f.function && ip >= 0 && ip < (int)f.function->instructions.size()) {
+        const Instruction& ins = f.function->instructions[ip];
+        return ins.sourceFile.empty()
+            ? program_.moduleRegistry.filePath(f.function->moduleId)
+            : ins.sourceFile;
+    }
+    return program_.moduleRegistry.filePath(f.function ? f.function->moduleId : 0);
+}
+
+int Interpreter::frameSlotCount(int depth) const {
+    if (depth < 0 || depth >= (int)callStack_.size()) return 0;
+    const CallFrame& f = callStack_[(int)callStack_.size() - 1 - depth];
+    return f.function ? f.function->slotCount : 0;
 }
 
 std::string Interpreter::frameFunctionName(int depth) const {
@@ -213,10 +232,12 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
 
     // run() ile aynı döngü — ortak kod yolu
     while (!callStack_.empty()) {
-        // Bütçe kontrolü
-        if (runBudget_ == 0) {
-            // 0 = sınırsız (INT_MAX ile çağrıldığında)
-        } else if (runBudget_ <= 0) {
+        // Bütçe kontrolü: < 0 = sınırsız, == 0 = tükendi, > 0 = kalan hak
+        // runUntilEvent(-1, ...) → sınırsız
+        // runUntilEvent(1, ...)  → 1 instruction, sonra dur
+        if (runBudget_ < 0) {
+            // Sınırsız bütçe — devam
+        } else if (runBudget_ == 0) {
             state_ = RunState::Paused;
             return RunReason::BudgetExhausted;
         }
@@ -874,15 +895,11 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
     return RunReason::Finished;
 }
 
-// Faz 5: run() artık başlatma + runUntilEvent çağrısı.
-int Interpreter::run() {
-    // Eğer VM zaten başlatıldıysa (DAP resume) — sadece devam et
-    if (vmInitialized_ && !callStack_.empty()) {
-        runUntilEvent(INT_MAX, -1);
-        return lastReturnValue_;
-    }
+// DAP: run()'ın ilklendirme kısmı. VM'i çalıştırmadan hazırlar.
+void Interpreter::initForDebug() {
+    if (vmInitialized_) return;
 
-    // İlk başlatma
+    // Globalleri sıfırla
     for (auto& [id, count] : program_.moduleGlobalCounts)
         moduleSlots_[id].assign(count, Value::fromInt(0));
     if (program_.moduleGlobalCounts.empty() && program_.globalCount > 0)
@@ -900,8 +917,19 @@ int Interpreter::run() {
     mainFrame.returnDestSlot     = -1;
     callStack_.push_back(std::move(mainFrame));
     vmInitialized_ = true;
+}
 
-    runUntilEvent(INT_MAX, -1);
+// Faz 5: run() artık başlatma + runUntilEvent çağrısı.
+int Interpreter::run() {
+    // Eğer VM zaten başlatıldıysa (DAP resume) — sadece devam et
+    if (vmInitialized_ && !callStack_.empty()) {
+        runUntilEvent(-1, -1);
+        return lastReturnValue_;
+    }
+
+    initForDebug();
+
+    runUntilEvent(-1, -1);
     return lastReturnValue_;
 }
 

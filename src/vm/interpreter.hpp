@@ -42,6 +42,9 @@ public:
     // Tamamlandığında main'in dönüş değerini (int) döndürür.
     int run();
 
+    // DAP: VM'i çalıştırmadan ilklendir (callStack, globaller, vmInitialized_)
+    void initForDebug();
+
     // Profil hook — bench komutu tarafından set edilir (nullptr = kapalı).
     // Normal run/check/ir komutlarında çağrılmaz, sıfır maliyet.
     void setVMTrace(BenchVMTrace* t) { vmTrace_ = t; }
@@ -70,6 +73,8 @@ public:
     int         currentSourceLine() const;
     std::string currentSourceFile() const;
     int         callDepth() const;
+    std::string frameSourceFile(int depth) const;
+    int         frameSlotCount(int depth) const;
     std::string frameFunctionName(int depth) const;
     int         frameSourceLine(int depth) const;
 

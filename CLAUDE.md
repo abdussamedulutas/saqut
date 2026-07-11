@@ -113,10 +113,13 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - Modül döngüsü tespiti — `A→B→A` sessiz kısa devre, derleme hatası yok (#78, ADR-031)
   - DAP satır bazlı adımlama + sembol adları — ham prototip (#79)
 - **LSP/DAP kurtarma planı** (`docs/prompt-lsp-dap-kurtarma.md`, Faz 0–6):
-  Faz 0 tamam — `tests/lsp/` golden test altyapısı kuruldu (7 senaryo,
-  Python sürücü `tests/lsp/lsp_test_driver.py`, ctest'e bağlı). Kod
-  düzeltmesi YOK; mevcut davranış (bozukları dahil, `wip_` önekiyle
-  `WILL_FAIL` işaretli) kilitlendi. Faz 1 (kaynak overlay) sırada.
+  Faz 0 tamam — `tests/lsp/` golden test altyapısı kuruldu. Faz 1 tamam —
+  `ModuleLoader` artık bir `SourceOverlay` seam'i (`src/module/module_loader.hpp`)
+  kabul ediyor; `DocumentStore::runPipeline` açık tüm belgeleri overlay olarak
+  sağlıyor, LSP artık diski değil editör buffer'ını derliyor (kök neden #1
+  kapandı). `uriToPath`/`pathToUri` `src/lsp/uri.hpp`'de ortak yardımcı oldu.
+  `tests/lsp/` 8 senaryo (`07_buffer_overlay`, `08_didchange_overlay` yeni).
+  Faz 2 (parser hata toleransı) sırada.
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası

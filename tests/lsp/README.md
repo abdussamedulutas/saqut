@@ -34,11 +34,9 @@ görünür (CTest bunu da bir hata olarak raporlar); bu, `WILL_FAIL`
 özelliğini kaldırıp dosyayı `wip_` önekinden kurtarma (ve normal senaryo
 listesine taşıma) zamanı geldiğinin sinyalidir.
 
-Örnek: `wip_buffer_overlay.jsonl` — kök neden #1'i (LSP diski derliyor,
-editör buffer'ını değil) belgeler. Diskteki `fixtures/overlay_broken.sqt`
-kasıtlı olarak E003 hatası içerir; `didOpen` ile gönderilen buffer içeriği
-düzeltilmiştir. Doğru davranışta diagnostics boş gelmeli (Faz 1'in işi);
-bugün disk okunduğu için E003 hatası gelir.
+Şu an aktif bekleyen bilinen-bozuk senaryo yok. (Faz 1'de `wip_buffer_overlay`
+kök neden #1 düzeltildiği için `07_buffer_overlay` adıyla normal senaryo
+listesine taşındı.)
 
 ## Yeni senaryo ekleme
 
@@ -84,4 +82,5 @@ python3 tests/lsp/lsp_test_driver.py \
 | `04_hover` | Bir referans konumunda `hover` → tip+isim |
 | `05_definition` | Bir referans konumunda `definition` → aralık |
 | `06_documentSymbol` | Fonksiyon+lokal değişken sembol listesi |
-| `wip_buffer_overlay` | (bilinen-bozuk) LSP diski derliyor, buffer'ı değil — Faz 1'in işi |
+| `07_buffer_overlay` | Diskte E003 hatalı `overlay_broken.sqt`, `didOpen` buffer'ı düzeltilmiş → diagnostics buffer'a göre boş (Faz 1) |
+| `08_didchange_overlay` | `didOpen` geçerli, `didChange` E003 hatası ekliyor → diagnostics güncellenip hata gelir (Faz 1) |

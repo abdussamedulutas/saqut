@@ -30,6 +30,11 @@ endif()
 
 file(READ "${EXPECTED}" EXPECTED_CONTENT)
 
+# ANSI renk kodlarını temizle (terminal dışı karşılaştırma için)
+string(ASCII 27 ESC)
+string(REGEX REPLACE "${ESC}\\[[0-9;]*m" "" ACTUAL "${ACTUAL}")
+string(REGEX REPLACE "${ESC}\\[1m" "" ACTUAL "${ACTUAL}")
+
 if(NOT ACTUAL STREQUAL EXPECTED_CONTENT)
     message(FATAL_ERROR
         "Çıktı uyuşmuyor: ${SOURCE}\n"

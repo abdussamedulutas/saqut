@@ -148,6 +148,11 @@ private:
     int getStructFieldIndex(const std::string& structType, const std::string& fieldName) const;
     int getStructFieldCount(const std::string& structType) const;
 
+    // VarDecl anında struct-tipli alanları özyinelemeli olarak tahsis edip bağlar.
+    // (ADR-020 nested struct kuralı: iç struct'lar STRUCT_NEW zinciriyle oluşturulur)
+    void initNestedStructFields(int destSlot, const std::string& structType,
+                                const SourceLocation& loc);
+
     bool isGlobal(const std::string& name) const;
     int  getGlobalIndex(const std::string& name) const;
 };

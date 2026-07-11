@@ -5,6 +5,8 @@
 #include "semantic/type_checker.hpp"
 #include "semantic/structural_validator.hpp"
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 
 namespace fs = std::filesystem;
 
@@ -21,6 +23,8 @@ DocumentState& DocumentStore::update(const std::string& uri,
     state.version = version;
     delete state.ast;
     state.ast = nullptr;
+    for (auto* t : state.tokens) delete t;
+    state.tokens.clear();
     runPipeline(state);
     return state;
 }
@@ -32,6 +36,36 @@ DocumentState* DocumentStore::get(const std::string& uri) {
 
 void DocumentStore::close(const std::string& uri) {
     store_.erase(uri);
+}
+
+bool DocumentStore::openContent(const std::string& path, std::string& out) const {
+    for (auto& [uri, docState] : store_) {
+        std::string docPath = fs::weakly_canonical(uriToPath(uri)).string();
+        if (docPath == path) {
+            out = docState->content;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string DocumentStore::contentForPath(const std::string& path) const {
+    std::string out;
+    if (openContent(path, out)) return out;
+
+    std::ifstream file(path, std::ios::in | std::ios::binary);
+    if (!file.is_open()) return "";
+    std::stringstream buf;
+    buf << file.rdbuf();
+    return buf.str();
+}
+
+std::string DocumentStore::uriForPath(const std::string& path) const {
+    for (auto& [uri, docState] : store_) {
+        std::string docPath = fs::weakly_canonical(uriToPath(uri)).string();
+        if (docPath == path) return uri;
+    }
+    return pathToUri(path);
 }
 
 void DocumentStore::runPipeline(DocumentState& state) {
@@ -47,17 +81,11 @@ void DocumentStore::runPipeline(DocumentState& state) {
 
     // Overlay: derleme diski değil, açık olan editör buffer'larını görür.
     // Böylece A.sqt import ettiği B.sqt editörde açıksa, B'nin kaydedilmemiş
-    // hali kullanılır (Faz 1, ADR: kaynak overlay).
+    // hali kullanılır (Faz 1, ADR: kaynak overlay). openContent aynı arama
+    // mantığını contentForPath ile de paylaşır (Faz 3).
     ModuleLoader::SourceOverlay overlay =
         [this](const std::string& path, std::string& out) -> bool {
-            for (auto& [uri, docState] : store_) {
-                std::string docPath = fs::weakly_canonical(uriToPath(uri)).string();
-                if (docPath == path) {
-                    out = docState->content;
-                    return true;
-                }
-            }
-            return false;
+            return openContent(path, out);
         };
 
     ModuleRegistry registry;
@@ -69,9 +97,27 @@ void DocumentStore::runPipeline(DocumentState& state) {
     // başarılı turdan kalan haliyle bırakılır ("son iyi tablo").
     if (graph.units.empty()) return;
 
+    // ModuleLoader entryFilePath'i canonical hale getirir (fs::weakly_canonical);
+    // SourceLocation.filePath'lerin hepsi bu biçimde. state.filePath'i ORADAN al
+    // ki symbolByOffset filtrelemesi ve çok-dosya URI karşılaştırmaları eşleşsin.
+    state.filePath = graph.units[0].filePath;
+
     state.symbolTable = SymbolTable{};
     SymbolCollector(state.symbolTable, state.diagnostics)
         .collectModuleGraph(graph);
+
+    // Faz 3: (offset → Symbol*) indeksi — yalnızca BU belgenin dosyasına ait
+    // tanım/referans konumları (kök neden #3: iki ayrı fonksiyondaki aynı adlı
+    // değişken artık karışmaz, çünkü findSymbolAt artık isim-uzunluğu aralık
+    // eşleştirmesi değil tam offset eşleşmesi kullanıyor).
+    state.symbolByOffset.clear();
+    for (Symbol* sym : state.symbolTable.allSymbols()) {
+        if (sym->definitionLoc.isValid() && sym->definitionLoc.filePath == state.filePath)
+            state.symbolByOffset[sym->definitionLoc.offset] = sym;
+        for (const auto& ref : sym->references)
+            if (ref.filePath == state.filePath)
+                state.symbolByOffset[ref.offset] = sym;
+    }
 
     // Faz 2: erken dönüş YOK. Parser artık sözdizimi hatalarında bile
     // (panic-mode recovery ile) tam bir AST döndürdüğü için, bir hata olsa
@@ -83,7 +129,10 @@ void DocumentStore::runPipeline(DocumentState& state) {
     for (auto& unit : graph.units)
         StructuralValidator(state.diagnostics).validate(unit.ast);
 
-    // AST sahipliğini DocumentState'e aktar
-    state.ast          = graph.units[0].ast;
-    graph.units[0].ast = nullptr;
+    // AST + token sahipliğini DocumentState'e aktar (Faz 3: findSymbolAt token
+    // binary search'ü için tokenlere ihtiyaç duyar; IdentifierNode::lexerToken
+    // bunlara işaret ettiği için ast ile aynı ömürde tutulmalılar).
+    state.ast             = graph.units[0].ast;
+    graph.units[0].ast    = nullptr;
+    state.tokens          = std::move(graph.units[0].tokens);
 }

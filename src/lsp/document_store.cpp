@@ -36,7 +36,12 @@ void DocumentStore::close(const std::string& uri) {
 
 void DocumentStore::runPipeline(DocumentState& state) {
     state.diagnostics = DiagnosticEngine{};
-    state.symbolTable = SymbolTable{};
+    // NOT: state.symbolTable BURADA sıfırlanmaz. Faz 2 — parser artık panic-mode
+    // recovery ile sözdizimi hatasında bile her zaman bir AST döndürür, bu yüzden
+    // SymbolCollector normal şartlarda her turda çalışıp tabloyu yeniden kurar
+    // (aşağıda). Tablo yalnızca modül hiç yüklenemediğinde (dosya bulunamadı vb.)
+    // dokunulmadan kalır — LSP sorguları böylece bir önceki başarılı turun
+    // ("son iyi") tablosuna düşmüş olur.
 
     std::string filePath = uriToPath(state.uri);
 
@@ -59,21 +64,26 @@ void DocumentStore::runPipeline(DocumentState& state) {
     ModuleGraph    graph = ModuleLoader(registry, state.diagnostics, overlay)
                                .load(filePath);
 
-    if (state.diagnostics.hasErrors()) return;
+    // Faz 2: modül hiç yüklenemediyse (örn. dosya bulunamadı — overlay ve disk
+    // ikisi de başarısız) toplanacak bir AST yok; sembol tablosu bir önceki
+    // başarılı turdan kalan haliyle bırakılır ("son iyi tablo").
+    if (graph.units.empty()) return;
 
+    state.symbolTable = SymbolTable{};
     SymbolCollector(state.symbolTable, state.diagnostics)
         .collectModuleGraph(graph);
 
-    if (state.diagnostics.hasErrors()) return;
-
+    // Faz 2: erken dönüş YOK. Parser artık sözdizimi hatalarında bile
+    // (panic-mode recovery ile) tam bir AST döndürdüğü için, bir hata olsa
+    // dahi hatanın DIŞINDAKİ fonksiyonlar için hover/definition/documentSymbol
+    // çalışmaya devam etsin diye TypeChecker/StructuralValidator'a kadar iniyoruz.
+    // Bu katmanlar ErrorNode'u (default: dalı) sessizce atlar.
     for (auto& unit : graph.units)
         TypeChecker(state.symbolTable, state.diagnostics).check(unit.ast);
     for (auto& unit : graph.units)
         StructuralValidator(state.diagnostics).validate(unit.ast);
 
     // AST sahipliğini DocumentState'e aktar
-    if (!graph.units.empty()) {
-        state.ast        = graph.units[0].ast;
-        graph.units[0].ast = nullptr;
-    }
+    state.ast          = graph.units[0].ast;
+    graph.units[0].ast = nullptr;
 }

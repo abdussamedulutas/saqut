@@ -9,5 +9,6 @@
 #include "parser/nodes/literal.hpp"
 #include "parser/nodes/identifier.hpp"
 #include "parser/nodes/expressions.hpp"
+#include "parser/nodes/error_node.hpp"
 
 #endif

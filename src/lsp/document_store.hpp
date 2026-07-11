@@ -14,6 +14,14 @@ struct DocumentState {
     std::string      content;
     int              version = 0;
     ASTNode*         ast     = nullptr;
+    // Faz 2 ("son iyi tablo"): SymbolTable unique_ptr tabanlı sahiplik kullandığı
+    // için kopyalanamaz, yalnızca taşınabilir — bu yüzden ayrı bir
+    // lastGoodSymbolTable alanı yerine symbolTable'ın KENDİSİ bu rolü üstlenir:
+    // runPipeline yalnızca yeni bir tablo üretebildiğinde üzerine yazar (bkz.
+    // document_store.cpp), modül hiç yüklenemediğinde dokunmadan bırakır.
+    // TODO(faz-ileri): SymbolCollector bir gün gerçekten yarıda kesilebilir hale
+    // gelirse (bugün mümkün değil — hep tamamlanır), gerçek bir "son iyi" anlık
+    // görüntüsü için SymbolTable derin kopyalanabilir hale getirilmeli.
     SymbolTable      symbolTable;
     DiagnosticEngine diagnostics;
 

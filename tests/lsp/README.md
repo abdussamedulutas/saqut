@@ -84,3 +84,4 @@ python3 tests/lsp/lsp_test_driver.py \
 | `06_documentSymbol` | Fonksiyon+lokal değişken sembol listesi |
 | `07_buffer_overlay` | Diskte E003 hatalı `overlay_broken.sqt`, `didOpen` buffer'ı düzeltilmiş → diagnostics buffer'a göre boş (Faz 1) |
 | `08_didchange_overlay` | `didOpen` geçerli, `didChange` E003 hatası ekliyor → diagnostics güncellenip hata gelir (Faz 1) |
+| `09_syntax_error_recovery` | `broken()` içinde sözdizimi hatası (`)`) → konumlu E901 diagnostic; hatanın DIŞINDAKİ `main()` fonksiyonunda hover/definition hâlâ doğru çalışır (Faz 2: panic-mode recovery) |

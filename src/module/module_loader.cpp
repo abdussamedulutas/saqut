@@ -46,7 +46,10 @@ void ModuleLoader::loadUnit(const std::string& filePath, ModuleGraph& graph) {
     Tokenizer tokenizer;
     auto tokens = tokenizer.scan(source, filePath);
 
-    Parser parser;
+    // Faz 2: diag_ enjekte edilir — sözdizimi hataları artık konumlu tanı
+    // (E9xx) olarak DiagnosticEngine'e gider, parse yine de devam eder
+    // (panic-mode recovery, bkz. Parser::synchronizeAndMakeError).
+    Parser parser(&diag_);
     ASTNode* ast = parser.parse(tokens);
     if (!ast) {
         diag_.report("E_MODULE_PARSE", SourceLocation{},

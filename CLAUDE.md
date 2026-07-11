@@ -119,7 +119,15 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   sağlıyor, LSP artık diski değil editör buffer'ını derliyor (kök neden #1
   kapandı). `uriToPath`/`pathToUri` `src/lsp/uri.hpp`'de ortak yardımcı oldu.
   `tests/lsp/` 8 senaryo (`07_buffer_overlay`, `08_didchange_overlay` yeni).
-  Faz 2 (parser hata toleransı) sırada.
+  Faz 2 tamam — Parser artık opsiyonel bir `DiagnosticEngine*` alıyor
+  (`ModuleLoader` bağlıyor); sözdizimi hataları konumlu `E9xx` tanısına
+  dönüşüp panic-mode recovery (`Parser::synchronizeAndMakeError`, yeni
+  `ASTKind::Error`/`ErrorNode`) ile bilinen bir sınıra kadar atlayıp parse'a
+  devam ediyor — kök neden #2 kapandı. `DocumentStore::runPipeline`'daki
+  erken `return`'ler kaldırıldı: sözdizimi hatası olsa da hatanın dışındaki
+  fonksiyonlar için hover/definition/documentSymbol çalışmaya devam ediyor.
+  `tests/lsp/` 9 senaryo (`09_syntax_error_recovery` yeni). Faz 3 (konum
+  doğruluğu: encoding, token-tabanlı sorgu, çok-dosya URI) sırada.
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası

@@ -399,6 +399,10 @@ static void walkAST(ASTNode* node, ASTStats& out) {
         // ── Program (root) ────────────────────────────────────────────────────
         case ASTKind::Program:
             break;
+
+        // ── Faz 2: panic-mode kurtarma yer tutucusu — yaprak, children yok ────
+        case ASTKind::Error:
+            break;
     }
     // getChildren() üzerinden ulaşılabilen çocuklar (Block içindeki stmtler, vb.)
     for (ASTNode* child : node->getChildren())

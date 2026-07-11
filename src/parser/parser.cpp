@@ -6,6 +6,7 @@
 #include "parser/nodes/expressions.hpp"
 #include "parser/nodes/statements.hpp"
 #include "parser/nodes/declarations.hpp"
+#include "parser/nodes/error_node.hpp"
 
 // --------------------------------------------------------------------------
 // parseToken: Ham Token'ı ParserToken'a dönüştür.
@@ -41,6 +42,7 @@ ParserToken Parser::getToken(int offset) {
 }
 
 void Parser::nextToken() {
+    if (currentToken().token) lastLoc_ = currentToken().token->loc;
     if ((int)tokens.size() >= current + 1)
         current++;
 }
@@ -57,6 +59,78 @@ ASTNode* Parser::parse(TokenList toks) {
     tokens  = toks;
     current = 0;
     return parseProgram();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Faz 2 — sözdizimi hata raporlama + panic-mode kurtarma
+// ─────────────────────────────────────────────────────────────────────────────
+
+void Parser::reportError(const SourceLocation& loc, const std::string& code,
+                          const std::string& message) {
+    if (diag_) {
+        diag_->report(code, loc, message);
+    } else {
+        std::cerr << "parser error: " << message << "\n";
+    }
+}
+
+// Bir statement'ın başlayabileceği token mı? panic-mode recovery bu token'lara
+// kadar atlar ama onları TÜKETMEZ — bir sonraki parseStatement() çağrısı
+// normal şekilde devam edebilsin diye.
+static bool isStatementStartToken(TokenType t) {
+    switch (t) {
+        case TokenType::KW_IF:
+        case TokenType::KW_WHILE:
+        case TokenType::KW_FOR:
+        case TokenType::KW_DO:
+        case TokenType::KW_RETURN:
+        case TokenType::KW_BREAK:
+        case TokenType::KW_CONTINUE:
+        case TokenType::KW_TRY:
+        case TokenType::KW_THROW:
+        case TokenType::KW_SWITCH:
+        case TokenType::KW_STRUCT:
+        case TokenType::KW_ENUM:
+        case TokenType::KW_IMPORT:
+        case TokenType::KW_EXPORT:
+        case TokenType::KW_VOID:
+        case TokenType::KW_INT:
+        case TokenType::KW_FLOAT_TYPE:
+        case TokenType::KW_DOUBLE:
+        case TokenType::KW_DECIMAL:
+        case TokenType::KW_BOOL:
+        case TokenType::KW_CHAR:
+        case TokenType::KW_STRING_TYPE:
+        case TokenType::KW_AUTO:
+            return true;
+        default:
+            return false;
+    }
+}
+
+ASTNode* Parser::synchronizeAndMakeError(const SourceLocation& loc, const std::string& code,
+                                          const std::string& message) {
+    reportError(loc, code, message);
+
+    // İlerleme garantisi: en az bir token tüket (aksi halde çağıran döngüde
+    // sonsuz döngü riski olurdu — bkz. parseProgram'daki eski "prevPos" koruması).
+    if (currentToken().type != TokenType::SVR_VOID)
+        nextToken();
+
+    while (currentToken().type != TokenType::SEMICOLON &&
+           currentToken().type != TokenType::RBRACE &&
+           currentToken().type != TokenType::SVR_VOID &&
+           !isStatementStartToken(currentToken().type)) {
+        nextToken();
+    }
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken(); // sınırlayıcı ';' tüketilir; '}' ve statement-başlangıcı tüketilmez
+
+    ErrorNode* err = new ErrorNode();
+    err->loc     = loc;
+    err->code    = code;
+    err->message = message;
+    return err;
 }
 
 ASTNode* Parser::parseProgram() {
@@ -267,10 +341,12 @@ static bool isScopeCallPattern(const ParserToken& ct, const ParserToken& la1,
 ASTNode* Parser::parseNullDenotation() {
     auto ct = currentToken();
 
-    if (ct.type == TokenType::SVR_VOID) {
-        std::cerr << "parser error: unexpected end of file\n";
-        return nullptr;
-    }
+    // SVR_VOID (EOF) burada özel olarak ele alınmaz: aşağıdaki hiçbir kalıpla
+    // eşleşmez ve fonksiyon sonundaki genel `return nullptr;`e düşer — tıpkı
+    // tanınmayan herhangi bir token gibi. Buradan yükselen nullptr, çağıran
+    // (genelde parseExpressionStatement) tarafından TEK bir konumlu tanıya
+    // (E901) ve panic-mode kurtarmaya çevrilir; burada ikinci bir mesaj
+    // basılırsa aynı hata için çift tanı üretilirdi (Faz 2).
 
     // ── E::method(args) — built-in scope-call ────────────────────────────────
     if (isScopeCallPattern(ct, lookahead(1), lookahead(2), lookahead(3))) {
@@ -457,7 +533,7 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
             cast->targetTypeName = typeTok.token->token;
             nextToken();
         } else {
-            std::cerr << "parser error: expected type name after 'as'\n";
+            reportError(cast->loc, "E902", "expected type name after 'as'");
             cast->targetTypeName = "int"; // error recovery
         }
 
@@ -474,7 +550,9 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         nextToken();
 
         if (currentToken().type != TokenType::IDENTIFIER) {
-            std::cerr << "parser error: expected member name\n";
+            reportError(currentToken().token ? currentToken().token->loc : lastLoc_,
+                        "E903", std::string("expected member name after '") +
+                                (arrow ? "->" : ".") + "'");
             return left;
         }
 
@@ -638,7 +716,8 @@ ASTNode* Parser::parseVariableDecl() {
         { nextToken(); vd->varType += "?"; }
 
     if (currentToken().type != TokenType::IDENTIFIER) {
-        std::cerr << "parser error: expected variable name\n";
+        reportError(currentToken().token ? currentToken().token->loc : vd->loc,
+                    "E904", "expected variable name");
         return vd;
     }
 
@@ -666,7 +745,8 @@ ASTNode* Parser::parseVariableDecl() {
         nextToken();
 
         if (currentToken().type != TokenType::IDENTIFIER) {
-            std::cerr << "parser error: expected variable name after ','\n";
+            reportError(currentToken().token ? currentToken().token->loc : vd->loc,
+                        "E904", "expected variable name after ','");
             break;
         }
 
@@ -925,17 +1005,31 @@ ASTNode* Parser::parseContinueStatement() {
 }
 
 ASTNode* Parser::parseExpressionStatement() {
-    ExpressionStatementNode* es = new ExpressionStatementNode();
-    es->loc = currentToken().token ? currentToken().token->loc : SourceLocation{};
-    es->expression = parseExpression();
-    if (!es->expression) {
-        while (currentToken().type != TokenType::SEMICOLON &&
-               currentToken().type != TokenType::RBRACE &&
-               currentToken().type != TokenType::SVR_VOID)
-            nextToken();
-        if (currentToken().type == TokenType::SEMICOLON)
-            nextToken();
+    auto ct = currentToken();
+    SourceLocation loc = ct.token ? ct.token->loc : lastLoc_;
+
+    // Yalnız ';' — boş statement (no-op), hata değil: düzenleme sırasında
+    // (satır silme/taşıma) sıkça oluşur, her seferinde tanı basmak gürültü olur.
+    if (ct.type == TokenType::SEMICOLON) {
+        nextToken();
+        ExpressionStatementNode* empty = new ExpressionStatementNode();
+        empty->loc = loc;
+        return empty;
     }
+
+    ASTNode* expr = parseExpression();
+    if (!expr) {
+        // Faz 2: bu noktadan önce hiçbir alt-kural bir mesaj basmadı (bkz.
+        // parseNullDenotation) — tek konumlu tanı burada üretilir, ardından
+        // panic-mode recovery ile bilinen bir sınıra kadar atlanır.
+        std::string tokText = ct.token ? ct.token->token : "<eof>";
+        return synchronizeAndMakeError(loc, "E901",
+            "unexpected token '" + tokText + "' — expected a statement");
+    }
+
+    ExpressionStatementNode* es = new ExpressionStatementNode();
+    es->loc        = loc;
+    es->expression = expr;
     if (currentToken().type == TokenType::SEMICOLON)
         nextToken();
 

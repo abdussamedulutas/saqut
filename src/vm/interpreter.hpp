@@ -49,6 +49,8 @@ public:
 
     // ── DAP API ───────────────────────────────────────────────────────────────
     enum class RunState { Running, Paused, Finished };
+    // Faz 5: runUntilEvent dönüş nedeni
+    enum class RunReason { StepDone, Breakpoint, Finished, BudgetExhausted, Error };
 
     void setBreakpoint(const std::string& file, int line);
     void clearBreakpoint(const std::string& file, int line);
@@ -58,6 +60,12 @@ public:
     void        resume();
     void        stepInstruction();
     void        stepOver();
+    // Faz 5: satır bazlı adımlar
+    void        stepLine();   // sourceLine değişene kadar ilerle
+    void        stepOut();    // callDepth azalana kadar ilerle
+
+    // Faz 5: instruction budget ile koş — mevcut durumdan devam eder, başlatma yapmaz.
+    RunReason   runUntilEvent(int maxInstructions, int startCallDepth = -1);
 
     int         currentSourceLine() const;
     std::string currentSourceFile() const;
@@ -66,7 +74,8 @@ public:
     int         frameSourceLine(int depth) const;
 
     Value       readSlotInFrame(int frameDepth, int slotIndex) const;
-    std::string slotName(int /*frameDepth*/, int /*slotIndex*/) const { return ""; }
+    // Faz 5: IRFunction::slotNames kullanarak gerçek değişken adını döndürür
+    std::string slotName(int frameDepth, int slotIndex) const;
 
 private:
     IRProgram&             program_;
@@ -81,8 +90,18 @@ private:
     RunState state_ = RunState::Running;
     std::set<std::pair<std::string,int>> breakpoints_;  // {file, line}
 
+    // Faz 5: debug koşu kontrolü
+    bool vmInitialized_  = false;   // run() başlatmayı bir kez yapar
+    int  runBudget_      = 0;       // kalan talimat bütçesi (0 = sınırsız, run() tarafından kullanılmaz)
+    int  stepStartDepth_ = -1;      // stepOver/Out için başlangıç derinliği
+    int  stepStartLine_  = 0;       // stepOver/Line için başlangıç satırı
+    int  lastReturnValue_ = 0;      // main'in dönüş değeri (pause/resume sonrası için)
+
     bool isBreakpoint() const;
     void checkBreakpoint();
+
+    // Faz 5: bütçe/step kısıtlarını kontrol eder, true = durmalı
+    bool shouldStop();
 
     // Error StructObject oluştur (ADR-025): [line, col, message, trace, code]
     Value makeErrorValue(const std::string& message,

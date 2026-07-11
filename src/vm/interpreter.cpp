@@ -86,24 +86,35 @@ void Interpreter::checkBreakpoint() {
 }
 
 void Interpreter::resume() {
-    state_ = RunState::Running;
-    run();
+    // Faz 5: run() değil, mevcut durumdan devam
+    runUntilEvent(INT_MAX, -1);
 }
 
 void Interpreter::stepInstruction() {
     if (callStack_.empty()) { state_ = RunState::Finished; return; }
-    // Tek instruction çalıştırmak için state_ = Running ile bir adım at.
-    // Gerçek adım geçişi run() döngüsünde olur; burada state yönetimi
-    // DAP handler'ında daha ince kontrol ile yapılır.
-    state_ = RunState::Paused;
+    // Faz 5: tek talimat çalıştır
+    runUntilEvent(1, -1);
 }
 
 void Interpreter::stepOver() {
+    if (callStack_.empty()) { state_ = RunState::Finished; return; }
+    // Faz 5: aynı çağrı derinliğinde satır değişene kadar ilerle
     int depth = (int)callStack_.size();
-    state_ = RunState::Running;
-    // Yeterli implementasyon: resume + aynı çağrı derinliğinde dur.
-    // DAP handler bu metodu çağırmadan önce run() döngüsünü kontrol eder.
-    (void)depth;
+    runUntilEvent(INT_MAX, depth);
+}
+
+// Faz 5: sourceLine değişene kadar ilerle
+void Interpreter::stepLine() {
+    if (callStack_.empty()) { state_ = RunState::Finished; return; }
+    int depth = (int)callStack_.size();
+    runUntilEvent(INT_MAX, depth); // stepOver ile aynı mantık
+}
+
+// Faz 5: callDepth azalana kadar ilerle
+void Interpreter::stepOut() {
+    if (callStack_.empty()) { state_ = RunState::Finished; return; }
+    int depth = (int)callStack_.size() - 1; // şu anki fonksiyondan çıkış
+    runUntilEvent(INT_MAX, depth);
 }
 
 int Interpreter::currentSourceLine() const {
@@ -156,27 +167,66 @@ Value Interpreter::readSlotInFrame(int frameDepth, int slotIndex) const {
     return f.slots[slotIndex];
 }
 
-int Interpreter::run() {
-    // Her modülün global slot vektörünü başlat (key = int moduleId)
-    for (auto& [id, count] : program_.moduleGlobalCounts)
-        moduleSlots_[id].assign(count, Value::fromInt(0));
-    // Geriye dönük uyumluluk: moduleGlobalCounts boşsa globalCount'u kullan
-    if (program_.moduleGlobalCounts.empty() && program_.globalCount > 0)
-        moduleSlots_[ModuleRegistry::INVALID_ID].assign(
-            program_.globalCount, Value::fromInt(0));
+// Faz 5: IRFunction::slotNames kullanarak gerçek değişken adını döndürür.
+std::string Interpreter::slotName(int frameDepth, int slotIndex) const {
+    if (frameDepth < 0 || frameDepth >= (int)callStack_.size()) return "";
+    const CallFrame& f = callStack_[(int)callStack_.size() - 1 - frameDepth];
+    if (!f.function) return "";
+    if (slotIndex < 0 || slotIndex >= (int)f.function->slotNames.size()) return "";
+    return f.function->slotNames[slotIndex];
+}
 
-    IRFunction* mainFunction = program_.findFunction("main");
-    if (!mainFunction)
-        throw std::runtime_error("runtime error: 'main' function not found");
+// Faz 5: bütçe/step kısıtı kontrolü — döngü başında çağrılır.
+bool Interpreter::shouldStop() {
+    if (state_ == RunState::Paused) return true;
+    if (runBudget_ <= 0 && runBudget_ != 0) return true; // bütçe tükendi (0 = sınırsız değil)
+    // stepOver/stepLine: satır değişti mi?
+    if (stepStartDepth_ >= 0 && stepStartLine_ > 0) {
+        int curLine = currentSourceLine();
+        int curDepth = (int)callStack_.size();
+        if (curLine > 0 && curLine != stepStartLine_ && curDepth <= stepStartDepth_) {
+            state_ = RunState::Paused;
+            return true;
+        }
+    }
+    // stepOut: derinlik azaldı mı?
+    if (stepStartDepth_ >= 0 && stepStartLine_ == 0) {
+        if ((int)callStack_.size() <= stepStartDepth_) {
+            state_ = RunState::Paused;
+            return true;
+        }
+    }
+    return false;
+}
 
-    CallFrame mainFrame;
-    mainFrame.function           = mainFunction;
-    mainFrame.instructionPointer = 0;
-    mainFrame.slots.resize(mainFunction->slotCount, Value::fromInt(0));
-    mainFrame.returnDestSlot     = -1;
-    callStack_.push_back(std::move(mainFrame));
+// Faz 5: mevcut durumdan bütçeli/step'li devam et.
+Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
+                                                    int startCallDepth) {
+    if (callStack_.empty() || !vmInitialized_) {
+        state_ = RunState::Finished;
+        return RunReason::Finished;
+    }
+    state_          = RunState::Running;
+    runBudget_      = maxInstructions;
+    stepStartDepth_ = startCallDepth;
+    stepStartLine_  = (startCallDepth >= 0) ? currentSourceLine() : 0;
 
+    // run() ile aynı döngü — ortak kod yolu
     while (!callStack_.empty()) {
+        // Bütçe kontrolü
+        if (runBudget_ == 0) {
+            // 0 = sınırsız (INT_MAX ile çağrıldığında)
+        } else if (runBudget_ <= 0) {
+            state_ = RunState::Paused;
+            return RunReason::BudgetExhausted;
+        }
+
+        // Breakpoint kontrolü
+        if (isBreakpoint()) {
+            state_ = RunState::Paused;
+            return RunReason::Breakpoint;
+        }
+
         CallFrame& frame = callStack_.back();
 
         if (frame.instructionPointer >= (int)frame.function->instructions.size()) {
@@ -184,15 +234,36 @@ int Interpreter::run() {
             callStack_.pop_back();
             if (!callStack_.empty() && destSlot != -1)
                 callStack_.back().slots[destSlot] = Value::fromInt(0);
+            // stepOut: derinlik azaldı → tamam
+            if (stepStartDepth_ >= 0 && stepStartLine_ == 0 &&
+                (int)callStack_.size() <= stepStartDepth_) {
+                state_ = RunState::Paused;
+                return RunReason::StepDone;
+            }
+            if (callStack_.empty()) {
+                state_ = RunState::Finished;
+                return RunReason::Finished;
+            }
             continue;
         }
 
         const Instruction& instr = frame.function->instructions[frame.instructionPointer];
         frame.instructionPointer++;
+        if (runBudget_ > 0) runBudget_--;
 
-        // ── Profil hook (bench modunda aktif, normal modda sıfır maliyet) ──
+        // Profil hook
         if (vmTrace_) [[unlikely]]
             vmTrace_->pushDispatch(static_cast<uint8_t>(instr.opcode));
+
+        // Adım kontrolü (stepOver/stepLine): instruction ÇALIŞTIRILDıKTAN sonra
+        if (stepStartLine_ > 0 && stepStartDepth_ >= 0) {
+            int curLine = currentSourceLine();
+            int curDepth = (int)callStack_.size();
+            if (curLine > 0 && curLine != stepStartLine_ && curDepth <= stepStartDepth_) {
+                state_ = RunState::Paused;
+                return RunReason::StepDone;
+            }
+        }
 
         switch (instr.opcode) {
 
@@ -415,9 +486,18 @@ int Interpreter::run() {
                 allGlobals.insert(allGlobals.end(), slots.begin(), slots.end());
             heap_.collect(allGlobals, callStack_);
 
-            if (callStack_.empty())
-                return returnValue.intValue;
+            if (callStack_.empty()) {
+                lastReturnValue_ = returnValue.intValue;
+                state_ = RunState::Finished;
+                return RunReason::Finished;
+            }
 
+            // stepOut: derinlik azaldı → tamam
+            if (stepStartDepth_ >= 0 && stepStartLine_ == 0 &&
+                (int)callStack_.size() <= stepStartDepth_) {
+                state_ = RunState::Paused;
+                return RunReason::StepDone;
+            }
             continue;
         }
 
@@ -789,7 +869,40 @@ int Interpreter::run() {
         }
     }
 
-    return 0;
+    // Döngü bitti — callStack boş
+    state_ = RunState::Finished;
+    return RunReason::Finished;
+}
+
+// Faz 5: run() artık başlatma + runUntilEvent çağrısı.
+int Interpreter::run() {
+    // Eğer VM zaten başlatıldıysa (DAP resume) — sadece devam et
+    if (vmInitialized_ && !callStack_.empty()) {
+        runUntilEvent(INT_MAX, -1);
+        return lastReturnValue_;
+    }
+
+    // İlk başlatma
+    for (auto& [id, count] : program_.moduleGlobalCounts)
+        moduleSlots_[id].assign(count, Value::fromInt(0));
+    if (program_.moduleGlobalCounts.empty() && program_.globalCount > 0)
+        moduleSlots_[ModuleRegistry::INVALID_ID].assign(
+            program_.globalCount, Value::fromInt(0));
+
+    IRFunction* mainFunction = program_.findFunction("main");
+    if (!mainFunction)
+        throw std::runtime_error("runtime error: 'main' function not found");
+
+    CallFrame mainFrame;
+    mainFrame.function           = mainFunction;
+    mainFrame.instructionPointer = 0;
+    mainFrame.slots.resize(mainFunction->slotCount, Value::fromInt(0));
+    mainFrame.returnDestSlot     = -1;
+    callStack_.push_back(std::move(mainFrame));
+    vmInitialized_ = true;
+
+    runUntilEvent(INT_MAX, -1);
+    return lastReturnValue_;
 }
 
 void Interpreter::executeHostFunction(const std::string&       name,

@@ -19,6 +19,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include "ir/instruction.hpp"
 #include "core/module_registry.hpp"
 
@@ -28,6 +29,10 @@ struct IRFunction {
     int                      paramCount;   // kaç parametresi var
     int                      slotCount;    // frame boyutu (üretim sonunda doldurulur)
     std::vector<Instruction> instructions; // bu fonksiyonun talimat listesi
+    // Faz 5: slot indeksi → değişken adı (debug/DAP için). Geçici slotlar boş string.
+    std::vector<std::string> slotNames;
+    // Faz 5: (sourceLine) → ilk instruction IP indeksi (breakpoint eşlemesi için)
+    std::unordered_map<int, int> lineToFirstIP;
 
     IRFunction(std::string name, int paramCount)
         : name(std::move(name)), paramCount(paramCount), slotCount(0) {}

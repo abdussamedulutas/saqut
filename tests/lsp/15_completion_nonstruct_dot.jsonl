@@ -1,0 +1,3 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_nonstruct.sqt","languageId":"sqt","version":1,"text":"int main() {\n    int x = 5;\n    x.\n    return 0;\n}\n"}}}
+{"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_nonstruct.sqt"},"position":{"line":2,"character":6}}}

@@ -147,8 +147,14 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   (`DocumentStore::uriForPath`); diagnostics dosyaya göre gruplanıp ayrı
   `publishDiagnostics` ile gönderiliyor — kök neden #4 kapandı. `tests/lsp/`
   12 senaryo (`10_turkish_encoding`, `11_scoped_definition`,
-  `12_cross_file_definition` yeni). Faz 4 (completion'ı token/sembol
-  tabanlı yeniden kurma) sırada.
+  `12_cross_file_definition` yeni). Faz 4 tamam — completion token/sembol tabanlı yeniden kuruldu:
+  `wordBefore`/`lineUpToCursor` string-hack'leri kaldırıldı; token-tabanlı
+  bağlam çıkarma (`.` zinciri, `::` scope), structLayouts zincir çözümü
+  (`a.b.c.`), scope filtrelemesi (başka fonksiyonun lokali önerilmez),
+  builtin metodlar BuiltinMethodRegistry'den üretiliyor. `tests/lsp/` 16
+  senaryo (`13_completion_scope`, `14_completion_dot_chain`,
+  `15_completion_nonstruct_dot`, `16_completion_scope_method` yeni).
+  Faz 5 (DAP zemini: IR satır tablosu + VM debug API) sırada.
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası

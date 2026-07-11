@@ -1,0 +1,9 @@
+int f() {
+    int birinci = 1;
+    return birinci;
+}
+
+int g() {
+    int ikinci = 2;
+    return ikinci;
+}

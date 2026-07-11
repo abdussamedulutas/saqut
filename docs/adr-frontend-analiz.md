@@ -533,6 +533,14 @@ ikinci sebebidir — bkz. ADR-018, ADR-019.)
 
 ## ADR-015: Çalıştırma Modeli — IR + Bytecode VM (Makine-Kodu JIT Kapsam Dışı)
 
+> ⚠️ **REVİZE (2026-07-11, ADR-032):** "Makine-kodu JIT kapsam dışı" maddesi
+> gevşetildi. İkinci backend **MIR tabanlı JIT** + **gömülü-runtime AOT**
+> (`saqut build`, linker'sız tek exe) olarak kararlaştırıldı. **C transpile
+> ikinci backend statüsünü kaybetti** (kullanıcıya C derleyicisi bağımlılığı
+> getirir). **LLVM/libgccjit fiilen kapandı** (muhtemelen hiç yapılmayacak).
+> VM referans backend olarak kalır.
+> Bkz. `docs/adr/ADR-032-mir-jit-gomulu-runtime-aot.md`.
+
 ### Bağlam
 
 Daha önceki belge/konuşmalarda çalıştırma için "JIT" terimi geçiyordu. Hangi

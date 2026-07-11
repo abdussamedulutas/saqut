@@ -18,3 +18,9 @@ __pycache__/
 
 # CMake versiyona özgü dosyalar (otomatik üretilir, her güncellemede değişir)
 build/*
+
+# Benchmark — üretilmiş dosyalar (gen_compile_suite.py tarafından üretilir)
+scripts/bench/compile_suite/
+
+# Java benchmark sınıfları (javac tarafından üretilir)
+scripts/bench/*.class

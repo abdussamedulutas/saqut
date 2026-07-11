@@ -1,0 +1,16 @@
+// saQut runtime benchmark — özyinelemeli fibonacci
+// Cetvel karşılaştırması: bench_fib.py / BenchFib.java ile BİREBİR aynı algoritma.
+// N=25 → fib(25)=75025
+
+int fib(int n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+int main() {
+    int result = fib(25);
+    print(result);
+    return 0;
+}

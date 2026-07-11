@@ -1,6 +1,7 @@
 #include "vm/interpreter.hpp"
 #include "vm/object.hpp"
 #include "builtin/builtin_methods.hpp"
+#include "bench/profile.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
@@ -189,6 +190,10 @@ int Interpreter::run() {
         const Instruction& instr = frame.function->instructions[frame.instructionPointer];
         frame.instructionPointer++;
 
+        // ── Profil hook (bench modunda aktif, normal modda sıfır maliyet) ──
+        if (vmTrace_) [[unlikely]]
+            vmTrace_->pushDispatch(static_cast<uint8_t>(instr.opcode));
+
         switch (instr.opcode) {
 
         case Opcode::LOAD_CONST:
@@ -230,7 +235,7 @@ int Interpreter::run() {
         }
         case Opcode::MOD: {
             int d = frame.slots[instr.right].intValue;
-            if (d == 0) { pendingThrow_ = makeErrorValue("division by zero (modulo)", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
+            if (d == 0) { pendingThrow_ = makeErrorValue("sıfıra bölme (mod)", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
             frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue % d);
             break;
         }
@@ -372,6 +377,7 @@ int Interpreter::run() {
 
         // ── Fonksiyon çağrısı ─────────────────────────────────────────────
         case Opcode::CALL: {
+            if (vmTrace_) [[unlikely]] ++vmTrace_->vmSaqutCalls;
             IRFunction* callee = program_.findFunction(instr.functionName);
             if (!callee)
                 throw std::runtime_error(
@@ -729,7 +735,9 @@ int Interpreter::run() {
 
         // ── FFI ───────────────────────────────────────────────────────────
         case Opcode::CALLHOST: {
+            if (vmTrace_) [[unlikely]] ++vmTrace_->vmFfiCalls;
             if (instr.functionName == "__builtin_method__") {
+                if (vmTrace_) [[unlikely]] ++vmTrace_->vmBuiltinCalls;
                 // Built-in metod: sabit id ile dispatch, O(1) tablo lookup
                 std::vector<Value> argVals;
                 argVals.reserve(instr.argSlots.size());

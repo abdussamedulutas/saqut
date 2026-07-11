@@ -23,6 +23,10 @@
 #include "vm/call_frame.hpp"
 #include "vm/object.hpp"
 
+// Forward-declare: BenchVMTrace tam tanımı bench/profile.hpp'de.
+// Yalnızca pointer tutulur — normal modda sıfır bağımlılık.
+struct BenchVMTrace;
+
 // ADR-025: try bloğu girişinde yığına eklenen kayıt
 struct TryFrame {
     size_t callStackDepth; // ENTER_TRY anındaki callStack_.size() — unwind için
@@ -37,6 +41,11 @@ public:
     // "main" fonksiyonunu bul ve çalıştır.
     // Tamamlandığında main'in dönüş değerini (int) döndürür.
     int run();
+
+    // Profil hook — bench komutu tarafından set edilir (nullptr = kapalı).
+    // Normal run/check/ir komutlarında çağrılmaz, sıfır maliyet.
+    void setVMTrace(BenchVMTrace* t) { vmTrace_ = t; }
+    int  heapAllocCount() const { return heap_.allocCount; }
 
     // ── DAP API ───────────────────────────────────────────────────────────────
     enum class RunState { Running, Paused, Finished };
@@ -66,6 +75,7 @@ private:
     Heap                   heap_;
     std::vector<TryFrame>  tryStack_;
     std::optional<Value>   pendingThrow_;
+    BenchVMTrace*          vmTrace_ = nullptr;  // profil hook (bench modunda non-null)
 
     // DAP durumu
     RunState state_ = RunState::Running;

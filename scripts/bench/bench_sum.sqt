@@ -1,0 +1,17 @@
+// saQut runtime benchmark — döngü toplama
+// Cetvel karşılaştırması: bench_sum.py / BenchSum.java ile BİREBİR aynı algoritma.
+// N=40000 → toplam 800020000 (int32 sınırları içinde)
+
+int sumLoop(int n) {
+    int total = 0;
+    for (int i = 1; i <= n; i = i + 1) {
+        total = total + i;
+    }
+    return total;
+}
+
+int main() {
+    int result = sumLoop(40000);
+    print(result);
+    return 0;
+}

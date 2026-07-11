@@ -122,7 +122,11 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - Modül döngüsü tespiti — `A→B→A` sessiz kısa devre, derleme hatası yok (#78, ADR-031)
   - DAP satır bazlı adımlama + sembol adları — Faz 5 ile zemin tamamlandı
     (IR satır tablosu %100, slotNames, runUntilEvent, stepLine/stepOver/stepOut,
-    lineToFirstIP breakpoint eşlemesi). Protokol düzeltmesi (Faz 6) sırada. (#79)
+    lineToFirstIP breakpoint eşlemesi). Faz 6 tamam — DAP protokolü doğru
+    formatla yeniden yazıldı (initialize+initialized sırası, launch→configurationDone
+    yaşam döngüsü, stackTrace per-frame sourceFile, variables slotName ile gerçek
+    isimler, `tests/dap/` 3 golden senaryo). continue sonrası exited/terminated
+    event gönderme + breakpoint dosya yolu eşleşmesi TODO(faz6). (#79)
   - MIR JIT backend (#80) ve gömülü-runtime AOT `saqut build` (#81) — ADR-032
     ile kararlaştırıldı, henüz başlanmadı
 - **LSP/DAP kurtarma planı** (`docs/prompt-lsp-dap-kurtarma.md`, Faz 0–6):
@@ -160,7 +164,7 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   effectiveLoc ile tüm emit noktaları sourceLine dolduruyor); IRFunction::slotNames
   + Interpreter::slotName() gerçek değişken adlarını veriyor; runUntilEvent(maxInstr,
   startCallDepth) bütçeli/step'li koşu modeli; stepLine/stepOver/stepOut;
-  lineToFirstIP breakpoint eşlemesi. 64 test yeşil. Faz 6 (DAP protokolü) sırada.
+  lineToFirstIP breakpoint eşlemesi. Faz 6 tamam (protokol, testler, 67 test yeşil).
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası

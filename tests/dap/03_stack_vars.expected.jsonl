@@ -1,0 +1,8 @@
+{"body": {"supportTerminateDebuggee": true, "supportsConditionalBreakpoints": false, "supportsConfigurationDoneRequest": true, "supportsExceptionInfoRequest": false, "supportsFunctionBreakpoints": false, "supportsGotoTargetsRequest": false, "supportsHitConditionalBreakpoints": false, "supportsSetVariable": false, "supportsStepBack": false, "supportsStepInTargetsRequest": false, "supportsTerminateRequest": true}, "command": "initialize", "request_seq": 1, "seq": 100, "success": true, "type": "response"}
+{"body": null, "event": "initialized", "seq": 101, "type": "event"}
+{"body": null, "command": "launch", "request_seq": 2, "seq": 102, "success": true, "type": "response"}
+{"body": null, "command": "configurationDone", "request_seq": 3, "seq": 103, "success": true, "type": "response"}
+{"body": {"reason": "entry", "threadId": 1}, "event": "stopped", "seq": 104, "type": "event"}
+{"body": {"stackFrames": [{"column": 0, "id": 0, "line": 2, "name": "main", "source": {"path": "%FIXDIR%/simple.sqt"}}], "totalFrames": 1}, "command": "stackTrace", "request_seq": 4, "seq": 105, "success": true, "type": "response"}
+{"body": {"scopes": [{"expensive": false, "name": "Locals", "variablesReference": 1000}]}, "command": "scopes", "request_seq": 5, "seq": 106, "success": true, "type": "response"}
+{"body": {"variables": [{"name": "x", "type": "", "value": "1", "variablesReference": 0}, {"name": "y", "type": "", "value": "0", "variablesReference": 0}]}, "command": "variables", "request_seq": 6, "seq": 107, "success": true, "type": "response"}

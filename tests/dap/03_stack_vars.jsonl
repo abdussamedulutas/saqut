@@ -1,0 +1,6 @@
+{"type":"request","seq":1,"command":"initialize","arguments":{"clientID":"vscode","clientName":"Visual Studio Code","adapterID":"sqt","pathFormat":"path","linesStartAt1":true,"columnsStartAt1":true,"supportsVariableType":true,"supportsVariablePaging":false,"supportsRunInTerminateRequest":true,"locale":"en"}}
+{"type":"request","seq":2,"command":"launch","arguments":{"program":"%FIXDIR%/simple.sqt","stopOnEntry":true,"__sessionId":"a"}}
+{"type":"request","seq":3,"command":"configurationDone","arguments":{}}
+{"type":"request","seq":4,"command":"stackTrace","arguments":{"threadId":1,"startFrame":0,"levels":20}}
+{"type":"request","seq":5,"command":"scopes","arguments":{"frameId":0}}
+{"type":"request","seq":6,"command":"variables","arguments":{"variablesReference":1000}}

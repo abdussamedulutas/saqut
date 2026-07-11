@@ -1,0 +1,5 @@
+int main() {
+    string s = "merhaba";
+    s::
+    return 0;
+}

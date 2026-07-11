@@ -1,0 +1,3 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_scope.sqt","languageId":"sqt","version":1,"text":"int f() {\n    int birinci = 1;\n    bi\n}\n\nint g() {\n    int ikinci = 2;\n    return ikinci;\n}\n"}}}
+{"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_scope.sqt"},"position":{"line":2,"character":6}}}

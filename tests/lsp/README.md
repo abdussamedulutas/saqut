@@ -88,3 +88,7 @@ python3 tests/lsp/lsp_test_driver.py \
 | `10_turkish_encoding` | Çok baytlı UTF-8 (Türkçe) karakter içeren satırlarda hover/definition sorgu konumu ve dönen aralık UTF-16↔byte dönüşümüyle doğru hesaplanır (Faz 3, kök neden #4 — `src/lsp/position.hpp`) |
 | `11_scoped_definition` | İki ayrı fonksiyonda aynı adlı yerel değişken (`x`) — her fonksiyondaki referans KENDİ fonksiyonunun tanımına gider, karışmaz (Faz 3, kök neden #3 — token+offset tabanlı `findSymbolAt`) |
 | `12_cross_file_definition` | `import` edilen fonksiyona giden `definition` sorgusu, sorgulanan dosyanın değil TANIMIN bulunduğu dosyanın URI'sini döndürür (Faz 3, kök neden #4 — çok-dosya URI) |
+| `13_completion_scope` | İki ayrı fonksiyonda farklı lokaller (`birinci`/`ikinci`) — completion yalnızca imlecin bulunduğu fonksiyonun lokallerini önerir, başka fonksiyonun lokali önerilmez (Faz 4 — scope filtreleme) |
+| `14_completion_dot_chain` | `p.adres.` zinciri — struct alanları zincir çözümüyle doğru struct'ın alanlarını gösterir (Faz 4 — token-tabanlı zincir çözümü) |
+| `15_completion_nonstruct_dot` | `x.` (x int) — struct olmayan tipe `.` ile alan tamamlama boş döner (Faz 4 — hatalı zincir savunması) |
+| `16_completion_scope_method` | `s::` (s string) — yalnızca string builtin metodlarını gösterir, array/struct metodlarını göstermez (Faz 4 — BuiltinMethodRegistry kategori filtrelemesi) |

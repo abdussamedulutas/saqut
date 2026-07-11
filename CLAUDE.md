@@ -120,7 +120,9 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - `byte` tipi (henüz tanımlanmadı)
   - GC `collect()` tetiklenmiyor — iskelet var, arena gibi çalışıyor (#77)
   - Modül döngüsü tespiti — `A→B→A` sessiz kısa devre, derleme hatası yok (#78, ADR-031)
-  - DAP satır bazlı adımlama + sembol adları — ham prototip (#79)
+  - DAP satır bazlı adımlama + sembol adları — Faz 5 ile zemin tamamlandı
+    (IR satır tablosu %100, slotNames, runUntilEvent, stepLine/stepOver/stepOut,
+    lineToFirstIP breakpoint eşlemesi). Protokol düzeltmesi (Faz 6) sırada. (#79)
   - MIR JIT backend (#80) ve gömülü-runtime AOT `saqut build` (#81) — ADR-032
     ile kararlaştırıldı, henüz başlanmadı
 - **LSP/DAP kurtarma planı** (`docs/prompt-lsp-dap-kurtarma.md`, Faz 0–6):
@@ -154,7 +156,11 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   builtin metodlar BuiltinMethodRegistry'den üretiliyor. `tests/lsp/` 16
   senaryo (`13_completion_scope`, `14_completion_dot_chain`,
   `15_completion_nonstruct_dot`, `16_completion_scope_method` yeni).
-  Faz 5 (DAP zemini: IR satır tablosu + VM debug API) sırada.
+  Faz 5 tamam — IR satır tablosu %100 (IRGenerator::currentLoc_ +
+  effectiveLoc ile tüm emit noktaları sourceLine dolduruyor); IRFunction::slotNames
+  + Interpreter::slotName() gerçek değişken adlarını veriyor; runUntilEvent(maxInstr,
+  startCallDepth) bütçeli/step'li koşu modeli; stepLine/stepOver/stepOut;
+  lineToFirstIP breakpoint eşlemesi. 64 test yeşil. Faz 6 (DAP protokolü) sırada.
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası

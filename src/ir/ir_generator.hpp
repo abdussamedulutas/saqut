@@ -131,6 +131,16 @@ private:
     int         nextSlot_         = 0;                     // sıradaki boş slot numarası
     int         currentModuleId_  = ModuleRegistry::INVALID_ID; // registry ID
 
+    // Faz 5: şu an üretilen düğümün kaynak konumu — tüm emit'ler buradan
+    // sourceLine/sourceCol alır. Her generateStatement/generateExpression
+    // girişinde node->loc ile güncellenir.
+    SourceLocation currentLoc_;
+
+    // Faz 5: explicitLoc geçerli değilse currentLoc_ döndürür.
+    SourceLocation effectiveLoc(const SourceLocation& explicitLoc) const {
+        return explicitLoc.isValid() ? explicitLoc : currentLoc_;
+    }
+
     // Değişken ismi → slot numarası (lokal).
     std::unordered_map<std::string, int> nameToSlot_;
 

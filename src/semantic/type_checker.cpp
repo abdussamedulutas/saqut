@@ -1,3 +1,18 @@
+// ============================================================================
+// saQut Compiler — TypeChecker Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/semantic/type_checker.cpp
+// KATMAN:  Faz 3 — Tip denetimi ve tip çıkarımı
+//
+// AMAÇ:
+//   AST'yi gezerek tip denetimi yapar ve her ifadeye resolvedType atar.
+//   ADR-010 (gizli dönüşüm yok), ADR-021 (nullable), ADR-024 (string),
+//   ADR-025 (hata yönetimi), ADR-026 (cast), ADR-027 (switch), ADR-028
+//   (decimal) kurallarını uygular.
+//
+// ============================================================================
+
 #include "semantic/type_checker.hpp"
 #include "parser/nodes/program.hpp"
 #include "parser/nodes/declarations.hpp"

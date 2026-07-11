@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut Compiler — Bildirim Düğümleri
+// ============================================================================
+//
+// DİZİN:   src/parser/nodes/declarations.hpp
+// KATMAN:  Katman 3 — FunctionDecl, StructDecl, EnumDecl, VariableDecl, ImportDecl
+//
+// AMAÇ:
+//   Dilin bildirim yapılarını temsil eden AST düğümleri. Her biri bir
+//   program öğesini (fonksiyon, struct, enum, değişken, import) tanımlar.
+//
+// ============================================================================
+
 #ifndef SAQUT_AST_DECL
 #define SAQUT_AST_DECL
 

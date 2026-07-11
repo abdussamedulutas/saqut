@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut Compiler — İfade/Deyim Düğümleri
+// ============================================================================
+//
+// DİZİN:   src/parser/nodes/statements.hpp
+// KATMAN:  Katman 3 — Kontrol akışı ve eylem düğümleri
+//
+// AMAÇ:
+//   Değer üretmeyen, kontrol akışı yürüten düğümlerin tanımları.
+//   Block, if/else, for, while, do-while, return, break, continue,
+//   try/catch/throw, switch/case, expression statement.
+//
+// ============================================================================
+
 #ifndef SAQUT_AST_STMT
 #define SAQUT_AST_STMT
 

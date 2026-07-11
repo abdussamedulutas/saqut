@@ -1,3 +1,7 @@
+// ============================================================================
+// saQut Compiler — ErrorNode Gerçeklemesi
+// ============================================================================
+
 #include "parser/nodes/error_node.hpp"
 #include "parser/ast_json.hpp"
 

@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut Compiler — StructuralValidator Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/semantic/structural_validator.cpp
+// KATMAN:  Faz 3 — Yapısal doğrulama
+//
+// AMAÇ:
+//   AST'yi recursive olarak gezerek break/continue/return bağlam
+//   kontrollerini ve fonksiyon içinde bildirim yasağını uygular.
+//
+// ============================================================================
+
 #include "semantic/structural_validator.hpp"
 #include "parser/nodes/declarations.hpp"
 #include "parser/nodes/statements.hpp"

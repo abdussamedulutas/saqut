@@ -1,3 +1,7 @@
+// ============================================================================
+// saQut VM — Object/Heap Gerçeklemesi
+// ============================================================================
+
 #include "vm/object.hpp"
 #include "vm/value.hpp"
 #include "vm/call_frame.hpp"

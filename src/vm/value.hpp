@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut VM — Value (Çalışma Zamanı Değeri)
+// ============================================================================
+//
+// DİZİN:   src/vm/value.hpp
+// KATMAN:  VM — Tüm çalışma zamanı değerlerinin ortak temsili
+//
+// AMAÇ:
+//   Int, Float, Bool, String, Decimal, Null ve Ref (heap referansı) değerlerini
+//   tek bir Value struct'ında birleştirir. VM'in tüm veri alışverişi Value
+//   üzerinden yapılır.
+//
+// ============================================================================
+
 #ifndef SAQUT_VM_VALUE
 #define SAQUT_VM_VALUE
 

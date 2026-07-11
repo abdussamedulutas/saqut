@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut Compiler — Tip Denetleyici (TypeChecker)
+// ============================================================================
+//
+// DİZİN:   src/semantic/type_checker.hpp
+// KATMAN:  Faz 3 — AST üzerinde tip denetimi ve tip çıkarımı
+//
+// AMAÇ:
+//   Her ifade düğümüne resolvedType atar, atama/parametre/dönüş uyumunu
+//   kontrol eder (ADR-010/021/025/026/027/028). Nullable daraltma ve
+//   non-void return kontrolü yapar.
+//
+// ============================================================================
+
 #ifndef SAQUT_SEMANTIC_TYPE_CHECKER
 #define SAQUT_SEMANTIC_TYPE_CHECKER
 

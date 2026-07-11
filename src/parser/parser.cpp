@@ -1,3 +1,19 @@
+// ============================================================================
+// saQut Compiler — Pratt Parser Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/parser/parser.cpp
+// KATMAN:  Katman 3 — Token listesini AST'ye dönüştürür
+// BAĞIMLI: parser/parser.hpp, parser/nodes/*.hpp
+//
+// AMAÇ:
+//   Parser sınıfının tüm metodlarının gövdeleri. Pratt parsing (Top-Down
+//   Operator Precedence) algoritması ile token'ları AST düğümlerine çevirir.
+//   5 ana bölüm: token navigasyonu, bildirim ayrıştırma, ifade/deyim
+//   ayrıştırma, Pratt ifade ayrıştırma, hata raporlama/kurtarma.
+//
+// ============================================================================
+
 #include "parser/parser.hpp"
 #include "parser/nodes/program.hpp"
 #include "parser/nodes/binary_expr.hpp"

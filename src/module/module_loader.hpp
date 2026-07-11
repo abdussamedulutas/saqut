@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut — ModuleLoader (Bağımlılık Zinciri Çözücü)
+// ============================================================================
+//
+// DİZİN:   src/module/module_loader.hpp
+// KATMAN:  Modül Sistemi — import bildirimlerini izleyerek dosyaları yükler
+//
+// AMAÇ:
+//   Giriş dosyasından başlayarak tüm import bağımlılıklarını BFS benzeri
+//   yükler ve parse eder. LSP için SourceOverlay seam'i sunar.
+//
+// ============================================================================
+
 #ifndef SAQUT_MODULE_LOADER
 #define SAQUT_MODULE_LOADER
 

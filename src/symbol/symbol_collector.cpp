@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut Compiler — SymbolCollector Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/symbol/symbol_collector.cpp
+// KATMAN:  Faz 2 — 3 geçişli sembol toplama
+//
+// AMAÇ:
+//   AST üzerinde 3 geçiş (pass1a, pass1b, pass2) ile sembolleri toplar,
+//   tipleri çözümler ve identifier'ları bağlar. çok dosyalı derleme için
+//   collectModuleGraph() giriş noktası.
+//
+// ============================================================================
+
 #include "symbol/symbol_collector.hpp"
 #include <functional>
 #include "parser/nodes/program.hpp"

@@ -27,16 +27,20 @@ void ModuleLoader::loadUnit(const std::string& filePath, ModuleGraph& graph) {
     if (seen_.count(filePath)) return;
     seen_.insert(filePath);
 
-    // Dosyayı oku
-    std::ifstream file(filePath, std::ios::in | std::ios::binary);
-    if (!file.is_open()) {
-        diag_.report("E_MODULE_NOT_FOUND", SourceLocation{},
-            "cannot open module '" + filePath + "': file not found");
-        return;
+    // Kaynağı önce overlay'den dene (editör buffer'ı), yoksa diske düş.
+    std::string source;
+    bool haveSource = overlay_ && overlay_(filePath, source);
+    if (!haveSource) {
+        std::ifstream file(filePath, std::ios::in | std::ios::binary);
+        if (!file.is_open()) {
+            diag_.report("E_MODULE_NOT_FOUND", SourceLocation{},
+                "cannot open module '" + filePath + "': file not found");
+            return;
+        }
+        std::stringstream buf;
+        buf << file.rdbuf();
+        source = buf.str();
     }
-    std::stringstream buf;
-    buf << file.rdbuf();
-    std::string source = buf.str();
 
     // Tokenize + parse
     Tokenizer tokenizer;

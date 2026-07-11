@@ -1,8 +1,12 @@
 #include "lsp/document_store.hpp"
+#include "lsp/uri.hpp"
 #include "module/module_loader.hpp"
 #include "symbol/symbol_collector.hpp"
 #include "semantic/type_checker.hpp"
 #include "semantic/structural_validator.hpp"
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 DocumentState& DocumentStore::update(const std::string& uri,
                                       const std::string& content, int version) {
@@ -30,33 +34,29 @@ void DocumentStore::close(const std::string& uri) {
     store_.erase(uri);
 }
 
-static std::string uriToPath(const std::string& uri) {
-    std::string s = uri;
-    if (s.rfind("file://", 0) == 0)
-        s = s.substr(7);
-    std::string out;
-    out.reserve(s.size());
-    for (size_t i = 0; i < s.size(); ++i) {
-        if (s[i] == '%' && i + 2 < s.size()) {
-            int hi = std::isdigit(s[i+1]) ? s[i+1]-'0' : std::tolower(s[i+1])-'a'+10;
-            int lo = std::isdigit(s[i+2]) ? s[i+2]-'0' : std::tolower(s[i+2])-'a'+10;
-            out += static_cast<char>(hi * 16 + lo);
-            i += 2;
-        } else {
-            out += s[i];
-        }
-    }
-    return out;
-}
-
 void DocumentStore::runPipeline(DocumentState& state) {
     state.diagnostics = DiagnosticEngine{};
     state.symbolTable = SymbolTable{};
 
     std::string filePath = uriToPath(state.uri);
 
+    // Overlay: derleme diski değil, açık olan editör buffer'larını görür.
+    // Böylece A.sqt import ettiği B.sqt editörde açıksa, B'nin kaydedilmemiş
+    // hali kullanılır (Faz 1, ADR: kaynak overlay).
+    ModuleLoader::SourceOverlay overlay =
+        [this](const std::string& path, std::string& out) -> bool {
+            for (auto& [uri, docState] : store_) {
+                std::string docPath = fs::weakly_canonical(uriToPath(uri)).string();
+                if (docPath == path) {
+                    out = docState->content;
+                    return true;
+                }
+            }
+            return false;
+        };
+
     ModuleRegistry registry;
-    ModuleGraph    graph = ModuleLoader(registry, state.diagnostics)
+    ModuleGraph    graph = ModuleLoader(registry, state.diagnostics, overlay)
                                .load(filePath);
 
     if (state.diagnostics.hasErrors()) return;

@@ -29,6 +29,10 @@
 //   W001  Kullanılmayan değişken                                          Faz 4
 //   W002  Sıfıra bölme (sabit folding)                                    Faz 4
 //   W003  Erişilemez (ölü) kod                                            Faz 4
+//   E901  Sözdizimi hatası — beklenmeyen token (statement seviyesi)        Faz 2
+//   E902  Sözdizimi hatası — 'as' sonrası tip adı bekleniyor                Faz 2
+//   E903  Sözdizimi hatası — '.'/'->' sonrası üye adı bekleniyor            Faz 2
+//   E904  Sözdizimi hatası — değişken adı bekleniyor                       Faz 2
 //
 // ============================================================================
 
@@ -122,6 +126,10 @@ inline const std::vector<DiagInfo>& diagnosticCatalog() {
         {"W002", DiagLevel::Warning, "Division by zero (constant expression)"},
         {"W003", DiagLevel::Warning, "Unreachable (dead) code"},
         {"W004", DiagLevel::Warning, "Implicit numeric widening"},
+        {"E901", DiagLevel::Error,   "Syntax error: unexpected token"},
+        {"E902", DiagLevel::Error,   "Syntax error: expected type name after 'as'"},
+        {"E903", DiagLevel::Error,   "Syntax error: expected member name"},
+        {"E904", DiagLevel::Error,   "Syntax error: expected variable name"},
     };
     return catalog;
 }

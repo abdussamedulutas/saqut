@@ -1,8 +1,14 @@
 #include "lsp/document_store.hpp"
+#include "lsp/uri.hpp"
 #include "module/module_loader.hpp"
 #include "symbol/symbol_collector.hpp"
 #include "semantic/type_checker.hpp"
 #include "semantic/structural_validator.hpp"
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+
+namespace fs = std::filesystem;
 
 DocumentState& DocumentStore::update(const std::string& uri,
                                       const std::string& content, int version) {
@@ -17,6 +23,8 @@ DocumentState& DocumentStore::update(const std::string& uri,
     state.version = version;
     delete state.ast;
     state.ast = nullptr;
+    for (auto* t : state.tokens) delete t;
+    state.tokens.clear();
     runPipeline(state);
     return state;
 }
@@ -30,50 +38,101 @@ void DocumentStore::close(const std::string& uri) {
     store_.erase(uri);
 }
 
-static std::string uriToPath(const std::string& uri) {
-    std::string s = uri;
-    if (s.rfind("file://", 0) == 0)
-        s = s.substr(7);
-    std::string out;
-    out.reserve(s.size());
-    for (size_t i = 0; i < s.size(); ++i) {
-        if (s[i] == '%' && i + 2 < s.size()) {
-            int hi = std::isdigit(s[i+1]) ? s[i+1]-'0' : std::tolower(s[i+1])-'a'+10;
-            int lo = std::isdigit(s[i+2]) ? s[i+2]-'0' : std::tolower(s[i+2])-'a'+10;
-            out += static_cast<char>(hi * 16 + lo);
-            i += 2;
-        } else {
-            out += s[i];
+bool DocumentStore::openContent(const std::string& path, std::string& out) const {
+    for (auto& [uri, docState] : store_) {
+        std::string docPath = fs::weakly_canonical(uriToPath(uri)).string();
+        if (docPath == path) {
+            out = docState->content;
+            return true;
         }
     }
-    return out;
+    return false;
+}
+
+std::string DocumentStore::contentForPath(const std::string& path) const {
+    std::string out;
+    if (openContent(path, out)) return out;
+
+    std::ifstream file(path, std::ios::in | std::ios::binary);
+    if (!file.is_open()) return "";
+    std::stringstream buf;
+    buf << file.rdbuf();
+    return buf.str();
+}
+
+std::string DocumentStore::uriForPath(const std::string& path) const {
+    for (auto& [uri, docState] : store_) {
+        std::string docPath = fs::weakly_canonical(uriToPath(uri)).string();
+        if (docPath == path) return uri;
+    }
+    return pathToUri(path);
 }
 
 void DocumentStore::runPipeline(DocumentState& state) {
     state.diagnostics = DiagnosticEngine{};
-    state.symbolTable = SymbolTable{};
+    // NOT: state.symbolTable BURADA sıfırlanmaz. Faz 2 — parser artık panic-mode
+    // recovery ile sözdizimi hatasında bile her zaman bir AST döndürür, bu yüzden
+    // SymbolCollector normal şartlarda her turda çalışıp tabloyu yeniden kurar
+    // (aşağıda). Tablo yalnızca modül hiç yüklenemediğinde (dosya bulunamadı vb.)
+    // dokunulmadan kalır — LSP sorguları böylece bir önceki başarılı turun
+    // ("son iyi") tablosuna düşmüş olur.
 
     std::string filePath = uriToPath(state.uri);
 
+    // Overlay: derleme diski değil, açık olan editör buffer'larını görür.
+    // Böylece A.sqt import ettiği B.sqt editörde açıksa, B'nin kaydedilmemiş
+    // hali kullanılır (Faz 1, ADR: kaynak overlay). openContent aynı arama
+    // mantığını contentForPath ile de paylaşır (Faz 3).
+    ModuleLoader::SourceOverlay overlay =
+        [this](const std::string& path, std::string& out) -> bool {
+            return openContent(path, out);
+        };
+
     ModuleRegistry registry;
-    ModuleGraph    graph = ModuleLoader(registry, state.diagnostics)
+    ModuleGraph    graph = ModuleLoader(registry, state.diagnostics, overlay)
                                .load(filePath);
 
-    if (state.diagnostics.hasErrors()) return;
+    // Faz 2: modül hiç yüklenemediyse (örn. dosya bulunamadı — overlay ve disk
+    // ikisi de başarısız) toplanacak bir AST yok; sembol tablosu bir önceki
+    // başarılı turdan kalan haliyle bırakılır ("son iyi tablo").
+    if (graph.units.empty()) return;
 
+    // ModuleLoader entryFilePath'i canonical hale getirir (fs::weakly_canonical);
+    // SourceLocation.filePath'lerin hepsi bu biçimde. state.filePath'i ORADAN al
+    // ki symbolByOffset filtrelemesi ve çok-dosya URI karşılaştırmaları eşleşsin.
+    state.filePath = graph.units[0].filePath;
+
+    state.symbolTable = SymbolTable{};
     SymbolCollector(state.symbolTable, state.diagnostics)
         .collectModuleGraph(graph);
 
-    if (state.diagnostics.hasErrors()) return;
+    // Faz 3: (offset → Symbol*) indeksi — yalnızca BU belgenin dosyasına ait
+    // tanım/referans konumları (kök neden #3: iki ayrı fonksiyondaki aynı adlı
+    // değişken artık karışmaz, çünkü findSymbolAt artık isim-uzunluğu aralık
+    // eşleştirmesi değil tam offset eşleşmesi kullanıyor).
+    state.symbolByOffset.clear();
+    for (Symbol* sym : state.symbolTable.allSymbols()) {
+        if (sym->definitionLoc.isValid() && sym->definitionLoc.filePath == state.filePath)
+            state.symbolByOffset[sym->definitionLoc.offset] = sym;
+        for (const auto& ref : sym->references)
+            if (ref.filePath == state.filePath)
+                state.symbolByOffset[ref.offset] = sym;
+    }
 
+    // Faz 2: erken dönüş YOK. Parser artık sözdizimi hatalarında bile
+    // (panic-mode recovery ile) tam bir AST döndürdüğü için, bir hata olsa
+    // dahi hatanın DIŞINDAKİ fonksiyonlar için hover/definition/documentSymbol
+    // çalışmaya devam etsin diye TypeChecker/StructuralValidator'a kadar iniyoruz.
+    // Bu katmanlar ErrorNode'u (default: dalı) sessizce atlar.
     for (auto& unit : graph.units)
         TypeChecker(state.symbolTable, state.diagnostics).check(unit.ast);
     for (auto& unit : graph.units)
         StructuralValidator(state.diagnostics).validate(unit.ast);
 
-    // AST sahipliğini DocumentState'e aktar
-    if (!graph.units.empty()) {
-        state.ast        = graph.units[0].ast;
-        graph.units[0].ast = nullptr;
-    }
+    // AST + token sahipliğini DocumentState'e aktar (Faz 3: findSymbolAt token
+    // binary search'ü için tokenlere ihtiyaç duyar; IdentifierNode::lexerToken
+    // bunlara işaret ettiği için ast ile aynı ömürde tutulmalılar).
+    state.ast             = graph.units[0].ast;
+    graph.units[0].ast    = nullptr;
+    state.tokens          = std::move(graph.units[0].tokens);
 }

@@ -131,6 +131,12 @@ Output ──────────────────── saqut run
 The optimizer works on a **clone** of the AST — the original is preserved.
 Constant folding and DCE run in a fixpoint loop until nothing changes.
 
+**Planned backends (ADR-032):** the VM stays as the reference backend; a
+[MIR](https://github.com/vnmakarov/mir)-based JIT (`saqut run --jit`) and an
+embedded-runtime AOT packager (`saqut build` — single self-contained executable,
+no linker, no external toolchain) are next. WASM follows later; LLVM is
+effectively out of scope for good.
+
 ---
 
 ## What works right now
@@ -170,7 +176,8 @@ Architectural decisions live in `docs/`:
 | File | Coverage |
 |---|---|
 | [`docs/fikirler.md`](docs/fikirler.md) | ADR-001–005: backend strategy, parser, header-only, token, IR |
-| [`docs/adr-frontend-analiz.md`](docs/adr-frontend-analiz.md) | ADR-006–019: analysis, optimization, execution model, FFI, memory |
+| [`docs/adr-frontend-analiz.md`](docs/adr-frontend-analiz.md) | ADR-006–028: analysis, optimization, execution model, FFI, memory, semantics |
+| [`docs/adr/`](docs/adr/) | ADR-029+: nested structs, heavyIR/lightIR, module cycles, MIR JIT + embedded-runtime AOT |
 | [`docs/roadmap-frontend.md`](docs/roadmap-frontend.md) | Phase-by-phase implementation plan |
 | [`docs/architecture.md`](docs/architecture.md) | Full architecture reference (Turkish) |
 

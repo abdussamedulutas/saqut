@@ -17,6 +17,12 @@ private:
     std::ostream& out_;
     DocumentStore store_;
     bool          shutdownRequested_ = false;
+    // Faz 3: initialize'da istemciyle anlaşılan pozisyon birimi. İstemci
+    // general.positionEncodings'te "utf-8" bildiriyorsa "utf-8" (dönüşüm
+    // gerekmez — SourceLocation.column zaten byte/UTF-8 code unit sayıyor);
+    // yoksa LSP varsayılanı "utf-16" (src/lsp/position.hpp dönüştürücüleri
+    // devreye girer).
+    std::string   positionEncoding_ = "utf-16";
 
     nlohmann::json handleInitialize(const nlohmann::json& id,
                                     const nlohmann::json& params);
@@ -36,11 +42,25 @@ private:
     nlohmann::json handleCompletion(const nlohmann::json& id,
                                     const nlohmann::json& params);
 
-    void publishDiagnostics(const std::string& uri,
-                            const DiagnosticEngine& diag);
+    // Faz 3: state.diagnostics'i loc.filePath'e göre gruplar, her dosya için
+    // ayrı bir publishDiagnostics bildirimi gönderir (kök neden #4 — import
+    // edilen modülün hatası artık ana dosyada görünmüyor).
+    void publishDiagnosticsGrouped(DocumentState& state);
 
-    // Verilen (0-tabanlı) satır/sütun pozisyonundaki sembolü bul
+    // Verilen (0-tabanlı, istemci pozisyon birimindeki) satır/sütun
+    // konumundaki sembolü bul. Faz 3: token binary search + (offset→Symbol*)
+    // indeksi — isim-uzunluğu aralık eşleştirmesi ve allSymbols lineer
+    // taraması yok (kök neden #3).
     Symbol* findSymbolAt(DocumentState& state, int line, int character);
+
+    // Faz 3 pozisyon-dönüşüm yardımcıları (src/lsp/position.hpp'yi sarar) —
+    // tüm handler'lar konum çevirisini buradan geçirir.
+    int         toByteColumn(const std::string& content, int line, int character) const;
+    LspPosition toLspPos(const std::string& content, const SourceLocation& loc) const;
+
+    // loc'un ait olduğu dosyanın içeriğini döndürür: state'in kendi dosyasıysa
+    // buffer'ı doğrudan, değilse store_.contentForPath ile (açık belge ya da disk).
+    std::string contentForLoc(DocumentState& state, const SourceLocation& loc) const;
 };
 
 #endif // SAQUT_LSP_HANDLER

@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_set>
 #include <unordered_map>
+#include <functional>
 #include "module/module_graph.hpp"
 #include "core/module_registry.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
@@ -18,8 +19,13 @@
 //   ModuleGraph graph = loader.load("main.sqt");
 class ModuleLoader {
 public:
-    ModuleLoader(ModuleRegistry& registry, DiagnosticEngine& diag)
-        : registry_(registry), diag_(diag) {}
+    // path → içerik sağlayan kaynak sağlayıcı seam'i (LSP editör buffer'ı için).
+    // true dönerse `out` kullanılır; false dönerse loadUnit diske düşer.
+    using SourceOverlay = std::function<bool(const std::string& path, std::string& out)>;
+
+    ModuleLoader(ModuleRegistry& registry, DiagnosticEngine& diag,
+                 SourceOverlay overlay = nullptr)
+        : registry_(registry), diag_(diag), overlay_(std::move(overlay)) {}
 
     // Giriş dosyasından başlayarak tüm bağımlı modülleri yükle.
     // units[0] her zaman giriş dosyasıdır.
@@ -36,6 +42,7 @@ private:
 
     ModuleRegistry&   registry_;
     DiagnosticEngine& diag_;
+    SourceOverlay     overlay_;
 
     // Zaten yüklenmiş ya da yüklenmekte olan dosyalar (canonical path).
     std::unordered_set<std::string> seen_;

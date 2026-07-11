@@ -11,11 +11,14 @@
 >
 > - **Birincil çalıştırma modeli = IR + bytecode VM** (yorumlayıcı döngü).
 >   Bkz. `docs/adr-frontend-analiz.md` **ADR-015**.
-> - **Gerçek makine-kodu JIT kapsam DIŞIDIR** (tek faydası ham hız; öncelik
->   determinizm + incelenebilirlik). Buradaki "JIT" geçişleri bu ışıkta okunmalı.
-> - **C-transpile**, ileride geçerli bir **ikinci backend**'tir; QBE/custom/LLVM
->   ise "makine kodu gerçekten gerekirse libgccjit/LLVM'e bağlan" çerçevesinde
->   **çok uzak gelecektir**. ADR-001'deki karşılaştırmalar o gün için geçerli.
+> - ~~**Gerçek makine-kodu JIT kapsam DIŞIDIR**~~ → **REVİZE (2026-07-11,
+>   ADR-032):** İkinci backend **MIR tabanlı JIT** + **gömülü-runtime AOT**
+>   (`saqut build`, linker'sız tek exe) olarak kararlaştırıldı. Bkz.
+>   `docs/adr/ADR-032-mir-jit-gomulu-runtime-aot.md`.
+> - ~~**C-transpile**, ileride geçerli bir **ikinci backend**'tir~~ → **ELENDİ
+>   (ADR-032):** kullanıcı makinesine C derleyicisi bağımlılığı getirir.
+>   QBE/custom/LLVM/libgccjit da elendi; **LLVM muhtemelen hiç yapılmayacak.**
+>   ADR-001'deki karşılaştırmalar tarihseldir.
 > - "HeavyIR/LightIR" ikiliği (ADR-005) bir **gelecek fikri** olarak durur; v0'ın
 >   IR+VM hedefi tek, basit bir IR'dir + **FFI seam** (ADR-016).
 > - **Yapılan vs planlanan:** Tüm pipeline uygulandı. `examples/fibonacci.sqt`

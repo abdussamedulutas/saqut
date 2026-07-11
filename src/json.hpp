@@ -53,6 +53,7 @@ inline const char* astKindName(ASTKind k) {
         case ASTKind::MemberAccess:        return "MemberAccess";
         case ASTKind::IndexExpression:     return "IndexExpression";
         case ASTKind::StructDecl:          return "StructDecl";
+        case ASTKind::Error:               return "Error";
         default: return "Unknown";
     }
 }

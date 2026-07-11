@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut Compiler — Sembol Veri Yapıları (Symbol, SymbolKind)
+// ============================================================================
+//
+// DİZİN:   src/symbol/symbol.hpp
+// KATMAN:  Faz 2 — Symbol struct'ı ve SymbolKind enum'ı
+//
+// AMAÇ:
+//   Bir ismin (değişken, fonksiyon, struct, enum, alan, parametre) tüm
+//   metaverisini taşıyan Symbol yapısı. Sembol toplama, tip denetimi, IR
+//   üretimi ve hata raporlamanın ortak dilidir.
+//
+// ============================================================================
+
 #ifndef SAQUT_SYMBOL_SYMBOL
 #define SAQUT_SYMBOL_SYMBOL
 

@@ -1,3 +1,18 @@
+// ============================================================================
+// saQut Compiler — Genişletilmiş İfade Düğümleri
+// ============================================================================
+//
+// DİZİN:   src/parser/nodes/expressions.hpp
+// KATMAN:  Katman 3 — CallExpression, Postfix, MemberAccess, Index, ScopeCall,
+//           ArrayLiteral, Cast, Ternary
+//
+// AMAÇ:
+//   BinaryExpression ve Literal dışında kalan tüm ifade türlerini tanımlar.
+//   Fonksiyon çağrısı, postfix ++/--, üye erişimi, dizi indeksi, scope call,
+//   array literal, tip dönüşümü (as) ve ternary ifade.
+//
+// ============================================================================
+
 #ifndef SAQUT_AST_EXPR_EXT
 #define SAQUT_AST_EXPR_EXT
 

@@ -186,6 +186,7 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - `docs/sonnet-handoff.md` — **Sonnet için uygulama promptu** (ADR-020…024'ü koda
   döken sıralı görev planı; ilk görev: GC-hazır nesne modeli + array runtime).
 - `docs/roadmap-frontend.md` — faz-faz uygulama planı (Faz 0–4 → fibonacci).
+- `docs/kod/` — modül başına mimari dokümantasyon (15 belge + indeks).
 - `docs/transkript-frontend-tasarim.md` — tasarım oturumu transkripti.
 - `examples/fibonacci.sqt` — geçerli referans program.
 - `examples/parser-stress/` — yalnızca parser'ı zorlayan, **geçerli olmayan** fixture'lar.

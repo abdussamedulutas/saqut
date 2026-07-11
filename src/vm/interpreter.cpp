@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut VM — Interpreter (Bytecode Yorumlayıcı) Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/vm/interpreter.cpp
+// KATMAN:  VM — IRProgram içindeki instruction'ları yorumlar
+//
+// AMAÇ:
+//   Tüm Opcode'ların işlenmesi (~1303 satır). DAP breakpoint/adım API'leri,
+//   built-in metod dispatch, hata yönetimi (TRY/THROW), GC tetikleme.
+//
+// ============================================================================
+
 #include "vm/interpreter.hpp"
 #include "vm/object.hpp"
 #include "builtin/builtin_methods.hpp"

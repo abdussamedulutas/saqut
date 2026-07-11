@@ -1,3 +1,7 @@
+// ============================================================================
+// saQut Compiler — BinaryExpressionNode Gerçeklemesi
+// ============================================================================
+
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/ast_json.hpp"
 

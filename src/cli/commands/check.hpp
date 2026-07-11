@@ -1,3 +1,9 @@
+// ============================================================================
+// saQut CLI — check komutu
+//
+// Yalnızca semantik analiz: ModuleLoader → SymbolCollector → TypeChecker
+// ============================================================================
+
 #ifndef SAQUT_CLI_CHECK
 #define SAQUT_CLI_CHECK
 

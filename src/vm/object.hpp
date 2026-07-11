@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut VM — Heap, GC ve Object Tipleri (ArrayObject, StructObject)
+// ============================================================================
+//
+// DİZİN:   src/vm/object.hpp
+// KATMAN:  VM — Heap'te yaşayan nesneler ve garbage collector iskeleti
+//
+// AMAÇ:
+//   ArrayObject ve StructObject için heap tahsisi, GCList ile mark-sweep
+//   garbage collector altyapısı. Şu an collect() tetiklenmez (#77).
+//
+// ============================================================================
+
 #ifndef SAQUT_VM_OBJECT
 #define SAQUT_VM_OBJECT
 

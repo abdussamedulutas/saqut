@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut — OptimizationPass (Soyut Temel Sınıf, ADR-009)
+// ============================================================================
+//
+// DİZİN:   src/opt/optimization_pass.hpp
+// KATMAN:  Faz 4 — Tüm optimizasyon pasajları için soyut arayüz
+//
+// AMAÇ:
+//   Her somut pasaj (ConstantFoldingPass, DeadCodeElimPass) bu sınıftan
+//   türetilir ve run()/name() metodlarını implemente eder. OptimizationManager
+//   tüm pass'leri bu arayüz üzerinden yönetir.
+//
+// ============================================================================
+
 #ifndef SAQUT_OPT_PASS
 #define SAQUT_OPT_PASS
 

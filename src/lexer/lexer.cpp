@@ -1,3 +1,18 @@
+// ============================================================================
+// saQut Compiler — Lexer (Karakter Seviyesinde Tarayıcı) Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/lexer/lexer.cpp
+// KATMAN:  Katman 1 — Derleyici pipeline'ının ilk aşaması
+// BAĞIMLI: lexer/lexer.hpp
+//
+// AMAÇ:
+//   Ham kaynak kodunu karakter karakter işleyerek Tokenizer'a temel okuma,
+//   konumlandırma, backtracking ve sayı-okuma hizmetleri sunar. Tüm Lexer
+//   metodlarının gövdeleri bu dosyadadır.
+//
+// ============================================================================
+
 #include "lexer/lexer.hpp"
 
 // --------------------------------------------------------------------------

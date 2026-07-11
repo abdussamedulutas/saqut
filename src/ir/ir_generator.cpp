@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut IR — IRGenerator (AST → IR) Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/ir/ir_generator.cpp
+// KATMAN:  IR — AST'yi dolaşarak 3-adresli IR talimatları üretir
+//
+// AMAÇ:
+//   AST'deki her düğüm tipi için uygun Instruction'ları emit eder.
+//   Slot tahsisi, satır tablosu doldurma, backpatch yönetimi.
+//
+// ============================================================================
+
 #include "ir/ir_generator.hpp"
 #include "tokenizer/token.hpp"
 #include "parser/nodes/program.hpp"

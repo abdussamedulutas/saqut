@@ -1,3 +1,19 @@
+// ============================================================================
+// saQut Compiler — Sözcüksel Analiz Motoru (Tokenizer)
+// ============================================================================
+//
+// DİZİN:   src/tokenizer/tokenizer.hpp
+// KATMAN:  Katman 2 — Lexer'dan gelen karakter akışını token dizisine dönüştürür
+// BAĞIMLI: lexer/lexer.hpp, tokenizer/token.hpp
+//
+// AMAÇ:
+//   Kaynak koddaki karakterleri tanıyarak Parser'ın tüketeceği token dizisini
+//   üretir. Operatör, delimiter ve keyword tabloları burada tanımlanır.
+//   Lexer'ı composition (hmx) olarak barındırır; karakter düzeyindeki tüm
+//   işlemler Lexer üzerinden yapılır.
+//
+// ============================================================================
+
 #ifndef SAQUT_TOKENIZER
 #define SAQUT_TOKENIZER
 

@@ -32,6 +32,7 @@
 #include "cli/commands/exec.hpp"
 #include "cli/commands/lsp.hpp"
 #include "cli/commands/dap.hpp"
+#include "cli/commands/bench.hpp"
 
 int main(int argc, char* argv[]) {
     // Komutları kaydet
@@ -72,6 +73,10 @@ int main(int argc, char* argv[]) {
     cli.registerCommand({"dap",
         "start DAP debug adapter (JSON-RPC on stdin/stdout)",
         false, cmdDap});
+
+    cli.registerCommand({"bench",
+        "phase-level benchmark (tokenize|parse|symbol|typecheck|ir|vm)",
+        false, cmdBench});
 
     // --- Future commands (TODO) ---
     cli.registerCommand({"compile",

@@ -30,11 +30,14 @@ struct CliArgs {
     std::vector<std::string> positional;
     std::string outputFile;
     std::string format;
-    bool showHelp   = false;
-    bool stdinMode  = false;
-    bool compact    = false;  // --compact: boşluksuz JSON
-    bool optimized  = false;  // --optimized: sabit katlama + ölü kod eleme
-    bool jsonOutput = false;  // --json: JSON çıktı üret (varsayılan: düz metin)
+    bool showHelp    = false;
+    bool stdinMode   = false;
+    bool compact     = false;  // --compact: boşluksuz JSON
+    bool optimized   = false;  // --optimized: sabit katlama + ölü kod eleme
+    bool jsonOutput  = false;  // --json: JSON çıktı üret (varsayılan: düz metin)
+    int  benchRuns   = 5;      // --runs=N: benchmark tekrar sayısı
+    bool compileOnly = false;  // --compile-only: VM çalıştırmasını atla
+    bool verbose     = false;  // --verbose: her aşamanın bitişini canlı yaz
 };
 
 // ============================================================================
@@ -82,6 +85,18 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
             args.optimized = true;
             continue;
         }
+        if (arg == "--compile-only") {
+            args.compileOnly = true;
+            continue;
+        }
+        if (arg == "--verbose" || arg == "-v") {
+            args.verbose = true;
+            continue;
+        }
+        if (arg.compare(0, 7, "--runs=") == 0) {
+            try { args.benchRuns = std::stoi(arg.substr(7)); } catch (...) {}
+            continue;
+        }
         if (arg.compare(0, 5, "file:") == 0) {
             args.positional.push_back(arg.substr(5));
             continue;
@@ -100,6 +115,7 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
             if (arg == "run"    || arg == "tokens"  || arg == "ast" ||
                 arg == "symbols" || arg == "check"   || arg == "ir"      ||
                 arg == "exec"    || arg == "lsp"     || arg == "dap"     ||
+                arg == "bench"   ||
                 arg == "compile" || arg == "parse"   || arg == "transpile" ||
                 arg == "interpret") {
                 args.command = arg;

@@ -1,0 +1,2 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/error_e003.sqt","languageId":"sqt","version":1,"text":"int main() {\n    int y = 1.5;\n    print(y);\n    return 0;\n}\n"}}}

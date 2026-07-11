@@ -116,3 +116,44 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
         )
     endif()
 endforeach()
+
+# LSP golden testleri — tests/lsp/*.jsonl senaryolarını otomatik keşfet.
+# Her senaryonun yanında aynı adla BASE.expected.jsonl bulunmalı.
+# "wip_" önekli senaryolar bilinen-bozuk davranışı belgeler: beklenen dosya
+# DOĞRU/gelecekteki davranışı tanımlar, bugünkü çıktı onunla uyuşmaz —
+# bu yüzden WILL_FAIL ile işaretlenir. İlgili faz düzeltince test
+# "beklenmedik şekilde geçti" diye görünür; bu, WILL_FAIL'i kaldırıp
+# dosyayı wip_ önekinden kurtarma zamanı geldiğinin sinyalidir.
+find_program(PYTHON3_EXECUTABLE python3)
+if(PYTHON3_EXECUTABLE)
+    file(GLOB ALL_LSP_SCENARIOS CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/tests/lsp/*.jsonl"
+    )
+    foreach(SCEN_FILE ${ALL_LSP_SCENARIOS})
+        get_filename_component(SCEN_NAME "${SCEN_FILE}" NAME)
+        if(SCEN_NAME MATCHES "\\.expected\\.jsonl$")
+            continue()
+        endif()
+        string(REGEX REPLACE "\\.jsonl$" "" SCEN_BASE "${SCEN_NAME}")
+        set(SCEN_EXPECTED "${CMAKE_SOURCE_DIR}/tests/lsp/${SCEN_BASE}.expected.jsonl")
+        if(NOT EXISTS "${SCEN_EXPECTED}")
+            continue()
+        endif()
+
+        add_test(
+            NAME "lsp_${SCEN_BASE}"
+            COMMAND "${PYTHON3_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/tests/lsp/lsp_test_driver.py"
+                --binary "${SAQUT_BINARY}"
+                --fixtures "${CMAKE_SOURCE_DIR}/tests/lsp/fixtures"
+                --scenario "${SCEN_FILE}"
+                --expected "${SCEN_EXPECTED}"
+        )
+
+        if(SCEN_BASE MATCHES "^wip_")
+            set_tests_properties("lsp_${SCEN_BASE}" PROPERTIES WILL_FAIL TRUE)
+        endif()
+    endforeach()
+else()
+    message(WARNING "python3 bulunamadı — LSP golden testleri (tests/lsp/) atlanıyor")
+endif()

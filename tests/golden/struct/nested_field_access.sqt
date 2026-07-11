@@ -1,0 +1,15 @@
+struct Point { int x; int y; }
+struct Rect { Point topLeft; Point bottomRight; }
+
+int main() {
+    Rect r;
+    r.topLeft.x = 5;
+    r.topLeft.y = 10;
+    r.bottomRight.x = 20;
+    r.bottomRight.y = 30;
+    print(r.topLeft.x);
+    print(r.topLeft.y);
+    print(r.bottomRight.x);
+    print(r.bottomRight.y);
+    return 0;
+}

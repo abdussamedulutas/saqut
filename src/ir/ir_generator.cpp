@@ -210,11 +210,13 @@ void IRGenerator::generateStatement(ASTNode* node) {
             }
 
         } else if (structLayouts_.count(vd->varType)) {
-            // Struct değişkeni: init ifadesi yoksa boş StructObject oluştur
+            // Struct değişkeni: dış struct + iç struct-tipi alanları özyinelemeli tahsis
             int varSlot = freshSlot();
             registerVariable(vd->name, varSlot);
             int fc = getStructFieldCount(vd->varType);
-            emitStructNew(varSlot, vd->varType, fc);
+            SourceLocation loc = vd->loc;
+            emitStructNew(varSlot, vd->varType, fc, loc);
+            initNestedStructFields(varSlot, vd->varType, loc);
         } else if (vd->varType.size() > 2 &&
                    vd->varType.substr(vd->varType.size() - 2) == "[]") {
             // Array değişkeni: init ifadesi yoksa boş dizi (kapasite=0)
@@ -1340,6 +1342,22 @@ void IRGenerator::emitArrayLen(int destSlot, int arrSlot,
     ins.sourceCol  = loc.column;
     ins.sourceFile = loc.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
+}
+
+void IRGenerator::initNestedStructFields(int destSlot, const std::string& structType,
+                                          const SourceLocation& loc) {
+    auto it = structLayouts_.find(structType);
+    if (it == structLayouts_.end()) return;
+    for (int i = 0; i < (int)it->second.size(); i++) {
+        const auto& [fieldName, fieldType] = it->second[i];
+        if (!fieldType.isStruct() || fieldType.structName.empty()) continue;
+        if (!structLayouts_.count(fieldType.structName)) continue;
+        int innerSlot = freshSlot();
+        int innerFc   = getStructFieldCount(fieldType.structName);
+        emitStructNew(innerSlot, fieldType.structName, innerFc, loc);
+        initNestedStructFields(innerSlot, fieldType.structName, loc); // özyineleme
+        emitFieldSet(destSlot, i, innerSlot, loc.line, loc.column);
+    }
 }
 
 int IRGenerator::getStructFieldIndex(const std::string& structType, const std::string& fieldName) const {

@@ -58,8 +58,11 @@ void DapHandler::sendEvent(const std::string& event,
 }
 
 // ── valueToString ───────────────────────────────────────────────────────────
+// Struct/array için tek seviyelik özet üretir: {x: 1, y: 2, z: 3} / [4, 5, 6].
+// depth > 0'da (özetin içindeki iç referanslar) kısa gösterime düşer — hem
+// okunur kalır hem döngüsel referansta (a.self = a) sonsuz özyineleme olmaz.
 
-std::string DapHandler::valueToString(const Value& v) const {
+std::string DapHandler::valueToString(const Value& v, int depth) const {
     switch (v.kind) {
         case ValueKind::Int:     return std::to_string(v.intValue);
         case ValueKind::Float:   {
@@ -69,16 +72,61 @@ std::string DapHandler::valueToString(const Value& v) const {
         }
         case ValueKind::Decimal: return v.decimalValue.toString();
         case ValueKind::String:  return "\"" + v.stringValue + "\"";
-        case ValueKind::Ref:     return v.ref ? "<object>" : "<null-ref>";
         case ValueKind::Null:    return "null";
+        case ValueKind::Ref: {
+            if (!v.ref) return "null";
+            if (v.ref->type == ObjectType::Struct) {
+                auto* s = static_cast<StructObject*>(v.ref);
+                if (depth > 0) return "{…}";
+                std::string out = "{";
+                size_t shown = std::min(s->fields.size(), (size_t)6);
+                for (size_t i = 0; i < shown; ++i) {
+                    if (i) out += ", ";
+                    std::string fname = (i < s->fieldNames.size() && !s->fieldNames[i].empty())
+                        ? s->fieldNames[i] : std::to_string(i);
+                    out += fname + ": " + valueToString(s->fields[i], depth + 1);
+                }
+                if (s->fields.size() > shown) out += ", …";
+                return out + "}";
+            }
+            auto* a = static_cast<ArrayObject*>(v.ref);
+            if (depth > 0) return "[…]";
+            std::string out = "[";
+            size_t shown = std::min(a->elements.size(), (size_t)8);
+            for (size_t i = 0; i < shown; ++i) {
+                if (i) out += ", ";
+                out += valueToString(a->elements[i], depth + 1);
+            }
+            if (a->elements.size() > shown) out += ", …";
+            return out + "]";
+        }
     }
     return "?";
 }
 
-// ── Struct/array child variable'ları (tek seviye) ───────────────────────────
+// ── variablesReference kayıt defteri ─────────────────────────────────────────
+// VS Code bir Ref değerinin çocuklarını sonradan ayrı bir `variables`
+// isteğiyle sorar — o istekte hangi Value'nun kastedildiğini bilmek için
+// ref numarası → Value eşlemesi tutulur. Koşu devam edince (continue/step)
+// eski numaralar DAP spec'i gereği geçersizleşir → invalidateVarRefs.
 
-nlohmann::json DapHandler::buildChildVariables(const Value& v,
-                                                int /*parentVarRef*/) {
+int DapHandler::registerVarRef(const Value& v) {
+    if (v.kind != ValueKind::Ref || !v.ref) return 0;
+    int id = nextVarRef_++;
+    varRefs_[id] = v;
+    return id;
+}
+
+void DapHandler::invalidateVarRefs() {
+    varRefs_.clear();
+    nextVarRef_ = 100000;
+}
+
+// ── Struct/array child variable'ları ─────────────────────────────────────────
+// Çocuklar da registerVarRef'ten geçer → kullanıcı Variables panelinde
+// istediği kadar derine inebilir (vecs → [0] → x).
+
+nlohmann::json DapHandler::buildChildVariables(const Value& v) {
     nlohmann::json vars = nlohmann::json::array();
     if (v.kind != ValueKind::Ref || !v.ref) return vars;
 
@@ -88,30 +136,22 @@ nlohmann::json DapHandler::buildChildVariables(const Value& v,
             const Value& fv = s->fields[i];
             std::string fname = (i < s->fieldNames.size() && !s->fieldNames[i].empty())
                 ? s->fieldNames[i] : "field[" + std::to_string(i) + "]";
-            int childRef = 0;
-            if (fv.kind == ValueKind::Ref && fv.ref) {
-                childRef = nextVarRef_++;
-            }
             vars.push_back({
                 {"name",               fname},
                 {"value",              valueToString(fv)},
                 {"type",               ""},
-                {"variablesReference", childRef}
+                {"variablesReference", registerVarRef(fv)}
             });
         }
     } else if (v.ref->type == ObjectType::Array) {
         auto* a = static_cast<ArrayObject*>(v.ref);
         for (size_t i = 0; i < a->elements.size(); ++i) {
             const Value& ev = a->elements[i];
-            int childRef = 0;
-            if (ev.kind == ValueKind::Ref && ev.ref) {
-                childRef = nextVarRef_++;
-            }
             vars.push_back({
                 {"name",               "[" + std::to_string(i) + "]"},
                 {"value",              valueToString(ev)},
                 {"type",               ""},
-                {"variablesReference", childRef}
+                {"variablesReference", registerVarRef(ev)}
             });
         }
     }
@@ -123,6 +163,7 @@ nlohmann::json DapHandler::buildChildVariables(const Value& v,
 
 void DapHandler::runWithBudget() {
     if (!vm_) return;
+    invalidateVarRefs(); // koşu devam ediyor → eski variablesReference'lar öldü
     Interpreter::RunReason reason = vm_->runUntilEvent(-1, -1);
 
     switch (reason) {
@@ -172,6 +213,8 @@ nlohmann::json DapHandler::dispatch(const nlohmann::json& msg) {
     if (command == "stackTrace")         return handleStackTrace(msg);
     if (command == "scopes")             return handleScopes(msg);
     if (command == "variables")          return handleVariables(msg);
+    if (command == "evaluate")           return handleEvaluate(msg);
+    if (command == "terminate")          return handleTerminate(msg);
     if (command == "disconnect")         return handleDisconnect(msg);
 
     // Bilinmeyen command → success:false döndür
@@ -196,6 +239,7 @@ nlohmann::json DapHandler::handleInitialize(const nlohmann::json& req) {
         {"supportsHitConditionalBreakpoints",false},
         {"supportsTerminateRequest",         true},
         {"supportsExceptionInfoRequest",     false},
+        {"supportsEvaluateForHovers",        true},
         {"supportTerminateDebuggee",         true}
     };
 
@@ -332,6 +376,7 @@ nlohmann::json DapHandler::handleNext(const nlohmann::json& req) {
     JsonRpc::writeMessage(out_, resp);
 
     if (vm_) {
+        invalidateVarRefs();
         vm_->stepOver();
         if (vm_->state() == Interpreter::RunState::Paused) {
             sendEvent("stopped", {{"reason","step"}, {"threadId",1}});
@@ -352,6 +397,7 @@ nlohmann::json DapHandler::handleStepIn(const nlohmann::json& req) {
     JsonRpc::writeMessage(out_, resp);
 
     if (vm_) {
+        invalidateVarRefs();
         vm_->stepInstruction();
         if (vm_->state() == Interpreter::RunState::Paused) {
             sendEvent("stopped", {{"reason","step"}, {"threadId",1}});
@@ -372,6 +418,7 @@ nlohmann::json DapHandler::handleStepOut(const nlohmann::json& req) {
     JsonRpc::writeMessage(out_, resp);
 
     if (vm_) {
+        invalidateVarRefs();
         vm_->stepOut();
         if (vm_->state() == Interpreter::RunState::Paused) {
             sendEvent("stopped", {{"reason","step"}, {"threadId",1}});
@@ -438,6 +485,17 @@ nlohmann::json DapHandler::handleVariables(const nlohmann::json& req) {
     nlohmann::json args = req.value("arguments", nlohmann::json::object());
     int ref     = args.value("variablesReference", 0);
 
+    // Dal sırası önemli: child ref'ler 100000+, frame (scope) ref'leri
+    // 1000+frameId — önce child aralığını ele, yoksa 100000 "frame 99000"
+    // sanılıp boş döner.
+    if (ref >= 100000) {
+        auto it = varRefs_.find(ref);
+        nlohmann::json vars = (it != varRefs_.end())
+            ? buildChildVariables(it->second)
+            : nlohmann::json::array();
+        return makeResponse(seq, "variables", {{"variables", vars}});
+    }
+
     // Frame variable'ları (ref >= 1000)
     if (ref >= 1000) {
         int frameId = ref - 1000;
@@ -451,15 +509,11 @@ nlohmann::json DapHandler::handleVariables(const nlohmann::json& req) {
                 std::string name = vm_->slotName(frameId, slot);
                 if (name.empty()) continue;  // geçici/adsız slotları atla
 
-                int childRef = 0;
-                if (v.kind == ValueKind::Ref && v.ref) {
-                    childRef = nextVarRef_++;
-                }
                 vars.push_back({
                     {"name",               name},
                     {"value",              valueToString(v)},
                     {"type",               ""},
-                    {"variablesReference", childRef}
+                    {"variablesReference", registerVarRef(v)}
                 });
             }
         }
@@ -467,22 +521,125 @@ nlohmann::json DapHandler::handleVariables(const nlohmann::json& req) {
         return makeResponse(seq, "variables", {{"variables", vars}});
     }
 
-    // Child variable'ları (struct/array alanları)
-    // ref numarasını bir önceki çağrıdan gelen referansa eşle
-    // — şu an basit: her childRef, bir önceki döngüde atanan sıraya göre
-    //    buildChildVariables yeniden üretilir
-    // Not: Bu yaklaşımda childRef'lerin map'ini tutmuyoruz; DAP her
-    // variablesReference için yeniden buildChildVariables çağırır.
-    // VS Code aynı childRef'leri birden çok kez sorgulayabilir, ama
-    // biz her seferinde aynı veriyi döndürürüz (stateless).
-    // Gerçek map 'variablesReference → Value' ileride eklenir.
-    nlohmann::json vars = nlohmann::json::array();
-    return makeResponse(seq, "variables", {{"variables", vars}});
+    // Tanınmayan ref aralığı
+    return makeResponse(seq, "variables",
+                        {{"variables", nlohmann::json::array()}});
+}
+
+// Stop butonu: VS Code, supportsTerminateRequest ilan edildiği için önce
+// `terminate` gönderir (nazik durdurma); ardından `disconnect` gelir.
+// Bu handler yokken istek "bilinmeyen komut → success:false" düşüyordu ve
+// VS Code "An unknown error occurred" gösteriyordu.
+nlohmann::json DapHandler::handleTerminate(const nlohmann::json& req) {
+    int seq = req.value("seq", 0);
+
+    // ÖNCE response, SONRA terminated eventi (DAP sırası)
+    nlohmann::json resp = makeResponse(seq, "terminate", {});
+    JsonRpc::writeMessage(out_, resp);
+
+    invalidateVarRefs();
+    vm_.reset();
+    irProgram_.reset();
+    sendEvent("terminated", {});
+    return nullptr;
 }
 
 nlohmann::json DapHandler::handleDisconnect(const nlohmann::json& req) {
     int seq = req.value("seq", 0);
+    invalidateVarRefs();
     vm_.reset();
     irProgram_.reset();
     return makeResponse(seq, "disconnect", {});
+}
+
+// ── evaluate ─────────────────────────────────────────────────────────────────
+// VS Code debug hover'ı ve Debug Console'daki ifadeler buradan geçer.
+// Desteklenen ifade biçimi: IDENT ( .IDENT | [SAYI] )*  — ör. a, a.x,
+// vecs[0].z. Tam ifade değerlendirme (aritmetik vb.) kapsam dışı.
+
+bool DapHandler::resolveExpression(const std::string& expr, int frameId,
+                                   Value& out) const {
+    if (!vm_) return false;
+    size_t i = 0, n = expr.size();
+    auto skipWs = [&]{ while (i < n && (expr[i] == ' ' || expr[i] == '\t')) ++i; };
+    auto isIdent = [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+               (c >= '0' && c <= '9') || c == '_';
+    };
+
+    skipWs();
+    size_t start = i;
+    while (i < n && isIdent(expr[i])) ++i;
+    if (i == start) return false;
+    std::string name = expr.substr(start, i - start);
+
+    // Kök isim: istenen frame'in slotlarında ara
+    if (frameId < 0 || frameId >= vm_->callDepth()) frameId = 0;
+    bool found = false;
+    int slotCount = vm_->frameSlotCount(frameId);
+    for (int slot = 0; slot < slotCount; ++slot) {
+        if (vm_->slotName(frameId, slot) == name) {
+            out = vm_->readSlotInFrame(frameId, slot);
+            found = true;
+            break;
+        }
+    }
+    if (!found) return false; // TODO(dap): global değişkenler henüz çözülmüyor
+
+    // Zincir: .alan ve [indeks]
+    while (true) {
+        skipWs();
+        if (i >= n) return true;
+        if (expr[i] == '.') {
+            ++i; skipWs();
+            size_t fs = i;
+            while (i < n && isIdent(expr[i])) ++i;
+            if (i == fs) return false;
+            std::string field = expr.substr(fs, i - fs);
+            if (out.kind != ValueKind::Ref || !out.ref ||
+                out.ref->type != ObjectType::Struct) return false;
+            auto* s = static_cast<StructObject*>(out.ref);
+            bool hit = false;
+            for (size_t f = 0; f < s->fieldNames.size() && f < s->fields.size(); ++f) {
+                if (s->fieldNames[f] == field) { out = s->fields[f]; hit = true; break; }
+            }
+            if (!hit) return false;
+        } else if (expr[i] == '[') {
+            ++i; skipWs();
+            size_t ds = i;
+            while (i < n && expr[i] >= '0' && expr[i] <= '9') ++i;
+            if (i == ds) return false;
+            int idx = std::stoi(expr.substr(ds, i - ds));
+            skipWs();
+            if (i >= n || expr[i] != ']') return false;
+            ++i;
+            if (out.kind != ValueKind::Ref || !out.ref ||
+                out.ref->type != ObjectType::Array) return false;
+            auto* a = static_cast<ArrayObject*>(out.ref);
+            if (idx < 0 || idx >= (int)a->elements.size()) return false;
+            out = a->elements[idx];
+        } else {
+            return false; // tanınmayan ek — aritmetik vb. desteklenmiyor
+        }
+    }
+}
+
+nlohmann::json DapHandler::handleEvaluate(const nlohmann::json& req) {
+    int seq = req.value("seq", 0);
+    nlohmann::json args = req.value("arguments", nlohmann::json::object());
+    std::string expr    = args.value("expression", "");
+    int frameId         = args.value("frameId", 0);
+
+    Value v;
+    if (!resolveExpression(expr, frameId, v)) {
+        // Hover bağlamında sessizce başarısız ol — VS Code tooltip göstermez.
+        return makeResponse(seq, "evaluate",
+            {{"result", "ifade çözülemedi: " + expr}}, false);
+    }
+
+    return makeResponse(seq, "evaluate", {
+        {"result",             valueToString(v)},
+        {"type",               ""},
+        {"variablesReference", registerVarRef(v)}
+    });
 }

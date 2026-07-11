@@ -1,0 +1,9 @@
+int topla(int a, int b) {
+    return a + b;
+}
+
+int main() {
+    int x = topla(2, 3);
+    print(x);
+    return 0;
+}

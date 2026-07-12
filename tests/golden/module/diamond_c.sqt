@@ -1,0 +1,6 @@
+// diamond.sqt yardımcı modülü — sağ kol (C→D)
+import {base} from "diamond_d.sqt";
+
+export int fromC() {
+    return base() + 2;
+}

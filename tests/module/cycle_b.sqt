@@ -1,0 +1,6 @@
+// Döngüsel bağımlılık fixture'ı: cycle_a.sqt ile karşılıklı import
+import {foo} from "cycle_a.sqt";
+
+export int helper() {
+    return 2;
+}

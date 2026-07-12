@@ -1,0 +1,9 @@
+// Elmas bağımlılık (A→B→D, A→C→D) döngü DEĞİLDİR — D bir kez yüklenir,
+// E_MODULE_CYCLE üretilmez (ADR-031 yanlış-pozitif kalkanı).
+import {fromB} from "diamond_b.sqt";
+import {fromC} from "diamond_c.sqt";
+
+int main() {
+    print(fromB() + fromC());
+    return 0;
+}

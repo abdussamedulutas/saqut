@@ -1,0 +1,6 @@
+// Kendi kendini import eden modül (E_MODULE_CYCLE beklenir, ADR-031)
+import {x} from "self_import.sqt";
+
+int main() {
+    return 0;
+}

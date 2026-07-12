@@ -6,6 +6,7 @@
 #include "parser/nodes/declarations.hpp"
 #include "tokenizer/tokenizer.hpp"
 #include "parser/parser.hpp"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -27,7 +28,22 @@ ModuleGraph ModuleLoader::load(const std::string& entryFilePath) {
 // loadUnit — tek bir dosyayı yükle, ImportDeclNode'larını takip et
 // ─────────────────────────────────────────────────────────────────────────────
 
-void ModuleLoader::loadUnit(const std::string& filePath, ModuleGraph& graph) {
+void ModuleLoader::loadUnit(const std::string& filePath, ModuleGraph& graph,
+                            const SourceLocation& importLoc) {
+    // Döngü tespiti (ADR-031): dosya kendi yükleme zincirinde tekrar
+    // görünüyorsa döngüsel bağımlılık var — açık derleme hatası üret.
+    // seen_ kontrolünden ÖNCE yapılmalı; aksi halde sessiz kısa devre olur.
+    auto cycleStart = std::find(loadChain_.begin(), loadChain_.end(), filePath);
+    if (cycleStart != loadChain_.end()) {
+        std::string chain;
+        for (auto it = cycleStart; it != loadChain_.end(); ++it)
+            chain += fs::path(*it).filename().string() + " -> ";
+        chain += fs::path(filePath).filename().string();
+        diag_.report("E_MODULE_CYCLE", importLoc,
+            "circular module dependency detected: " + chain);
+        return;
+    }
+
     if (seen_.count(filePath)) return;
     seen_.insert(filePath);
 
@@ -70,15 +86,18 @@ void ModuleLoader::loadUnit(const std::string& filePath, ModuleGraph& graph) {
     unit.tokens   = std::move(tokens);
     graph.units.push_back(std::move(unit));
 
-    // ImportDeclNode'ları tara ve bağımlıları yükle
+    // ImportDeclNode'ları tara ve bağımlıları yükle. Bu dosya, bağımlıları
+    // yüklenirken aktif zincirde kalır — döngü tespitinin temeli.
+    loadChain_.push_back(filePath);
     for (ASTNode* child : ast->getChildren()) {
         if (child->kind != ASTKind::ImportDecl) continue;
         auto* imp = static_cast<ImportDeclNode*>(child);
         if (imp->sourcePath.empty()) continue;
 
         std::string depPath = resolvePath(filePath, imp->sourcePath);
-        loadUnit(depPath, graph);
+        loadUnit(depPath, graph, imp->loc);
     }
+    loadChain_.pop_back();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut Compiler — LiteralNode (Sabit Değer Düğümü)
+// ============================================================================
+//
+// DİZİN:   src/parser/nodes/literal.hpp
+// KATMAN:  Katman 3 — Sayı, string, bool, null sabitleri
+//
+// AMAÇ:
+//   Kaynak koddaki sabit değerleri temsil eder: tamsayı, float, string,
+//   boolean ve null. LiteralType ile değerin hangi türde olduğu belirtilir.
+//
+// ============================================================================
+
 #ifndef SAQUT_AST_LITERAL
 #define SAQUT_AST_LITERAL
 

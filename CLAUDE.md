@@ -120,7 +120,13 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - `byte` tipi (henüz tanımlanmadı)
   - GC `collect()` tetiklenmiyor — iskelet var, arena gibi çalışıyor (#77)
   - Modül döngüsü tespiti — `A→B→A` sessiz kısa devre, derleme hatası yok (#78, ADR-031)
-  - DAP satır bazlı adımlama + sembol adları — ham prototip (#79)
+  - DAP satır bazlı adımlama + sembol adları — Faz 5 ile zemin tamamlandı
+    (IR satır tablosu %100, slotNames, runUntilEvent, stepLine/stepOver/stepOut,
+    lineToFirstIP breakpoint eşlemesi). Faz 6 tamam — DAP protokolü doğru
+    formatla yeniden yazıldı (initialize+initialized sırası, launch→configurationDone
+    yaşam döngüsü, stackTrace per-frame sourceFile, variables slotName ile gerçek
+    isimler, `tests/dap/` 3 golden senaryo). continue sonrası exited/terminated
+    event gönderme + breakpoint dosya yolu eşleşmesi TODO(faz6). (#79)
   - MIR JIT backend (#80) ve gömülü-runtime AOT `saqut build` (#81) — ADR-032
     ile kararlaştırıldı, henüz başlanmadı
 - **LSP/DAP kurtarma planı** (`docs/prompt-lsp-dap-kurtarma.md`, Faz 0–6):
@@ -147,8 +153,18 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   (`DocumentStore::uriForPath`); diagnostics dosyaya göre gruplanıp ayrı
   `publishDiagnostics` ile gönderiliyor — kök neden #4 kapandı. `tests/lsp/`
   12 senaryo (`10_turkish_encoding`, `11_scoped_definition`,
-  `12_cross_file_definition` yeni). Faz 4 (completion'ı token/sembol
-  tabanlı yeniden kurma) sırada.
+  `12_cross_file_definition` yeni). Faz 4 tamam — completion token/sembol tabanlı yeniden kuruldu:
+  `wordBefore`/`lineUpToCursor` string-hack'leri kaldırıldı; token-tabanlı
+  bağlam çıkarma (`.` zinciri, `::` scope), structLayouts zincir çözümü
+  (`a.b.c.`), scope filtrelemesi (başka fonksiyonun lokali önerilmez),
+  builtin metodlar BuiltinMethodRegistry'den üretiliyor. `tests/lsp/` 16
+  senaryo (`13_completion_scope`, `14_completion_dot_chain`,
+  `15_completion_nonstruct_dot`, `16_completion_scope_method` yeni).
+  Faz 5 tamam — IR satır tablosu %100 (IRGenerator::currentLoc_ +
+  effectiveLoc ile tüm emit noktaları sourceLine dolduruyor); IRFunction::slotNames
+  + Interpreter::slotName() gerçek değişken adlarını veriyor; runUntilEvent(maxInstr,
+  startCallDepth) bütçeli/step'li koşu modeli; stepLine/stepOver/stepOut;
+  lineToFirstIP breakpoint eşlemesi. Faz 6 tamam (protokol, testler, 67 test yeşil).
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası
@@ -170,6 +186,7 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - `docs/sonnet-handoff.md` — **Sonnet için uygulama promptu** (ADR-020…024'ü koda
   döken sıralı görev planı; ilk görev: GC-hazır nesne modeli + array runtime).
 - `docs/roadmap-frontend.md` — faz-faz uygulama planı (Faz 0–4 → fibonacci).
+- `docs/kod/` — modül başına mimari dokümantasyon (15 belge + indeks).
 - `docs/transkript-frontend-tasarim.md` — tasarım oturumu transkripti.
 - `examples/fibonacci.sqt` — geçerli referans program.
 - `examples/parser-stress/` — yalnızca parser'ı zorlayan, **geçerli olmayan** fixture'lar.

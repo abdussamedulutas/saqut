@@ -1,3 +1,19 @@
+// ============================================================================
+// saQut Compiler — Sözcüksel Analiz (Tokenizer) Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/tokenizer/tokenizer.cpp
+// KATMAN:  Katman 2 — Lexer yardımıyla kaynak kodu token'lara ayırır
+// BAĞIMLI: tokenizer/tokenizer.hpp
+//
+// AMAÇ:
+//   Lexer aracılığıyla karakterleri okuyarak anlamlı token'lar üretir:
+//   sayı, string literal, operatör, delimiter, keyword, identifier.
+//   scope() ana dispatch metodudur; scan() döngüde scope() çağırarak
+//   token listesini oluşturur.
+//
+// ============================================================================
+
 #include "tokenizer/tokenizer.hpp"
 #include <unordered_map>
 

@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut — ModuleGraph (Çok Dosyalı Derleme Birimi)
+// ============================================================================
+//
+// DİZİN:   src/module/module_graph.hpp
+// KATMAN:  Modül Sistemi — Tüm bağımlı dosyaların parse edilmiş hali
+//
+// AMAÇ:
+//   Bir .sqt dosyasının ve tüm import bağımlılıklarının parse edilmiş
+//   AST + token'larını tutar. Move-only; sahiplik tek noktada.
+//
+// ============================================================================
+
 #ifndef SAQUT_MODULE_GRAPH
 #define SAQUT_MODULE_GRAPH
 

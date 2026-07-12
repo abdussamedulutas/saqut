@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut Compiler — Sembol Toplayıcı (SymbolCollector)
+// ============================================================================
+//
+// DİZİN:   src/symbol/symbol_collector.hpp
+// KATMAN:  Faz 2 — 3 geçişli (3-pass) sembol toplama algoritması
+//
+// AMAÇ:
+//   AST üzerinde gezerek tüm bildirimleri kaydeder, tipleri çözümler,
+//   kapsam hiyerarşisini kurar ve identifier'ları tanımlarına bağlar.
+//   Çok dosyalı (multi-module) derlemeyi destekler.
+//
+// ============================================================================
+
 #ifndef SAQUT_SYMBOL_COLLECTOR
 #define SAQUT_SYMBOL_COLLECTOR
 

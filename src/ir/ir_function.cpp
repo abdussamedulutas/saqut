@@ -1,3 +1,15 @@
+// ============================================================================
+// saQut IR — IRFunction Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/ir/ir_function.cpp
+// KATMAN:  IR — Fonksiyonun IR karşılığı (instruction listesi + slotlar)
+//
+// AMAÇ:
+//   IRFunction::dump() ile debug çıktısı ve slot isim çözümlemesi.
+//
+// ============================================================================
+
 #include "ir/ir_function.hpp"
 #include "builtin/builtin_methods.hpp"
 #include "tools.hpp"

@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut Compiler — Kapsam (Scope) Sınıfı
+// ============================================================================
+//
+// DİZİN:   src/symbol/scope.hpp
+// KATMAN:  Faz 2 — Kapsam hiyerarşisi ve lexical scoping
+//
+// AMAÇ:
+//   Sembol kapsamını temsil eder. parent işaretçisi ile iç içe bloklar
+//   için kapsam ağacı oluşturur. resolve() parent zincirini tırmanarak
+//   lexical scoping uygular.
+//
+// ============================================================================
+
 #ifndef SAQUT_SYMBOL_SCOPE
 #define SAQUT_SYMBOL_SCOPE
 

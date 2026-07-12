@@ -1,0 +1,15 @@
+struct Adres {
+    string sehir;
+    string sokak;
+}
+
+struct Person {
+    string isim;
+    Adres adres;
+}
+
+int main() {
+    Person p;
+    p.adres.
+    return 0;
+}

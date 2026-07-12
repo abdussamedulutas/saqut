@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut Compiler — IdentifierNode (Tanımlayıcı Düğümü)
+// ============================================================================
+//
+// DİZİN:   src/parser/nodes/identifier.hpp
+// KATMAN:  Katman 3 — Değişken/fonksiyon ismi
+//
+// AMAÇ:
+//   Kaynak koddaki tanımlayıcıları (değişken adı, fonksiyon adı, tip adı)
+//   temsil eder. Sembol tablosuna bağlantı için Symbol* alanı içerir.
+//
+// ============================================================================
+
 #ifndef SAQUT_AST_IDENTIFIER
 #define SAQUT_AST_IDENTIFIER
 

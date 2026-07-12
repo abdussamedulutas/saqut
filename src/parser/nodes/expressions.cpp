@@ -1,3 +1,7 @@
+// ============================================================================
+// saQut Compiler — Genişletilmiş İfade Düğümleri Gerçeklemesi
+// ============================================================================
+
 #include "parser/nodes/expressions.hpp"
 #include "parser/ast_json.hpp"
 

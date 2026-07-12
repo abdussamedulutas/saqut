@@ -1,7 +1,12 @@
+// ============================================================================
+// saQut LSP — Pozisyon Dönüştürücüleri (UTF-16 ↔ byte)
+// ============================================================================
+
 #ifndef SAQUT_LSP_POSITION
 #define SAQUT_LSP_POSITION
 
 #include <string>
+#include <vector>
 
 // LSP pozisyonları öntanımlı olarak UTF-16 code unit sayar; saQut derleyicisi
 // içeride byte (UTF-8 code unit) offset/column kullanır (bkz.
@@ -12,6 +17,31 @@
 //
 // Tüm handler'lar konum çevirisini BU dosyadaki yardımcılardan geçirmeli —
 // elle +1/-1 hesabı kalmamalı.
+
+// İçerikteki her satırın başlangıç byte offset'ini bir kez çıkarır (satır
+// indeksi). lspLineText her çağrıda dosya başından tarar (O(dosya boyutu));
+// sembol/tanı başına çağrılan döngülerde bu kuadratik patlar (90K satırlık
+// dosyada documentSymbol dakikalarca CPU yakıyordu). Belge başına bir kez
+// kur (DocumentState.lineStarts), döngülerde *At varyantlarını kullan.
+inline std::vector<int> buildLineStarts(const std::string& content) {
+    std::vector<int> starts;
+    starts.push_back(0);
+    for (size_t i = 0; i < content.size(); ++i)
+        if (content[i] == '\n') starts.push_back(static_cast<int>(i) + 1);
+    return starts;
+}
+
+// buildLineStarts indeksiyle O(satır uzunluğu) satır metni (\n / \r\n HARİÇ).
+inline std::string lspLineTextAt(const std::string& content,
+                                 const std::vector<int>& starts, int line) {
+    if (line < 0 || line >= static_cast<int>(starts.size())) return "";
+    size_t s = static_cast<size_t>(starts[line]);
+    size_t e = (line + 1 < static_cast<int>(starts.size()))
+                   ? static_cast<size_t>(starts[line + 1]) - 1  // '\n' hariç
+                   : content.size();
+    if (e > s && content[e - 1] == '\r') --e;
+    return content.substr(s, e - s);
+}
 
 // content içindeki 0-tabanlı `line`'a karşılık gelen satırın metnini
 // döndürür (satır sonu \n / \r\n HARİÇ).
@@ -98,6 +128,12 @@ inline int lspToByteCol(const std::string& content, int line, int utf16Col) {
 // sütunu (LSP `character` alanı ile aynı birim).
 inline int byteColToLsp(const std::string& content, int line, int byteCol) {
     return byteOffsetToUtf16(lspLineText(content, line), byteCol - 1);
+}
+
+// byteColToLsp'nin satır-indeksli varyantı — döngü içinde çağıranlar için.
+inline int byteColToLspAt(const std::string& content,
+                          const std::vector<int>& starts, int line, int byteCol) {
+    return byteOffsetToUtf16(lspLineTextAt(content, starts, line), byteCol - 1);
 }
 
 #endif // SAQUT_LSP_POSITION

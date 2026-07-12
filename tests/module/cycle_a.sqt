@@ -1,0 +1,10 @@
+// Döngüsel bağımlılık fixture'ı: a → b → a (E_MODULE_CYCLE beklenir, ADR-031)
+import {helper} from "cycle_b.sqt";
+
+export int foo() {
+    return 1;
+}
+
+int main() {
+    return 0;
+}

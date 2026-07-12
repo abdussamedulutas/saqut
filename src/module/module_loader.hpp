@@ -15,6 +15,7 @@
 #define SAQUT_MODULE_LOADER
 
 #include <string>
+#include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <functional>
@@ -23,7 +24,9 @@
 #include "diagnostic/diagnostic_engine.hpp"
 
 // ModuleLoader: import bildirimlerini izleyerek tüm bağımlı dosyaları
-// yükler ve parse eder. Döngüsel bağımlılıklar sessizce atlanır (hata değil).
+// yükler ve parse eder. Döngüsel bağımlılık (A→B→A) E_MODULE_CYCLE
+// tanısıyla derleme hatası üretir (ADR-031); elmas bağımlılık (A→B→D,
+// A→C→D) meşrudur ve D yalnızca bir kez yüklenir.
 //
 // Kullanım:
 //   ModuleRegistry registry;
@@ -46,8 +49,11 @@ public:
 
 private:
     // Tek bir dosyayı yükle, parse et, ImportDeclNode'larını takip et.
-    // Zaten yüklenmiş dosyalar atlanır (seen_ ile kontrol).
-    void loadUnit(const std::string& filePath, ModuleGraph& graph);
+    // Zaten yüklenmiş dosyalar atlanır (seen_ ile kontrol); yükleme
+    // zincirinde tekrar görünen dosya döngü hatasıdır (loadChain_).
+    // importLoc: bu dosyayı isteyen import bildiriminin konumu (tanı için).
+    void loadUnit(const std::string& filePath, ModuleGraph& graph,
+                  const SourceLocation& importLoc = SourceLocation{});
 
     // İmport yolunu çözümle: import eden dosyanın dizinine göre canonical yol üret.
     std::string resolvePath(const std::string& importerPath,
@@ -57,8 +63,13 @@ private:
     DiagnosticEngine& diag_;
     SourceOverlay     overlay_;
 
-    // Zaten yüklenmiş ya da yüklenmekte olan dosyalar (canonical path).
+    // Yüklemesi başlatılmış dosyalar (canonical path) — tekrar yüklemeyi
+    // ve hata alan dosya için mükerrer tanıyı önler.
     std::unordered_set<std::string> seen_;
+
+    // Aktif yükleme zinciri (canonical path, sıralı) — döngü tespiti ve
+    // E_MODULE_CYCLE mesajındaki A → B → A zinciri için (ADR-031).
+    std::vector<std::string> loadChain_;
 };
 
 #endif // SAQUT_MODULE_LOADER

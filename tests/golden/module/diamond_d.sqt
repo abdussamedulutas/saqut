@@ -1,0 +1,4 @@
+// diamond.sqt yardımcı modülü — ortak taban (D)
+export int base() {
+    return 10;
+}

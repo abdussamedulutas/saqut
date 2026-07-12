@@ -1,0 +1,170 @@
+# saQut .clang-format
+# Bu dosya docs/kod-standardı.md'deki biçim kurallarını otomatik uygular.
+# C++17, header-only eğilimli proje.
+
+BasedOnStyle: LLVM
+
+###############################################################################
+# Dil / Standart
+###############################################################################
+Language:        Cpp
+Standard:        c++17
+DisableFormat:   false
+
+###############################################################################
+# Girinti
+###############################################################################
+IndentWidth:         4
+TabWidth:            4
+UseTab:              Never
+ContinuationIndentWidth: 4
+IndentCaseLabels:    false        # case, switch ile aynı hizada
+IndentCaseBlocks:    false
+IndentGotoLabels:    false
+AccessModifierOffset: -4          # public: 4 boşluk, üyeler 8 boşluk (toplam 4 içerde)
+NamespaceIndentation: None        # namespace içi ekstra girintisiz
+
+###############################################################################
+# Satır Uzunluğu ve Hizalama
+###############################################################################
+ColumnLimit:         100
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Left
+AlignOperands:       Align
+AlignTrailingComments: false
+
+###############################################################################
+# Parantez Stili (Attach)
+###############################################################################
+BreakBeforeBraces:   Attach
+BraceWrapping:
+  AfterCaseLabel:    false
+  AfterClass:        false
+  AfterControlStatement: Never
+  AfterEnum:         false
+  AfterFunction:     false
+  AfterNamespace:    false
+  AfterStruct:       false
+  AfterUnion:        false
+  AfterExternBlock:  false
+  BeforeCatch:       false
+  BeforeElse:        false
+  BeforeLambdaBody:  false
+  BeforeWhile:       false
+  SplitEmptyFunction: false
+  SplitEmptyRecord:  false
+  SplitEmptyNamespace: false
+
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: false
+BreakConstructorInitializers: BeforeComma
+ConstructorInitializerIndentWidth: 4
+BreakInheritanceList: BeforeComma
+BreakStringLiterals: false
+
+###############################################################################
+# Boşluk
+###############################################################################
+SpaceAfterCStyleCast:    true
+SpaceAfterLogicalNot:    false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon:    false
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens:       ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceBeforeSquareBrackets: false
+SpaceInEmptyBlock:       false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles:          Never     # vector<int> değil vector< int >
+SpacesInCStyleCastParentheses: false
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: false
+SpacesInParentheses:     false      # foo(a, b)
+SpacesInSquareBrackets:  false
+
+###############################################################################
+# Pointer / Referans Hizalama
+###############################################################################
+PointerAlignment:       Left       # int* p, std::string& s
+ReferenceAlignment:     Left
+DerivePointerAlignment: false
+
+###############################################################################
+# İfade Biçimlendirme
+###############################################################################
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Inline
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments:       true
+BinPackParameters:      true
+Cpp11BracedListStyle:   true
+
+###############################################################################
+# Include'lar
+###############################################################################
+IncludeBlocks:          Regroup
+IncludeCategories:
+  # Proje header'ları (src/)
+  - Regex:           '^"(lsp|dap|vm|ir|parser|lexer|tokenizer|symbol|semantic|module|core|cli|builtin|bench|diagnostic)/'
+    Priority:         1
+    SortPriority:     0
+    CaseSensitive:    false
+  # Vendor
+  - Regex:           '^"vendor/'
+    Priority:         2
+    SortPriority:     0
+    CaseSensitive:    false
+  # Diğer tırnaklı (proje-içi göreli yollar)
+  - Regex:           '^".*"'
+    Priority:         1
+    SortPriority:     0
+    CaseSensitive:    false
+  # Sistem başlıkları
+  - Regex:           '^<.*>'
+    Priority:         3
+    SortPriority:     0
+    CaseSensitive:    false
+
+SortIncludes:           true
+SortUsingDeclarations:  false
+
+###############################################################################
+# Makro / Önişlemci
+###############################################################################
+IndentPPDirectives:     None
+IncludeIsMainRegex:     '$'
+CommentPragmas:         ''
+
+###############################################################################
+# Diğer
+###############################################################################
+FixNamespaceComments:   false
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep:    1
+ReflowComments:         false
+RequiresClausePosition: WithPreceding
+RequiresExpressionIndentation: OuterScope
+InsertBraces:           false       # C++17 — istenirse true yapılabilir
+InsertNewlineAtEOF:     true
+RemoveBracesLLVM:       false
+RemoveSemicolon:        false
+SeparateDefinitionBlocks: Always
+
+# ── Editör ayarları (isteğe bağlı) ─────────────────────────────────────────
+# Çoğu editör .clang-format'ı otomatik algılar.
+# VS Code:  "C_Cpp.clang_format_style": "file"
+# Vim/Neovim: let g:clang_format#style = 'file'
+# CLion:  Editor → Code Style → C/C++ → Set from... → .clang-format file

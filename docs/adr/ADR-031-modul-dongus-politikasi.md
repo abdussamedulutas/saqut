@@ -1,26 +1,31 @@
 # ADR-031 — Modül Döngüsü Tespiti Politikası
 
-**Durum:** Beklemede (TODO)  
+**Durum:** Uygulandı (issue #78, 2026-07-12)  
 **Tarih:** 2026-06-25
 
-## Mevcut durum
+## Karar
 
-`src/module/module_loader.cpp`: `seen_` seti her yüklenen modül yolunu izler. Tekrar
-karşılaşılan modül `loadUnit` çağrısı atlanır — sonsuz döngü önlenir. Ancak döngüsel
-bağımlılık (`A → B → A`) açık bir hata üretmez; sessizce kısa devre yapılır.
-
-## Kabul edilen karar (gelecek)
-
-Döngüsel bağımlılık tespit edildiğinde derleme hatası üretilmeli:
+Döngüsel bağımlılık (`A → B → A`) tespit edildiğinde derleme hatası üretilir:
 
 ```
-E_MODULE_CYCLE: döngüsel modül bağımlılığı tespit edildi: A → B → A
+E_MODULE_CYCLE: circular module dependency detected: a.sqt -> b.sqt -> a.sqt
 ```
 
-`seen_` seti yerine veya yanında `inProgress_` seti eklenerek bir modülün kendi yükleme
-zincirinde tekrar görünmesi döngü olarak işaretlenebilir.
+## Uygulama
 
-## Bekleyen neden
+`src/module/module_loader.cpp`: `seen_` seti tekrar yüklemeyi önlemeye devam eder
+(elmas bağımlılıkta D bir kez yüklenir). Yanına eklenen `loadChain_` vektörü aktif
+yükleme zincirini sıralı tutar; bir dosya kendi zincirinde tekrar görünürse
+`E_MODULE_CYCLE` tanısı üretilir. Tanının konumu döngüyü kapatan `import`
+bildiriminin `SourceLocation`'ıdır; mesaj döngü zincirini dosya adlarıyla gösterir.
+Kendi kendini import eden dosya (`self.sqt → self.sqt`) da aynı yoldan yakalanır.
 
-Modül sistemi golden testleri henüz yok. Döngü politikası tanımlanmadan önce temel
-çok-modüllü test altyapısı kurulmalı. Bu issue açık (#TODO — issue yoksa açılacak).
+## Testler
+
+- `tests/module/cycle_a.sqt` + `cycle_b.sqt` — karşılıklı import → `E_MODULE_CYCLE`
+- `tests/module/self_import.sqt` — kendini import → `E_MODULE_CYCLE`
+- `tests/golden/module/diamond.sqt` — elmas bağımlılık yanlış-pozitif üretmez
+  (golden run testi, çıktı `23`)
+
+Döngü testleri `tests/run.sh` "modül döngüsü" bölümünde `saqut check` exit kodu +
+tanı kodu üzerinden doğrulanır.

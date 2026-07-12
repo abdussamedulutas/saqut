@@ -114,12 +114,12 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - **Kontrol akışı:** `if/else`, `for`, `while`, `do-while`, `switch-case`, `break`/`continue`/`return`
   - **Hata yönetimi:** `try/catch/throw` (ADR-025), cast `as` (ADR-026)
   - **Global değişkenler:** LOAD_GLOBAL/STORE_GLOBAL (issue #38 kapatıldı)
-  - **Modül sistemi:** `import`/`export`, çok modüllü derleme
+  - **Modül sistemi:** `import`/`export`, çok modüllü derleme; döngü tespiti
+    `E_MODULE_CYCLE` (ADR-031, #78)
   - **Nested struct:** struct-tipli alanlar VarDecl anında özyinelemeli tahsis (ADR-029)
 - **Henüz YOK (gerçek eksikler):**
   - `byte` tipi (henüz tanımlanmadı)
   - GC `collect()` tetiklenmiyor — iskelet var, arena gibi çalışıyor (#77)
-  - Modül döngüsü tespiti — `A→B→A` sessiz kısa devre, derleme hatası yok (#78, ADR-031)
   - DAP satır bazlı adımlama + sembol adları — Faz 5 ile zemin tamamlandı
     (IR satır tablosu %100, slotNames, runUntilEvent, stepLine/stepOver/stepOut,
     lineToFirstIP breakpoint eşlemesi). Faz 6 tamam — DAP protokolü doğru
@@ -169,6 +169,7 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 
 ## Belge haritası
 - `readme.md` — toolbox çerçevesi, built-vs-planned, dil kimliği, çalıştırma modeli.
+- `docs/kod-standardı.md` — C++ kod standardı (biçim, adlandırma, yorum, modern C++ kullanımı).
 - `docs/fikirler.md` — ADR-001…005 (backend stratejisi, parser, header-only, token, IR).
 - `docs/adr-frontend-analiz.md` — ADR-006…028 (frontend, analiz/optimizasyon,
   çalıştırma modeli, FFI, interface, bellek, **değer/referans semantiği, null
@@ -238,3 +239,8 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - Ana dal `0.1.0`; geliştirme branchi `0.2.0`. commit/push kullanıcı isteyince yapılır.
 - `build/` artık git'te izlenmiyor (.gitignore'da). `wiki/` klasörü repo'ya dahil edildi.
 - Wiki GitHub repo'sundaki `wiki/` klasöründen yönetilir.
+- **Kod standardı:** `docs/kod-standardı.md`'ye uy. `.clang-format` biçimi otomatik
+  uygular; adlandırma, yorum dili, `class`/`struct` ayrımı gibi kurallar el ile
+  sağlanır. Yeni kod yazarken veya mevcut kodu değiştirirken bu standarda uy.
+  Tüm yorumlar Türkçe, tüm tanımlayıcılar İngilizce. Header-only eğilimli
+  (ADR-003), `#pragma once` değil `#ifndef` guard.

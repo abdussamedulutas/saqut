@@ -125,9 +125,10 @@ Kanıt: `tests/golden/error/basic_catch.sqt`, `div_line.sqt`, `throw_and_nested.
 |---------|-------|---------------|
 | `import` / `from` ayrıştırma | **çalışıyor** | `src/module/module_loader.cpp` `loadUnit` |
 | Çok modüllü derleme | **çalışıyor** | `module_loader.cpp` özyinelemeli yükleme |
-| Import döngüsü tespiti | **YOK** | `seen_` seti tekrar yüklemeyi önler ama döngüsel bağımlılık (A→B→A) sonsuz döngü yerine sessiz kısa devre — hata üretmiyor |
+| Import döngüsü tespiti | **çalışıyor** | `loadChain_` aktif zinciri izler; A→B→A ve self-import `E_MODULE_CYCLE` üretir (ADR-031, #78) |
 
-Golden test: **YOK** — modül sistemi otomatik test edilmiyor.
+Golden test: `tests/golden/module/diamond.sqt` (elmas bağımlılık) +
+`tests/module/cycle_*.sqt` döngü hata testleri (`tests/run.sh` "modül döngüsü").
 
 ---
 

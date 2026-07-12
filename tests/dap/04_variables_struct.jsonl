@@ -1,0 +1,11 @@
+{"type":"request","seq":1,"command":"initialize","arguments":{"clientID":"vscode","adapterID":"sqt","linesStartAt1":true,"columnsStartAt1":true}}
+{"type":"request","seq":2,"command":"launch","arguments":{"program":"%FIXDIR%/vec.sqt","stopOnEntry":true}}
+{"type":"request","seq":3,"command":"setBreakpoints","arguments":{"source":{"path":"%FIXDIR%/vec.sqt"},"breakpoints":[{"line":13}]}}
+{"type":"request","seq":4,"command":"configurationDone","arguments":{}}
+{"type":"request","seq":5,"command":"continue","arguments":{"threadId":1}}
+{"type":"request","seq":6,"command":"variables","arguments":{"variablesReference":1000}}
+{"type":"request","seq":7,"command":"variables","arguments":{"variablesReference":100001}}
+{"type":"request","seq":8,"command":"evaluate","arguments":{"expression":"a.x","frameId":0,"context":"hover"}}
+{"type":"request","seq":9,"command":"evaluate","arguments":{"expression":"vecs[1].y","frameId":0,"context":"hover"}}
+{"type":"request","seq":10,"command":"terminate","arguments":{}}
+{"type":"request","seq":11,"command":"disconnect","arguments":{}}

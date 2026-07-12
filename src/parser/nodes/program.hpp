@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut Compiler — ProgramNode (Kök Düğüm)
+// ============================================================================
+//
+// DİZİN:   src/parser/nodes/program.hpp
+// KATMAN:  Katman 3 — AST'nin kök düğümü
+//
+// AMAÇ:
+//   Tüm programı kapsayan kök AST düğümü. Children'ı bildirim düğümleridir
+//   (FunctionDecl, StructDecl, VariableDecl, ImportDecl). Her .sqt dosyası
+//   tek bir ProgramNode olarak temsil edilir.
+//
+// ============================================================================
+
 #ifndef SAQUT_AST_PROGRAM
 #define SAQUT_AST_PROGRAM
 

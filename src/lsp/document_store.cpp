@@ -1,5 +1,10 @@
+// ============================================================================
+// saQut LSP — DocumentStore Gerçeklemesi
+// ============================================================================
+
 #include "lsp/document_store.hpp"
 #include "lsp/uri.hpp"
+#include "lsp/position.hpp"
 #include "module/module_loader.hpp"
 #include "symbol/symbol_collector.hpp"
 #include "semantic/type_checker.hpp"
@@ -19,8 +24,9 @@ DocumentState& DocumentStore::update(const std::string& uri,
         it->second->uri = uri;
     }
     DocumentState& state = *it->second;
-    state.content = content;
-    state.version = version;
+    state.content    = content;
+    state.lineStarts = buildLineStarts(content);
+    state.version    = version;
     delete state.ast;
     state.ast = nullptr;
     for (auto* t : state.tokens) delete t;

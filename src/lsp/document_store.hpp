@@ -1,3 +1,16 @@
+// ============================================================================
+// saQut LSP — DocumentStore (Açık Belgelerin Yöneticisi)
+// ============================================================================
+//
+// DİZİN:   src/lsp/document_store.hpp
+// KATMAN:  LSP — Açık belgelerin buffer'larını yönetir, overlay ile derler
+//
+// AMAÇ:
+//   didOpen/didChange/didClose ile belge durumunu takip eder.
+//   runPipeline() tüm açık belgeleri ModuleLoader overlay'i ile derler.
+//
+// ============================================================================
+
 #ifndef SAQUT_LSP_DOCUMENT_STORE
 #define SAQUT_LSP_DOCUMENT_STORE
 
@@ -13,6 +26,11 @@
 struct DocumentState {
     std::string      uri;
     std::string      content;
+    // content'in satır-başlangıç byte offset indeksi (position.hpp
+    // buildLineStarts). Konum dönüşümü yapan döngüler (documentSymbol,
+    // diagnostics, references...) satır metnine dosya başından taramadan
+    // O(1) erişsin diye content ile birlikte güncellenir.
+    std::vector<int> lineStarts;
     int              version = 0;
     ASTNode*         ast     = nullptr;
     // Faz 3: bu belgenin canonical dosya yolu (uriToPath + weakly_canonical).

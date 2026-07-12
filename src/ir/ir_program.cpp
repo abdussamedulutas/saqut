@@ -1,3 +1,15 @@
+// ============================================================================
+// saQut IR — IRProgram Gerçeklemesi
+// ============================================================================
+//
+// DİZİN:   src/ir/ir_program.cpp
+// KATMAN:  IR — Tüm programın IR temsili
+//
+// AMAÇ:
+//   mainFunction() arama ve ModuleRegistry yönetimi.
+//
+// ============================================================================
+
 #include "ir/ir_program.hpp"
 #include "tools.hpp"
 #include <iostream>

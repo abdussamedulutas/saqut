@@ -1,0 +1,3 @@
+{"type":"request","seq":1,"command":"initialize","arguments":{"clientID":"vscode","clientName":"Visual Studio Code","adapterID":"sqt","pathFormat":"path","linesStartAt1":true,"columnsStartAt1":true,"supportsVariableType":true,"supportsVariablePaging":false,"supportsRunInTerminateRequest":true,"locale":"en","supportsProgressReporting":false,"supportsInvalidatedEvent":false,"supportsMemoryReferences":false,"supportsArgsCanBeInterpretedByShell":false,"supportsStartDebuggingRequest":false}}
+{"type":"request","seq":2,"command":"launch","arguments":{"program":"%FIXDIR%/fib.sqt","stopOnEntry":true,"__sessionId":"2e45f630-8c6a-4b89-adcf-b6ae2b8fdf8b"}}
+{"type":"request","seq":3,"command":"configurationDone","arguments":{}}

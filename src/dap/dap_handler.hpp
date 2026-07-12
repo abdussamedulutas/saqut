@@ -1,3 +1,7 @@
+// ============================================================================
+// saQut DAP — DapHandler (Hata Ayıklama Protokolü Dispatch)
+// ============================================================================
+
 #ifndef SAQUT_DAP_HANDLER
 #define SAQUT_DAP_HANDLER
 
@@ -6,46 +10,77 @@
 #include "dap/dap_types.hpp"
 #include "vm/interpreter.hpp"
 #include "ir/ir_program.hpp"
+#include "vm/value.hpp"
 #include <ostream>
 #include <memory>
+#include <unordered_map>
 
 class DapHandler {
 public:
     explicit DapHandler(std::ostream& out) : out_(out) {}
 
+    // Ana giriş: DAP-format mesajı işle, response döndür (null = response yok).
+    // Event'ler doğrudan out_'a yazılır.
     nlohmann::json dispatch(const nlohmann::json& msg);
 
 private:
-    std::ostream&              out_;
-    std::unique_ptr<IRProgram> irProgram_;
+    std::ostream&               out_;
+    std::unique_ptr<IRProgram>  irProgram_;
     std::unique_ptr<Interpreter> vm_;
-    int                        nextBpId_ = 1;
+    int                         nextBpId_   = 1;
+    // Child variablesReference'ları: scopes 1000+frameId kullandığı için
+    // çakışmasın diye 100000'den başlar. Her koşu devamında (continue/step)
+    // geçersizleşir — DAP spec'i de öyle söyler (resume → eski ref'ler ölür).
+    int                          nextVarRef_ = 100000;
+    std::unordered_map<int, Value> varRefs_;
 
-    nlohmann::json handleInitialize(const nlohmann::json& id,
-                                    const nlohmann::json& args);
-    nlohmann::json handleLaunch(const nlohmann::json& id,
-                                const nlohmann::json& args);
-    nlohmann::json handleSetBreakpoints(const nlohmann::json& id,
-                                        const nlohmann::json& args);
-    nlohmann::json handleContinue(const nlohmann::json& id,
-                                  const nlohmann::json& args);
-    nlohmann::json handleStepOver(const nlohmann::json& id,
-                                  const nlohmann::json& args);
-    nlohmann::json handleStepIn(const nlohmann::json& id,
-                                const nlohmann::json& args);
-    nlohmann::json handleThreads(const nlohmann::json& id,
-                                 const nlohmann::json& args);
-    nlohmann::json handleStackTrace(const nlohmann::json& id,
-                                    const nlohmann::json& args);
-    nlohmann::json handleScopes(const nlohmann::json& id,
-                                const nlohmann::json& args);
-    nlohmann::json handleVariables(const nlohmann::json& id,
-                                   const nlohmann::json& args);
-    nlohmann::json handleDisconnect(const nlohmann::json& id,
-                                    const nlohmann::json& args);
+    // Yeni yaşam döngüsü durumu
+    bool  initialized_    = false;
+    int   responseSeq_    = 100;     // cevap/event seq numaraları
 
+    // ── Handler'lar ──────────────────────────────────────────────────────────
+    nlohmann::json handleInitialize(const nlohmann::json& req);
+    nlohmann::json handleLaunch(const nlohmann::json& req);
+    nlohmann::json handleSetBreakpoints(const nlohmann::json& req);
+    nlohmann::json handleConfigurationDone(const nlohmann::json& req);
+    nlohmann::json handleContinue(const nlohmann::json& req);
+    nlohmann::json handleNext(const nlohmann::json& req);
+    nlohmann::json handleStepIn(const nlohmann::json& req);
+    nlohmann::json handleStepOut(const nlohmann::json& req);
+    nlohmann::json handlePause(const nlohmann::json& req);
+    nlohmann::json handleThreads(const nlohmann::json& req);
+    nlohmann::json handleStackTrace(const nlohmann::json& req);
+    nlohmann::json handleScopes(const nlohmann::json& req);
+    nlohmann::json handleVariables(const nlohmann::json& req);
+    nlohmann::json handleEvaluate(const nlohmann::json& req);
+    nlohmann::json handleTerminate(const nlohmann::json& req);
+    nlohmann::json handleDisconnect(const nlohmann::json& req);
+
+    // ── Yardımcılar ──────────────────────────────────────────────────────────
+    nlohmann::json makeResponse(int requestSeq, const std::string& command,
+                                const nlohmann::json& body,
+                                bool success = true);
     void sendEvent(const std::string& event, const nlohmann::json& body);
-    std::string valueToString(const Value& v) const;
+
+    // Değişken değerini DAP string'ine çevir (struct/array için özet)
+    std::string valueToString(const Value& v, int depth = 0) const;
+
+    // Ref taşıyan Value'yu kaydet, VS Code'un sonradan variables isteğinde
+    // bulacağı variablesReference numarasını döndür (Ref değilse 0).
+    int registerVarRef(const Value& v);
+    // Koşu devam ederken eski referanslar geçersizleşir.
+    void invalidateVarRefs();
+
+    // Struct/array child variable'ları oluştur (çocuklar da register edilir
+    // → istenildiği kadar derine inilebilir)
+    nlohmann::json buildChildVariables(const Value& v);
+
+    // "a", "a.x", "vecs[0].z" gibi basit ifadeleri frame slotlarından çözer.
+    // Başarısızsa nullptr-value döner (found=false).
+    bool resolveExpression(const std::string& expr, int frameId, Value& out) const;
+
+    // Koşu: budget döngüsüyle VM çalıştır, event'leri yönet
+    void runWithBudget();
 };
 
 #endif // SAQUT_DAP_HANDLER

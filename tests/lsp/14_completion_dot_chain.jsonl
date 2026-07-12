@@ -1,0 +1,3 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_chain.sqt","languageId":"sqt","version":1,"text":"struct Adres {\n    string sehir;\n    string sokak;\n}\n\nstruct Person {\n    string isim;\n    Adres adres;\n}\n\nint main() {\n    Person p;\n    p.adres.\n    return 0;\n}\n"}}}
+{"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_chain.sqt"},"position":{"line":12,"character":12}}}

@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut LSP — LspHandler (İstek Dispatch ve İşleme)
+// ============================================================================
+//
+// DİZİN:   src/lsp/lsp_handler.hpp
+// KATMAN:  LSP — Tüm LSP isteklerini dispatch eder
+//
+// AMAÇ:
+//   initialize, hover, definition, references, documentSymbol,
+//   completion, highlight isteklerini işler. Position encoding
+//   anlaşması ve gruplanmış publishDiagnostics yapar.
+//
+// ============================================================================
+
 #ifndef SAQUT_LSP_HANDLER
 #define SAQUT_LSP_HANDLER
 
@@ -57,6 +71,13 @@ private:
     // tüm handler'lar konum çevirisini buradan geçirir.
     int         toByteColumn(const std::string& content, int line, int character) const;
     LspPosition toLspPos(const std::string& content, const SourceLocation& loc) const;
+    // Satır-indeksli varyant: sembol/tanı başına çağrılan DÖNGÜLERDE bunu
+    // kullan — indeksisiz varyant satırı bulmak için dosya başından tarar,
+    // döngüde kuadratik patlar (90K satırlık dosyada documentSymbol dakikalarca
+    // %100 CPU yakıyordu).
+    LspPosition toLspPos(const std::string& content,
+                         const std::vector<int>& lineStarts,
+                         const SourceLocation& loc) const;
 
     // loc'un ait olduğu dosyanın içeriğini döndürür: state'in kendi dosyasıysa
     // buffer'ı doğrudan, değilse store_.contentForPath ile (açık belge ya da disk).

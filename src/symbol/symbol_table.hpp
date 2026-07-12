@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut Compiler — Sembol Tablosu (SymbolTable)
+// ============================================================================
+//
+// DİZİN:   src/symbol/symbol_table.hpp
+// KATMAN:  Faz 2 — Sembol ömrü yönetimi + struct/enum layout haritaları
+//
+// AMAÇ:
+//   Sembollerin (Symbol) ve kapsamların (Scope) ömrünü yönetir.
+//   structLayouts ve enumLayouts haritaları ile tip denetleyici ve IR
+//   üretecinin struct/enum düzenine erişmesini sağlar.
+//
+// ============================================================================
+
 #ifndef SAQUT_SYMBOL_TABLE
 #define SAQUT_SYMBOL_TABLE
 

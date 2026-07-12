@@ -1,3 +1,17 @@
+// ============================================================================
+// saQut Compiler — Yapısal Doğrulayıcı (StructuralValidator)
+// ============================================================================
+//
+// DİZİN:   src/semantic/structural_validator.hpp
+// KATMAN:  Faz 3 — break/continue/return bağlamı, iç-içe bildirim yasağı
+//
+// AMAÇ:
+//   AST'yi gezerek yapısal kuralları denetler: break/continue'in doğru
+//   bağlamda kullanımı (E004), fonksiyon dışı return (E005), fonksiyon
+//   içinde struct/enum/fonksiyon bildirimi yasağı (E011).
+//
+// ============================================================================
+
 #ifndef SAQUT_SEMANTIC_STRUCTURAL_VALIDATOR
 #define SAQUT_SEMANTIC_STRUCTURAL_VALIDATOR
 

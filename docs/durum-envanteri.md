@@ -466,15 +466,15 @@ Aşağıdaki kararlar kodda/CLAUDE.md'de yaşıyor ama ayrı ADR dosyası yok:
 
 4. **Decimal print formatı**: `1.5 + 2.5 = 4` çıktısı veriyor (4.0 değil). Tamsayı sonuçlarda nokta yok. Gerçek `decimal` için beklenti `4.00` ya da `4` olmalı — semantik netleştirilmeli.
 
-5. **Modül sistemi golden testi**: Hiç yok. Çok modüllü program yükleme test edilmiyor.
+5. **Modül sistemi golden testi**: `tests/golden/module/diamond.sqt` + `tests/module/cycle_*.sqt` (#78 ile eklendi).
 
-6. **GC mark-sweep (issue #56)**: `vm/object.cpp`'de `Heap` sınıfı var, `allocStruct/allocArray/markAll/sweepAll` iskelet mevcut. GC **tetiklenmiyor** (`collect()` çağrısı yok). Arena benzeri: nesneler heap'e ekleniyor ama serbest bırakılmıyor. `TODO.md`'de açık görev.
+6. **GC mark-sweep**: ÇÖZÜLDÜ (#77) — eşik tabanlı tetikleme `Interpreter::maybeCollect()` (instruction sınırı safepoint, adaptif eşik), kökler moduleSlots_ + callStack_ + pendingThrow_. `--gc-threshold=N` / `--gc-stats` CLI bayrakları; `tests/golden/gc/liveness.sqt` + run.sh "gc" bölümü.
 
 ### Yarım Kalanlar Özeti
 
 | Özellik | Durum |
 |---------|-------|
-| GC mark-sweep | İskelet var, collect() tetiklenmiyor |
+| GC mark-sweep | **ÇÖZÜLDÜ** (#77) — eşik tabanlı maybeCollect, stress/kapama bayrakları |
 | DAP değişken isimleri | Slot numaraları gösteriyor, sembol adı yok |
 | DAP satır bazlı adımlama | Instruction bazlı, satır bazlı değil |
 | Nested struct field | IR doğru, STRUCT_NEW iç struct tahsis etmiyor |

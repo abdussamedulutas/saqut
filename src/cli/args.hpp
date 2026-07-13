@@ -38,6 +38,8 @@ struct CliArgs {
     int  benchRuns   = 5;      // --runs=N: benchmark tekrar sayısı
     bool compileOnly = false;  // --compile-only: VM çalıştırmasını atla
     bool verbose     = false;  // --verbose: her aşamanın bitişini canlı yaz
+    int  gcThreshold = 0;      // --gc-threshold=N: GC eşiği (0 = VM varsayılanı, negatif = GC kapalı)
+    bool gcStats     = false;  // --gc-stats: koşu sonunda GC istatistiklerini stderr'e yaz
 };
 
 // ============================================================================
@@ -95,6 +97,14 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         }
         if (arg.compare(0, 7, "--runs=") == 0) {
             try { args.benchRuns = std::stoi(arg.substr(7)); } catch (...) {}
+            continue;
+        }
+        if (arg.compare(0, 15, "--gc-threshold=") == 0) {
+            try { args.gcThreshold = std::stoi(arg.substr(15)); } catch (...) {}
+            continue;
+        }
+        if (arg == "--gc-stats") {
+            args.gcStats = true;
             continue;
         }
         if (arg.compare(0, 5, "file:") == 0) {

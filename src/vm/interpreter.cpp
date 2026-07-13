@@ -254,6 +254,30 @@ bool Interpreter::shouldStop() {
 }
 
 // Faz 5: mevcut durumdan bütçeli/step'li devam et.
+// ─────────────────────────────────────────────────────────────────────────────
+// maybeCollect — eşik tabanlı mark-sweep tetikleme (#77, ADR-022)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Kökler: moduleSlots_ (modül-düzeyi değişkenler), callStack_ (her frame'in
+// slot'ları) ve pendingThrow_ (unwind sırasındaki Error nesnesi). Eşik
+// adaptif: toplama sonrası canlı kümenin 2 katına çıkar (küçülünce başlangıç
+// eşiğine iner) — canlı nesnesi çok programda her instruction'da sweep
+// koşulmasını önler, tetikleme sayısı deterministik kalır.
+
+void Interpreter::maybeCollect() {
+    if (gcThreshold_ <= 0 || heap_.allocCount < gcThreshold_) return;
+
+    for (auto& [id, slots] : moduleSlots_)
+        heap_.markSlots(slots);
+    for (const CallFrame& frame : callStack_)
+        heap_.markSlots(frame.slots);
+    if (pendingThrow_)
+        heap_.markValue(*pendingThrow_);
+
+    heap_.sweep();
+    gcThreshold_ = std::max(gcInitialThreshold_, heap_.allocCount * 2);
+}
+
 Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                                                     int startCallDepth) {
     if (callStack_.empty() || !vmInitialized_) {
@@ -320,6 +344,10 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             // Resume satırından çıkıldı — bundan sonra normal kontrol
             resumeSkipLine = 0;
         }
+
+        // GC safepoint (#77): instruction sınırı — tüm canlı nesneler bu
+        // noktada bir slot'a (frame/modül) ya da pendingThrow_'a bağlıdır.
+        maybeCollect();
 
         CallFrame& frame = callStack_.back();
 
@@ -567,9 +595,11 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
 
         // ── Dönüş ─────────────────────────────────────────────────────────
         //
-        // GC safepoint: frame pop'landıktan SONRA, dönüş değeri caller'a
-        // yazıldıktan SONRA tetiklenir — kök kümesi bu noktada kararlıdır.
-        // Döngüsel referanslar dahil erişilemeyen her nesne burada toplanır.
+        // GC (#77): eski "her RETURN'de koşulsuz collect" kaldırıldı — hem
+        // her dönüşte tüm modül slotlarını geçici vektöre kopyalıyordu hem de
+        // döngü İÇİNDE tahsis yapan program hiç toplanmıyordu (#67 zayıflığı).
+        // Toplama artık döngü başındaki eşik tabanlı maybeCollect() safepoint'i
+        // (dönüş değeri o noktada caller slot'una yazılmış olur — kök kararlı).
         case Opcode::RETURN: {
             Value returnValue    = frame.slots[instr.src];
             int   returnDestSlot = frame.returnDestSlot;
@@ -577,12 +607,6 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
 
             if (!callStack_.empty() && returnDestSlot != -1)
                 callStack_.back().slots[returnDestSlot] = returnValue;
-
-            // Tüm modüllerin global slotlarını kök olarak ver
-            std::vector<Value> allGlobals;
-            for (auto& [id, slots] : moduleSlots_)
-                allGlobals.insert(allGlobals.end(), slots.begin(), slots.end());
-            heap_.collect(allGlobals, callStack_);
 
             if (callStack_.empty()) {
                 lastReturnValue_ = returnValue.intValue;

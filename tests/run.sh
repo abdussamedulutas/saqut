@@ -59,4 +59,25 @@ for f in cycle_a self_import; do
 done
 echo "  2 geçti, 0 başarısız"
 
+# ── GC testleri (#77, ADR-022) ───────────────────────────────────────────────
+# 1) Varsayılan eşikle koşuda GC gerçekten tetikleniyor (runs >= 1)
+# 2) Stress modda (--gc-threshold=1) çıktı normal koşuyla aynı (canlılık)
+# 3) --gc-threshold=-1 otomatik GC'yi kapatıyor (runs=0)
+echo "=== gc ==="
+GC_SQT="$ROOT/tests/golden/gc/liveness.sqt"
+gcout=$("$SAQUT" run --gc-stats "$GC_SQT" 2>&1 >/dev/null)
+if ! echo "$gcout" | grep -Eq "gc: runs=[1-9]"; then
+    echo "  FAIL: varsayılan eşikte GC hiç koşmadı: $gcout"; exit 1
+fi
+stress=$("$SAQUT" run --gc-threshold=1 "$GC_SQT" 2>/dev/null)
+normal=$("$SAQUT" run "$GC_SQT" 2>/dev/null)
+if [ "$stress" != "$normal" ]; then
+    echo "  FAIL: stress modda (--gc-threshold=1) çıktı farklı"; exit 1
+fi
+gcoff=$("$SAQUT" run --gc-threshold=-1 --gc-stats "$GC_SQT" 2>&1 >/dev/null)
+if ! echo "$gcoff" | grep -q "runs=0"; then
+    echo "  FAIL: --gc-threshold=-1 GC'yi kapatmadı: $gcoff"; exit 1
+fi
+echo "  3 geçti, 0 başarısız"
+
 echo "=== TUM TESTLER GECTI ==="

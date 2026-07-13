@@ -117,9 +117,12 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - **Modül sistemi:** `import`/`export`, çok modüllü derleme; döngü tespiti
     `E_MODULE_CYCLE` (ADR-031, #78)
   - **Nested struct:** struct-tipli alanlar VarDecl anında özyinelemeli tahsis (ADR-029)
+  - **GC (#77, ADR-022):** eşik tabanlı mark-sweep — `Interpreter::maybeCollect()`
+    instruction sınırında (safepoint); kökler moduleSlots_ + frame slot'ları +
+    pendingThrow_; adaptif eşik (canlı×2). CLI: `--gc-threshold=N`, `--gc-stats`.
+    ⚠️ Kural: opcode ORTASINDA collect çağırma — slot'a bağlanmamış nesne toplanır.
 - **Henüz YOK (gerçek eksikler):**
   - `byte` tipi (henüz tanımlanmadı)
-  - GC `collect()` tetiklenmiyor — iskelet var, arena gibi çalışıyor (#77)
   - MIR JIT backend (#80) ve gömülü-runtime AOT `saqut build` (#81) — ADR-032
     ile kararlaştırıldı, henüz başlanmadı (⚠️ kullanıcı talimatı: MIR'e
     GELİNCE DUR ve sor; stdlib dalgasından önce builtin listesi onayı al)

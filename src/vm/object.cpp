@@ -4,7 +4,6 @@
 
 #include "vm/object.hpp"
 #include "vm/value.hpp"
-#include "vm/call_frame.hpp"
 
 // ── Yardımcı: tek bir nesneyi ve geçişli çocuklarını işaretle ────────────────
 
@@ -28,15 +27,6 @@ void Heap::markSlots(const std::vector<Value>& slots) {
         markValue(v);
 }
 
-// ── Heap::markRoots ──────────────────────────────────────────────────────────
-
-void Heap::markRoots(const std::vector<Value>&     globalSlots,
-                     const std::vector<CallFrame>& callStack) {
-    markSlots(globalSlots);
-    for (const CallFrame& frame : callStack)
-        markSlots(frame.slots);
-}
-
 // ── Heap::sweep ──────────────────────────────────────────────────────────────
 //
 // İntrusive listede iki işaretçiyle gezilir:
@@ -46,9 +36,10 @@ void Heap::markRoots(const std::vector<Value>&     globalSlots,
 // İşaretlenmemiş (erişilemeyen) nesneler listeden çıkarılır ve silinir.
 // İşaretlenmiş nesnelerin marked biti sıfırlanır — bir sonraki döngüye hazır.
 
-void Heap::sweep() {
-    Object** prev = &head;
-    Object*  cur  = head;
+int Heap::sweep() {
+    Object** prev  = &head;
+    Object*  cur   = head;
+    int      freed = 0;
 
     while (cur) {
         if (!cur->marked) {
@@ -58,6 +49,7 @@ void Heap::sweep() {
             cur   = cur->next;
             delete dead;
             --allocCount;
+            ++freed;
         } else {
             // Canlı nesne — işaret bitini sıfırla, ilerle
             cur->marked = false;
@@ -65,6 +57,10 @@ void Heap::sweep() {
             cur  = cur->next;
         }
     }
+
+    ++gcRuns;
+    freedTotal += freed;
+    return freed;
 }
 
 // ── ArrayObject::markChildren ────────────────────────────────────────────────

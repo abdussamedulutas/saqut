@@ -37,12 +37,12 @@ CallFrame
   └─ slotName(idx) → string
 
 Heap
-  ├─ objects_    : vector<GCList> — GC izleme listeleri
-  ├─ allocCount_ : int
-  ├─ alloc(obj)  → size_t (ref index)
-  ├─ get<T>(ref) → T*
-  ├─ collect()   — mark-sweep (şu an arena gibi, tetiklenmez)
-  └─ markSweepCollect() — iskelet hazır (#77)
+  ├─ head        : Object* — intrusive "tüm nesneler" listesi
+  ├─ allocCount  : int — canlı nesne sayısı
+  ├─ gcRuns / freedTotal — GC istatistikleri (--gc-stats)
+  ├─ allocArray / allocStruct — tahsis + listeye ekleme
+  ├─ markValue / markSlots — mark yapıtaşları (kökleri Interpreter verir)
+  └─ sweep() → int — işaretsizleri sil, işaret bitlerini sıfırla
 
 TryFrame (Interpreter iç struct)
   ├─ callStackDepth : int (unwind sınırı)
@@ -119,9 +119,14 @@ IRProgram (IRGenerator çıktısı)
 
 - **Slot-tabanlı (register benzeri)**: Stack-based değil. Her CallFrame'in
   sabit sayıda slotu vardır (`slotCount`). Operand'lar slot indeksi ile belirtilir.
-- **Heap + GC**: `Heap` sınıfı mark-sweep GC altyapısını içerir.
-  Şu an `collect()` tetiklenmez — arena gibi çalışır (#77). `markSweepCollect()`
-  iskeleti hazır.
+- **Heap + GC** (#77, ADR-022): taşımasız, stop-the-world mark-sweep.
+  Tetikleme eşik tabanlı: `Interpreter::maybeCollect()` her instruction
+  sınırında (safepoint) `allocCount >= gcThreshold_` bakar; toplama sonrası
+  eşik canlı kümenin 2 katına çıkar (adaptif, deterministik). Kökler:
+  `moduleSlots_` + `callStack_` frame slot'ları + `pendingThrow_` (unwind'daki
+  Error nesnesi). Opcode ORTASINDA collect çağrılmaz — slot'a bağlanmamış
+  nesne toplanırdı. CLI: `--gc-threshold=N` (negatif = kapalı), `--gc-stats`
+  (stderr'e runs/freed/live).
 - **Referans semantiği** (ADR-020): Struct/Array değerleri `Ref` (Heap index)
   olarak taşınır. Atama referans kopyalar, derin kopya yapılmaz.
 - **String immutable** (ADR-024): String`Value`'ler `strVal` olarak inline
@@ -140,8 +145,9 @@ IRProgram (IRGenerator çıktısı)
 
 ## Bilinen sınırlar / TODO
 
-- GC `collect()` tetiklenmez — arena gibi çalışır, bellek sızdırmaz ama asla
-  geri kazanmaz (#77).
+- GC mark aşaması özyinelemeli (`markChildren`) — çok derin nesne
+  grafiklerinde (milyonlarca iç içe referans) C++ yığınını zorlayabilir;
+  gerekirse açık işaretleme yığınına çevrilir.
 - `dispatchBuiltinMethod` switch-case ile elle yazılmıştır; yeni metod eklemek
   için hem builtin kaydı hem de dispatch güncellenmelidir.
 - `valueToJsonStr`/`structToJson` yalnızca debug içindir; serileştirme için

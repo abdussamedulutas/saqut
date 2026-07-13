@@ -77,7 +77,15 @@ inline int cmdRun(const CliArgs& args) {
     int exitCode = 0;
     try {
         Interpreter vm(program);
+        // GC (#77): --gc-threshold=N eşiği ezer (negatif = otomatik GC kapalı)
+        if (args.gcThreshold != 0) vm.setGCThreshold(args.gcThreshold);
         exitCode = vm.run();
+        // --gc-stats: golden testlerin stdout karşılaştırmasını bozmamak
+        // için stderr'e yazılır
+        if (args.gcStats)
+            std::cerr << "gc: runs=" << vm.gcRuns()
+                      << " freed=" << vm.gcFreedTotal()
+                      << " live=" << vm.heapAllocCount() << "\n";
     } catch (const std::exception& e) {
         std::cerr << "runtime error: " << e.what() << "\n";
         exitCode = 1;

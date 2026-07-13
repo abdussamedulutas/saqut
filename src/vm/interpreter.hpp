@@ -57,6 +57,14 @@ public:
     using OutputSink = std::function<void(const std::string&)>;
     void setOutputSink(OutputSink sink) { outputSink_ = std::move(sink); }
 
+    // ── GC (#77, ADR-022) ────────────────────────────────────────────────────
+    // Eşik tabanlı tetikleme: canlı nesne sayısı eşiği aşınca instruction
+    // sınırında (safepoint) mark-sweep koşar. n <= 0 → otomatik GC kapalı
+    // (yalnızca ~Heap temizler — eski arena davranışı).
+    void      setGCThreshold(int n) { gcInitialThreshold_ = n; gcThreshold_ = n; }
+    int       gcRuns() const       { return heap_.gcRuns; }
+    long long gcFreedTotal() const { return heap_.freedTotal; }
+
     // ── DAP API ───────────────────────────────────────────────────────────────
     enum class RunState { Running, Paused, Finished };
     // Faz 5: runUntilEvent dönüş nedeni
@@ -115,6 +123,15 @@ private:
 
     bool isBreakpoint() const;
     void checkBreakpoint();
+
+    // GC (#77): eşik aşıldıysa kökleri (moduleSlots_ + callStack_ +
+    // pendingThrow_) işaretleyip sweep koşar. YALNIZCA instruction sınırında
+    // çağrılmalı — opcode ortasında slot'a bağlanmamış nesne toplanabilir.
+    void maybeCollect();
+
+    static constexpr int kGCDefaultThreshold = 1024;
+    int gcInitialThreshold_ = kGCDefaultThreshold;
+    int gcThreshold_        = kGCDefaultThreshold; // bir sonraki tetikleme eşiği
 
     // Faz 5: bütçe/step kısıtlarını kontrol eder, true = durmalı
     bool shouldStop();

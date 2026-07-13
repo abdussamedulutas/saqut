@@ -7,7 +7,8 @@
 //
 // AMAÇ:
 //   ArrayObject ve StructObject için heap tahsisi, GCList ile mark-sweep
-//   garbage collector altyapısı. Şu an collect() tetiklenmez (#77).
+//   garbage collector altyapısı. Toplama Interpreter::maybeCollect() ile
+//   instruction sınırında (safepoint) eşik tabanlı tetiklenir (#77).
 //
 // ============================================================================
 
@@ -73,21 +74,20 @@ struct StructObject : Object {
 // ── Heap ─────────────────────────────────────────────────────────────────────
 //
 // Tahsis: allocArray / allocStruct — her yeni nesneyi intrusive listeye ekler.
-// Toplama: collect(globalSlots, callStack) — mark + sweep iki geçiş.
-//
-// Kök kaynakları:
-//   - globalSlots : program genelinde yaşayan değerler
-//   - callStack   : her aktif frame'in slot'ları (parametre + lokal + geçici)
+// Toplama: mark + sweep iki geçiş. Kökleri MARK EDEN Interpreter'dır
+// (Interpreter::maybeCollect) — kök kümesi VM'in iç yapısına bağlı olduğundan
+// (moduleSlots_ modül başına map, callStack_, uçuştaki pendingThrow_) Heap
+// yalnızca markValue/markSlots/sweep yapıtaşlarını sunar.
 //
 // Çocuk kaynakları:
 //   - ArrayObject::elements, StructObject::fields içindeki Ref değerleri
 //   (markChildren() bunları kurgular)
 
-struct CallFrame; // tam tanım call_frame.hpp'de
-
 struct Heap {
-    Object* head       = nullptr;
-    int     allocCount = 0;
+    Object*   head       = nullptr;
+    int       allocCount = 0;   // canlı (listede duran) nesne sayısı
+    int       gcRuns     = 0;   // toplam sweep sayısı (istatistik)
+    long long freedTotal = 0;   // toplam serbest bırakılan nesne (istatistik)
 
     ArrayObject* allocArray(int capacity = 0) {
         auto* obj = new ArrayObject(capacity);
@@ -113,22 +113,11 @@ struct Heap {
     // Bir slot dizisindeki tüm Value'ları tara.
     void markSlots(const std::vector<Value>& slots);
 
-    // Tüm kök kaynaklarını işaretle.
-    void markRoots(const std::vector<Value>&       globalSlots,
-                   const std::vector<CallFrame>&   callStack);
-
     // ── Sweep ────────────────────────────────────────────────────────────────
 
     // İşaretlenmemiş nesneleri sil; işaretlenenlerin bitini sıfırla.
-    void sweep();
-
-    // ── Tam döngü ────────────────────────────────────────────────────────────
-
-    void collect(const std::vector<Value>&     globalSlots,
-                 const std::vector<CallFrame>& callStack) {
-        markRoots(globalSlots, callStack);
-        sweep();
-    }
+    // Dönüş: bu turda serbest bırakılan nesne sayısı.
+    int sweep();
 
     // Program sonunda kalan her şeyi temizle.
     ~Heap() {

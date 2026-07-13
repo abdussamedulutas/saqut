@@ -1,0 +1,24 @@
+// GC canlılık testi (#77, ADR-022): döngü içinde 3000 çöp nesne üretilirken
+// (varsayılan eşik 1024 → koşu sırasında birden çok toplama olur) slot'tan
+// erişilebilen array, struct ve İÇ struct (markChildren yolu) sağ kalmalı.
+struct Ic { int x; }
+struct Dis { Ic ic; }
+
+int main() {
+    int[] kalici = [0];
+    Dis d;
+    d.ic.x = 7;
+
+    int i = 0;
+    while (i < 3000) {
+        Ic cop;
+        cop.x = i;
+        int eski = kalici[0];
+        kalici[0] = eski + 1;
+        i = i + 1;
+    }
+
+    print(kalici[0]);
+    print(d.ic.x);
+    return 0;
+}

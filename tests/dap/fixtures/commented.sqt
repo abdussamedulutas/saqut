@@ -1,0 +1,7 @@
+// bu satır yorum — breakpoint doğrulanmamalı (satır 1)
+
+int main() {
+    int x = 5;
+    print(x);
+    return 0;
+}

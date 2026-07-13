@@ -37,6 +37,9 @@ private:
     // Yeni yaşam döngüsü durumu
     bool  initialized_    = false;
     int   responseSeq_    = 100;     // cevap/event seq numaraları
+    // Faz 7 (#105): launch argümanından; false = configurationDone sonrası
+    // entry'de durmadan koşuya başla (DAP varsayılanı).
+    bool  stopOnEntry_    = false;
 
     // ── Handler'lar ──────────────────────────────────────────────────────────
     nlohmann::json handleInitialize(const nlohmann::json& req);

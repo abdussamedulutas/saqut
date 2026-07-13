@@ -1,17 +1,17 @@
 // ============================================================================
-// saQut DAP Handler — Faz 6: DAP Protokolünü Doğru Formatla
+// saQut DAP Handler — Faz 6–7: DAP Protokolü + Davranış Düzeltmeleri (#105)
 //
 // Tüm mesajlar DAP formatında: {"type":"request|response|event","seq":N,...}
 // jsonrpc/method/params zarfı KULLANILMAZ (Content-Length çerçevesi aynı kalır).
 //
-// TODO(faz6): continue sonrası VM tamamlanınca exited/terminated event'leri
-// gönderilmiyor — runUntilEvent(-1,-1) çağrısı RETURN'den sonra state=Finished
-// döndürüyor ama process çıkış yapmıyor. Sebep araştırılıyor.
-// TODO(faz6): breakpoint file-path eşleşmesi tam doğrulanmadı — golden test
-// senaryosu (wip_breakpoint) continue flow'u düzeltilene kadar ertelendi.
+// Faz 7: print çıktısı Interpreter outputSink'i üzerinden `output` event'ine
+// gider (protokol stdout'una çıplak bayt sızmaz); stopOnEntry launch argümanı
+// işlenir; setBreakpoints.verified lineToFirstIP'e bakar ve yollar
+// kanonikleştirilir (05–08 golden senaryoları).
 // ============================================================================
 
 #include "dap/dap_handler.hpp"
+#include <filesystem>
 #include "module/module_loader.hpp"
 #include "module/module_graph.hpp"
 #include "core/module_registry.hpp"
@@ -293,6 +293,16 @@ nlohmann::json DapHandler::handleLaunch(const nlohmann::json& req) {
 
     vm_ = std::make_unique<Interpreter>(*irProgram_);
 
+    // Faz 7 (#105): stopOnEntry launch argümanından okunur (DAP varsayılanı
+    // false); configurationDone buna göre entry'de durur ya da koşuya başlar.
+    stopOnEntry_ = args.value("stopOnEntry", false);
+
+    // Faz 7 (#105): print çıktısını output event'ine yönlendir — protokol
+    // stdout'una çıplak bayt sızmaz, VS Code Debug Console'da görünür.
+    vm_->setOutputSink([this](const std::string& text) {
+        sendEvent("output", {{"category", "stdout"}, {"output", text}});
+    });
+
     // VM'i ilklendir ama çalıştırma — configurationDone'da başlatılacak
     vm_->initForDebug();
 
@@ -309,6 +319,12 @@ nlohmann::json DapHandler::handleSetBreakpoints(const nlohmann::json& req) {
     if (args.contains("source") && args["source"].contains("path"))
         sourceFile = args["source"]["path"].get<std::string>();
 
+    // Faz 7 (#105): istemcinin yolu göreli/symlink'li gelebilir — VM'deki
+    // SourceLocation.filePath'ler kanoniktir (ModuleLoader weakly_canonical
+    // uygular); eşleşme için aynı biçime getir.
+    if (!sourceFile.empty())
+        sourceFile = std::filesystem::weakly_canonical(sourceFile).string();
+
     nlohmann::json bps = nlohmann::json::array();
     if (args.contains("breakpoints")) {
         for (const auto& bp : args["breakpoints"]) {
@@ -316,11 +332,11 @@ nlohmann::json DapHandler::handleSetBreakpoints(const nlohmann::json& req) {
             bool verified = false;
 
             if (vm_) {
-                // line→ip index'inde doğrula — eşleşen satır varsa verified=true
-                // VM henüz başlamamış olabilir, breakpoint'i yine de kaydet
-                vm_->setBreakpoint(sourceFile, line);
-                // Basit doğrulama: line > 0 ise verified
-                verified = (line > 0);
+                // Faz 7 (#105): gerçek doğrulama — Faz 5'in lineToFirstIP
+                // indeksinde (dosya, satır) var mı? Yorum/boş satır →
+                // verified:false (VS Code içi boş daire gösterir).
+                verified = vm_->isExecutableLine(sourceFile, line);
+                if (verified) vm_->setBreakpoint(sourceFile, line);
             }
 
             bps.push_back({
@@ -346,10 +362,14 @@ nlohmann::json DapHandler::handleConfigurationDone(const nlohmann::json& req) {
     nlohmann::json resp = makeResponse(seq, "configurationDone", {});
     JsonRpc::writeMessage(out_, resp);
 
-    // VM'i başlat — ilk instruction'da dur (entry)
-    vm_->stepInstruction();
-
-    sendEvent("stopped", {{"reason","entry"}, {"threadId",1}});
+    // Faz 7 (#105): stopOnEntry'ye saygı — true ise entry'de dur, false ise
+    // doğrudan koşuya başla (breakpoint'e çarpar ya da biter).
+    if (stopOnEntry_) {
+        vm_->stepInstruction();
+        sendEvent("stopped", {{"reason","entry"}, {"threadId",1}});
+    } else {
+        runWithBudget();
+    }
 
     return nullptr;
 }

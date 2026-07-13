@@ -15,6 +15,7 @@
 
 #include <vector>
 #include <optional>
+#include <functional>
 #include <set>
 #include <unordered_map>
 #include <utility>
@@ -50,6 +51,12 @@ public:
     void setVMTrace(BenchVMTrace* t) { vmTrace_ = t; }
     int  heapAllocCount() const { return heap_.allocCount; }
 
+    // Faz 7 (#105): program çıktısı kancası. DAP modunda print çıktısı
+    // protokol stdout'unu kirletmesin diye DapHandler output event'ine
+    // yönlendirilir. Varsayılan (boş) std::cout — CLI run/exec DEĞİŞMEZ.
+    using OutputSink = std::function<void(const std::string&)>;
+    void setOutputSink(OutputSink sink) { outputSink_ = std::move(sink); }
+
     // ── DAP API ───────────────────────────────────────────────────────────────
     enum class RunState { Running, Paused, Finished };
     // Faz 5: runUntilEvent dönüş nedeni
@@ -58,6 +65,9 @@ public:
     void setBreakpoint(const std::string& file, int line);
     void clearBreakpoint(const std::string& file, int line);
     void clearAllBreakpoints();
+    // Faz 7 (#105): (dosya, satır) çalıştırılabilir bir satıra denk geliyor mu?
+    // setBreakpoints.verified için Faz 5'in lineToFirstIP indeksinde arar.
+    bool isExecutableLine(const std::string& file, int line) const;
 
     RunState    state() const { return state_; }
     void        resume();
@@ -90,6 +100,7 @@ private:
     std::vector<TryFrame>  tryStack_;
     std::optional<Value>   pendingThrow_;
     BenchVMTrace*          vmTrace_ = nullptr;  // profil hook (bench modunda non-null)
+    OutputSink             outputSink_;         // Faz 7 (#105): boş = std::cout
 
     // DAP durumu
     RunState state_ = RunState::Running;

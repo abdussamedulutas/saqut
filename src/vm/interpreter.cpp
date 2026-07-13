@@ -78,6 +78,17 @@ void Interpreter::clearAllBreakpoints() {
     breakpoints_.clear();
 }
 
+// Faz 7 (#105): (dosya, satır) çalıştırılabilir mi? — setBreakpoints.verified.
+// Yorum/boş satıra konan breakpoint'e verified:false dönmek için Faz 5'in
+// lineToFirstIP indeksinde arar; dosya eşleşmesi ModuleRegistry üzerinden.
+bool Interpreter::isExecutableLine(const std::string& file, int line) const {
+    for (const auto& [name, fn] : program_.functions) {
+        if (fn.lineToFirstIP.count(line) == 0) continue;
+        if (program_.moduleRegistry.filePath(fn.moduleId) == file) return true;
+    }
+    return false;
+}
+
 bool Interpreter::isBreakpoint() const {
     if (callStack_.empty()) return false;
     const CallFrame& frame = callStack_.back();
@@ -243,6 +254,22 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
     stepStartDepth_ = startCallDepth;
     stepStartLine_  = (startCallDepth >= 0) ? currentSourceLine() : 0;
 
+    // Faz 7 (#105): breakpoint ÜSTÜNDE dururken devam edilirse aynı satıra
+    // yeniden takılma — bir kaynak satırı birden çok instruction ürettiğinden
+    // "üzerinde durduğumuz satır"dan çıkana kadar bp kontrolü atlanır.
+    // TODO(faz8): satır içi çağrıdan aynı satıra dönüşte bp yeniden vurur
+    // (GDB "her varışta bir kez" semantiği için hit-noktası takibi gerekir).
+    int         resumeSkipLine = 0;
+    std::string resumeSkipFile;
+    if (isBreakpoint() && !callStack_.empty()) {
+        const CallFrame& f = callStack_.back();
+        const Instruction& ins = f.function->instructions[f.instructionPointer];
+        resumeSkipLine = ins.sourceLine;
+        resumeSkipFile = ins.sourceFile.empty()
+            ? program_.moduleRegistry.filePath(f.function->moduleId)
+            : ins.sourceFile;
+    }
+
     // run() ile aynı döngü — ortak kod yolu
     while (!callStack_.empty()) {
         // Bütçe kontrolü: < 0 = sınırsız, == 0 = tükendi, > 0 = kalan hak
@@ -255,10 +282,32 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             return RunReason::BudgetExhausted;
         }
 
-        // Breakpoint kontrolü
+        // Breakpoint kontrolü (resume satırı atlanır, bkz. yukarı)
         if (isBreakpoint()) {
-            state_ = RunState::Paused;
-            return RunReason::Breakpoint;
+            bool onResumeLine = false;
+            if (resumeSkipLine > 0) {
+                int curLine = 0;
+                std::string curFile;
+                const CallFrame& f = callStack_.back();
+                if (f.function &&
+                    f.instructionPointer < (int)f.function->instructions.size()) {
+                    const Instruction& ins =
+                        f.function->instructions[f.instructionPointer];
+                    curLine = ins.sourceLine;
+                    curFile = ins.sourceFile.empty()
+                        ? program_.moduleRegistry.filePath(f.function->moduleId)
+                        : ins.sourceFile;
+                }
+                onResumeLine = (curLine == resumeSkipLine &&
+                                curFile == resumeSkipFile);
+            }
+            if (!onResumeLine) {
+                state_ = RunState::Paused;
+                return RunReason::Breakpoint;
+            }
+        } else {
+            // Resume satırından çıkıldı — bundan sonra normal kontrol
+            resumeSkipLine = 0;
         }
 
         CallFrame& frame = callStack_.back();
@@ -952,7 +1001,11 @@ void Interpreter::executeHostFunction(const std::string&       name,
     if (name == "print") {
         if (!argSlots.empty()) {
             const Value& val = slots[argSlots[0]];
-            std::cout << val.toString() << "\n";
+            // Faz 7 (#105): DAP modunda çıktı sink üzerinden output event'ine
+            // gider — protokol stdout'una çıplak bayt sızmaz.
+            std::string text = val.toString() + "\n";
+            if (outputSink_) outputSink_(text);
+            else             std::cout << text;
         }
         return;
     }

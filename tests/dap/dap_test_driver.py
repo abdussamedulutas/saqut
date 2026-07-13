@@ -26,19 +26,26 @@ def frame(obj) -> bytes:
 
 
 def read_all_messages(data: bytes):
+    # Faz 7 (#105): çerçeve DIŞI bayt = protokol kirliliği (ör. print çıktısı
+    # doğrudan stdout'a sızarsa) → test hatası. Her çerçeve tam olarak bir
+    # önceki çerçevenin bittiği yerde "Content-Length:" ile başlamalı.
     msgs = []
     i = 0
-    while True:
+    while i < len(data):
+        if not data[i:].startswith(b"Content-Length:"):
+            stray_end = data.find(b"Content-Length:", i)
+            stray = data[i:stray_end if stray_end != -1 else len(data)]
+            raise SystemExit(
+                f"HATA: çerçeve dışı {len(stray)} bayt tespit edildi "
+                f"(protokol kirliliği): {stray[:120]!r}")
         hdr_end = data.find(b"\r\n\r\n", i)
         if hdr_end == -1:
-            break
+            raise SystemExit("HATA: eksik çerçeve başlığı (\\r\\n\\r\\n yok)")
         header = data[i:hdr_end].decode("utf-8", errors="replace")
         length = None
         for line in header.split("\r\n"):
             if line.lower().startswith("content-length:"):
                 length = int(line.split(":", 1)[1].strip())
-        if length is None:
-            break
         body_start = hdr_end + 4
         body = data[body_start:body_start + length]
         msgs.append(json.loads(body.decode("utf-8")))

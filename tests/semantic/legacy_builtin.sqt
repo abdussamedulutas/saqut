@@ -1,0 +1,6 @@
+// ADR-033 (#85): eski element-tipi sözdizimi bir sürüm W006 uyarısıyla çalışır
+int main() {
+    int[] a = [1, 2];
+    print(int::length(a));
+    return 0;
+}

@@ -818,48 +818,140 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         break;
     }
 
-    // ── ScopeCall: E::method(args) — built-in metod çağrısı ───────────────
+    // ── ScopeCall: builtin metod çağrısı (ADR-033, #85) ────────────────────
+    //
+    // Üç yüzey sözdizimi aynı düğüme düşer:
+    //   1. UFCS nokta çağrısı (birincil): arr.push(12), s.upper(), p.toJson()
+    //      → dotCall=true, receiver arguments[0]; kategori receiver TİPİNDEN.
+    //   2. Ad alanı (ikincil): array::push(arr,12), string::upper(s),
+    //      struct::toJson(p) — sol taraf sabit kategori adı.
+    //   3. ESKİ element-tipi sözdizimi: int::push(arr,12), Person::toJson(p)
+    //      — W006 uyarısıyla çalışır, v0.7.0'da kaldırılacak.
     case ASTKind::ScopeCall: {
         auto* sc = (ScopeCallNode*)node;
         const auto& reg = BuiltinMethodRegistry::instance();
 
-        // leftTypeName'den element tipini ve struct olup olmadığını belirle
-        bool isStruct = false;
-        Type elemType = BuiltinMethodRegistry::resolveElemType(sc->leftTypeName);
-        if (elemType.isError()) {
-            // Bilinen scalar değil — struct mı?
-            if (table_.hasStruct(sc->leftTypeName)) {
-                isStruct  = true;
-                elemType  = Type::structType(sc->leftTypeName);
-            } else {
+        // Önce tüm argümanları (dotCall'da receiver dahil) denetle
+        std::vector<Type> argTypes;
+        for (auto* arg : sc->arguments)
+            argTypes.push_back(checkExpr(arg));
+
+        Type recvType        = argTypes.empty() ? Type::error() : argTypes[0];
+        bool isReceiverArray = recvType.isArray();
+
+        // Tanı mesajlarında görünen çağrı adı
+        std::string displayName = sc->dotCall
+            ? "." + sc->methodName
+            : sc->leftTypeName + "::" + sc->methodName;
+
+        bool        isStruct   = false;
+        Type        elemType   = Type::error();
+        std::string lookupName = sc->leftTypeName; // reg.lookup'un sol adı
+
+        if (sc->dotCall) {
+            // ── 1. UFCS: kategori receiver tipinden ──────────────────────
+            // Alan gölgeleme kuralı: receiver struct ve metod adı bir ALANSA
+            // builtin'e hiç bakılmaz — alan kazanır (alanlar çağrılabilir
+            // olmadığından bu bir hatadır, sessiz sürpriz değil).
+            bool fieldShadows = false;
+            if (recvType.isStruct()) {
+                auto lay = table_.structLayouts.find(recvType.structName);
+                if (lay != table_.structLayouts.end())
+                    for (auto& [fn, ft] : lay->second)
+                        if (fn == sc->methodName) { fieldShadows = true; break; }
+            }
+            if (fieldShadows) {
                 diag_.report("E001", sc->loc,
-                    "unknown type '" + sc->leftTypeName + "' in scope call",
-                    "use a known scalar type (int, float, string, ...) or a defined struct");
-                for (auto* arg : sc->arguments) checkExpr(arg);
+                    "'" + sc->methodName + "' is a field of struct '" +
+                    recvType.structName + "' and is not callable",
+                    "the field shadows the builtin method (ADR-033) — "
+                    "rename the field or use struct::" + sc->methodName + "(value)");
                 result = Type::error();
                 break;
             }
-        } else if (elemType.isStruct()) {
+            if (isReceiverArray && recvType.elementType) {
+                elemType   = *recvType.elementType;
+                lookupName = "array";
+                isStruct   = elemType.isStruct(); // struct-array: ar metodları geçerli
+            } else if (recvType.isString()) {
+                elemType   = Type::String();
+                lookupName = "string";
+            } else if (recvType.isStruct()) {
+                elemType   = recvType;
+                lookupName = recvType.structName;
+                isStruct   = true;
+            } else {
+                if (!recvType.isError())
+                    diag_.report("E001", sc->loc,
+                        "type '" + recvType.toString() + "' has no builtin methods",
+                        "dot-call works on array, string and struct values (ADR-033)");
+                result = Type::error();
+                break;
+            }
+        } else if (sc->leftTypeName == "array") {
+            // ── 2. array:: ad alanı — element tipi receiver'dan türetilir ──
+            if (!isReceiverArray) {
+                diag_.report("E003", sc->loc,
+                    "array::" + sc->methodName + " expects an array as first argument"
+                    + (argTypes.empty() ? "" : ", got '" + recvType.toString() + "'"),
+                    "example: array::push(arr, value)");
+                result = Type::error();
+                break;
+            }
+            elemType = recvType.elementType ? *recvType.elementType : Type::Int();
+            isStruct = elemType.isStruct();
+            // lookup'ta "array" sv/st dallarına düşmez, ar: bulunur
+        } else if (sc->leftTypeName == "struct") {
+            // ── 2. struct:: ad alanı ──────────────────────────────────────
+            if (!recvType.isStruct()) {
+                diag_.report("E003", sc->loc,
+                    "struct::" + sc->methodName + " expects a struct as first argument"
+                    + (argTypes.empty() ? "" : ", got '" + recvType.toString() + "'"),
+                    "example: struct::toJson(value)");
+                result = Type::error();
+                break;
+            }
+            elemType = recvType;
             isStruct = true;
+        } else {
+            // ── 3. ESKİ sözdizimi: ElemTip::method / StructAd::method ─────
+            elemType = BuiltinMethodRegistry::resolveElemType(sc->leftTypeName);
+            if (elemType.isError()) {
+                if (table_.hasStruct(sc->leftTypeName)) {
+                    isStruct = true;
+                    elemType = Type::structType(sc->leftTypeName);
+                } else {
+                    diag_.report("E001", sc->loc,
+                        "unknown type '" + sc->leftTypeName + "' in scope call",
+                        "use value.method(...) or the array::/string::/struct:: namespaces (ADR-033)");
+                    result = Type::error();
+                    break;
+                }
+            } else if (elemType.isStruct()) {
+                isStruct = true;
+            }
+            // string::upper(s) YENİ modelde de geçerli (string ad alanı) —
+            // uyarı yalnızca element-tipi kullanımına verilir: skaler/struct
+            // sol ad, ya da string:: ile ARRAY metodu (string::push(sarr,x)).
+            if (sc->leftTypeName != "string" || isReceiverArray) {
+                std::string suggestion = isReceiverArray
+                    ? "use value.method(...) or array::" + sc->methodName + "(value, ...)"
+                    : "use value." + sc->methodName + "(...) or struct::" + sc->methodName + "(value)";
+                diag_.report("W006", sc->loc,
+                    "deprecated builtin call syntax '" + displayName + "' — "
+                    "the element-type prefix will be removed in v0.7.0 (ADR-033)",
+                    suggestion);
+            }
         }
 
-        std::vector<Type> argTypes;
-        for (auto* arg : sc->arguments) {
-            argTypes.push_back(checkExpr(arg));
-        }
-
-        bool isReceiverArray = false;
-        if (!argTypes.empty()) {
-            isReceiverArray = argTypes[0].isArray();
-        }
-
-        const BuiltinMethod* bm = reg.lookup(sc->leftTypeName, sc->methodName, isStruct, isReceiverArray);
+        const BuiltinMethod* bm = reg.lookup(lookupName, sc->methodName, isStruct, isReceiverArray);
         if (!bm) {
             // Hata mesajında hangi tiplerin bu metodu desteklediğini söyle
+            std::string typeDesc = sc->dotCall ? recvType.toString() : sc->leftTypeName;
             diag_.report("E001", sc->loc,
-                "'" + sc->methodName + "' is not a built-in method for type '" + sc->leftTypeName + "'",
+                "'" + sc->methodName + "' is not a built-in method for type '" + typeDesc + "'",
                 std::string("use one of: length, push, pop, insert, remove, slice, reverse, concat, contains, indexOf, clear")
-                + (sc->leftTypeName == "string"
+                + (lookupName == "string"
                     ? " — or string methods: upper, lower, trim, split, substring, replace, repeat, charAt, indexOf, contains, startsWith, endsWith"
                     : "")
                 + (isStruct ? " — or struct methods: toJson, dump" : ""));
@@ -870,9 +962,10 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         // Argüman sayısı kontrolü
         if (sc->arguments.size() != bm->params.size()) {
             diag_.report("E008", sc->loc,
-                sc->leftTypeName + "::" + sc->methodName + " expects " +
+                displayName + " expects " +
                 std::to_string(bm->params.size()) + " argument(s), " +
-                std::to_string(sc->arguments.size()) + " given",
+                std::to_string(sc->arguments.size()) + " given"
+                + (sc->dotCall ? " (receiver counts as the first argument)" : ""),
                 "check the method signature");
             result = Type::error();
             break;
@@ -896,7 +989,7 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             if (!argType.isError() && !expectedType.isError()) {
                 if (!checkAssign(expectedType, argType, isLit,
                                  sc->arguments[i]->loc,
-                                 sc->leftTypeName + "::" + sc->methodName + " arg " + std::to_string(i + 1)))
+                                 displayName + " arg " + std::to_string(i + 1)))
                     anyError = true;
             }
         }

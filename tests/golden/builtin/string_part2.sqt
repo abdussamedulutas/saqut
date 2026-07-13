@@ -1,14 +1,14 @@
 int main() {
     string s = "hello world";
-    print(string::substring(s, 0, 5));
-    print(string::substring(s, 6, 5));
+    print(s.substring(0, 5));
+    print(s.substring(6, 5));
     
-    print(string::replace(s, "world", "saqut"));
+    print(s.replace("world", "saqut"));
     
     print(string::repeat("hi ", 3));
     
-    print(string::charAt(s, 0));
-    print(string::charAt(s, 6));
+    print(s.charAt(0));
+    print(s.charAt(6));
     
     return 0;
 }

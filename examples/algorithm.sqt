@@ -1,7 +1,7 @@
 // Örnek: Kabarcık sıralama + string işleme built-in metodlarla
 
 void bubbleSort(int[] arr) {
-    int n = int::length(arr);
+    int n = arr.length();
     int i = 0;
     while (i < n - 1) {
         int j = 0;
@@ -19,37 +19,37 @@ void bubbleSort(int[] arr) {
 
 int main() {
     int[] nums = [5, 2, 8, 1, 9, 3];
-    print(int::length(nums));
+    print(nums.length());
 
     bubbleSort(nums);
 
     int i = 0;
-    while (i < int::length(nums)) {
+    while (i < nums.length()) {
         print(nums[i]);
         i = i + 1;
     }
 
-    int? found = int::indexOf(nums, 8);
+    int? found = nums.indexOf(8);
     if (found != null) {
         print(found);
     }
 
-    int[] half = int::slice(nums, 0, 3);
-    print(int::length(half));
+    int[] half = nums.slice(0, 3);
+    print(half.length());
     print(half[0]);
     print(half[2]);
 
     string[] words = ["hello", "world", "saqut"];
     string[] upper_words = [];
     int k = 0;
-    while (k < string::length(words)) {
+    while (k < words.length()) {
         string w = string::upper(words[k]);
-        string::push(upper_words, w);
+        upper_words.push(w);
         k = k + 1;
     }
 
     int m = 0;
-    while (m < string::length(upper_words)) {
+    while (m < upper_words.length()) {
         print(upper_words[m]);
         m = m + 1;
     }

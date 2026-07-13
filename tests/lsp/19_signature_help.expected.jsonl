@@ -2,6 +2,6 @@
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "file://%FIXDIR%/sighelp.sqt"}}
 {"id": 2, "jsonrpc": "2.0", "result": {"activeParameter": 1, "activeSignature": 0, "signatures": [{"label": "int topla(int a, int b)", "parameters": [{"label": "int a"}, {"label": "int b"}]}]}}
 {"id": 3, "jsonrpc": "2.0", "result": {"activeParameter": 0, "activeSignature": 0, "signatures": [{"label": "void print(value)", "parameters": [{"label": "value"}]}]}}
-{"id": 4, "jsonrpc": "2.0", "result": {"activeParameter": 1, "activeSignature": 0, "signatures": [{"label": "push(T) → int", "parameters": [{"label": "T"}]}]}}
-{"id": 5, "jsonrpc": "2.0", "result": {"activeParameter": 0, "activeSignature": 0, "signatures": [{"label": "upper() → string", "parameters": []}]}}
+{"id": 4, "jsonrpc": "2.0", "result": {"activeParameter": 0, "activeSignature": 0, "signatures": [{"label": "push(T) → int", "parameters": [{"label": "T"}]}]}}
+{"id": 5, "jsonrpc": "2.0", "result": {"activeParameter": 0, "activeSignature": 0, "signatures": [{"label": "upper(string) → string", "parameters": [{"label": "string"}]}]}}
 {"id": 6, "jsonrpc": "2.0", "result": null}

@@ -126,6 +126,7 @@ inline const std::vector<DiagInfo>& diagnosticCatalog() {
         {"W002", DiagLevel::Warning, "Division by zero (constant expression)"},
         {"W003", DiagLevel::Warning, "Unreachable (dead) code"},
         {"W004", DiagLevel::Warning, "Implicit numeric widening"},
+        {"W006", DiagLevel::Warning, "Deprecated builtin call syntax (ADR-033)"},
         {"E901", DiagLevel::Error,   "Syntax error: unexpected token"},
         {"E902", DiagLevel::Error,   "Syntax error: expected type name after 'as'"},
         {"E903", DiagLevel::Error,   "Syntax error: expected member name"},

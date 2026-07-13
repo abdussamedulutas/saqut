@@ -889,12 +889,16 @@ nlohmann::json LspHandler::handleCompletion(const nlohmann::json& id,
         targetType = resolveChainType(*state, ctx.chain);
         if (targetType.isError()) return JsonRpc::makeResponse(id, items);
 
-        // Nullable / array wrapper'ları soy
-        while (targetType.isArray() && targetType.elementType)
-            targetType = *targetType.elementType;
+        // ADR-033 (#85): UFCS nokta çağrısı — receiver array/string ise
+        // builtin metodları öner (arr.push, s.upper). Struct-array'de
+        // alanlara zaten index'siz erişilemez; metod listesi doğru öneri.
+        if (targetType.isArray() || targetType.isString()) {
+            items = builtinMethodsForType(targetType, "");
+            return JsonRpc::makeResponse(id, items);
+        }
         if (!targetType.isStruct()) return JsonRpc::makeResponse(id, items);
 
-        // Struct alanlarını listele
+        // Struct: alanlar + struct builtin metodları (toJson/dump — ADR-033)
         auto it = state->symbolTable.structLayouts.find(targetType.structName);
         if (it != state->symbolTable.structLayouts.end()) {
             for (auto& [fieldName, fieldType] : it->second) {
@@ -904,6 +908,15 @@ nlohmann::json LspHandler::handleCompletion(const nlohmann::json& id,
                     {"detail", fieldType.toString()},
                 });
             }
+        }
+        for (auto& m : builtinMethodsForType(targetType, targetType.structName)) {
+            // Alan gölgeleme (ADR-033): aynı adlı alan varsa metod önerme —
+            // TypeChecker o çağrıyı zaten reddeder.
+            bool shadowed = false;
+            if (it != state->symbolTable.structLayouts.end())
+                for (auto& [fieldName, fieldType] : it->second)
+                    if (fieldName == m["label"].get<std::string>()) { shadowed = true; break; }
+            if (!shadowed) items.push_back(m);
         }
         return JsonRpc::makeResponse(id, items);
     }
@@ -1130,6 +1143,7 @@ nlohmann::json LspHandler::handleRename(const nlohmann::json& id,
 struct CallCtx {
     std::string callee;       // çağrılan fonksiyon/metod adı
     std::string scopeTarget;  // "x::push(" desenindeki x (builtin metod için)
+    std::string dotReceiver;  // "arr.push(" desenindeki arr (UFCS, ADR-033)
     int         activeParam = 0;
     bool        valid = false;
 };
@@ -1170,11 +1184,16 @@ static CallCtx findCallContext(DocumentState& state, int byteOffset) {
             ctx.valid       = true;
             // "x::adet(" deseni: builtin metod çağrısı — receiver'ı yakala.
             // Sol taraf değişken (identifier) ya da tip adı olabilir; tip
-            // adları (int::push, string::upper) KEYWORD token'dır.
+            // adları (string::upper, struct::toJson) KEYWORD token'dır.
             if (i + 3 < left.size() && left[i + 2]->token == "::" &&
                 (left[i + 3]->gettype() == "identifier" ||
                  left[i + 3]->gettype() == "keyword"))
                 ctx.scopeTarget = left[i + 3]->token;
+            // "arr.push(" deseni: UFCS nokta çağrısı (ADR-033) — receiver
+            // tek tanımlayıcıysa yakala (zincirli receiver şimdilik yok).
+            else if (i + 3 < left.size() && left[i + 2]->token == "." &&
+                     left[i + 3]->gettype() == "identifier")
+                ctx.dotReceiver = left[i + 3]->token;
             return ctx;
         }
         if (depth == 0) {
@@ -1210,8 +1229,12 @@ static nlohmann::json signatureForFunction(Symbol* sym) {
     return {{"label", label}, {"parameters", paramsArr}};
 }
 
-// BuiltinMethod kaydından SignatureInformation üret (receiver hariç).
-static nlohmann::json signatureForBuiltinMethod(const BuiltinMethod* m) {
+// BuiltinMethod kaydından SignatureInformation üret.
+// includeReceiver: `array::push(arr, x)` biçiminde receiver AÇIK ilk argümandır
+// — imzada görünmeli ki activeParameter hizalansın; UFCS'te (arr.push(x))
+// receiver örtük olduğundan atlanır.
+static nlohmann::json signatureForBuiltinMethod(const BuiltinMethod* m,
+                                                bool includeReceiver = false) {
     auto paramTypeStr = [](const ParamRule& p) -> std::string {
         switch (p.kind) {
             case ParamKind::Fixed:     return p.fixedType.toString();
@@ -1223,9 +1246,9 @@ static nlohmann::json signatureForBuiltinMethod(const BuiltinMethod* m) {
     };
     nlohmann::json paramsArr = nlohmann::json::array();
     std::string label = m->name + "(";
-    for (size_t i = 1; i < m->params.size(); ++i) {
+    for (size_t i = includeReceiver ? 0 : 1; i < m->params.size(); ++i) {
         std::string p = paramTypeStr(m->params[i]);
-        if (i > 1) label += ", ";
+        if (!paramsArr.empty()) label += ", ";
         label += p;
         paramsArr.push_back({{"label", p}});
     }
@@ -1255,23 +1278,40 @@ nlohmann::json LspHandler::handleSignatureHelp(const nlohmann::json& id,
 
     nlohmann::json sig;
 
-    if (!ctx.scopeTarget.empty()) {
-        // "x::push(" — builtin metod: receiver'ın tipinden kategoriye in
-        Symbol* recv = nullptr;
-        for (Symbol* s : state->symbolTable.allSymbols()) {
-            if (s->name == ctx.scopeTarget && s->kind != SymbolKind::Field) {
-                recv = s;
-                break;
-            }
-        }
-        Type recvType = recv ? recv->type : Type::fromName(ctx.scopeTarget);
-        if (!recvType.isError()) {
-            std::string leftName = recvType.isStruct()
-                ? recvType.structName : recvType.toString();
-            const BuiltinMethod* m = BuiltinMethodRegistry::instance().lookup(
-                leftName, ctx.callee, recvType.isStruct(), recvType.isArray());
-            if (m) sig = signatureForBuiltinMethod(m);
-        }
+    // Bir tipin builtin metod imzasını üret (UFCS + :: ortak yolu).
+    // includeReceiver: :: biçimlerinde receiver açık ilk argümandır.
+    auto builtinSigForType = [&](const Type& recvType, bool includeReceiver) {
+        if (recvType.isError()) return;
+        std::string leftName = recvType.isStruct()
+            ? recvType.structName : recvType.toString();
+        const BuiltinMethod* m = BuiltinMethodRegistry::instance().lookup(
+            leftName, ctx.callee, recvType.isStruct(), recvType.isArray());
+        if (m) sig = signatureForBuiltinMethod(m, includeReceiver);
+    };
+    // Sembol tablosunda ada göre tip bul (Field hariç)
+    auto typeOfName = [&](const std::string& name) -> Type {
+        for (Symbol* s : state->symbolTable.allSymbols())
+            if (s->name == name && s->kind != SymbolKind::Field)
+                return s->type;
+        return Type::fromName(name);
+    };
+
+    if (!ctx.dotReceiver.empty()) {
+        // "arr.push(" — UFCS (ADR-033): receiver örtük, imzada görünmez
+        builtinSigForType(typeOfName(ctx.dotReceiver), false);
+    } else if (ctx.scopeTarget == "array") {
+        // ADR-033 ad alanı: array::push(arr, x) — kategori sabit
+        const BuiltinMethod* m = BuiltinMethodRegistry::instance().lookup(
+            "array", ctx.callee, false, false);
+        if (m) sig = signatureForBuiltinMethod(m, true);
+    } else if (ctx.scopeTarget == "struct") {
+        // ADR-033 ad alanı: struct::toJson(p)
+        const BuiltinMethod* m = BuiltinMethodRegistry::instance().lookup(
+            "struct", ctx.callee, true, false);
+        if (m) sig = signatureForBuiltinMethod(m, true);
+    } else if (!ctx.scopeTarget.empty()) {
+        // "x::push(" — değişken ya da eski tip-adı sözdizimi (receiver açık)
+        builtinSigForType(typeOfName(ctx.scopeTarget), true);
     } else {
         // Kullanıcı fonksiyonu (ya da print gibi builtin fonksiyon sembolü)
         for (Symbol* s : state->symbolTable.allSymbols()) {

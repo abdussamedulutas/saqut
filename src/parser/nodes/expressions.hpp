@@ -71,10 +71,14 @@ public:
 // Built-in metod çağrısı: E::method(args)  (ör. int::push(arr, 12))
 class ScopeCallNode : public ExpressionNode {
 public:
-    std::string leftTypeName;   // "int", "float", "string", "Person", ...
+    std::string leftTypeName;   // "int", "array", "string", "struct", "Person", ...
     std::string methodName;     // "push", "pop", "upper", "toJson", ...
     std::vector<ASTNode*> arguments;
     int         builtinId = -1; // TypeChecker çözer; IR codegen kullanır
+    // ADR-033 (#85): UFCS nokta çağrısı — expr.method(args) şekeri.
+    // true ise leftTypeName boştur, receiver arguments[0]'dadır; kategori
+    // TypeChecker'da receiver TİPİNDEN çözülür. IR aynı CALLHOST'a düşer.
+    bool        dotCall = false;
 
     ScopeCallNode();
     ~ScopeCallNode() override { for (auto* a : arguments) delete a; }

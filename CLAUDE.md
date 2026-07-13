@@ -121,6 +121,11 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
     instruction sınırında (safepoint); kökler moduleSlots_ + frame slot'ları +
     pendingThrow_; adaptif eşik (canlı×2). CLI: `--gc-threshold=N`, `--gc-stats`.
     ⚠️ Kural: opcode ORTASINDA collect çağırma — slot'a bağlanmamış nesne toplanır.
+  - **Builtin sözdizimi (#85, ADR-033):** birincil UFCS nokta çağrısı
+    (`arr.push(12)`, `s.upper()`, `p.toJson()` — OOP değil, `f(a,b)` şekeri;
+    aynı IR); ikincil ad alanı (`array::push(arr,12)`, `string::upper(s)`,
+    `struct::toJson(p)`). Struct alanı builtin'i gölgeler (çağrı hatası).
+    Eski `ElemTip::metod` W006 ile çalışır, v0.7.0'da kalkar.
 - **Henüz YOK (gerçek eksikler):**
   - `byte` tipi (henüz tanımlanmadı)
   - MIR JIT backend (#80) ve gömülü-runtime AOT `saqut build` (#81) — ADR-032
@@ -198,6 +203,9 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   lightIR (sade opcode) ayrımı; `--optimized` bayrağıyla seçim.
 - `docs/adr/ADR-031-modul-dongus-politikasi.md` — Modül döngüsü tespiti: `seen_` seti
   sonsuz döngüyü önler ama döngüde açık hata üretmez (TODO).
+- `docs/adr/ADR-033-builtin-sozdizimi-ufcs.md` — Builtin reformu: UFCS nokta
+  çağrısı (birincil) + array::/string::/struct:: ad alanları; alan gölgeleme;
+  eski ElemTip::metod W006 ile v0.7.0'a kadar.
 - `docs/adr/ADR-032-mir-jit-gomulu-runtime-aot.md` — İkinci backend: MIR JIT +
   gömülü-runtime AOT (`saqut build`); shadow stack GC kökleri; C transpile/libgccjit
   elendi, LLVM fiilen kapalı; VM referans backend, diferansiyel test zorunlu.

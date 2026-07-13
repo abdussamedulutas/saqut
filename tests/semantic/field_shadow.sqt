@@ -1,0 +1,9 @@
+// ADR-033 (#85): struct alanı builtin metodu gölgeler — çağrı derleme hatası
+struct Kutu { int length; }
+
+int main() {
+    Kutu k;
+    k.length = 5;
+    print(k.length());
+    return 0;
+}

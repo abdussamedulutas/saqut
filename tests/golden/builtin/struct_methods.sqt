@@ -8,8 +8,8 @@ int main() {
     p.name = "Alice";
     p.age = 30;
 
-    print(Person::dump(p));
-    print(Person::toJson(p));
+    print(p.dump());
+    print(p.toJson());
 
     return 0;
 }

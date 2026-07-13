@@ -14,27 +14,27 @@ int main() {
     p2.x = 30;
     p2.y = 40;
 
-    int idx1 = Point::push(arr, p1);
-    int idx2 = Point::push(arr, p2);
+    int idx1 = arr.push(p1);
+    int idx2 = arr.push(p2);
     print(idx1);
     print(idx2);
-    print(Point::length(arr));
+    print(arr.length());
 
     print(arr[0].x);
     print(arr[1].y);
 
-    print(Point::contains(arr, p1));
-    print(Point::contains(arr, p2));
+    print(arr.contains(p1));
+    print(arr.contains(p2));
 
-    Point::reverse(arr);
+    arr.reverse();
     print(arr[0].x);
 
-    Point popped = Point::pop(arr);
+    Point popped = arr.pop();
     print(popped.x);
-    print(Point::length(arr));
+    print(arr.length());
 
-    Point::clear(arr);
-    print(Point::length(arr));
+    arr.clear();
+    print(arr.length());
 
     return 0;
 }

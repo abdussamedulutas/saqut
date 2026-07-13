@@ -1,14 +1,15 @@
-# Faz 5 (#84): signatureHelp — kullanıcı fonksiyonu (aktif parametre virgül
-# sayımıyla), print builtin'i ve `tip::metod(` builtin metod imzaları.
+# Faz 5 (#84) + ADR-033 (#85): signatureHelp — kullanıcı fonksiyonu (aktif
+# parametre virgül sayımıyla), print builtin'i, UFCS nokta çağrısı (dizi.push)
+# ve string:: ad alanı imzaları.
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}
-{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/sighelp.sqt","languageId":"sqt","version":1,"text":"int topla(int a, int b) {\n    return a + b;\n}\n\nint main() {\n    int[] dizi = [1, 2];\n    string ad = \"ali\";\n    int::push(dizi, 3);\n    string yeni = string::upper(ad);\n    int x = topla(1, 2);\n    print(x);\n    return 0;\n}\n"}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/sighelp.sqt","languageId":"sqt","version":1,"text":"int topla(int a, int b) {\n    return a + b;\n}\n\nint main() {\n    int[] dizi = [1, 2];\n    string ad = \"ali\";\n    dizi.push(3);\n    string yeni = string::upper(ad);\n    int x = topla(1, 2);\n    print(x);\n    return 0;\n}\n"}}}
 # topla(1, |2) — ikinci parametre aktif
 {"jsonrpc":"2.0","id":2,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://%FIXDIR%/sighelp.sqt"},"position":{"line":9,"character":21}}}
 # print(|x) — builtin fonksiyon
 {"jsonrpc":"2.0","id":3,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://%FIXDIR%/sighelp.sqt"},"position":{"line":10,"character":10}}}
-# int::push(dizi, |3) — builtin array metodu, ikinci parametre aktif
-{"jsonrpc":"2.0","id":4,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://%FIXDIR%/sighelp.sqt"},"position":{"line":7,"character":20}}}
-# string::upper(ad|) — builtin string metodu
+# dizi.push(|3) — UFCS nokta çağrısı (ADR-033), receiver örtük
+{"jsonrpc":"2.0","id":4,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://%FIXDIR%/sighelp.sqt"},"position":{"line":7,"character":14}}}
+# string::upper(ad|) — string ad alanı, receiver imzada açık
 {"jsonrpc":"2.0","id":5,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://%FIXDIR%/sighelp.sqt"},"position":{"line":8,"character":34}}}
 # Çağrı bağlamı yok (deyim ortası) — null
 {"jsonrpc":"2.0","id":6,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://%FIXDIR%/sighelp.sqt"},"position":{"line":11,"character":8}}}

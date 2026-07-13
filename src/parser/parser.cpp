@@ -340,13 +340,15 @@ ASTNode* Parser::parseExpression(uint16_t precedence) {
 
 // E::method(args) kalıbını ayrıştır: hem type-keyword hem IDENTIFIER başlangıçları için.
 // Koşul: (type_kw | IDENTIFIER) COLON_COLON IDENTIFIER LPAREN
+// ADR-033 (#85): `struct::toJson(p)` ad alanı çağrısı için KW_STRUCT da sol
+// tarafta geçerli ("array" zaten IDENTIFIER olarak eşleşir).
 static bool isScopeCallPattern(const ParserToken& ct, const ParserToken& la1,
                                 const ParserToken& la2, const ParserToken& la3)
 {
     bool leftIsType = ct.is({
         TokenType::KW_INT, TokenType::KW_FLOAT_TYPE, TokenType::KW_DOUBLE,
         TokenType::KW_DECIMAL, TokenType::KW_BOOL, TokenType::KW_CHAR,
-        TokenType::KW_STRING_TYPE
+        TokenType::KW_STRING_TYPE, TokenType::KW_STRUCT
     }) || ct.type == TokenType::IDENTIFIER;
     return leftIsType
         && la1.type == TokenType::COLON_COLON
@@ -572,13 +574,41 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
             return left;
         }
 
+        std::string memberName = currentToken().token->token;
+        nextToken();
+
+        // ADR-033 (#85): UFCS nokta çağrısı — expr.method(args).
+        // `a.f(b)` yalnızca `f(a, b)` şekeridir (OOP değil): receiver
+        // arguments[0] olur, TypeChecker alan gölgelemesini ve builtin
+        // kategorisini receiver TİPİNDEN çözer, IR eski `::` çağrısıyla
+        // birebir aynı CALLHOST'a düşer.
+        if (!arrow && currentToken().type == TokenType::LPAREN) {
+            ScopeCallNode* sc = new ScopeCallNode();
+            sc->loc        = ct.token ? ct.token->loc : SourceLocation{};
+            sc->methodName = memberName;
+            sc->dotCall    = true;
+            sc->arguments.push_back(left);
+            left->parent = sc;
+
+            nextToken(); // tüket: (
+            if (currentToken().type != TokenType::RPAREN) {
+                sc->arguments.push_back(parseExpression(0));
+                while (currentToken().type == TokenType::COMMA) {
+                    nextToken();
+                    sc->arguments.push_back(parseExpression(0));
+                }
+            }
+            if (currentToken().type == TokenType::RPAREN)
+                nextToken(); // tüket: )
+            return sc;
+        }
+
         MemberAccessNode* ma = new MemberAccessNode();
         ma->loc     = ct.token ? ct.token->loc : SourceLocation{};
         ma->object = left;
-        ma->member = currentToken().token->token;
+        ma->member = memberName;
         ma->arrow  = arrow;
         left->parent = ma;
-        nextToken();
         return ma;
     }
 

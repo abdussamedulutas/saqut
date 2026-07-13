@@ -1,33 +1,33 @@
 int main() {
     int[] a = [10, 20, 30];
-    print(int::length(a));          // 3
-    print(int::push(a, 40));        // 3 (index of new element)
-    print(int::length(a));          // 4
-    print(int::pop(a));             // 40
-    print(int::length(a));          // 3
+    print(a.length());          // 3
+    print(a.push(40));        // 3 (index of new element)
+    print(a.length());          // 4
+    print(a.pop());             // 40
+    print(a.length());          // 3
     
-    print(int::insert(a, 1, 15));   // 1
+    print(a.insert(1, 15));   // 1
     print(a[1]);                    // 15
-    print(int::remove(a, 1));       // 15
+    print(a.remove(1));       // 15
     print(a[1]);                    // 20
     
-    int[] b = int::slice(a, 1, 3);
-    print(int::length(b));          // 2
+    int[] b = a.slice(1, 3);
+    print(b.length());          // 2
     print(b[0]);                    // 20
 
-    int::reverse(b);
+    b.reverse();
     print(b[0]);                    // 30
 
-    int[] c = int::concat(a, b);
-    print(int::length(c));          // 5
+    int[] c = a.concat(b);
+    print(c.length());          // 5
 
-    print(int::contains(c, 20));    // 1 (true)
-    print(int::contains(c, 99));    // 0 (false)
+    print(c.contains(20));    // 1 (true)
+    print(c.contains(99));    // 0 (false)
 
-    print(int::indexOf(c, 30));     // 2
-    print(int::indexOf(c, 99));     // null
+    print(c.indexOf(30));     // 2
+    print(c.indexOf(99));     // null
 
-    int::clear(c);
-    print(int::length(c));          // 0
+    c.clear();
+    print(c.length());          // 0
     return 0;
 }

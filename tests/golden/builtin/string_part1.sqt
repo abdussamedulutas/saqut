@@ -1,13 +1,13 @@
 int main() {
     string s = "  Hello World  ";
-    print(string::length(s));
-    print(string::upper(s));
-    print(string::lower(s));
-    print(string::trim(s));
+    print(s.length());
+    print(s.upper());
+    print(s.lower());
+    print(s.trim());
 
     string csv = "a,b,c";
-    string[] parts = string::split(csv, ",");
-    print(string::length(parts));
+    string[] parts = csv.split(",");
+    print(parts.length());
     print(parts[0]);
     print(parts[1]);
     print(parts[2]);

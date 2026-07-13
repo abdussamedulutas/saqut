@@ -80,4 +80,21 @@ if ! echo "$gcoff" | grep -q "runs=0"; then
 fi
 echo "  3 geçti, 0 başarısız"
 
+# ── Builtin sözdizimi testleri (ADR-033, #85) ────────────────────────────────
+# 1) Eski ElemTip::metod sözdizimi W006 uyarısı verir ama çalışır (exit 0)
+# 2) Struct alanı builtin'i gölgeler: k.length() alan varken derleme hatası
+echo "=== builtin sözdizimi ==="
+legout=$("$SAQUT" check "$ROOT/tests/semantic/legacy_builtin.sqt" 2>/dev/null) || {
+    echo "  FAIL: legacy_builtin.sqt derlenmeliydi (yalnızca W)"; exit 1; }
+if ! echo "$legout" | grep -q "W006"; then
+    echo "  FAIL: eski sözdizimi W006 uyarısı üretmedi"; exit 1
+fi
+if out=$("$SAQUT" check "$ROOT/tests/semantic/field_shadow.sqt" 2>/dev/null); then
+    echo "  FAIL: field_shadow.sqt derlenmemeliydi (alan gölgeleme)"; exit 1
+fi
+if ! echo "$out" | grep -q "is a field of struct"; then
+    echo "  FAIL: alan gölgeleme tanısı beklenen mesajı içermiyor"; exit 1
+fi
+echo "  2 geçti, 0 başarısız"
+
 echo "=== TUM TESTLER GECTI ==="

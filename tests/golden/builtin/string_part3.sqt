@@ -2,17 +2,17 @@ int main() {
     string s = "hello world";
     
     // indexOf returns int? (which might print as null or the value)
-    print(string::indexOf(s, "world"));
-    print(string::indexOf(s, "saqut"));
+    print(s.indexOf("world"));
+    print(s.indexOf("saqut"));
     
-    print(string::contains(s, "world"));
-    print(string::contains(s, "saqut"));
+    print(s.contains("world"));
+    print(s.contains("saqut"));
     
-    print(string::startsWith(s, "hello"));
-    print(string::startsWith(s, "world"));
+    print(s.startsWith("hello"));
+    print(s.startsWith("world"));
     
-    print(string::endsWith(s, "world"));
-    print(string::endsWith(s, "hello"));
+    print(s.endsWith("world"));
+    print(s.endsWith("hello"));
     
     return 0;
 }

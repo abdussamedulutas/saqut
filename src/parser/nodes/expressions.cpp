@@ -5,12 +5,12 @@
 #include "parser/nodes/expressions.hpp"
 #include "parser/ast_json.hpp"
 
-// ScopeCallNode — built-in metod çağrısı: E::method(args)
+// ScopeCallNode — built-in metod çağrısı: E::method(args) / recv.method(args)
 ScopeCallNode::ScopeCallNode() { kind = ASTKind::ScopeCall; }
 void ScopeCallNode::log(int indent) {
     std::cout << jsonIndent(indent) << Color::SoftMavi << "ScopeCall" << Color::Reset
-              << " " << Color::SoftPembe << leftTypeName << Color::Reset
-              << Color::SoftGri << "::" << Color::Reset
+              << " " << Color::SoftPembe << (dotCall ? "<recv>" : leftTypeName) << Color::Reset
+              << Color::SoftGri << (dotCall ? "." : "::") << Color::Reset
               << Color::SoftYesil << methodName << Color::Reset << "\n";
     for (auto* arg : arguments) arg->log(indent + 1);
 }
@@ -20,6 +20,7 @@ std::string ScopeCallNode::toJson(int depth) {
     obj.add("leftType",   leftTypeName);
     obj.add("method",     methodName);
     obj.add("builtinId",  builtinId);
+    if (dotCall) obj.add("dotCall", true); // ADR-033: UFCS — eski AST JSON'ları değişmez
     obj.addArray("arguments", [&]() {
         for (auto* arg : arguments) obj.addItem(arg->toJson(depth + 2));
     });

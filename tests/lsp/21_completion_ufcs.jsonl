@@ -1,0 +1,9 @@
+# ADR-033 (#85): UFCS dot completion — array receiver'da builtin metodlar
+# (push, pop, length...), string receiver'da string metodları önerilir.
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_ufcs.sqt","languageId":"sqt","version":1,"text":"int main() {\n    int[] dizi = [1, 2];\n    string ad = \"ali\";\n    dizi.\n    return 0;\n}\n"}}}
+# dizi. → array metodları
+{"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_ufcs.sqt"},"position":{"line":3,"character":9}}}
+# ad'ı string yap: didChange ile "ad." iste
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_ufcs.sqt","version":2},"contentChanges":[{"text":"int main() {\n    int[] dizi = [1, 2];\n    string ad = \"ali\";\n    ad.\n    return 0;\n}\n"}]}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://%FIXDIR%/completion_ufcs.sqt"},"position":{"line":3,"character":7}}}

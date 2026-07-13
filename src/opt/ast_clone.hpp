@@ -282,6 +282,7 @@ inline ASTNode* deepClone(ASTNode* node) {
         dst->leftTypeName  = src->leftTypeName;
         dst->methodName    = src->methodName;
         dst->builtinId     = src->builtinId;
+        dst->dotCall       = src->dotCall;
         for (auto* arg : src->arguments) {
             ASTNode* ca = deepClone(arg);
             ca->parent = dst;

@@ -120,15 +120,17 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - **Henüz YOK (gerçek eksikler):**
   - `byte` tipi (henüz tanımlanmadı)
   - GC `collect()` tetiklenmiyor — iskelet var, arena gibi çalışıyor (#77)
-  - DAP satır bazlı adımlama + sembol adları — Faz 5 ile zemin tamamlandı
-    (IR satır tablosu %100, slotNames, runUntilEvent, stepLine/stepOver/stepOut,
-    lineToFirstIP breakpoint eşlemesi). Faz 6 tamam — DAP protokolü doğru
-    formatla yeniden yazıldı (initialize+initialized sırası, launch→configurationDone
-    yaşam döngüsü, stackTrace per-frame sourceFile, variables slotName ile gerçek
-    isimler, `tests/dap/` 3 golden senaryo). continue sonrası exited/terminated
-    event gönderme + breakpoint dosya yolu eşleşmesi TODO(faz6). (#79)
   - MIR JIT backend (#80) ve gömülü-runtime AOT `saqut build` (#81) — ADR-032
-    ile kararlaştırıldı, henüz başlanmadı
+    ile kararlaştırıldı, henüz başlanmadı (⚠️ kullanıcı talimatı: MIR'e
+    GELİNCE DUR ve sor; stdlib dalgasından önce builtin listesi onayı al)
+- **DAP Faz 7–9 tamam (#105, 0.5.0):** print → output event (Interpreter
+  outputSink seam'i — protokol stdout'u temiz, sürücüde çerçeve-dışı bayt
+  kalkanı); stopOnEntry işleniyor; verified lineToFirstIP'e bakıyor (yol
+  kanonik); gerçek pause (FrameReader — DAP okuma yolu std::cin DEĞİL,
+  stdio tamponu pipe baytlarını yutuyordu; bütçe turları + tur arası poll);
+  fetch-öncesi adım kontrolü (satır sınırındaki instruction yutulması
+  düzeltildi — print adımlamada çalışmıyordu); duraklama satırı = sıradaki
+  instruction. `tests/dap/` 10 senaryo.
 - **LSP/DAP kurtarma planı** (`docs/prompt-lsp-dap-kurtarma.md`, Faz 0–6):
   Faz 0 tamam — `tests/lsp/` golden test altyapısı kuruldu. Faz 1 tamam —
   `ModuleLoader` artık bir `SourceOverlay` seam'i (`src/module/module_loader.hpp`)

@@ -1,8 +1,11 @@
-# saQut — LSP/DAP Kurtarma Planı: KALAN İŞLER (Sonnet Handoff Promptu)
+# saQut — LSP/DAP Kurtarma Planı: TAMAMLANDI
 
-> **Bu belge bir yapay zekaya verilecek görev promptudur.**
-> Orijinal plan Faz 0–6'ydı ve **tamamlandı** (aşağıdaki özet). Bu belge yalnızca
-> doğrulama sırasında tespit edilen **kalan işleri** içerir: Faz 7–9.
+> **ARŞİV (2026-07-13):** Faz 0–9'un tamamı bitti. Faz 7–9 issue #105 ile
+> uygulandı (commit'ler 0.5.0 dalında): output sink + stopOnEntry + gerçek
+> verified (Faz 7), FrameReader + non-blocking bütçe döngüsü + gerçek pause
+> (Faz 8), fetch-öncesi adım kontrolü (satır sınırındaki instruction'ın
+> yutulması düzeltildi) + duraklama satırı semantiği + step_lines kapsamı
+> (Faz 9). `tests/dap/` 10 senaryo. Aşağıdaki metin tarihsel plandır.
 >
 > **ÇALIŞMA DİSİPLİNİ (ihlal etme):**
 > 1. **Her oturumda YALNIZCA BİR faz uygula.** Faz bitmeden sonrakine geçme.

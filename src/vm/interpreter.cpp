@@ -145,6 +145,12 @@ int Interpreter::currentSourceLine() const {
     if (callStack_.empty()) return 0;
     const CallFrame& f = callStack_.back();
     int ip = f.instructionPointer;
+    // Faz 9 (#105): duraklama semantiği — SIRADAKİ (henüz çalışmamış)
+    // instruction'ın satırı raporlanır; adım kontrolü fetch ÖNCESİNE
+    // alındığından durulan nokta ip'nin kendisidir. Fonksiyon sonundaysa
+    // son çalışan instruction'ın satırına düşülür.
+    if (f.function && ip >= 0 && ip < (int)f.function->instructions.size())
+        return f.function->instructions[ip].sourceLine;
     if (f.function && ip > 0 && ip - 1 < (int)f.function->instructions.size())
         return f.function->instructions[ip - 1].sourceLine;
     return 0;
@@ -195,9 +201,14 @@ std::string Interpreter::frameFunctionName(int depth) const {
 int Interpreter::frameSourceLine(int depth) const {
     if (depth < 0 || depth >= (int)callStack_.size()) return 0;
     const CallFrame& f = callStack_[(int)callStack_.size() - 1 - depth];
-    int ip = f.instructionPointer - 1;
+    // Faz 9 (#105): aktif frame'de (depth 0) durulan nokta = SIRADAKİ
+    // instruction; üst frame'lerde ip dönüş adresidir — çağrıyı yapan
+    // satır (ip-1'deki CALL) raporlanır.
+    int ip = (depth == 0) ? f.instructionPointer : f.instructionPointer - 1;
     if (f.function && ip >= 0 && ip < (int)f.function->instructions.size())
         return f.function->instructions[ip].sourceLine;
+    if (f.function && ip - 1 >= 0 && ip - 1 < (int)f.function->instructions.size())
+        return f.function->instructions[ip - 1].sourceLine;
     return 0;
 }
 
@@ -330,6 +341,20 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             continue;
         }
 
+        // Adım kontrolü (stepOver/stepLine): SIRADAKİ instruction yeni bir
+        // satıra aitse o instruction ÇALIŞMADAN dur. Faz 9 (#105) düzeltmesi:
+        // eski konum (fetch SONRASI) satır sınırındaki ilk instruction'ı
+        // yutuyordu — print gibi tek-instruction'lık satırlar adımlamada
+        // hiç çalışmıyordu.
+        if (stepStartLine_ > 0 && stepStartDepth_ >= 0) {
+            int nextLine = frame.function->instructions[frame.instructionPointer].sourceLine;
+            int curDepth = (int)callStack_.size();
+            if (nextLine > 0 && nextLine != stepStartLine_ && curDepth <= stepStartDepth_) {
+                state_ = RunState::Paused;
+                return RunReason::StepDone;
+            }
+        }
+
         const Instruction& instr = frame.function->instructions[frame.instructionPointer];
         frame.instructionPointer++;
         if (runBudget_ > 0) runBudget_--;
@@ -337,16 +362,6 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         // Profil hook
         if (vmTrace_) [[unlikely]]
             vmTrace_->pushDispatch(static_cast<uint8_t>(instr.opcode));
-
-        // Adım kontrolü (stepOver/stepLine): instruction ÇALIŞTIRILDıKTAN sonra
-        if (stepStartLine_ > 0 && stepStartDepth_ >= 0) {
-            int curLine = currentSourceLine();
-            int curDepth = (int)callStack_.size();
-            if (curLine > 0 && curLine != stepStartLine_ && curDepth <= stepStartDepth_) {
-                state_ = RunState::Paused;
-                return RunReason::StepDone;
-            }
-        }
 
         switch (instr.opcode) {
 

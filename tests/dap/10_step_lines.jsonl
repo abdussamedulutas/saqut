@@ -1,0 +1,11 @@
+# Faz 9 (#105): next (stepOver) satır satır ilerler — ardışık stopped(step)
+# sonrası stackTrace satırları artar; çağrı içeren satırda (fibonacci(n))
+# next çağrının İÇİNE GİRMEZ (frame sayısı 1 kalır, satır main'de ilerler).
+{"type":"request","seq":1,"command":"initialize","arguments":{"clientID":"vscode","adapterID":"sqt","pathFormat":"path","linesStartAt1":true,"columnsStartAt1":true}}
+{"type":"request","seq":2,"command":"launch","arguments":{"program":"%FIXDIR%/fib.sqt","stopOnEntry":true}}
+{"type":"request","seq":3,"command":"configurationDone","arguments":{}}
+{"type":"request","seq":4,"command":"next","arguments":{"threadId":1}}
+{"type":"request","seq":5,"command":"stackTrace","arguments":{"threadId":1}}
+{"type":"request","seq":6,"command":"next","arguments":{"threadId":1}}
+{"type":"request","seq":7,"command":"stackTrace","arguments":{"threadId":1}}
+{"type":"request","seq":10,"command":"disconnect","arguments":{}}

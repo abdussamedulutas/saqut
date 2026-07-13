@@ -1,0 +1,7 @@
+{"body": {"supportTerminateDebuggee": true, "supportsConditionalBreakpoints": false, "supportsConfigurationDoneRequest": true, "supportsEvaluateForHovers": true, "supportsExceptionInfoRequest": false, "supportsFunctionBreakpoints": false, "supportsGotoTargetsRequest": false, "supportsHitConditionalBreakpoints": false, "supportsSetVariable": false, "supportsStepBack": false, "supportsStepInTargetsRequest": false, "supportsTerminateRequest": true}, "command": "initialize", "request_seq": 1, "seq": 100, "success": true, "type": "response"}
+{"body": null, "event": "initialized", "seq": 101, "type": "event"}
+{"body": null, "command": "launch", "request_seq": 2, "seq": 102, "success": true, "type": "response"}
+{"body": null, "command": "configurationDone", "request_seq": 3, "seq": 103, "success": true, "type": "response"}
+{"body": null, "command": "pause", "request_seq": 4, "seq": 104, "success": true, "type": "response"}
+{"body": {"reason": "pause", "threadId": 1}, "event": "stopped", "seq": 105, "type": "event"}
+{"body": null, "command": "disconnect", "request_seq": 5, "seq": 106, "success": true, "type": "response"}

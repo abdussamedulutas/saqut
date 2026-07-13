@@ -8,9 +8,11 @@
 #include "vendor/nlohmann/json.hpp"
 #include "lsp/json_rpc.hpp"
 #include "dap/dap_types.hpp"
+#include "dap/frame_reader.hpp"
 #include "vm/interpreter.hpp"
 #include "ir/ir_program.hpp"
 #include "vm/value.hpp"
+#include <deque>
 #include <ostream>
 #include <memory>
 #include <unordered_map>
@@ -23,8 +25,14 @@ public:
     // Event'ler doğrudan out_'a yazılır.
     nlohmann::json dispatch(const nlohmann::json& msg);
 
+    // Faz 8 (#105): DAP okuma yolu std::cin DEĞİL — FrameReader (fd tabanlı).
+    // Server ana döngüsü de runWithBudget'ın tur-arası kontrolü de aynı
+    // okuyucuyu kullanır; stdio tamponunun baytları yutması diye bir şey yok.
+    FrameReader& reader() { return reader_; }
+
 private:
     std::ostream&               out_;
+    FrameReader                 reader_;
     std::unique_ptr<IRProgram>  irProgram_;
     std::unique_ptr<Interpreter> vm_;
     int                         nextBpId_   = 1;
@@ -82,8 +90,15 @@ private:
     // Başarısızsa nullptr-value döner (found=false).
     bool resolveExpression(const std::string& expr, int frameId, Value& out) const;
 
-    // Koşu: budget döngüsüyle VM çalıştır, event'leri yönet
+    // Koşu: budget döngüsüyle VM çalıştır, event'leri yönet.
+    // Faz 8 (#105): tur arası stdin kontrolü — pause işlenir, diğer istekler
+    // pendingRequests_'e kuyruklanıp koşu durunca drainPendingRequests ile işlenir.
     void runWithBudget();
+    void drainPendingRequests();
+
+    // Faz 8 (#105): bütçe turu boyutu — tur arası pause gecikmesinin üst sınırı.
+    static constexpr int kRunBudgetChunk = 100000;
+    std::deque<nlohmann::json> pendingRequests_;
 };
 
 #endif // SAQUT_DAP_HANDLER

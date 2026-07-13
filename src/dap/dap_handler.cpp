@@ -12,6 +12,9 @@
 
 #include "dap/dap_handler.hpp"
 #include <filesystem>
+#include <iostream>
+#include <poll.h>
+#include <unistd.h>
 #include "module/module_loader.hpp"
 #include "module/module_graph.hpp"
 #include "core/module_registry.hpp"
@@ -160,30 +163,76 @@ nlohmann::json DapHandler::buildChildVariables(const Value& v) {
 
 // ── Koşu döngüsü ────────────────────────────────────────────────────────────
 // continue/step sonrası VM'i bütçeli çalıştır, uygun event'i gönder.
+//
+// Faz 8 (#105): sınırsız runUntilEvent yerine bütçe TURLARI — her turun
+// arasında stdin'de bekleyen mesaj var mı bakılır. `pause` gelirse koşu
+// bırakılır (DAP sırası: pause response'u stopped event'inden ÖNCE yazılır);
+// diğer istekler kuyruklanır ve koşu durunca işlenir. Böylece sonsuz döngülü
+// program DAP sunucusunu kilitlemez.
 
 void DapHandler::runWithBudget() {
     if (!vm_) return;
     invalidateVarRefs(); // koşu devam ediyor → eski variablesReference'lar öldü
-    Interpreter::RunReason reason = vm_->runUntilEvent(-1, -1);
 
-    switch (reason) {
-        case Interpreter::RunReason::Breakpoint:
-            sendEvent("stopped", {{"reason","breakpoint"}, {"threadId",1}});
-            break;
-        case Interpreter::RunReason::StepDone:
-            sendEvent("stopped", {{"reason","step"}, {"threadId",1}});
-            break;
-        case Interpreter::RunReason::Finished:
-            sendEvent("exited", {{"exitCode", 0}});
-            sendEvent("terminated", {});
-            break;
-        case Interpreter::RunReason::BudgetExhausted:
-            // Budget tükendi — pause için yer tutucu
-            sendEvent("stopped", {{"reason","pause"}, {"threadId",1}});
-            break;
-        case Interpreter::RunReason::Error:
-            sendEvent("stopped", {{"reason","exception"}, {"threadId",1}});
-            break;
+    while (true) {
+        Interpreter::RunReason reason = vm_->runUntilEvent(kRunBudgetChunk, -1);
+
+        switch (reason) {
+            case Interpreter::RunReason::Breakpoint:
+                sendEvent("stopped", {{"reason","breakpoint"}, {"threadId",1}});
+                drainPendingRequests();
+                return;
+            case Interpreter::RunReason::StepDone:
+                sendEvent("stopped", {{"reason","step"}, {"threadId",1}});
+                drainPendingRequests();
+                return;
+            case Interpreter::RunReason::Finished:
+                sendEvent("exited", {{"exitCode", 0}});
+                sendEvent("terminated", {});
+                drainPendingRequests();
+                return;
+            case Interpreter::RunReason::Error:
+                sendEvent("stopped", {{"reason","exception"}, {"threadId",1}});
+                drainPendingRequests();
+                return;
+            case Interpreter::RunReason::BudgetExhausted:
+                // Tur arası: bekleyen istemci mesajına bak
+                if (reader_.hasPending()) {
+                    auto msg = reader_.readMessage();
+                    if (!msg.is_null() && !msg.is_discarded()) {
+                        std::string cmd = msg.value("command", "");
+                        if (cmd == "pause") {
+                            int seq = msg.value("seq", 0);
+                            // DAP sırası: response ÖNCE, stopped SONRA
+                            JsonRpc::writeMessage(out_,
+                                makeResponse(seq, "pause", {}));
+                            sendEvent("stopped",
+                                {{"reason","pause"}, {"threadId",1}});
+                            drainPendingRequests();
+                            return;
+                        }
+                        // pause değil — koşu durunca işlenmek üzere kuyrukla
+                        pendingRequests_.push_back(std::move(msg));
+                    }
+                } else if (reader_.eof()) {
+                    // İstemci gitti (EOF) — sonsuz döngüde busy-hang kalma
+                    sendEvent("terminated", {});
+                    return;
+                }
+                continue; // koşuya devam
+        }
+    }
+}
+
+// Koşu sırasında kuyruklanan istekleri işle (koşu durdu — artık güvenli).
+// dispatch yeniden runWithBudget çağırabilir (ör. kuyruklanmış continue).
+void DapHandler::drainPendingRequests() {
+    while (!pendingRequests_.empty()) {
+        nlohmann::json msg = std::move(pendingRequests_.front());
+        pendingRequests_.pop_front();
+        nlohmann::json resp = dispatch(msg);
+        if (!resp.is_null())
+            JsonRpc::writeMessage(out_, resp);
     }
 }
 
@@ -453,8 +502,9 @@ nlohmann::json DapHandler::handleStepOut(const nlohmann::json& req) {
 
 nlohmann::json DapHandler::handlePause(const nlohmann::json& req) {
     int seq = req.value("seq", 0);
-    // Pause: mevcut uygulamada runUntilEvent budget döngüsü olmadığından
-    // şu an sadece cevap döner. Gerçek pause ileride (non-blocking run loop).
+    // Faz 8 (#105): koşu SIRASINDA gelen pause runWithBudget'ın tur-arası
+    // stdin kontrolünde yakalanır (response + stopped orada yazılır).
+    // Buraya düşen pause, VM zaten durmuşken gelmiştir — yalnızca onayla.
     return makeResponse(seq, "pause", {});
 }
 

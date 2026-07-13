@@ -14,6 +14,8 @@
 #ifndef SAQUT_LSP_DOCUMENT_STORE
 #define SAQUT_LSP_DOCUMENT_STORE
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <unordered_map>
 #include <memory>
@@ -67,6 +69,28 @@ struct DocumentState {
     DocumentState(const DocumentState&) = delete;
     DocumentState& operator=(const DocumentState&) = delete;
 };
+
+// Faz 5 (#84): bildirim konumundan tanımlayıcının gerçek byte offset'ini bulur.
+// Symbol::definitionLoc bildirim BAŞINI gösterir ("int deger"de `int` token'ı) —
+// rename gibi tanımlayıcının kendisini hedefleyen işlemler için içerikte
+// declOffset'ten ileriye doğru `name`in tam-kelime ilk geçişi aranır.
+// Bulunamazsa -1 (arama penceresi: bildirim başlığı için 256 bayt yeterli).
+inline int identOffsetFromDecl(const std::string& content, int declOffset,
+                               const std::string& name) {
+    if (declOffset < 0 || name.empty()) return -1;
+    auto isWord = [](unsigned char c) { return std::isalnum(c) || c == '_'; };
+    size_t limit = std::min(content.size(),
+                            static_cast<size_t>(declOffset) + 256 + name.size());
+    for (size_t i = declOffset; i + name.size() <= limit; ++i) {
+        if (content.compare(i, name.size(), name) != 0) continue;
+        bool startOk = (i == 0) || !isWord(static_cast<unsigned char>(content[i - 1]));
+        size_t after = i + name.size();
+        bool endOk = (after >= content.size()) ||
+                     !isWord(static_cast<unsigned char>(content[after]));
+        if (startOk && endOk) return static_cast<int>(i);
+    }
+    return -1;
+}
 
 class DocumentStore {
 public:

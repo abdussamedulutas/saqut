@@ -1,0 +1,10 @@
+# Faz 5 (#84): rename — tanım NOKTASINDAN yeniden adlandırma; tanım + tüm
+# kullanımlar tek WorkspaceEdit'te döner (tanım edit'i tanımlayıcıyı hedefler,
+# bildirim başındaki tip adını DEĞİL).
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://%FIXDIR%/rename_local.sqt","languageId":"sqt","version":1,"text":"int topla(int a, int b) {\n    return a + b;\n}\n\nint main() {\n    int deger = topla(2, 3);\n    int y = topla(deger, 5);\n    print(deger);\n    return y;\n}\n"}}}
+{"jsonrpc":"2.0","id":2,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://%FIXDIR%/rename_local.sqt"},"position":{"line":5,"character":8},"newName":"sonuc"}}
+# Builtin'i yeniden adlandırma reddedilir
+{"jsonrpc":"2.0","id":3,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://%FIXDIR%/rename_local.sqt"},"position":{"line":7,"character":5},"newName":"yaz"}}
+# Anahtar kelimeye yeniden adlandırma reddedilir
+{"jsonrpc":"2.0","id":4,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://%FIXDIR%/rename_local.sqt"},"position":{"line":5,"character":8},"newName":"while"}}

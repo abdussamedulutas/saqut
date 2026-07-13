@@ -6,6 +6,7 @@
 #include "lsp/position.hpp"
 #include "builtin/builtin_methods.hpp"
 #include <algorithm>
+#include <cctype>
 #include <map>
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13,11 +14,60 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 nlohmann::json LspHandler::dispatch(const nlohmann::json& msg) {
-    if (msg.is_discarded() || !msg.contains("method")) return nullptr;
+    if (msg.is_discarded() || !msg.is_object()) return nullptr;
+
+    nlohmann::json id = msg.value("id", nlohmann::json(nullptr));
+
+    // Faz 6 (#84): method eksik ya da string değilse (bozuk istemci) çökme —
+    // istek ise InvalidRequest dön, notification ise sessizce at.
+    if (!msg.contains("method") || !msg["method"].is_string()) {
+        if (!id.is_null())
+            return JsonRpc::makeError(id, -32600, "Invalid request: missing method");
+        return nullptr;
+    }
 
     std::string method = msg["method"].get<std::string>();
-    nlohmann::json id  = msg.value("id", nlohmann::json(nullptr));
     nlohmann::json params = msg.value("params", nlohmann::json::object());
+
+    // Faz 6 (#84): params doğrulaması. nlohmann::json'un CONST operator[]'ı
+    // eksik anahtarda assert/abort eder (istisna DEĞİL — try/catch yakalamaz);
+    // bozuk istemci mesajı sunucuyu düşürmesin diye handler'lara girmeden
+    // burada doğrula: istek ise InvalidParams dön, notification ise at.
+    if (method.rfind("textDocument/", 0) == 0) {
+        auto invalidParams = [&]() -> nlohmann::json {
+            if (!id.is_null())
+                return JsonRpc::makeError(id, -32602, "Invalid params: " + method);
+            return nullptr;
+        };
+        if (!params.contains("textDocument") ||
+            !params["textDocument"].contains("uri") ||
+            !params["textDocument"]["uri"].is_string())
+            return invalidParams();
+
+        static const std::vector<std::string> positional = {
+            "textDocument/definition",        "textDocument/hover",
+            "textDocument/references",        "textDocument/documentHighlight",
+            "textDocument/completion",        "textDocument/rename",
+            "textDocument/signatureHelp",
+        };
+        bool needsPos = std::find(positional.begin(), positional.end(),
+                                  method) != positional.end();
+        if (needsPos && (!params.contains("position") ||
+                         !params["position"].contains("line") ||
+                         !params["position"]["line"].is_number_integer() ||
+                         !params["position"].contains("character") ||
+                         !params["position"]["character"].is_number_integer()))
+            return invalidParams();
+
+        if (method == "textDocument/rename" &&
+            (!params.contains("newName") || !params["newName"].is_string()))
+            return invalidParams();
+
+        if (method == "textDocument/didOpen" &&
+            (!params["textDocument"].contains("text") ||
+             !params["textDocument"]["text"].is_string()))
+            return nullptr; // notification — sessizce at
+    }
 
     if (method == "initialize")
         return handleInitialize(id, params);
@@ -65,6 +115,12 @@ nlohmann::json LspHandler::dispatch(const nlohmann::json& msg) {
     if (method == "textDocument/completion")
         return handleCompletion(id, params);
 
+    if (method == "textDocument/rename")
+        return handleRename(id, params);
+
+    if (method == "textDocument/signatureHelp")
+        return handleSignatureHelp(id, params);
+
     // Bilinmeyen metod — null döndür (notification) veya boş cevap
     if (!id.is_null())
         return JsonRpc::makeError(id, -32601, "Method not found: " + method);
@@ -105,6 +161,10 @@ nlohmann::json LspHandler::handleInitialize(const nlohmann::json& id,
         {"completionProvider", {
             {"triggerCharacters", nlohmann::json::array({":", "."})}
         }},
+        {"renameProvider",            true},
+        {"signatureHelpProvider", {
+            {"triggerCharacters", nlohmann::json::array({"(", ","})}
+        }},
     };
     nlohmann::json result = {
         {"capabilities", capabilities},
@@ -128,8 +188,11 @@ void LspHandler::handleDidChange(const nlohmann::json& params) {
     int         version = params["textDocument"].value("version", 0);
     std::string content;
 
-    if (params.contains("contentChanges") && !params["contentChanges"].empty()) {
-        content = params["contentChanges"].back()["text"].get<std::string>();
+    if (params.contains("contentChanges") && params["contentChanges"].is_array() &&
+        !params["contentChanges"].empty()) {
+        // Faz 6 (#84): "text" alanı eksikse const operator[] abort eder — value() kullan.
+        const auto& last = params["contentChanges"].back();
+        if (last.is_object()) content = last.value("text", "");
     }
 
     DocumentState& state = store_.update(uri, content, version);
@@ -489,6 +552,17 @@ nlohmann::json LspHandler::handleDocumentHighlight(const nlohmann::json& id,
 //     + globaller önerilir; başka fonksiyonun lokali ASLA önerilmez
 //   - Builtin metodlar BuiltinMethodRegistry'den üretilir
 //     (src/builtin/builtin_methods.hpp — tek doğruluk kaynağı)
+
+// Dil anahtar kelimeleri — completion önerileri ve rename hedef-ad doğrulaması
+// ortak kullanır.
+static const std::vector<std::string> kKeywords = {
+    "int","float","bool","string","void",
+    "if","else","while","for","return",
+    "true","false","null",
+    "struct","enum","import","export",
+    "break","continue","throw","try","catch",
+    "switch","case","default","as"
+};
 
 // CompletionItemKind: Function=3, Variable=6, Field=5, Struct=22, Enum=13, EnumMember=20, Keyword=14
 static int completionKind(SymbolKind k) {
@@ -890,18 +964,329 @@ nlohmann::json LspHandler::handleCompletion(const nlohmann::json& id,
     }
 
     // Anahtar kelimeler
-    static const std::vector<std::string> keywords = {
-        "int","float","bool","string","void",
-        "if","else","while","for","return",
-        "true","false","null",
-        "struct","enum","import","export",
-        "break","continue","throw","try","catch",
-        "switch","case","default","as"
-    };
-    for (const auto& kw : keywords) {
+    for (const auto& kw : kKeywords) {
         if (!prefix.empty() && kw.rfind(prefix, 0) != 0) continue;
         items.push_back({{"label", kw}, {"kind", 14}});
     }
 
     return JsonRpc::makeResponse(id, items);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rename (Faz 5, #84)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Hedef ad geçerli bir tanımlayıcı mı? (ASCII kural: [A-Za-z_][A-Za-z0-9_]*,
+// anahtar kelime değil)
+static bool isValidIdentifier(const std::string& name) {
+    if (name.empty()) return false;
+    auto isAlpha = [](unsigned char c) { return std::isalpha(c) || c == '_'; };
+    auto isAlnum = [](unsigned char c) { return std::isalnum(c) || c == '_'; };
+    if (!isAlpha(static_cast<unsigned char>(name[0]))) return false;
+    for (char c : name)
+        if (!isAlnum(static_cast<unsigned char>(c))) return false;
+    for (const auto& kw : kKeywords)
+        if (kw == name) return false;
+    return true;
+}
+
+nlohmann::json LspHandler::handleRename(const nlohmann::json& id,
+                                         const nlohmann::json& params) {
+    std::string uri     = params["textDocument"]["uri"].get<std::string>();
+    int         line    = params["position"]["line"].get<int>();
+    int         ch      = params["position"]["character"].get<int>();
+    std::string newName = params["newName"].get<std::string>();
+
+    DocumentState* state = store_.get(uri);
+    if (!state) return JsonRpc::makeResponse(id, nullptr);
+
+    Symbol* sym = findSymbolAt(*state, line, ch);
+    if (!sym) return JsonRpc::makeResponse(id, nullptr);
+
+    // Builtin (print, Error, ...) yeniden adlandırılamaz — tanımı kullanıcı
+    // kodunda değil.
+    if (sym->isBuiltin || !sym->definitionLoc.isValid())
+        return JsonRpc::makeError(id, -32602,
+            "cannot rename builtin symbol: " + sym->name);
+
+    if (!isValidIdentifier(newName))
+        return JsonRpc::makeError(id, -32602,
+            "invalid identifier: '" + newName + "'");
+
+    // Tanım + tüm referanslar; (dosya, offset) ile tekilleştir — aynı konum
+    // hem definitionLoc hem references'ta görünürse çifte edit üretme.
+    std::vector<SourceLocation> locs;
+    {
+        // definitionLoc bildirim BAŞINI gösterir ("int deger"de `int` token'ı) —
+        // edit tanımlayıcının kendisini hedeflemeli, yoksa tip adı bozulur.
+        SourceLocation defLoc     = sym->definitionLoc;
+        std::string    defContent = contentForLoc(*state, defLoc);
+        int identOff = identOffsetFromDecl(defContent, defLoc.offset, sym->name);
+        if (identOff >= 0 && identOff != defLoc.offset) {
+            std::vector<int> starts = buildLineStarts(defContent);
+            auto it = std::upper_bound(starts.begin(), starts.end(), identOff);
+            int lineIdx   = static_cast<int>(std::distance(starts.begin(), it)) - 1;
+            defLoc.offset = identOff;
+            defLoc.line   = lineIdx + 1;
+            defLoc.column = identOff - starts[lineIdx] + 1;
+        }
+        locs.push_back(defLoc);
+    }
+    for (const auto& ref : sym->references)
+        if (ref.isValid()) locs.push_back(ref);
+    // Dosya başına içerik + satır indeksi bir kez kurulur (handleReferences
+    // ile aynı desen) — import taraması ve edit üretimi ortak kullanır.
+    std::map<std::string, std::pair<std::string, std::vector<int>>> fileCache;
+    auto fileData = [&](const std::string& fp)
+        -> std::pair<const std::string*, const std::vector<int>*> {
+        if (fp == state->filePath) return {&state->content, &state->lineStarts};
+        auto it = fileCache.find(fp);
+        if (it == fileCache.end()) {
+            std::string c = store_.contentForPath(fp);
+            it = fileCache.emplace(fp,
+                    std::make_pair(std::move(c), std::vector<int>{})).first;
+            it->second.second = buildLineStarts(it->second.first);
+        }
+        return {&it->second.first, &it->second.second};
+    };
+
+    // Import bağlayıcıları: `import { helper } from "..."` içindeki ad sembol
+    // tablosunda referans olarak KAYITLI DEĞİL (ImportDeclNode ad başına konum
+    // taşımıyor — TODO(#84): konum eklenince bu tarama kalkar). Rename sonrası
+    // kod bozulmasın diye referans geçen her dosyanın import satırlarında
+    // yalnızca {...} arasındaki tam-kelime geçişler de edit'e dahil edilir
+    // ("from \"helper.sqt\"" yol string'i bilerek kapsam dışı).
+    {
+        std::vector<std::string> files;
+        for (const auto& l : locs)
+            if (std::find(files.begin(), files.end(), l.filePath) == files.end())
+                files.push_back(l.filePath);
+        auto isWord = [](unsigned char c) { return std::isalnum(c) || c == '_'; };
+        for (const auto& fp : files) {
+            auto [content, starts] = fileData(fp);
+            for (size_t li = 0; li < starts->size(); ++li) {
+                size_t ls = (*starts)[li];
+                size_t le = (li + 1 < starts->size())
+                    ? (size_t)(*starts)[li + 1] : content->size();
+                std::string lineStr = content->substr(ls, le - ls);
+                size_t p = lineStr.find_first_not_of(" \t");
+                if (p == std::string::npos || lineStr.compare(p, 6, "import") != 0)
+                    continue;
+                size_t ob = lineStr.find('{'), cb = lineStr.find('}');
+                if (ob == std::string::npos || cb == std::string::npos || cb < ob)
+                    continue;
+                for (size_t q = lineStr.find(sym->name, ob);
+                     q != std::string::npos && q + sym->name.size() <= cb;
+                     q = lineStr.find(sym->name, q + sym->name.size())) {
+                    bool sOk = !isWord(static_cast<unsigned char>(lineStr[q - 1]));
+                    bool eOk = !isWord(static_cast<unsigned char>(lineStr[q + sym->name.size()]));
+                    if (!sOk || !eOk) continue;
+                    SourceLocation il;
+                    il.filePath = fp;
+                    il.line     = static_cast<int>(li) + 1;
+                    il.column   = static_cast<int>(q) + 1;
+                    il.offset   = static_cast<int>(ls + q);
+                    locs.push_back(il);
+                }
+            }
+        }
+    }
+
+    std::sort(locs.begin(), locs.end(),
+        [](const SourceLocation& a, const SourceLocation& b) {
+            if (a.filePath != b.filePath) return a.filePath < b.filePath;
+            return a.offset < b.offset;
+        });
+    locs.erase(std::unique(locs.begin(), locs.end(),
+        [](const SourceLocation& a, const SourceLocation& b) {
+            return a.filePath == b.filePath && a.offset == b.offset;
+        }), locs.end());
+
+    // Edit'leri dosya URI'sine göre grupla (WorkspaceEdit.changes) —
+    // referanslar farklı dosyalardan gelebilir (çok dosyalı rename).
+    nlohmann::json changes = nlohmann::json::object();
+    for (const auto& loc : locs) {
+        auto [content, starts] = fileData(loc.filePath);
+        LspPosition pos = toLspPos(*content, *starts, loc);
+        changes[store_.uriForPath(loc.filePath)].push_back({
+            {"range", {
+                {"start", {{"line", pos.line}, {"character", pos.character}}},
+                {"end",   {{"line", pos.line}, {"character", pos.character + (int)sym->name.size()}}}
+            }},
+            {"newText", newName}
+        });
+    }
+
+    return JsonRpc::makeResponse(id, {{"changes", changes}});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SignatureHelp (Faz 5, #84)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// İmleci saran fonksiyon çağrısının bağlamı: token dizisi geriye taranır,
+// eşleşmemiş '(' bulunduğunda solundaki tanımlayıcı callee'dir; derinlik-0'da
+// sayılan virgüller aktif parametre indeksini verir.
+struct CallCtx {
+    std::string callee;       // çağrılan fonksiyon/metod adı
+    std::string scopeTarget;  // "x::push(" desenindeki x (builtin metod için)
+    int         activeParam = 0;
+    bool        valid = false;
+};
+
+static CallCtx findCallContext(DocumentState& state, int byteOffset) {
+    CallCtx ctx;
+    const auto& toks = state.tokens;
+    if (toks.empty()) return ctx;
+
+    // İmleçten önce biten token'ları geriye doğru topla (en yakın en başta)
+    auto it = std::upper_bound(toks.begin(), toks.end(), byteOffset,
+        [](int off, Token* t) { return off < t->start; });
+    std::vector<Token*> left;
+    auto rit = it;
+    while (rit != toks.begin()) {
+        --rit;
+        Token* tok = *rit;
+        if (tok->end > byteOffset) continue;
+        left.push_back(tok);
+        if (left.size() >= 256) break; // uzun ifadelerde tarama tavanı
+    }
+
+    int depth = 0, commas = 0;
+    for (size_t i = 0; i < left.size(); ++i) {
+        const std::string& s = left[i]->token;
+        if (s == ")" || s == "]") { depth++; continue; }
+        if (s == "[") {
+            if (depth > 0) { depth--; continue; }
+            return ctx; // eşleşmemiş '[' — indeksleme bağlamı, imza yok
+        }
+        if (s == "(") {
+            if (depth > 0) { depth--; continue; }
+            // Eşleşmemiş '(' — solundaki token callee olmalı
+            if (i + 1 >= left.size() || left[i + 1]->gettype() != "identifier")
+                return ctx; // gruplama pareni: (a + b
+            ctx.callee      = left[i + 1]->token;
+            ctx.activeParam = commas;
+            ctx.valid       = true;
+            // "x::adet(" deseni: builtin metod çağrısı — receiver'ı yakala.
+            // Sol taraf değişken (identifier) ya da tip adı olabilir; tip
+            // adları (int::push, string::upper) KEYWORD token'dır.
+            if (i + 3 < left.size() && left[i + 2]->token == "::" &&
+                (left[i + 3]->gettype() == "identifier" ||
+                 left[i + 3]->gettype() == "keyword"))
+                ctx.scopeTarget = left[i + 3]->token;
+            return ctx;
+        }
+        if (depth == 0) {
+            if (s == ",") { commas++; continue; }
+            if (s == ";" || s == "{" || s == "}")
+                return ctx; // deyim sınırı — çağrı bağlamı yok
+        }
+    }
+    return ctx;
+}
+
+// Kullanıcı fonksiyonu sembolünden SignatureInformation üret.
+static nlohmann::json signatureForFunction(Symbol* sym) {
+    std::string ret = sym->type.returnType ? sym->type.returnType->toString() : "void";
+    nlohmann::json paramsArr = nlohmann::json::array();
+    std::string label = ret + " " + sym->name + "(";
+
+    // print gibi geçici builtin'ler parametresiz Type::function ile kayıtlı
+    // (TODO(#89) builtin kataloğu) — imzada tek bir "value" göster.
+    if (sym->isBuiltin && sym->type.paramTypes.empty()) {
+        label += "value";
+        paramsArr.push_back({{"label", "value"}});
+    } else {
+        for (size_t i = 0; i < sym->type.paramTypes.size(); ++i) {
+            std::string p = sym->type.paramTypes[i].toString();
+            if (i < sym->paramNames.size()) p += " " + sym->paramNames[i];
+            if (i > 0) label += ", ";
+            label += p;
+            paramsArr.push_back({{"label", p}});
+        }
+    }
+    label += ")";
+    return {{"label", label}, {"parameters", paramsArr}};
+}
+
+// BuiltinMethod kaydından SignatureInformation üret (receiver hariç).
+static nlohmann::json signatureForBuiltinMethod(const BuiltinMethod* m) {
+    auto paramTypeStr = [](const ParamRule& p) -> std::string {
+        switch (p.kind) {
+            case ParamKind::Fixed:     return p.fixedType.toString();
+            case ParamKind::ElemType:  return "T";
+            case ParamKind::ElemArray: return "T[]";
+            case ParamKind::StringVal: return "string";
+        }
+        return "?";
+    };
+    nlohmann::json paramsArr = nlohmann::json::array();
+    std::string label = m->name + "(";
+    for (size_t i = 1; i < m->params.size(); ++i) {
+        std::string p = paramTypeStr(m->params[i]);
+        if (i > 1) label += ", ";
+        label += p;
+        paramsArr.push_back({{"label", p}});
+    }
+    label += ") → ";
+    switch (m->ret.kind) {
+        case ReturnKind::Fixed:     label += m->ret.fixedType.toString(); break;
+        case ReturnKind::ElemType:  label += "T";   break;
+        case ReturnKind::ElemArray: label += "T[]"; break;
+    }
+    return {{"label", label}, {"parameters", paramsArr}};
+}
+
+nlohmann::json LspHandler::handleSignatureHelp(const nlohmann::json& id,
+                                                const nlohmann::json& params) {
+    std::string uri  = params["textDocument"]["uri"].get<std::string>();
+    int         line = params["position"]["line"].get<int>();
+    int         ch   = params["position"]["character"].get<int>();
+
+    DocumentState* state = store_.get(uri);
+    if (!state) return JsonRpc::makeResponse(id, nullptr);
+
+    int byteCol = toByteColumn(state->content, line, ch);
+    int byteOff = lspLineStartOffset(state->content, line) + (byteCol - 1);
+
+    CallCtx ctx = findCallContext(*state, byteOff);
+    if (!ctx.valid) return JsonRpc::makeResponse(id, nullptr);
+
+    nlohmann::json sig;
+
+    if (!ctx.scopeTarget.empty()) {
+        // "x::push(" — builtin metod: receiver'ın tipinden kategoriye in
+        Symbol* recv = nullptr;
+        for (Symbol* s : state->symbolTable.allSymbols()) {
+            if (s->name == ctx.scopeTarget && s->kind != SymbolKind::Field) {
+                recv = s;
+                break;
+            }
+        }
+        Type recvType = recv ? recv->type : Type::fromName(ctx.scopeTarget);
+        if (!recvType.isError()) {
+            std::string leftName = recvType.isStruct()
+                ? recvType.structName : recvType.toString();
+            const BuiltinMethod* m = BuiltinMethodRegistry::instance().lookup(
+                leftName, ctx.callee, recvType.isStruct(), recvType.isArray());
+            if (m) sig = signatureForBuiltinMethod(m);
+        }
+    } else {
+        // Kullanıcı fonksiyonu (ya da print gibi builtin fonksiyon sembolü)
+        for (Symbol* s : state->symbolTable.allSymbols()) {
+            if (s->name == ctx.callee && s->kind == SymbolKind::Function) {
+                sig = signatureForFunction(s);
+                break;
+            }
+        }
+    }
+
+    if (sig.is_null()) return JsonRpc::makeResponse(id, nullptr);
+
+    return JsonRpc::makeResponse(id, {
+        {"signatures",      nlohmann::json::array({sig})},
+        {"activeSignature", 0},
+        {"activeParameter", ctx.activeParam}
+    });
 }

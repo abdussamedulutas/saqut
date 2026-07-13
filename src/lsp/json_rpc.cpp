@@ -23,8 +23,15 @@ nlohmann::json JsonRpc::readMessage(std::istream& in) {
     while (std::getline(in, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty()) break;
-        if (line.rfind("Content-Length:", 0) == 0)
-            contentLength = std::stoi(line.substr(16));
+        if (line.rfind("Content-Length:", 0) == 0) {
+            // Faz 6 (#84): bozuk başlık ("Content-Length: abc") sunucuyu
+            // düşürmemeli — stoi fırlatırsa 0 kalır, mesaj atlanır.
+            try {
+                contentLength = std::stoi(line.substr(16));
+            } catch (...) {
+                contentLength = 0;
+            }
+        }
     }
     if (contentLength <= 0) return nullptr;
     std::string body(contentLength, '\0');

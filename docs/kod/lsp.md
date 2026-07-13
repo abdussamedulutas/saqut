@@ -57,6 +57,11 @@ DocumentState
 - `textDocument/documentSymbol` — hiyerarşik sembol listesi
 - `textDocument/documentHighlight` — aynı sembolün vurgulanması
 - `textDocument/publishDiagnostics` — gruplanmış hata/uyarı bildirimi
+- `textDocument/rename` (Faz 5, #84) — çok dosyalı WorkspaceEdit: tanım + tüm
+  referanslar + import bağlayıcıları; builtin/geçersiz ada rename reddedilir
+- `textDocument/signatureHelp` (Faz 5, #84) — token geri-taramasıyla çağrı
+  bağlamı (eşleşmemiş `(` + virgül sayımı); kullanıcı fonksiyonları,
+  `print` ve `tip::metod(` builtin imzaları
 
 ## Tasarım kararları
 
@@ -66,6 +71,11 @@ DocumentState
   yerine token binary search + offset→Symbol* indeksi kullanır (kök neden #3).
 - **Gruplanmış diagnostics**: publishDiagnostics her dosya için ayrı gönderilir
   (kök neden #4). İmport edilen modülün hatası artık ana dosyada görünmez.
+- **Dayanıklılık (Faz 6, #84)**: bozuk Content-Length/JSON gövdesi mesajı
+  atlatır; `method` eksik/yanlış tipse InvalidRequest, params eksikse
+  InvalidParams döner (nlohmann const `operator[]` eksik anahtarda ABORT
+  ettiği için doğrulama dispatch'te, handler'lara girmeden yapılır);
+  sunucu döngüsünde istisna backstop'u InternalError yanıtına çevrilir.
 - **Position encoding anlaşması**: initialize'da istemci general.positionEncodings'e
   göre UTF-8 veya UTF-16 seçilir (kök neden #3/Faz 3).
 - **Cross-file definition**: definition/references tanımın bulunduğu dosyanın

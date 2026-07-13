@@ -24,8 +24,13 @@ import sys
 
 
 def frame(obj) -> bytes:
-    body = json.dumps(obj)
-    data = body.encode("utf-8")
+    # Faz 6 (#84) dayanıklılık senaryoları için kaçış kapısı: {"__raw__": "..."}
+    # gövdeyi JSON'a çevirmeden OLDUĞU GİBİ gönderir (bozuk JSON testi).
+    if isinstance(obj, dict) and "__raw__" in obj:
+        data = obj["__raw__"].encode("utf-8")
+    else:
+        body = json.dumps(obj)
+        data = body.encode("utf-8")
     return f"Content-Length: {len(data)}\r\n\r\n".encode("ascii") + data
 
 

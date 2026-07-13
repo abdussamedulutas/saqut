@@ -160,6 +160,18 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   builtin metodlar BuiltinMethodRegistry'den üretiliyor. `tests/lsp/` 16
   senaryo (`13_completion_scope`, `14_completion_dot_chain`,
   `15_completion_nonstruct_dot`, `16_completion_scope_method` yeni).
+  LSP Faz 5–6 tamam (#84, 0.5.0 dalı) — `textDocument/rename` (çok dosyalı
+  WorkspaceEdit: tanım + referanslar + import bağlayıcıları; symbolByOffset
+  artık bildirimdeki TANIMLAYICI token'ı da indeksliyor — definitionLoc
+  bildirim başını gösterir, `identOffsetFromDecl` düzeltir) ve
+  `textDocument/signatureHelp` (token geri-taraması; kullanıcı fonksiyonları +
+  `print` + `tip::metod(` builtin imzaları). Dayanıklılık: bozuk
+  Content-Length/JSON/params sunucuyu düşürmez (doğrulama dispatch'te —
+  nlohmann const `operator[]` eksik anahtarda ABORT eder, istisna değil;
+  ayrıca sunucu döngüsünde istisna→InternalError backstop'u).
+  `semanticTokens` ertelendi (opsiyoneldi). `tests/lsp/` 20 senaryo
+  (`17_rename`, `18_rename_cross_file`, `19_signature_help`,
+  `20_robustness` yeni; sürücüye bozuk-gövde için `__raw__` kaçış kapısı).
   Faz 5 tamam — IR satır tablosu %100 (IRGenerator::currentLoc_ +
   effectiveLoc ile tüm emit noktaları sourceLine dolduruyor); IRFunction::slotNames
   + Interpreter::slotName() gerçek değişken adlarını veriyor; runUntilEvent(maxInstr,

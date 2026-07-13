@@ -55,6 +55,12 @@ private:
                                            const nlohmann::json& params);
     nlohmann::json handleCompletion(const nlohmann::json& id,
                                     const nlohmann::json& params);
+    // Faz 5 (#84): tanım + tüm referansları kapsayan çok dosyalı WorkspaceEdit.
+    nlohmann::json handleRename(const nlohmann::json& id,
+                                const nlohmann::json& params);
+    // Faz 5 (#84): imleci saran çağrının imzası (kullanıcı fonksiyonu + builtin).
+    nlohmann::json handleSignatureHelp(const nlohmann::json& id,
+                                       const nlohmann::json& params);
 
     // Faz 3: state.diagnostics'i loc.filePath'e göre gruplar, her dosya için
     // ayrı bir publishDiagnostics bildirimi gönderir (kök neden #4 — import

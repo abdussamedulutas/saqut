@@ -118,8 +118,16 @@ void DocumentStore::runPipeline(DocumentState& state) {
     // eşleştirmesi değil tam offset eşleşmesi kullanıyor).
     state.symbolByOffset.clear();
     for (Symbol* sym : state.symbolTable.allSymbols()) {
-        if (sym->definitionLoc.isValid() && sym->definitionLoc.filePath == state.filePath)
+        if (sym->definitionLoc.isValid() && sym->definitionLoc.filePath == state.filePath) {
             state.symbolByOffset[sym->definitionLoc.offset] = sym;
+            // Faz 5 (#84): definitionLoc bildirim başını gösterir ("int deger"de
+            // `int`) — bildirimdeki TANIMLAYICI token'ı da indeksle ki tanım
+            // noktasında hover/rename/definition çalışsın. emplace: bir usage
+            // aynı offset'e daha önce yazıldıysa ezme.
+            int identOff = identOffsetFromDecl(state.content,
+                                               sym->definitionLoc.offset, sym->name);
+            if (identOff >= 0) state.symbolByOffset.emplace(identOff, sym);
+        }
         for (const auto& ref : sym->references)
             if (ref.filePath == state.filePath)
                 state.symbolByOffset[ref.offset] = sym;

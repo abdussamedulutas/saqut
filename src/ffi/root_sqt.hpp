@@ -39,6 +39,16 @@ ffi float round(float x)          : MATH_ROUND from math;
 // import {drop, has} from caps; drop("fs");
 ffi void drop(string capName) : CAPS_DROP from caps;
 ffi bool has(string capName)  : CAPS_HAS  from caps;
+
+// ── fs modülü (dosya sistemi, --allow-fs — #87) ─────────────────────────────
+// Handle/descriptor YOK — tek atımlık read/write (record-replay önkoşulu).
+ffi string  readFile(string path)                : FS_READ_FILE   from fs requires fs;
+ffi byte[]  readBytes(string path)                : FS_READ_BYTES  from fs requires fs;
+ffi void    writeFile(string path, string content) : FS_WRITE_FILE  from fs requires fs;
+ffi void    writeBytes(string path, byte[] data)    : FS_WRITE_BYTES from fs requires fs;
+ffi void    append(string path, string content)     : FS_APPEND      from fs requires fs;
+ffi bool    exists(string path)                     : FS_EXISTS      from fs requires fs;
+ffi void    remove(string path)                     : FS_REMOVE      from fs requires fs;
 )SQT";
 
 #endif // SAQUT_FFI_ROOT_SQT

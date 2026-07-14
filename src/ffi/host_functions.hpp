@@ -23,14 +23,17 @@
 #include <string>
 #include <vector>
 #include "vm/value.hpp"
+#include "vm/object.hpp"
 #include "core/capability.hpp"
 
-// VM state'ine erişim gereken host fonksiyonlar (caps::drop/has, sys::args)
-// için enjekte edilen bağlam. Pointer'lar Interpreter'ın gerçek üyelerine
-// işaret eder — caps mutasyonu (drop) doğrudan VM durumunu etkiler.
+// VM state'ine erişim gereken host fonksiyonlar (caps::drop/has, sys::args,
+// fs::readBytes/writeBytes) için enjekte edilen bağlam. Pointer'lar
+// Interpreter'ın gerçek üyelerine işaret eder — caps mutasyonu (drop)
+// doğrudan VM durumunu etkiler, heap byte[] tahsisi için kullanılır.
 struct HostContext {
     std::set<Capability>*           caps        = nullptr;
     const std::vector<std::string>* programArgs = nullptr;
+    Heap*                            heap        = nullptr;
 };
 
 // Tek bir host fonksiyon kaydı. Çoğu impl saf (heap/throw gerektirmeyen);

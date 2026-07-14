@@ -709,6 +709,11 @@ ASTNode* Parser::parseFfiDecl() {
     // dönüş tipi
     fn->returnType = currentToken().token ? currentToken().token->token : "";
     nextToken();
+    while (currentToken().type == TokenType::LBRACKET) {
+        nextToken();
+        if (currentToken().type == TokenType::RBRACKET) nextToken();
+        fn->returnType += "[]";
+    }
     if (currentToken().type == TokenType::TERNARY)
         { nextToken(); fn->returnType += "?"; }
 

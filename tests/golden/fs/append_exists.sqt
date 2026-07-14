@@ -1,0 +1,12 @@
+import {writeFile, append, readFile, exists, remove} from fs;
+
+void main() {
+    string path = "/tmp/saqut_fs_test_append.txt";
+    print(exists(path));
+    writeFile(path, "a");
+    append(path, "b");
+    print(readFile(path));
+    print(exists(path));
+    remove(path);
+    print(exists(path));
+}

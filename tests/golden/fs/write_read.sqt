@@ -1,0 +1,7 @@
+import {writeFile, readFile, remove} from fs;
+
+void main() {
+    writeFile("/tmp/saqut_fs_test_write_read.txt", "merhaba");
+    print(readFile("/tmp/saqut_fs_test_write_read.txt"));
+    remove("/tmp/saqut_fs_test_write_read.txt");
+}

@@ -8,11 +8,14 @@
 // ============================================================================
 
 #include "ffi/host_functions.hpp"
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <sstream>
+#include <thread>
 #include <unordered_map>
 
 // ── math implementasyonları ─────────────────────────────────────────────────
@@ -136,6 +139,46 @@ static Value fs_remove(const std::vector<Value>& a, HostContext&) {
     return Value::fromInt(0); // void
 }
 
+// ── sys implementasyonları (#90) ────────────────────────────────────────────
+// Non-deterministik/dış-durum-okuyan — --allow-sys. Kaynak: OS CSPRNG
+// (std::random_device), rand() DEĞİL.
+
+static Value sys_random(const std::vector<Value>&, HostContext&) {
+    static std::random_device rd;
+    static std::mt19937_64 gen(rd());
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+    return Value::fromFloat(dist(gen));
+}
+
+static Value sys_randomInt(const std::vector<Value>& a, HostContext&) {
+    int lo = a[0].intValue, hi = a[1].intValue;
+    if (lo >= hi)
+        throw std::runtime_error("randomInt: invalid range [" + std::to_string(lo) +
+                                  ", " + std::to_string(hi) + ")");
+    static std::random_device rd;
+    static std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<int> dist(lo, hi - 1);
+    return Value::fromInt(dist(gen));
+}
+
+static Value sys_env(const std::vector<Value>& a, HostContext&) {
+    const char* v = std::getenv(a[0].stringValue.c_str());
+    return v ? Value::fromString(std::string(v)) : Value::null();
+}
+
+static Value sys_sleep(const std::vector<Value>& a, HostContext&) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(a[0].intValue));
+    return Value::fromInt(0); // void
+}
+
+static Value sys_args(const std::vector<Value>&, HostContext& ctx) {
+    const auto& args = ctx.programArgs ? *ctx.programArgs : std::vector<std::string>{};
+    ArrayObject* arr = ctx.heap->allocArray((int)args.size());
+    for (const auto& s : args)
+        arr->elements.push_back(Value::fromString(s));
+    return Value::fromRef(arr);
+}
+
 // ── Tablo (index = sayısal host id) ──────────────────────────────────────────
 // Sıra değişebilir; root.sqt sembolik ad kullandığı için etkilenmez.
 
@@ -161,6 +204,11 @@ const std::vector<HostFn>& hostFnTable() {
         { "FS_WRITE_BYTES", 2, fs_writeBytes },
         { "FS_EXISTS",      1, fs_exists     },
         { "FS_REMOVE",      1, fs_remove     },
+        { "SYS_RANDOM",     0, sys_random    },
+        { "SYS_RANDOM_INT", 2, sys_randomInt },
+        { "SYS_ENV",        1, sys_env       },
+        { "SYS_SLEEP",      1, sys_sleep     },
+        { "SYS_ARGS",       0, sys_args      },
     };
     return table;
 }

@@ -49,6 +49,14 @@ ffi void    writeBytes(string path, byte[] data)    : FS_WRITE_BYTES from fs req
 ffi void    append(string path, string content)     : FS_APPEND      from fs requires fs;
 ffi bool    exists(string path)                     : FS_EXISTS      from fs requires fs;
 ffi void    remove(string path)                     : FS_REMOVE      from fs requires fs;
+
+// ── sys modülü (--allow-sys — #90) ──────────────────────────────────────────
+// Non-deterministik/dış-durum-okuyan; OS CSPRNG (rand() DEĞİL).
+ffi float    random()                          : SYS_RANDOM     from sys requires sys;
+ffi int      randomInt(int lo, int hi)         : SYS_RANDOM_INT from sys requires sys;
+ffi string?  env(string name)                  : SYS_ENV        from sys requires sys;
+ffi void     sleep(int millis)                 : SYS_SLEEP      from sys requires sys;
+ffi string[] args()                            : SYS_ARGS       from sys requires sys;
 )SQT";
 
 #endif // SAQUT_FFI_ROOT_SQT

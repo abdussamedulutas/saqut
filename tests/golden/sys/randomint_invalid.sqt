@@ -1,0 +1,5 @@
+import {randomInt} from sys;
+
+void main() {
+    print(randomInt(5, 5));
+}

@@ -1,0 +1,8 @@
+import {args, sleep} from sys;
+
+void main() {
+    string[] a = args();
+    print(a.length());
+    sleep(1);
+    print("done");
+}

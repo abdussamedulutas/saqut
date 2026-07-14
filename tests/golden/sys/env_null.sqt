@@ -1,0 +1,10 @@
+import {env} from sys;
+
+void main() {
+    string? v = env("SAQUT_TEST_ENV_DOES_NOT_EXIST_XYZ");
+    if (v == null) {
+        print("null");
+    } else {
+        print(v);
+    }
+}

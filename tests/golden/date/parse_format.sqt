@@ -1,0 +1,10 @@
+import {parse, format} from date;
+
+void main() {
+    date? d = parse("2026-07-12T10:00:00Z");
+    if (d == null) {
+        print("parse failed");
+    } else {
+        print(format(d, "yyyy-MM-dd HH:mm:ss"));
+    }
+}

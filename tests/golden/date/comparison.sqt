@@ -1,0 +1,12 @@
+import {parse} from date;
+
+void main() {
+    date? a = parse("2026-01-01T00:00:00Z");
+    date? b = parse("2026-06-01T00:00:00Z");
+    if (a != null && b != null) {
+        print(a < b);
+        print(a > b);
+        print(a == a);
+        print(a != b);
+    }
+}

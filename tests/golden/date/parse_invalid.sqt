@@ -1,0 +1,10 @@
+import {parse} from date;
+
+void main() {
+    date? d = parse("not-a-date");
+    if (d == null) {
+        print("null");
+    } else {
+        print("parsed");
+    }
+}

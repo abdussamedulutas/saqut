@@ -34,6 +34,7 @@ enum class ValueKind {
     String,
     Ref,      // ADR-020: array/struct nesnesine Object* referansı
     Null,     // ADR-021: nullable referansın null değeri (saQut kaynağında `null`)
+    Date,     // #88 (ADR-036): UTC epoch-ms; int64Value alanı taşır
 };
 
 struct Value {
@@ -43,9 +44,14 @@ struct Value {
     DecimalValue decimalValue;                 // kind == Decimal için (ADR-028)
     std::string  stringValue;                  // kind == String için
     Object*      ref          = nullptr;       // kind == Ref için
+    long long    int64Value   = 0;             // kind == Date için (UTC epoch-ms)
 
     static Value fromInt(int n) {
         Value v; v.kind = ValueKind::Int; v.intValue = n; return v;
+    }
+
+    static Value fromDate(long long epochMs) {
+        Value v; v.kind = ValueKind::Date; v.int64Value = epochMs; return v;
     }
 
     static Value fromFloat(double d) {
@@ -76,6 +82,7 @@ struct Value {
             case ValueKind::String:  return !stringValue.empty();
             case ValueKind::Ref:     return ref != nullptr;
             case ValueKind::Null:    return false;
+            case ValueKind::Date:    return true; // her zaman geçerli bir andı temsil eder
         }
         return false;
     }
@@ -97,6 +104,7 @@ struct Value {
             case ValueKind::String: return stringValue;
             case ValueKind::Ref:   return "<ref>";
             case ValueKind::Null:  return "null";
+            case ValueKind::Date:  return std::to_string(int64Value);
         }
         return "?";
     }
@@ -109,6 +117,7 @@ struct Value {
             case ValueKind::String:  return "string";
             case ValueKind::Ref:     return "ref";
             case ValueKind::Null:    return "null";
+            case ValueKind::Date:    return "date";
         }
         return "?";
     }

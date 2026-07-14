@@ -76,6 +76,7 @@ std::string DapHandler::valueToString(const Value& v, int depth) const {
         case ValueKind::Decimal: return v.decimalValue.toString();
         case ValueKind::String:  return "\"" + v.stringValue + "\"";
         case ValueKind::Null:    return "null";
+        case ValueKind::Date:    return std::to_string(v.int64Value);
         case ValueKind::Ref: {
             if (!v.ref) return "null";
             if (v.ref->type == ObjectType::Struct) {

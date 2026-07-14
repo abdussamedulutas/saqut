@@ -70,7 +70,7 @@ private:
 
     SymbolTable&      table_;
     DiagnosticEngine& diag_;
-    std::set<Capability> allowedCaps_; // ADR-036 (#76): --allow-fs/net/sys
+    std::set<Capability> allowedCaps_; // ADR-035 (#76): --allow-fs/net/sys
     int               currentModuleId_ = -1;
 
     // struct adı → içerdiği struct-tip alan adları (cycle check için)

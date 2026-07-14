@@ -477,7 +477,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::LESS: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
-            if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+            if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
+                r = (lv.int64Value < rv.int64Value ? 1 : 0);
+            else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) < 0 ? 1 : 0;
             else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
                 r = (lv.floatValue < rv.floatValue ? 1 : 0);
@@ -488,7 +490,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::LESS_EQUAL: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
-            if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+            if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
+                r = (lv.int64Value <= rv.int64Value ? 1 : 0);
+            else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) <= 0 ? 1 : 0;
             else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
                 r = (lv.floatValue <= rv.floatValue ? 1 : 0);
@@ -499,7 +503,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::GREATER: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
-            if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+            if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
+                r = (lv.int64Value > rv.int64Value ? 1 : 0);
+            else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) > 0 ? 1 : 0;
             else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
                 r = (lv.floatValue > rv.floatValue ? 1 : 0);
@@ -510,7 +516,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::GREATER_EQUAL: {
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
-            if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
+            if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
+                r = (lv.int64Value >= rv.int64Value ? 1 : 0);
+            else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) >= 0 ? 1 : 0;
             else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
                 r = (lv.floatValue >= rv.floatValue ? 1 : 0);
@@ -528,6 +536,8 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 r = 0;
             else if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
                 r = (lv.ref == rv.ref ? 1 : 0); // ADR-023: array/struct kimlik
+            else if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
+                r = (lv.int64Value == rv.int64Value ? 1 : 0);
             else if (lv.kind == ValueKind::String)
                 r = (lv.stringValue == rv.stringValue ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
@@ -548,6 +558,8 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 r = 1;
             else if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
                 r = (lv.ref != rv.ref ? 1 : 0);
+            else if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
+                r = (lv.int64Value != rv.int64Value ? 1 : 0);
             else if (lv.kind == ValueKind::String)
                 r = (lv.stringValue != rv.stringValue ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
@@ -969,7 +981,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 }
             } else if (instr.functionName == "__ffi__") {
                 // ADR-034 (#107): sayısal host id ile FFI dispatch
-                // ADR-036 (#76): runtime capability backstop (A+B modelinin B'si)
+                // ADR-035 (#76): runtime capability backstop (A+B modelinin B'si)
                 if (instr.requiredCap && caps_.find(*instr.requiredCap) == caps_.end()) {
                     pendingThrow_ = makeErrorValue(
                         std::string("requires --allow-") + capabilityName(*instr.requiredCap) +
@@ -1118,6 +1130,7 @@ static bool valueEqual(const Value& a, const Value& b) {
         case ValueKind::String:  return a.stringValue == b.stringValue;
         case ValueKind::Ref:     return a.ref == b.ref;
         case ValueKind::Null:    return true;
+        case ValueKind::Date:    return a.int64Value == b.int64Value;
     }
     return false;
 }
@@ -1171,6 +1184,7 @@ static std::string valueToJsonStr(const Value& v) {
             return s;
         }
         case ValueKind::Null: return "null";
+        case ValueKind::Date: return std::to_string(v.int64Value);
     }
     return "null";
 }

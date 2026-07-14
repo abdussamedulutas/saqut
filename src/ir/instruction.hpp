@@ -290,7 +290,7 @@ struct Instruction {
     int         sourceCol  = 0;
     std::string sourceFile;
 
-    // ADR-036 (#76): CALLHOST("__ffi__") için gereken capability — yoksa
+    // ADR-035 (#76): CALLHOST("__ffi__") için gereken capability — yoksa
     // nullopt. VM'de runtime backstop (B), `saqut ir --capabilities`'te
     // statik raporlama için kullanılır.
     std::optional<Capability> requiredCap;

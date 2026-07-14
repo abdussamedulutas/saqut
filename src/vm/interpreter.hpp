@@ -66,7 +66,7 @@ public:
     int       gcRuns() const       { return heap_.gcRuns; }
     long long gcFreedTotal() const { return heap_.freedTotal; }
 
-    // ADR-036 (#76): --allow-fs/--allow-net/--allow-sys — CLI'dan doldurulur.
+    // ADR-035 (#76): --allow-fs/--allow-net/--allow-sys — CLI'dan doldurulur.
     void setCapabilities(std::set<Capability> caps) { caps_ = std::move(caps); }
     // #90: `--` sonrası argümanlar — sys::args() ile programa geçirilir.
     void setProgramArgs(std::vector<std::string> a) { programArgs_ = std::move(a); }
@@ -143,7 +143,7 @@ private:
     int gcInitialThreshold_ = kGCDefaultThreshold;
     int gcThreshold_        = kGCDefaultThreshold; // bir sonraki tetikleme eşiği
 
-    std::set<Capability>     caps_;       // ADR-036 (#76): açık capability'ler
+    std::set<Capability>     caps_;       // ADR-035 (#76): açık capability'ler
     std::vector<std::string> programArgs_; // #90: `--` sonrası argümanlar
 
     // Faz 5: bütçe/step kısıtlarını kontrol eder, true = durmalı

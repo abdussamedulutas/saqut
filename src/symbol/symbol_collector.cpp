@@ -372,7 +372,7 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
     if (!catalog.hasModule(imp->sourcePath)) {
         diag_.report("E_IMPORT_UNKNOWN", imp->loc,
             "unknown module '" + imp->sourcePath + "'",
-            "known embedded modules: math, caps, fs, sys");
+            "known embedded modules: math, caps, fs, sys, date");
         return;
     }
 
@@ -392,7 +392,7 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
             continue;
         }
 
-        // ADR-036 (#76): `requires <cap>` — A+B modelinin "A" yarısı (derleme
+        // ADR-035 (#76): `requires <cap>` — A+B modelinin "A" yarısı (derleme
         // zamanı tanı). B yarısı (runtime backstop) VM CALLHOST'ta uygulanır.
         std::optional<Capability> reqCap;
         if (!decl->requiresCap.empty()) {

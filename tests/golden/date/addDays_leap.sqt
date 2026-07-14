@@ -1,0 +1,17 @@
+import {parse, format, addDays} from date;
+
+void main() {
+    date? d1 = parse("2024-02-28T00:00:00Z");
+    if (d1 != null) {
+        date leap = addDays(d1, 1);
+        print(format(leap, "yyyy-MM-dd"));
+        date afterLeap = addDays(leap, 1);
+        print(format(afterLeap, "yyyy-MM-dd"));
+    }
+
+    date? d2 = parse("2026-12-31T00:00:00Z");
+    if (d2 != null) {
+        date nextYear = addDays(d2, 1);
+        print(format(nextYear, "yyyy-MM-dd"));
+    }
+}

@@ -1,0 +1,21 @@
+import {parse, year, month, day, hour, minute, second, diffMillis} from date;
+
+void main() {
+    date? d = parse("2026-07-12T10:30:45Z");
+    if (d != null) {
+        print(year(d));
+        print(month(d));
+        print(day(d));
+        print(hour(d));
+        print(minute(d));
+        print(second(d));
+    }
+
+    date? a = parse("2026-01-01T00:00:00Z");
+    if (a != null) {
+        date? b = parse("2026-01-01T00:00:05Z");
+        if (b != null) {
+            print(diffMillis(b, a));
+        }
+    }
+}

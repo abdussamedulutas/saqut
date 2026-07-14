@@ -669,6 +669,10 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
                 result = Type::error(); // previous error, silent pass
             } else if (leftType.isNumeric() && rightType.isNumeric()) {
                 result = Type::Bool();
+            } else if (leftType.isDate() && rightType.isDate()) {
+                // #88 (ADR-036): date karşılaştırılabilir ama numeric DEĞİL —
+                // aritmetik (+, -, vb.) bu yoldan geçmez, yalnızca burada izinli.
+                result = Type::Bool();
             } else {
                 diag_.report("E003", bin->loc,
                     "comparison operator only works with numeric types: " +

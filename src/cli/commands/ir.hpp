@@ -52,7 +52,7 @@ inline int cmdIr(const CliArgs& args) {
     IRGenerator irGenerator;
     IRProgram   program = irGenerator.generateModuleGraph(graph, symbolTable);
 
-    // ADR-036 (#76): statik capability analizi — programın hangi cap'lere
+    // ADR-035 (#76): statik capability analizi — programın hangi cap'lere
     // ihtiyaç duyduğunu raporlar. caps::drop RUNTIME davranışıdır, bu üst
     // sınır raporundan ETKİLENMEZ (ayrım kasıtlı — #91).
     if (args.showCapabilities) {

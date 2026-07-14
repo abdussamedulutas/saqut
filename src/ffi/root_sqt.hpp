@@ -57,6 +57,25 @@ ffi int      randomInt(int lo, int hi)         : SYS_RANDOM_INT from sys require
 ffi string?  env(string name)                  : SYS_ENV        from sys requires sys;
 ffi void     sleep(int millis)                 : SYS_SLEEP      from sys requires sys;
 ffi string[] args()                            : SYS_ARGS       from sys requires sys;
+
+// ── date modülü (UTC epoch-ms değer tipi — #88, ADR-036) ────────────────────
+// Yalnızca now() capability ister; geri kalan saf hesap (determinizmi bozmaz).
+ffi date    now()                               : DATE_NOW           from date requires sys;
+ffi date    fromEpochMillis(int ms)             : DATE_FROM_EPOCH_MS from date;
+ffi int     toEpochMillis(date d)               : DATE_TO_EPOCH_MS   from date;
+ffi date    addDays(date d, int n)              : DATE_ADD_DAYS      from date;
+ffi date    addHours(date d, int n)             : DATE_ADD_HOURS     from date;
+ffi date    addMinutes(date d, int n)           : DATE_ADD_MINUTES   from date;
+ffi date    addSeconds(date d, int n)           : DATE_ADD_SECONDS   from date;
+ffi int     year(date d)                        : DATE_YEAR          from date;
+ffi int     month(date d)                       : DATE_MONTH         from date;
+ffi int     day(date d)                         : DATE_DAY           from date;
+ffi int     hour(date d)                        : DATE_HOUR          from date;
+ffi int     minute(date d)                      : DATE_MINUTE        from date;
+ffi int     second(date d)                      : DATE_SECOND        from date;
+ffi int     diffMillis(date a, date b)          : DATE_DIFF_MS       from date;
+ffi date?   parse(string iso8601)               : DATE_PARSE         from date;
+ffi string  format(date d, string pattern)      : DATE_FORMAT        from date;
 )SQT";
 
 #endif // SAQUT_FFI_ROOT_SQT

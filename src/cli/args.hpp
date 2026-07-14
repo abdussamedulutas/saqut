@@ -43,7 +43,7 @@ struct CliArgs {
     int  gcThreshold = 0;      // --gc-threshold=N: GC eşiği (0 = VM varsayılanı, negatif = GC kapalı)
     bool gcStats     = false;  // --gc-stats: koşu sonunda GC istatistiklerini stderr'e yaz
 
-    // ADR-036 (#76): --allow-fs/--allow-net/--allow-sys — varsayılan hepsi kapalı.
+    // ADR-035 (#76): --allow-fs/--allow-net/--allow-sys — varsayılan hepsi kapalı.
     std::set<Capability> allowedCaps;
     bool showCapabilities = false; // --capabilities: kullanılan cap'leri raporla (saqut ir)
     // `--` sonrası argümanlar — sys::args() ile programa geçilir.

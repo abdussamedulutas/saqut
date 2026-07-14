@@ -1,0 +1,6 @@
+import {now, year} from date;
+
+void main() {
+    date d = now();
+    print(year(d) >= 2026);
+}

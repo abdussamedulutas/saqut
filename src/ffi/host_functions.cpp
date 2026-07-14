@@ -8,9 +8,11 @@
 // ============================================================================
 
 #include "ffi/host_functions.hpp"
+#include "ffi/date_calc.hpp"
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -54,7 +56,7 @@ static Value math_round(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::round(a[0].floatValue));
 }
 
-// ── caps implementasyonları (#91, ADR-036) ──────────────────────────────────
+// ── caps implementasyonları (#91, ADR-035) ──────────────────────────────────
 // drop/has caps::drop kendisi capability istemez (izin düşürmek her zaman
 // serbest); VM'nin gerçek caps_ kümesine ctx.caps üzerinden dokunur.
 
@@ -179,6 +181,103 @@ static Value sys_args(const std::vector<Value>&, HostContext& ctx) {
     return Value::fromRef(arr);
 }
 
+// ── date implementasyonları (#88, ADR-035) ──────────────────────────────────
+// Yalnızca now() capability ister (--allow-sys); geri kalan saf hesap.
+// ⚠️ v1 kısıtı: saQut'ta 64-bit int yok — fromEpochMillis/toEpochMillis
+// `int` (32-bit) taşır, epoch-ms günümüz tarihleri için bunu aşar (bilinen
+// sınır, ADR-035'te belgelenir). date DEĞERİNİN kendisi (Value::int64Value)
+// tam hassasiyetlidir; year/month/day/addX/diffMillis bu yüzden güvenlidir.
+
+static Value date_now(const std::vector<Value>&, HostContext&) {
+    auto now = std::chrono::system_clock::now();
+    long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       now.time_since_epoch()).count();
+    return Value::fromDate(ms);
+}
+
+static Value date_fromEpochMillis(const std::vector<Value>& a, HostContext&) {
+    return Value::fromDate((long long)a[0].intValue);
+}
+
+static Value date_toEpochMillis(const std::vector<Value>& a, HostContext&) {
+    return Value::fromInt((int)a[0].int64Value);
+}
+
+static Value date_addDays(const std::vector<Value>& a, HostContext&) {
+    return Value::fromDate(a[0].int64Value + (long long)a[1].intValue * 86400000LL);
+}
+static Value date_addHours(const std::vector<Value>& a, HostContext&) {
+    return Value::fromDate(a[0].int64Value + (long long)a[1].intValue * 3600000LL);
+}
+static Value date_addMinutes(const std::vector<Value>& a, HostContext&) {
+    return Value::fromDate(a[0].int64Value + (long long)a[1].intValue * 60000LL);
+}
+static Value date_addSeconds(const std::vector<Value>& a, HostContext&) {
+    return Value::fromDate(a[0].int64Value + (long long)a[1].intValue * 1000LL);
+}
+
+static Value date_year(const std::vector<Value>& a, HostContext&) {
+    return Value::fromInt(date_calc::breakDown(a[0].int64Value).y);
+}
+static Value date_month(const std::vector<Value>& a, HostContext&) {
+    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).mo);
+}
+static Value date_day(const std::vector<Value>& a, HostContext&) {
+    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).d);
+}
+static Value date_hour(const std::vector<Value>& a, HostContext&) {
+    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).h);
+}
+static Value date_minute(const std::vector<Value>& a, HostContext&) {
+    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).mi);
+}
+static Value date_second(const std::vector<Value>& a, HostContext&) {
+    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).s);
+}
+
+static Value date_diffMillis(const std::vector<Value>& a, HostContext&) {
+    return Value::fromInt((int)(a[0].int64Value - a[1].int64Value));
+}
+
+// "2026-07-12T10:00:00Z" — v1 yalnızca UTC (ADR-035); başka format → null.
+static Value date_parse(const std::vector<Value>& a, HostContext&) {
+    const std::string& s = a[0].stringValue;
+    int y, mo, d, h, mi, se;
+    char zChar = 0;
+    if (s.size() != 20) return Value::null();
+    if (std::sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%2d%c",
+                     &y, &mo, &d, &h, &mi, &se, &zChar) != 7 || zChar != 'Z')
+        return Value::null();
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || se > 59)
+        return Value::null();
+    long long ms = date_calc::assemble(y, (unsigned)mo, (unsigned)d,
+                                        (unsigned)h, (unsigned)mi, (unsigned)se);
+    return Value::fromDate(ms);
+}
+
+// pattern alt kümesi: yyyy MM dd HH mm ss (ADR-035'te sabitlenir)
+static Value date_format(const std::vector<Value>& a, HostContext&) {
+    auto b = date_calc::breakDown(a[0].int64Value);
+    char buf[8];
+    std::string out;
+    const std::string& pat = a[1].stringValue;
+    size_t i = 0;
+    auto matches = [&](const char* tok) {
+        size_t n = std::string(tok).size();
+        return pat.compare(i, n, tok) == 0;
+    };
+    while (i < pat.size()) {
+        if (matches("yyyy")) { std::snprintf(buf, sizeof buf, "%04d", b.y); out += buf; i += 4; }
+        else if (matches("MM")) { std::snprintf(buf, sizeof buf, "%02u", b.mo); out += buf; i += 2; }
+        else if (matches("dd")) { std::snprintf(buf, sizeof buf, "%02u", b.d); out += buf; i += 2; }
+        else if (matches("HH")) { std::snprintf(buf, sizeof buf, "%02u", b.h); out += buf; i += 2; }
+        else if (matches("mm")) { std::snprintf(buf, sizeof buf, "%02u", b.mi); out += buf; i += 2; }
+        else if (matches("ss")) { std::snprintf(buf, sizeof buf, "%02u", b.s); out += buf; i += 2; }
+        else { out += pat[i]; ++i; }
+    }
+    return Value::fromString(out);
+}
+
 // ── Tablo (index = sayısal host id) ──────────────────────────────────────────
 // Sıra değişebilir; root.sqt sembolik ad kullandığı için etkilenmez.
 
@@ -209,6 +308,22 @@ const std::vector<HostFn>& hostFnTable() {
         { "SYS_ENV",        1, sys_env       },
         { "SYS_SLEEP",      1, sys_sleep     },
         { "SYS_ARGS",       0, sys_args      },
+        { "DATE_NOW",             0, date_now             },
+        { "DATE_FROM_EPOCH_MS",   1, date_fromEpochMillis },
+        { "DATE_TO_EPOCH_MS",     1, date_toEpochMillis   },
+        { "DATE_ADD_DAYS",        2, date_addDays         },
+        { "DATE_ADD_HOURS",       2, date_addHours        },
+        { "DATE_ADD_MINUTES",     2, date_addMinutes      },
+        { "DATE_ADD_SECONDS",     2, date_addSeconds      },
+        { "DATE_YEAR",             1, date_year           },
+        { "DATE_MONTH",            1, date_month          },
+        { "DATE_DAY",              1, date_day            },
+        { "DATE_HOUR",             1, date_hour           },
+        { "DATE_MINUTE",           1, date_minute         },
+        { "DATE_SECOND",           1, date_second         },
+        { "DATE_DIFF_MS",          2, date_diffMillis     },
+        { "DATE_PARSE",            1, date_parse          },
+        { "DATE_FORMAT",           2, date_format         },
     };
     return table;
 }

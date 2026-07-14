@@ -115,6 +115,7 @@ static bool isStatementStartToken(TokenType t) {
         case TokenType::KW_DOUBLE:
         case TokenType::KW_DECIMAL:
         case TokenType::KW_BYTE:
+        case TokenType::KW_DATE:
         case TokenType::KW_BOOL:
         case TokenType::KW_CHAR:
         case TokenType::KW_STRING_TYPE:
@@ -233,7 +234,7 @@ ASTNode* Parser::parseExportDecl() {
     // veya struct dönüş tipli: export TypeName name(
     bool isFunctionReturnType = ct.is({
         TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE,
+        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
         TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE
     });
 
@@ -273,7 +274,7 @@ ASTNode* Parser::parseDeclaration() {
 
     if (ct.is({
         TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE,
+        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
         TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE,
         TokenType::KW_AUTO
     })) {
@@ -358,7 +359,7 @@ static bool isScopeCallPattern(const ParserToken& ct, const ParserToken& la1,
 {
     bool leftIsType = ct.is({
         TokenType::KW_INT, TokenType::KW_FLOAT_TYPE, TokenType::KW_DOUBLE,
-        TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_BOOL,
+        TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE, TokenType::KW_BOOL,
         TokenType::KW_CHAR, TokenType::KW_STRING_TYPE, TokenType::KW_STRUCT
     }) || ct.type == TokenType::IDENTIFIER;
     return leftIsType
@@ -554,7 +555,7 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         auto typeTok = currentToken();
         if (typeTok.is({TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
                         TokenType::KW_DOUBLE, TokenType::KW_DECIMAL,
-                        TokenType::KW_BYTE, TokenType::KW_BOOL,
+                        TokenType::KW_BYTE, TokenType::KW_DATE, TokenType::KW_BOOL,
                         TokenType::KW_STRING_TYPE})) {
             // tip adını string olarak al
             cast->targetTypeName = typeTok.token ? typeTok.token->token : "";
@@ -659,7 +660,7 @@ ASTNode* Parser::parseFunctionDecl() {
             auto typeTok = currentToken();
             bool isTypeKw = typeTok.is({
                 TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-                TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE,
+                TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
                 TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE,
                 TokenType::KW_AUTO
             }) || typeTok.type == TokenType::IDENTIFIER;
@@ -729,7 +730,7 @@ ASTNode* Parser::parseFfiDecl() {
             auto typeTok = currentToken();
             bool isTypeKw = typeTok.is({
                 TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-                TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE,
+                TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
                 TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE
             }) || typeTok.type == TokenType::IDENTIFIER;
             if (!isTypeKw || !typeTok.token) break;
@@ -966,7 +967,7 @@ ASTNode* Parser::parseStatement() {
 
     if (ct.is({
         TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE,
+        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
         TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE
     })) {
         if (lookahead(1).type == TokenType::COLON_COLON) {

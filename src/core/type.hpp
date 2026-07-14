@@ -40,7 +40,7 @@
 // Enum'lar
 // ============================================================================
 
-enum class PrimitiveKind { Int, Float, Double, Decimal, Byte, Char, String, Bool, Void };
+enum class PrimitiveKind { Int, Float, Double, Decimal, Byte, Char, String, Bool, Void, Date };
 
 enum class TypeKind { Primitive, Array, Struct, Enum, Function, Error };
 
@@ -90,6 +90,7 @@ struct Type {
     static Type Double()  { return primitive(PrimitiveKind::Double); }
     static Type Decimal() { return primitive(PrimitiveKind::Decimal); }
     static Type Byte()    { return primitive(PrimitiveKind::Byte); }
+    static Type Date()    { return primitive(PrimitiveKind::Date); }
     static Type Char()    { return primitive(PrimitiveKind::Char); }
     static Type String() { return primitive(PrimitiveKind::String); }
     static Type Bool()   { return primitive(PrimitiveKind::Bool); }
@@ -156,6 +157,12 @@ struct Type {
         return kind == TypeKind::Primitive && prim == PrimitiveKind::Byte;
     }
 
+    // #88 (ADR-036): date yalnızca karşılaştırılabilir — aritmetik YOK
+    // (birim belirsizliği önlenir; yalnızca açık addX fonksiyonları).
+    bool isDate() const {
+        return kind == TypeKind::Primitive && prim == PrimitiveKind::Date;
+    }
+
     bool isString() const {
         return kind == TypeKind::Primitive && prim == PrimitiveKind::String;
     }
@@ -213,6 +220,7 @@ struct Type {
             case PrimitiveKind::Double:  return "double";
             case PrimitiveKind::Decimal: return "decimal";
             case PrimitiveKind::Byte:    return "byte";
+            case PrimitiveKind::Date:    return "date";
             case PrimitiveKind::Char:    return "char";
             case PrimitiveKind::String:  return "string";
             case PrimitiveKind::Bool:    return "bool";
@@ -235,6 +243,7 @@ struct Type {
         if (n == "double")  return Double();
         if (n == "decimal") return Decimal();
         if (n == "byte")    return Byte();
+        if (n == "date")    return Date();
         if (n == "char")    return Char();
         if (n == "string") return String();
         if (n == "bool")   return Bool();

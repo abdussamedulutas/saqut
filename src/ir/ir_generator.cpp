@@ -59,6 +59,7 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
             if (child->kind != ASTKind::FunctionDecl) continue;
             auto* fnDecl = static_cast<FunctionDeclNode*>(child);
             nameToSlot_.clear();
+            shadowStack_.clear();
             nextSlot_ = 0;
 
             IRFunction irFn(fnDecl->name, (int)fnDecl->params.size());
@@ -114,6 +115,7 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
     for (ASTNode* child : programNode->getChildren()) {
         if (child->kind == ASTKind::FunctionDecl) {
             nameToSlot_.clear();
+            shadowStack_.clear();
             nextSlot_ = 0;
 
             auto* fnDecl = (FunctionDeclNode*)child;
@@ -182,9 +184,11 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
     // ── Blok: içindeki her deyimi sırayla üret ───────────────────────────
     case ASTKind::Block: {
+        pushScope();
         for (ASTNode* child : node->getChildren()) {
             generateStatement(child);
         }
+        popScope();
         break;
     }
 
@@ -1221,12 +1225,41 @@ int IRGenerator::freshSlot() {
 }
 
 void IRGenerator::registerVariable(const std::string& name, int slot) {
+    // #108: aktif bloğun gölge kaydına ismin ÖNCEKİ durumunu (var olan slot
+    // ya da yoktu) sakla — popScope() blok kapanışında bunu geri yükler.
+    if (!shadowStack_.empty()) {
+        auto it = nameToSlot_.find(name);
+        if (it != nameToSlot_.end())
+            shadowStack_.back().emplace_back(name, it->second);
+        else
+            shadowStack_.back().emplace_back(name, std::nullopt);
+    }
+
     nameToSlot_[name] = slot;
     // Faz 5: slot → isim eşlemesi (DAP/debug için)
     if (currentFunction_) {
         if (slot >= (int)currentFunction_->slotNames.size())
             currentFunction_->slotNames.resize(slot + 1);
         currentFunction_->slotNames[slot] = name;
+    }
+}
+
+void IRGenerator::pushScope() {
+    shadowStack_.emplace_back();
+}
+
+void IRGenerator::popScope() {
+    if (shadowStack_.empty()) return;
+    auto record = std::move(shadowStack_.back());
+    shadowStack_.pop_back();
+    // Geriye doğru uygula: aynı isim birden fazla kez bu blokta bildirilmişse
+    // (örn. sibling VariableDecl'ler) en eski önceki-durum geçerli olmalı.
+    for (auto it = record.rbegin(); it != record.rend(); ++it) {
+        const std::string& name = it->first;
+        if (it->second.has_value())
+            nameToSlot_[name] = *it->second;
+        else
+            nameToSlot_.erase(name);
     }
 }
 

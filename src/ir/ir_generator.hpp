@@ -20,6 +20,7 @@
 #ifndef SAQUT_IR_GENERATOR
 #define SAQUT_IR_GENERATOR
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -143,6 +144,14 @@ private:
 
     // Değişken ismi → slot numarası (lokal).
     std::unordered_map<std::string, int> nameToSlot_;
+
+    // #108: blok-scope shadowing düzeltmesi. Her Block girişinde bir kayıt
+    // push'lanır; registerVariable üstüne yazacağı ismin ÖNCEKİ durumunu
+    // (var olan slot ya da nullopt = yoktu) en üstteki kayda ekler. Block
+    // çıkışında kayıt geriye doğru uygulanıp nameToSlot_ eski haline getirilir.
+    std::vector<std::vector<std::pair<std::string, std::optional<int>>>> shadowStack_;
+    void pushScope();
+    void popScope();
 
     // Global değişken ismi → global index
     std::unordered_map<std::string, int> nameToGlobal_;

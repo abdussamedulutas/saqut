@@ -1,0 +1,10 @@
+// #108: ic scope'ta disi golgeleyen yerel bildirim, blok kapanisindan sonra
+// dis referansin dogru slot'a donmesini test eder.
+void main() {
+    int a = 1;
+    {
+        int a = 2;
+        print(a);
+    }
+    print(a);
+}

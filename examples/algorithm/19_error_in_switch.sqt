@@ -1,3 +1,7 @@
+
+
+
+
 void test_error(int kind) {
     if (kind == 1) {
         int x = 10 / 0;

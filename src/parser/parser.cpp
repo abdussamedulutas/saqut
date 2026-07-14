@@ -262,6 +262,9 @@ ASTNode* Parser::parseDeclaration() {
     if (ct.type == TokenType::KW_EXPORT)
         return parseExportDecl();
 
+    if (ct.type == TokenType::KW_FFI)
+        return parseFfiDecl();
+
     if (ct.is({
         TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
         TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE,
@@ -686,6 +689,90 @@ ASTNode* Parser::parseFunctionDecl() {
         fn->addChild(body);
     }
 
+    return fn;
+}
+
+// ADR-034 (#107): ffi <ret> <ad>(<params>) : <HOST_ID> from <mod> [requires <cap>];
+// Gövdesiz gömülü host fonksiyon bildirimi. `from`/`requires` contextual keyword
+// (IDENTIFIER metni), modül adı tırnaksız identifier.
+ASTNode* Parser::parseFfiDecl() {
+    FfiDeclNode* fn = new FfiDeclNode();
+    fn->loc = currentToken().token->loc;
+    nextToken(); // 'ffi' tüket
+
+    // dönüş tipi
+    fn->returnType = currentToken().token ? currentToken().token->token : "";
+    nextToken();
+    if (currentToken().type == TokenType::TERNARY)
+        { nextToken(); fn->returnType += "?"; }
+
+    // ad
+    fn->name = currentToken().token ? currentToken().token->token : "";
+    nextToken();
+
+    // parametreler (parseFunctionDecl ile aynı desen)
+    if (currentToken().type == TokenType::LPAREN) {
+        nextToken();
+        while (currentToken().type != TokenType::RPAREN &&
+               currentToken().type != TokenType::SVR_VOID) {
+            auto typeTok = currentToken();
+            bool isTypeKw = typeTok.is({
+                TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+                TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE,
+                TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE
+            }) || typeTok.type == TokenType::IDENTIFIER;
+            if (!isTypeKw || !typeTok.token) break;
+            std::string paramType = typeTok.token->token;
+            nextToken();
+            while (currentToken().type == TokenType::LBRACKET) {
+                nextToken();
+                if (currentToken().type == TokenType::RBRACKET) nextToken();
+                paramType += "[]";
+            }
+            if (currentToken().type == TokenType::TERNARY)
+                { nextToken(); paramType += "?"; }
+            if (currentToken().type != TokenType::IDENTIFIER || !currentToken().token) break;
+            VariableDeclNode* param = new VariableDeclNode();
+            param->loc = currentToken().token->loc;
+            param->varType = paramType;
+            param->name = currentToken().token->token;
+            nextToken();
+            fn->params.push_back(param);
+            if (currentToken().type == TokenType::COMMA) nextToken();
+        }
+        if (currentToken().type == TokenType::RPAREN) nextToken();
+    }
+
+    // : <HOST_ID>
+    if (currentToken().type == TokenType::COLON) {
+        nextToken();
+        if (currentToken().type == TokenType::IDENTIFIER && currentToken().token) {
+            fn->hostId = currentToken().token->token;
+            nextToken();
+        }
+    }
+
+    // from <mod>   (contextual keyword 'from', tırnaksız modül adı)
+    if (currentToken().type == TokenType::IDENTIFIER &&
+        currentToken().token->token == "from") {
+        nextToken();
+        if (currentToken().type == TokenType::IDENTIFIER && currentToken().token) {
+            fn->moduleName = currentToken().token->token;
+            nextToken();
+        }
+    }
+
+    // [requires <cap>]  (contextual keyword)
+    if (currentToken().type == TokenType::IDENTIFIER &&
+        currentToken().token->token == "requires") {
+        nextToken();
+        if (currentToken().type == TokenType::IDENTIFIER && currentToken().token) {
+            fn->requiresCap = currentToken().token->token;
+            nextToken();
+        }
+    }
+
+    if (currentToken().type == TokenType::SEMICOLON) nextToken();
     return fn;
 }
 

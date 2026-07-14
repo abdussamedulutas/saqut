@@ -36,7 +36,7 @@ static const std::unordered_map<std::string_view, std::string_view> KW_MAP = {
     {"new","new"},{"public","public"},{"private","private"},
     {"protected","protected"},{"static","static"},{"final","final"},
     {"abstract","abstract"},{"import","import"},{"export","export"},{"package","package"},
-    {"const","const"},{"extern","extern"},{"typedef","typedef"},
+    {"const","const"},{"extern","extern"},{"ffi","ffi"},{"typedef","typedef"},
     {"sizeof","sizeof"},{"auto","auto"},{"constexpr","constexpr"},
     {"noexcept","noexcept"},{"native","native"},
     {"synchronized","synchronized"},{"volatile","volatile"},

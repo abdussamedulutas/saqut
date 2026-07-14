@@ -69,8 +69,28 @@ public:
 class ImportDeclNode : public ASTNode {
 public:
     std::vector<std::string> importedNames;  // {"add", "Vector"}
-    std::string              sourcePath;     // "math.sqt" (ham, çözümlenmemiş)
+    std::string              sourcePath;     // "math.sqt" (dosya) veya "fs" (modül)
+    // ADR-034 (#107): tırnaklı kaynak = dosya yolu; tırnaksız ad = gömülü/
+    // çözümlenen modül. Parser bu ayrımı işaretler ki loader doğru çözsün.
+    bool                     isModuleName = false;
     ImportDeclNode();
+    void log(int indent = 0) override;
+    std::string toJson(int depth = 0) override;
+};
+
+// ADR-034 (#107): gömülü host fonksiyon bildirimi. Gövdesiz; yalnız gömülü
+// root.sqt'te geçerli (kullanıcı kodunda policy ile reddedilir).
+//   ffi <ret> <ad>(<params>) : <HOST_ID> from <mod> [requires <cap>];
+class FfiDeclNode : public ASTNode {
+public:
+    std::string                    name;         // "readFile"
+    std::string                    returnType;   // "string"
+    std::vector<VariableDeclNode*> params;       // (string path)
+    std::string                    hostId;       // "FS_READFILE" (sembolik)
+    std::string                    moduleName;   // "fs"
+    std::string                    requiresCap;  // "fs" (boş = capability'siz)
+    FfiDeclNode();
+    ~FfiDeclNode() override;
     void log(int indent = 0) override;
     std::string toJson(int depth = 0) override;
 };

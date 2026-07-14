@@ -62,6 +62,9 @@ enum class ASTKind {
     FunctionDecl,         // Fonksiyon tanımı.
                           //   children: [returnType?], [name], [params...], [body: Block]
                           //   Örn: int main() { ... }
+    FfiDecl,              // Gömülü host fonksiyon bildirimi (ADR-034, #107).
+                          //   ffi <ret> <ad>(<params>) : <HOST_ID> from <mod> [requires <cap>];
+                          //   Gövdesiz; yalnız gömülü root.sqt'te geçerli.
     StructDecl,           // struct tanımı.
                           //   children: [name], [members: VariableDecl...]
                           //   Örn: struct Point { int x; int y; };

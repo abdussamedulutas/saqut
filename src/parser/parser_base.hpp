@@ -64,6 +64,7 @@ private:
     ASTNode* parseVariableDecl();
     ASTNode* parseImportDecl();   // import {name, ...} from "file.sqt";
     ASTNode* parseExportDecl();   // export struct/enum/function ...
+    ASTNode* parseFfiDecl();      // ffi <ret> <ad>(...) : HOST_ID from mod; (ADR-034)
 
     // --- Statement'lar ---
     ASTNode* parseStatement();

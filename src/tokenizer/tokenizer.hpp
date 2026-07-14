@@ -55,7 +55,7 @@ inline constexpr std::string_view keywords[] = {
     "new",      "public",   "private",  "protected",
     "static",   "final",    "abstract",
     "import",   "package",
-    "const",    "extern",   "typedef",  "sizeof",
+    "const",    "extern",   "ffi",      "typedef",  "sizeof",
     "auto",     "constexpr","noexcept",
     "native",   "synchronized", "volatile", "transient"
 };

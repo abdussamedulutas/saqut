@@ -107,9 +107,39 @@ std::string ImportDeclNode::toJson(int depth) {
     JsonObject obj(depth);
     obj.add("kind", "ImportDecl");
     obj.add("sourcePath", sourcePath);
+    obj.add("isModuleName", isModuleName);
     obj.addArray("importedNames", [&]() {
         for (auto& n : importedNames)
             obj.addItem("\"" + n + "\"");
+    });
+    obj.addRaw("location", loc.toJson());
+    return obj.str();
+}
+
+// FfiDeclNode (ADR-034, #107)
+FfiDeclNode::FfiDeclNode() { kind = ASTKind::FfiDecl; }
+FfiDeclNode::~FfiDeclNode() { for (auto* p : params) delete p; }
+void FfiDeclNode::log(int indent) {
+    std::cout << jsonIndent(indent) << Color::SoftMavi << "FfiDecl" << Color::Reset
+              << " (" << Color::SoftYesil << name << Color::Reset
+              << " : " << Color::SoftPembe << returnType << Color::Reset << ") "
+              << Color::SoftGri << ": " << Color::Reset << hostId
+              << Color::SoftGri << " from " << Color::Reset << moduleName;
+    if (!requiresCap.empty())
+        std::cout << Color::SoftGri << " requires " << Color::Reset << requiresCap;
+    std::cout << "\n";
+    for (auto* child : children) child->log(indent + 1);
+}
+std::string FfiDeclNode::toJson(int depth) {
+    JsonObject obj(depth);
+    obj.add("kind", "FfiDecl");
+    obj.add("name", name);
+    obj.add("returnType", returnType);
+    obj.add("hostId", hostId);
+    obj.add("module", moduleName);
+    obj.add("requiresCap", requiresCap);
+    obj.addArray("params", [&]() {
+        for (auto* p : params) obj.addItem(((ASTNode*)p)->toJson(depth + 2));
     });
     obj.addRaw("location", loc.toJson());
     return obj.str();

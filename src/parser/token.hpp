@@ -210,6 +210,7 @@ enum class TokenType : uint16_t {
     KW_CONST,        // const (değişmez değer — C/C++ tarzı)
                      //   Örn: const int MAX = 100;
     KW_EXTERN,       // extern (harici bağlantı — C/C++ tarzı)
+    KW_FFI,          // ffi (gömülü host fonksiyon bildirimi — ADR-034, #107)
     KW_TYPEDEF,      // typedef (tip takma adı — C/C++ tarzı)
     KW_SIZEOF,       // sizeof (tip/boyut sorgulama — C/C++ tarzı)
                      //   Sözdizimi: sizeof(int) veya sizeof x
@@ -485,6 +486,7 @@ inline const std::unordered_map<std::string_view, TokenType> KEYWORD_MAP = {
     // --- C/C++ specific ---
     {"const",       TokenType::KW_CONST},
     {"extern",      TokenType::KW_EXTERN},
+    {"ffi",         TokenType::KW_FFI},
     {"typedef",     TokenType::KW_TYPEDEF},
     {"sizeof",      TokenType::KW_SIZEOF},
     {"auto",        TokenType::KW_AUTO},

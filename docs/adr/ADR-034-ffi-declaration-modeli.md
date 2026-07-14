@@ -67,17 +67,27 @@ bir kez parse edilip önbelleğe alınır, tüm derlemelerde yeniden kullanılı
 binlerce derleme yapar; modül-modül FFI araması istenmez). Modül üyeliği `from <ad>` ile
 ayrışır.
 
-**6. Unstable/deprecated bir bayrağın ardında.** `unstable`/`deprecated` işaretli
-bildirimler `--unstable` (veya `--allow-experimental`) olmadan import edilince hata.
-Varsayılan build curated/deterministik kalır; güç kullanıcısı görünür kapıdan opt-in
-yapar — "cam kutu" kimliğini korur, esnekliği verir.
+**6. `requires <cap>` capability alanı.** Bildirimde parse edilip saklanır; ENFORCEMENT
+#76 (capability modeli) geldiğinde bağlanır. İlk modül `math` capability'siz olduğundan
+bu ilk dilimde alan taşınır ama zorlanmaz.
 
-## İleri genişlemeler (şimdi YAPILMAZ, iskele buna kapalı kurulmaz)
+## İleri genişlemeler (şimdi YAPILMAZ — ES GEÇİLDİ, iskele buna kapalı kurulmaz)
 
-- **Opsiyonel gövde:** ileride `ffi` bir gövde alabilir; gövde, capability yokken
-  runtime davranışını belirler (ör. `fs.readFile` desteklenmiyorsa tempfs'e yönlendir
-  ya da hata). Fallback kararı derleyicide GİZLİ değil, gövdede görünür/incelenebilir →
-  determinizm + izolasyon güçlenir.
+Kullanıcı talimatı (2026-07-13): aşağıdakiler net değil / karmaşık; şimdilik bir
+kenarda durur, temel FFI seam'i bunlara kapalı kurulmaz ama gelecekte eklenebilir.
+
+- **`unstable`/`deprecated` + `--unstable` gate:** işaretli bildirimler bayrak olmadan
+  import edilince hata; varsayılan build curated/deterministik kalır, güç kullanıcısı
+  görünür kapıdan opt-in yapar. Ertelendi.
+- **`deprecated` → `stable` yönlendirme:** deprecated bir fonksiyonun kararlı karşılığına
+  yönlenmesi. Düşünülen sözdizimi:
+  `int Div(int a, int b) deprecated { return a/b; } stable { if (b==0){return 0;} else {return a/b;} }`.
+  ⚠️ İlk bakışta basit görünse de büyük projelerde iki-gövde ikiliği karmaşa yaratır;
+  ertelendi.
+- **Opsiyonel gövde (capability-yok fallback):** ileride `ffi` bir gövde alabilir;
+  gövde, capability yokken runtime davranışını belirler (ör. `fs.readFile` desteklenmiyorsa
+  tempfs'e yönlendir ya da hata). Fallback kararı derleyicide GİZLİ değil, gövdede
+  görünür/incelenebilir → determinizm + izolasyon güçlenir. Ertelendi.
 
 ## Sonuçlar
 

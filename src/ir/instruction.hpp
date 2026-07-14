@@ -135,6 +135,7 @@ enum class Opcode {
     CAST_STR_TO_INT,    // slots[dest] = parse_int(slots[src])
     CAST_STR_TO_FLOAT,  // slots[dest] = parse_float(slots[src])
     CAST_FLOAT_TO_INT_CHECKED,  // slots[dest] = (int)slots[src]; NaN/Inf/taşma → fallible
+    CAST_INT_TO_BYTE_CHECKED,   // slots[dest] = slots[src]; 0-255 dışı → fallible (#86)
 
     // --- Decimal aritmetik (ADR-028) ---
     LOAD_DECIMAL,       // slots[dest] = decimalValue (decimal sabit yükle)

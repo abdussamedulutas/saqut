@@ -1,0 +1,10 @@
+// #86: byte literal bağlam-güdümlü tiplenir; 0-255 aralığı geçerli.
+int main() {
+    byte lo = 0;
+    byte mid = 128;
+    byte hi = 255;
+    print(lo);
+    print(mid);
+    print(hi);
+    return 0;
+}

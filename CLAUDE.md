@@ -109,7 +109,8 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - Optimizasyon: constant folding (int/bool/logical) + dead code elimination (W003 dahil)
   - IR üreteci (3-adresli, slot tabanlı) + bytecode VM (yorumlayıcı döngü)
   - CLI: `tokens` / `ast` / `symbols` / `check` / `ir` / `run` / `exec` / `bench` / `lsp` / `dap`
-  - **Tipler:** `int`, `float`, `bool`, `string`, `decimal`, `enum`, `struct` (nested dahil), `array`, nullable `T?`
+  - **Tipler:** `int`, `float`, `bool`, `string`, `decimal`, `byte` (0-255, #86),
+    `enum`, `struct` (nested dahil), `array`, nullable `T?`
   - **Operatörler:** aritmetik, bitwise, mantıksal, karşılaştırma, tüm bileşik atamalar (`%=` dahil)
   - **Kontrol akışı:** `if/else`, `for`, `while`, `do-while`, `switch-case`, `break`/`continue`/`return`
   - **Hata yönetimi:** `try/catch/throw` (ADR-025), cast `as` (ADR-026)
@@ -126,8 +127,13 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
     aynı IR); ikincil ad alanı (`array::push(arr,12)`, `string::upper(s)`,
     `struct::toJson(p)`). Struct alanı builtin'i gölgeler (çağrı hatası).
     Eski `ElemTip::metod` W006 ile çalışır, v0.7.0'da kalkar.
+  - **byte tipi (#86, ADR-026 genişlemesi):** 8-bit işaretsiz değer tipi
+    (0-255); VM'de int taşınır. Literal bağlam-güdümlü + aralık denetimi
+    (`byte b=300` derleme hatası); aritmetikte int'e terfi (`byte+byte→int`,
+    bitwise dahil); cast `int↔byte` (int→byte fallible, CAST_INT_TO_BYTE_CHECKED),
+    `byte→string`; `byte↔float/decimal` ve `string→byte` yasak (önce int'e).
+    `byte[]` mevcut array runtime'ında çalışır.
 - **Henüz YOK (gerçek eksikler):**
-  - `byte` tipi (henüz tanımlanmadı)
   - MIR JIT backend (#80) ve gömülü-runtime AOT `saqut build` (#81) — ADR-032
     ile kararlaştırıldı, henüz başlanmadı (⚠️ kullanıcı talimatı: MIR'e
     GELİNCE DUR ve sor; stdlib dalgasından önce builtin listesi onayı al)

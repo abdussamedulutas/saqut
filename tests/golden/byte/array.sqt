@@ -1,0 +1,12 @@
+// #86: byte[] mevcut array runtime'ında çalışır (push/pop/length/index).
+int main() {
+    byte[] data = [10, 20, 30];
+    print(data.length());   // 3
+    data.push(250);
+    print(data.length());   // 4
+    print(data[3]);         // 250
+    print(data.pop());      // 250
+    print(data.length());   // 3
+    print(data[0]);         // 10
+    return 0;
+}

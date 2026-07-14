@@ -1,0 +1,27 @@
+// #86: int→byte (checked), byte→int (safe), byte→string, taşma yakalama.
+int main() {
+    int i = 42;
+    byte b = i as byte;
+    print(b);               // 42
+    int back = b as int;
+    print(back);            // 42
+    print(b as string);     // 42
+
+    // taşma → Error
+    int big = 500;
+    try {
+        byte overflow = big as byte;
+        print(overflow);
+    } catch (Error e) {
+        print(e.code);      // E_CAST
+    }
+
+    // as byte? → null
+    byte? maybe = big as byte?;
+    if (maybe == null) {
+        print("null");
+    } else {
+        print(maybe);
+    }
+    return 0;
+}

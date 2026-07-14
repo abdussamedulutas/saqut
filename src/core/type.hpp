@@ -40,7 +40,7 @@
 // Enum'lar
 // ============================================================================
 
-enum class PrimitiveKind { Int, Float, Double, Decimal, Char, String, Bool, Void };
+enum class PrimitiveKind { Int, Float, Double, Decimal, Byte, Char, String, Bool, Void };
 
 enum class TypeKind { Primitive, Array, Struct, Enum, Function, Error };
 
@@ -89,6 +89,7 @@ struct Type {
     static Type Float()   { return primitive(PrimitiveKind::Float); }
     static Type Double()  { return primitive(PrimitiveKind::Double); }
     static Type Decimal() { return primitive(PrimitiveKind::Decimal); }
+    static Type Byte()    { return primitive(PrimitiveKind::Byte); }
     static Type Char()    { return primitive(PrimitiveKind::Char); }
     static Type String() { return primitive(PrimitiveKind::String); }
     static Type Bool()   { return primitive(PrimitiveKind::Bool); }
@@ -135,16 +136,24 @@ struct Type {
     bool isVoid()      const { return kind == TypeKind::Primitive && prim == PrimitiveKind::Void; }
 
     // Aritmetik/karşılaştırma operatörlerine uygun sayısal tip mi?
+    // byte de sayısaldır (#86) ama aritmetikte int'e terfi eder (C modeli) —
+    // sonuç asla byte olmaz; bu ayrım TypeChecker'da yapılır (numericRank byte
+    // içermez, promotion aritmetik dalında elle yapılır).
     bool isNumeric() const {
         return kind == TypeKind::Primitive &&
                (prim == PrimitiveKind::Int     ||
                 prim == PrimitiveKind::Float   ||
                 prim == PrimitiveKind::Double  ||
-                prim == PrimitiveKind::Decimal);
+                prim == PrimitiveKind::Decimal ||
+                prim == PrimitiveKind::Byte);
     }
 
     bool isDecimal() const {
         return kind == TypeKind::Primitive && prim == PrimitiveKind::Decimal;
+    }
+
+    bool isByte() const {
+        return kind == TypeKind::Primitive && prim == PrimitiveKind::Byte;
     }
 
     bool isString() const {
@@ -203,6 +212,7 @@ struct Type {
             case PrimitiveKind::Float:   return "float";
             case PrimitiveKind::Double:  return "double";
             case PrimitiveKind::Decimal: return "decimal";
+            case PrimitiveKind::Byte:    return "byte";
             case PrimitiveKind::Char:    return "char";
             case PrimitiveKind::String:  return "string";
             case PrimitiveKind::Bool:    return "bool";
@@ -224,6 +234,7 @@ struct Type {
         if (n == "float")   return Float();
         if (n == "double")  return Double();
         if (n == "decimal") return Decimal();
+        if (n == "byte")    return Byte();
         if (n == "char")    return Char();
         if (n == "string") return String();
         if (n == "bool")   return Bool();

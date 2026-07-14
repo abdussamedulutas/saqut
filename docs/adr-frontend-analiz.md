@@ -1107,6 +1107,17 @@ Nullable her zaman **tipte** (`?`) yaşar, ayrı operatör icat edilmez. Sonra `
 | `string → int`/`float` | ⚠️ fallible | parse; `"abc"` → `as int` fırlatır / `as int?` null |
 | `float → int` | ⚠️ fallible | sonlu & aralık-içi: **sıfıra doğru kırpılır** (`1.71→1`, `-1.71→-1`); NaN/Inf/taşma → fırlatır / null |
 | `bool ↔ int` | (karar) | başta yasak tutmak en güvenlisi; gerekirse açılır |
+| `byte → int` | ✅ hatasız | byte VM'de int taşınır — genişleme (#86) |
+| `byte → string` | ✅ hatasız | int gösterimi |
+| `int → byte` | ⚠️ fallible | 0-255 dışı → fırlatır / null (**sessiz kırpma YOK**) |
+| `byte ↔ float/decimal` | ✗ yasak | önce int'e geç: `value as int as float` (#86) |
+| `string → byte` | ✗ yasak | önce int'e geç: `text as int as byte` (#86) |
+
+**byte notu (#86):** `byte` 8-bit işaretsiz değer tipidir (0-255). Aritmetikte
+**int'e terfi eder** (C modeli — `byte + byte → int`, bitwise de int); sonuç asla
+byte olmaz. Literal bağlam-güdümlü tiplenir (`byte b = 200` geçerli, `byte b = 300`
+derleme hatası). byte ile int arasında gizli dönüşüm yoktur — her iki yön de açık
+`as` ister (`byte → int` güvenli, `int → byte` fallible).
 
 ### Örnek (ADR-021 ile birlikte)
 

@@ -29,6 +29,7 @@ static const std::unordered_map<std::string_view, std::string_view> KW_MAP = {
     {"throw","throw"},{"throws","throws"},{"assert","assert"},
     {"void","void"},{"int","int"},{"float","float"},{"double","double"},
     {"char","char"},{"string","string"},{"bool","bool"},{"decimal","decimal"},
+    {"byte","byte"},
     {"true","true"},{"false","false"},{"null","null"},
     {"class","class"},{"struct","struct"},{"interface","interface"},
     {"enum","enum"},{"extends","extends"},{"implements","implements"},

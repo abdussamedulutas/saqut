@@ -796,6 +796,19 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             }
             break;
         }
+        case Opcode::CAST_INT_TO_BYTE_CHECKED: {
+            // #86: int → byte, 0-255 dışı sessiz kırpılmaz — fallible
+            int iv = frame.slots[instr.src].intValue;
+            if (iv < 0 || iv > 255) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "integer value " + std::to_string(iv) + " out of byte range (0-255)",
+                    "E_CAST", instr.sourceLine, instr.sourceCol);
+            } else {
+                frame.slots[instr.dest] = Value::fromInt(iv); // byte int olarak taşınır
+            }
+            break;
+        }
 
         // ── Decimal aritmetik (ADR-028) ──────────────────────────────────
         case Opcode::LOAD_DECIMAL:

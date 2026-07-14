@@ -529,8 +529,27 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
 
         switch (lit->literalType) {
             case LiteralType::INTEGER:
+                // byte bağlamı (#86): 0-255 aralık denetimi — sessiz kırpma YOK.
+                if (!expected.isError() && expected.isByte()) {
+                    long long v = 0;
+                    if (lit->hasDirectValue) v = lit->directIntValue;
+                    else if (lit->parserToken.token) {
+                        try { v = std::stoll(lit->parserToken.token->token); }
+                        catch (...) { v = -1; } // taşma → aralık dışı say
+                    }
+                    if (v < 0 || v > 255) {
+                        diag_.report("E003", lit->loc,
+                            "integer literal " + (lit->parserToken.token
+                                ? lit->parserToken.token->token : std::to_string(v))
+                                + " is out of byte range (0-255)",
+                            "byte holds 0-255; use int for larger values or a value in range");
+                        result = Type::error();
+                    } else {
+                        result = Type::Byte();
+                    }
+                }
                 // Bağlam daha geniş sayısal tip ise literal o tip olarak tiplenir (ADR-010/028).
-                if (!expected.isError() && expected.isDecimal()) result = Type::Decimal();
+                else if (!expected.isError() && expected.isDecimal()) result = Type::Decimal();
                 else if (expRank > 0) result = expected; // float veya double bekleniyor
                 else                  result = Type::Int();
                 break;
@@ -601,7 +620,10 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             if (bin->Operator == TokenType::BANG) {
                 result = Type::Bool();
             } else {
-                result = rightType.isNumeric() ? rightType : Type::error();
+                // byte tekli işlemde int'e terfi eder (#86, C modeli).
+                if (rightType.isByte())      result = Type::Int();
+                else if (rightType.isNumeric()) result = rightType;
+                else                         result = Type::error();
                 if (result.isError() && !rightType.isError())
                     diag_.report("E003", bin->loc, "non-numeric operand",
                     "- (unary) only works on int or float values");
@@ -677,13 +699,18 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             break;
         }
 
-        // Arithmetic: +, -, *, /, %
-        int lRank = numericRank(leftType);
-        int rRank = numericRank(rightType);
+        // Arithmetic / bitwise: +, -, *, /, %, &, |, ^, <<, >>
+        // byte C-modeli terfi (#86): byte operand int'e yükselir, sonuç asla
+        // byte olmaz (byte + byte → int; byte & byte → int). numericRank byte
+        // içermez, o yüzden burada elle int'e çeviriyoruz.
+        Type lArith = leftType.isByte()  ? Type::Int() : leftType;
+        Type rArith = rightType.isByte() ? Type::Int() : rightType;
+        int lRank = numericRank(lArith);
+        int rRank = numericRank(rArith);
 
         if (lRank >= 0 && rRank >= 0) {
             // Same type or implicit widening; result is the wider type.
-            result = (lRank >= rRank) ? leftType : rightType;
+            result = (lRank >= rRank) ? lArith : rArith;
         } else if (!leftType.isError() && !rightType.isError()) {
             diag_.report("E003", bin->loc,
                 "arithmetic operator on non-numeric type: " +
@@ -986,6 +1013,12 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             }
 
             bool isLit = sc->arguments[i]->kind == ASTKind::Literal;
+            // Dar-tipli literal argümanlar (byte gibi) bağlamla yeniden
+            // tiplenir — argTypes başta bağlamsız hesaplandı, bu yüzden
+            // `arr.push(250)` literali önce int oldu; beklenen tiple
+            // yeniden değerlendir (aralık denetimi + doğru tip). (#86)
+            if (isLit && !expectedType.isError())
+                argType = checkExpr(sc->arguments[i], expectedType);
             if (!argType.isError() && !expectedType.isError()) {
                 if (!checkAssign(expectedType, argType, isLit,
                                  sc->arguments[i]->loc,
@@ -1074,6 +1107,31 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             diag_.report("E003", cast->loc,
                 "bool conversion from string not supported",
                 "for bool use comparison: `value == \"true\"` or `value != \"\"`");
+            result = Type::error();
+            break;
+        }
+
+        // byte dönüşüm matrisi (#86, ADR-026 genişlemesi):
+        //   byte → int    güvenli (byte VM'de int olarak taşınır)
+        //   byte → string  güvenli (int gösterimi)
+        //   int  → byte   fallible (0-255 dışı → Error/null)
+        //   byte ↔ float/decimal YASAK — önce int'e geç
+        //   string → byte YASAK — `text as int as byte`
+        bool srcIsByte = srcType.isByte();
+        bool tgtIsByte = targetBase.isByte();
+        bool srcIsInt  = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Int;
+        bool tgtIsInt  = targetBase.isPrimitive() && targetBase.prim == PrimitiveKind::Int;
+        if (srcIsByte && !(tgtIsInt || tgtIsStr || tgtIsByte)) {
+            diag_.report("E003", cast->loc,
+                "'byte' can only be cast to int or string",
+                "for float/decimal go through int first: `value as int as float`");
+            result = Type::error();
+            break;
+        }
+        if (tgtIsByte && !(srcIsInt || srcIsByte)) {
+            diag_.report("E003", cast->loc,
+                "only 'int' can be cast to byte",
+                "cast to int first: `value as int as byte`");
             result = Type::error();
             break;
         }

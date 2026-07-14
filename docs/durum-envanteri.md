@@ -37,7 +37,7 @@
 | `enum` | **çalışıyor** (ctest dışı) | `ir_generator.cpp:929` enum layout, LOAD_CONST | `tests/golden/enum/basic.sqt` — `.expected` YOK → ctest dışı | Manuel: `1\n1` — doğru; explicit_values: `404\n1\n0` — doğru |
 | nullable `T?` | **çalışıyor** | `type_checker.cpp` nullable analiz, `interpreter.cpp` null guard | `tests/golden/null/` (4 test: narrowing, and_narrowing, 2×compile_error) | 4/4 ✓ |
 | `cast` (`as`) | **çalışıyor** (ctest dışı) | `ir_generator.cpp` CAST_* opcode'lar, ADR-026 | `tests/golden/cast/` (3 dosya) — `.expected` YOK → ctest dışı | Manuel: basic ✓, nullable_cast ✓, cast_error ✓ |
-| `byte` | **yok** | Kaynak kodda `byte` tipi tanımlanmamış | test YOK | — |
+| `byte` | **çalışıyor** | `PrimitiveKind::Byte`, `CAST_INT_TO_BYTE_CHECKED`, aritmetik int'e terfi (#86) | `tests/golden/byte/` (literal, arithmetic, cast, array) | 4/4 ✓ |
 
 #### Struct üç tuzağı — kritik
 

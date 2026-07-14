@@ -1,0 +1,18 @@
+// #86: byte aritmetikte int'e terfi eder (C modeli); bitwise de int döner.
+int main() {
+    byte a = 100;
+    byte b = 200;
+    int sum = a + b;        // 300 — byte'a sığmaz, int'e terfi
+    print(sum);
+    int diff = b - a;       // 100
+    print(diff);
+    byte m = 240;
+    byte n = 15;
+    int orr = m | n;        // 255
+    print(orr);
+    int andd = m & n;       // 0
+    print(andd);
+    int shifted = a << 2;   // 400
+    print(shifted);
+    return 0;
+}

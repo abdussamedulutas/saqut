@@ -1041,10 +1041,25 @@ int IRGenerator::generateExpression(ASTNode* node) {
                              tgtType.prim == PrimitiveKind::Double);
         bool tgtIsInt     = tgtType.isPrimitive() && tgtType.prim == PrimitiveKind::Int;
         bool tgtIsDecimal = tgtType.isDecimal();
+        bool srcIsByte    = srcType.isByte();
+        bool tgtIsByte    = tgtType.isByte();
 
         Opcode op;
         bool infallible = false;
-        if (srcIsInt && tgtIsFloat) {
+        if (srcIsInt && tgtIsByte) {
+            // int → byte: 0-255 aralık denetimi (#86)
+            op = Opcode::CAST_INT_TO_BYTE_CHECKED;
+        } else if ((srcIsByte && tgtIsInt) || (srcIsByte && tgtIsByte)) {
+            // byte → int / byte → byte: byte VM'de int taşındığı için kimlik
+            Instruction nop(Opcode::LOAD_SLOT);
+            nop.dest = destSlot;
+            nop.src  = srcSlot;
+            currentFunction_->instructions.push_back(std::move(nop));
+            return destSlot;
+        } else if (srcIsByte && tgtIsStr) {
+            // byte → string: int gösterimi (byte int olarak taşınır)
+            op = Opcode::CAST_INT_TO_STR; infallible = true;
+        } else if (srcIsInt && tgtIsFloat) {
             op = Opcode::INT_TO_FLOAT; infallible = true;
         } else if (srcIsInt && tgtIsDecimal) {
             op = Opcode::INT_TO_DECIMAL; infallible = true;

@@ -173,6 +173,7 @@ enum class TokenType : uint16_t {
     KW_STRING_TYPE,  // string (metin tipi)
     KW_DECIMAL,      // decimal (ondalık hassasiyet — ADR-028)
                      //   string.h'daki string işlevleriyle çakışmaz.
+    KW_BYTE,         // byte (8-bit işaretsiz değer tipi 0-255 — #86)
 
     /* ====== Literal Keyword'ler ====== */
     KW_TRUE,         // true (mantıksal doğru sabiti)
@@ -461,6 +462,7 @@ inline const std::unordered_map<std::string_view, TokenType> KEYWORD_MAP = {
     {"char",        TokenType::KW_CHAR},
     {"string",      TokenType::KW_STRING_TYPE},
     {"decimal",     TokenType::KW_DECIMAL},
+    {"byte",        TokenType::KW_BYTE},
 
     // --- Literals ---
     {"true",        TokenType::KW_TRUE},

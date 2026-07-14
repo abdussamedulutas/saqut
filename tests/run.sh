@@ -30,7 +30,14 @@ while IFS= read -r -d '' sqt; do
     exp="$dir/$base.expected"
     [ -f "$exp" ] || continue
 
-    actual=$("$SAQUT" run "$sqt" 2>/dev/null) || true
+    # ADR-036 (#76): BASE.flags — --allow-fs vb. gerektiren testler.
+    extra_flags=()
+    flags_file="$dir/$base.flags"
+    if [ -f "$flags_file" ]; then
+        mapfile -t extra_flags < "$flags_file"
+    fi
+
+    actual=$("$SAQUT" run "${extra_flags[@]}" "$sqt" 2>/dev/null) || true
     expected=$(cat "$exp")
 
     if [ "$actual" = "$expected" ]; then

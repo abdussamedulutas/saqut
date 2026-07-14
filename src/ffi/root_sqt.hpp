@@ -33,6 +33,12 @@ ffi float pow(float b, float e)   : MATH_POW   from math;
 ffi float floor(float x)          : MATH_FLOOR from math;
 ffi float ceil(float x)           : MATH_CEIL  from math;
 ffi float round(float x)          : MATH_ROUND from math;
+
+// ── caps modülü (pledge modeli, capability'siz — #91) ───────────────────────
+// drop geri alınamaz; ekleme fonksiyonu YOK (güvenlik değeri buradan gelir).
+// import {drop, has} from caps; drop("fs");
+ffi void drop(string capName) : CAPS_DROP from caps;
+ffi bool has(string capName)  : CAPS_HAS  from caps;
 )SQT";
 
 #endif // SAQUT_FFI_ROOT_SQT

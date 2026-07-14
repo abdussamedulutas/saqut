@@ -14,38 +14,55 @@
 
 // ── math implementasyonları ─────────────────────────────────────────────────
 
-static Value math_abs(const std::vector<Value>& a) {
+static Value math_abs(const std::vector<Value>& a, HostContext&) {
     return Value::fromInt(std::abs(a[0].intValue));
 }
-static Value math_absf(const std::vector<Value>& a) {
+static Value math_absf(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::fabs(a[0].floatValue));
 }
-static Value math_min(const std::vector<Value>& a) {
+static Value math_min(const std::vector<Value>& a, HostContext&) {
     return Value::fromInt(std::min(a[0].intValue, a[1].intValue));
 }
-static Value math_max(const std::vector<Value>& a) {
+static Value math_max(const std::vector<Value>& a, HostContext&) {
     return Value::fromInt(std::max(a[0].intValue, a[1].intValue));
 }
-static Value math_minf(const std::vector<Value>& a) {
+static Value math_minf(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::fmin(a[0].floatValue, a[1].floatValue));
 }
-static Value math_maxf(const std::vector<Value>& a) {
+static Value math_maxf(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::fmax(a[0].floatValue, a[1].floatValue));
 }
-static Value math_sqrt(const std::vector<Value>& a) {
+static Value math_sqrt(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::sqrt(a[0].floatValue));   // sqrt(-1) → NaN (Error yok)
 }
-static Value math_pow(const std::vector<Value>& a) {
+static Value math_pow(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::pow(a[0].floatValue, a[1].floatValue));
 }
-static Value math_floor(const std::vector<Value>& a) {
+static Value math_floor(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::floor(a[0].floatValue));
 }
-static Value math_ceil(const std::vector<Value>& a) {
+static Value math_ceil(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::ceil(a[0].floatValue));
 }
-static Value math_round(const std::vector<Value>& a) {
+static Value math_round(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::round(a[0].floatValue));
+}
+
+// ── caps implementasyonları (#91, ADR-036) ──────────────────────────────────
+// drop/has caps::drop kendisi capability istemez (izin düşürmek her zaman
+// serbest); VM'nin gerçek caps_ kümesine ctx.caps üzerinden dokunur.
+
+static Value caps_drop(const std::vector<Value>& a, HostContext& ctx) {
+    auto cap = capabilityFromName(a[0].stringValue);
+    if (!cap) throw std::runtime_error("unknown capability '" + a[0].stringValue + "'");
+    if (ctx.caps) ctx.caps->erase(*cap);
+    return Value::fromInt(0); // void
+}
+static Value caps_has(const std::vector<Value>& a, HostContext& ctx) {
+    auto cap = capabilityFromName(a[0].stringValue);
+    if (!cap) throw std::runtime_error("unknown capability '" + a[0].stringValue + "'");
+    bool has = ctx.caps && ctx.caps->find(*cap) != ctx.caps->end();
+    return Value::fromInt(has ? 1 : 0);
 }
 
 // ── Tablo (index = sayısal host id) ──────────────────────────────────────────
@@ -64,6 +81,8 @@ const std::vector<HostFn>& hostFnTable() {
         { "MATH_FLOOR", 1, math_floor },
         { "MATH_CEIL",  1, math_ceil  },
         { "MATH_ROUND", 1, math_round },
+        { "CAPS_DROP",  1, caps_drop  },
+        { "CAPS_HAS",   1, caps_has   },
     };
     return table;
 }
@@ -79,8 +98,8 @@ int hostFnIndex(const std::string& symbolicId) {
     return it != index.end() ? it->second : -1;
 }
 
-Value callHostFn(int id, const std::vector<Value>& args) {
+Value callHostFn(int id, const std::vector<Value>& args, HostContext& ctx) {
     const auto& t = hostFnTable();
     if (id < 0 || id >= (int)t.size() || !t[id].impl) return Value::null();
-    return t[id].impl(args);
+    return t[id].impl(args, ctx);
 }

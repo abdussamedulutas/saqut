@@ -6,8 +6,14 @@
 #   EXPECTED — beklenen hata içeriği (.compile_error dosyası); stderr bu
 #              metni içermeli (regex veya düz dize olarak eşleşir)
 
+# ADR-036 (#76): BASE.flags'ten gelen --allow-fs vb. bayraklar ("|" ile ayrık).
+set(EXTRA_FLAGS "")
+if(EXTRA_ARGS)
+    string(REPLACE "|" ";" EXTRA_FLAGS "${EXTRA_ARGS}")
+endif()
+
 execute_process(
-    COMMAND "${BINARY}" run "file:${SOURCE}"
+    COMMAND "${BINARY}" run ${EXTRA_FLAGS} "file:${SOURCE}"
     OUTPUT_VARIABLE STDOUT_OUT
     ERROR_VARIABLE  STDERR_OUT
     RESULT_VARIABLE EXIT_CODE

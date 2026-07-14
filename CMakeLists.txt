@@ -45,6 +45,15 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
     string(REPLACE ".sqt" "" BASE "${REL}")
     string(REPLACE "/" "_" TNAME "${BASE}")
 
+    # ADR-036 (#76): BASE.flags — --allow-fs vb. gerektiren testler için ekstra
+    # CLI bayrakları (satır başına bir bayrak). Yoksa boş.
+    set(FLAGS_FILE "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.flags")
+    set(EXTRA_ARGS_JOINED "")
+    if(EXISTS "${FLAGS_FILE}")
+        file(STRINGS "${FLAGS_FILE}" FLAG_LIST)
+        list(JOIN FLAG_LIST "|" EXTRA_ARGS_JOINED)
+    endif()
+
     # Siyah-kutu: saqut run çıktısı
     set(RUN_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.expected")
     if(EXISTS "${RUN_EXPECTED}")
@@ -54,6 +63,7 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -DBINARY=${SAQUT_BINARY}
                 -DSOURCE=${SQT_FILE}
                 -DEXPECTED=${RUN_EXPECTED}
+                -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
                 -P "${GOLDEN_SCRIPT}"
         )
     endif()
@@ -98,6 +108,7 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -DBINARY=${SAQUT_BINARY}
                 -DSOURCE=${SQT_FILE}
                 -DEXPECTED=${COMPILE_ERROR_EXPECTED}
+                -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
                 -P "${CMAKE_SOURCE_DIR}/cmake/run_golden_error.cmake"
         )
     endif()
@@ -112,6 +123,7 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -DBINARY=${SAQUT_BINARY}
                 -DSOURCE=${SQT_FILE}
                 -DEXPECTED=${RUNTIME_ERROR_EXPECTED}
+                -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
                 -P "${CMAKE_SOURCE_DIR}/cmake/run_golden_error.cmake"
         )
     endif()

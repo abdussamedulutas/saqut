@@ -15,6 +15,11 @@ set(EXTRA_FLAGS "")
 if(OPTIMIZED)
     list(APPEND EXTRA_FLAGS "--optimized")
 endif()
+# ADR-036 (#76): BASE.flags'ten gelen --allow-fs vb. bayraklar ("|" ile ayrık).
+if(EXTRA_ARGS)
+    string(REPLACE "|" ";" EXTRA_ARGS_LIST "${EXTRA_ARGS}")
+    list(APPEND EXTRA_FLAGS ${EXTRA_ARGS_LIST})
+endif()
 
 execute_process(
     COMMAND "${BINARY}" "${COMMAND}" ${EXTRA_FLAGS} "file:${SOURCE}"

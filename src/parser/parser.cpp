@@ -193,10 +193,16 @@ ASTNode* Parser::parseImportDecl() {
         nextToken();
     }
 
-    // string literal: "file.sqt"
+    // ADR-034 (#107): tırnaklı = dosya yolu; tırnaksız identifier = gömülü/
+    // çözümlenen modül adı.
     if (currentToken().type == TokenType::STRING) {
         auto* st = static_cast<StringToken*>(currentToken().token);
-        node->sourcePath = st->context;
+        node->sourcePath   = st->context;
+        node->isModuleName = false; // dosya
+        nextToken();
+    } else if (currentToken().type == TokenType::IDENTIFIER && currentToken().token) {
+        node->sourcePath   = currentToken().token->token;
+        node->isModuleName = true;  // gömülü/çözümlenen modül
         nextToken();
     }
 

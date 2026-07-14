@@ -874,6 +874,8 @@ int IRGenerator::generateExpression(ASTNode* node) {
         // Hangi fonksiyon çağrılıyor? Callee bir Identifier
         std::string fnName;
         bool        isBuiltin = false;
+        int         ffiHostId = -1;
+        bool        ffiReturnsVoid = false;
 
         if (call->callee && call->callee->kind == ASTKind::Identifier) {
             auto* calleeId = (IdentifierNode*)call->callee;
@@ -884,6 +886,12 @@ int IRGenerator::generateExpression(ASTNode* node) {
             if (calleeId->resolvedSymbol && calleeId->resolvedSymbol->isBuiltin) {
                 isBuiltin = true;
             }
+            // ADR-034 (#107): FFI host fonksiyonu — sayısal dispatch
+            if (calleeId->resolvedSymbol && calleeId->resolvedSymbol->hostFnId >= 0) {
+                ffiHostId      = calleeId->resolvedSymbol->hostFnId;
+                ffiReturnsVoid = calleeId->resolvedSymbol->type.returnType &&
+                                 calleeId->resolvedSymbol->type.returnType->isVoid();
+            }
         }
 
         // Her argümanı hesapla, sonuçların slot numaralarını topla
@@ -892,7 +900,20 @@ int IRGenerator::generateExpression(ASTNode* node) {
             argSlots.push_back(generateExpression(arg));
         }
 
-        if (isBuiltin) {
+        if (ffiHostId >= 0) {
+            // CALLHOST: sayısal host id ile FFI dispatch (ADR-034, #107)
+            int destSlot = ffiReturnsVoid ? -1 : freshSlot();
+            Instruction ins(Opcode::CALLHOST);
+            ins.functionName = "__ffi__";
+            ins.intValue     = ffiHostId;
+            ins.dest         = destSlot;
+            ins.argSlots     = argSlots;
+            ins.sourceLine   = call->loc.line;
+            ins.sourceCol    = call->loc.column;
+            ins.sourceFile   = call->loc.filePath;
+            currentFunction_->instructions.push_back(std::move(ins));
+            return destSlot;
+        } else if (isBuiltin) {
             // CALLHOST: host (C++) fonksiyonu çağır (print gibi), dönüş değeri yok
             Instruction ins(Opcode::CALLHOST);
             ins.functionName = fnName;

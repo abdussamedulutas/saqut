@@ -1,0 +1,4 @@
+// ADR-034 (#107): import-gated — sqrt hiç import edilmemişse tanımsız kalmalı.
+void main() {
+    print(sqrt(4.0));
+}

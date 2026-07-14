@@ -20,6 +20,9 @@
 #include "parser/nodes/expressions.hpp"
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/identifier.hpp"
+#include "ffi/ffi_catalog.hpp"
+#include "ffi/host_functions.hpp"
+#include "core/module_registry.hpp"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // collect — tek dosya (geriye dönük uyumluluk)
@@ -264,6 +267,15 @@ void SymbolCollector::validateImports(ModuleGraph& graph) {
             if (child->kind != ASTKind::ImportDecl) continue;
             auto* imp = static_cast<ImportDeclNode*>(child);
 
+            // ADR-034 (#107): tırnaksız import → gömülü FFI modülü, dosya
+            // graph'ında aranmaz — FfiCatalog'a yönlendir.
+            if (imp->isModuleName) {
+                resolveFfiImport(imp);
+                moduleImports_[unit.moduleId].insert(imp->importedNames.begin(),
+                                                      imp->importedNames.end());
+                continue;
+            }
+
             // Kaynak modülün moduleId'sini bul
             // sourcePath ham string; loader canonical yola çevirmiş.
             // ModuleRegistry üzerinden eşle.
@@ -345,6 +357,58 @@ void SymbolCollector::validateImports(ModuleGraph& graph) {
                 moduleImports_[unit.moduleId].insert(name);
             }
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveFfiImport — `import {sqrt} from math;` (ADR-034, #107)
+// FfiCatalog'dan bildirimi bul, global scope'a hostFnId taşıyan Symbol tanımla.
+// Sembol yalnızca import edildiğinde var olur → gating burada doğal sağlanır.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
+    const FfiCatalog& catalog = FfiCatalog::instance();
+
+    if (!catalog.hasModule(imp->sourcePath)) {
+        diag_.report("E_IMPORT_UNKNOWN", imp->loc,
+            "unknown module '" + imp->sourcePath + "'",
+            "known embedded modules: math");
+        return;
+    }
+
+    for (const auto& name : imp->importedNames) {
+        const FfiDeclNode* decl = catalog.lookup(imp->sourcePath, name);
+        if (!decl) {
+            diag_.report("E_IMPORT_UNKNOWN", imp->loc,
+                "'" + name + "' not found in module '" + imp->sourcePath + "'");
+            continue;
+        }
+
+        int hostId = hostFnIndex(decl->hostId);
+        if (hostId < 0) {
+            // root.sqt ↔ host_functions.cpp drift — geliştirici hatası.
+            diag_.report("E_IMPORT_UNKNOWN", imp->loc,
+                "internal: FFI host id '" + decl->hostId + "' has no registered implementation");
+            continue;
+        }
+
+        if (table_.resolve(name)) continue; // zaten tanımlı (tekrar import vb.)
+
+        std::vector<Type> paramTypes;
+        std::vector<std::string> paramNames;
+        for (auto* p : decl->params) {
+            paramTypes.push_back(typeFromName(p->varType, p->loc));
+            paramNames.push_back(p->name);
+        }
+        Type retType = typeFromName(decl->returnType, decl->loc);
+
+        Symbol* s = table_.define(name, SymbolKind::Function,
+                                  Type::function(retType, paramTypes),
+                                  decl->loc, ModuleRegistry::BUILTIN_ID);
+        if (!s) continue;
+        s->paramNames = paramNames;
+        s->hostFnId   = hostId;
+        s->ffiModule  = imp->sourcePath;
     }
 }
 

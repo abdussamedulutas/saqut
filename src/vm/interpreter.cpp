@@ -15,6 +15,7 @@
 #include "vm/object.hpp"
 #include "builtin/builtin_methods.hpp"
 #include "bench/profile.hpp"
+#include "ffi/host_functions.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
@@ -966,6 +967,15 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                     pendingThrow_ = makeErrorValue(e.what(), "E_BUILTIN",
                                                    instr.sourceLine, instr.sourceCol);
                 }
+            } else if (instr.functionName == "__ffi__") {
+                // ADR-034 (#107): sayısal host id ile FFI dispatch
+                std::vector<Value> argVals;
+                argVals.reserve(instr.argSlots.size());
+                for (int s : instr.argSlots)
+                    argVals.push_back(frame.slots[s]);
+                Value ret = callHostFn(instr.intValue, argVals);
+                if (instr.dest >= 0)
+                    callStack_.back().slots[instr.dest] = ret;
             } else {
                 executeHostFunction(instr.functionName, frame.slots, instr.argSlots);
             }

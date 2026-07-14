@@ -93,6 +93,9 @@ void ModuleLoader::loadUnit(const std::string& filePath, ModuleGraph& graph,
         if (child->kind != ASTKind::ImportDecl) continue;
         auto* imp = static_cast<ImportDeclNode*>(child);
         if (imp->sourcePath.empty()) continue;
+        // ADR-034 (#107): tırnaksız import = gömülü FFI modülü, dosya grafiğinde
+        // izlenmez — SymbolCollector::resolveFfiImport bunu FfiCatalog'dan çözer.
+        if (imp->isModuleName) continue;
 
         std::string depPath = resolvePath(filePath, imp->sourcePath);
         loadUnit(depPath, graph, imp->loc);

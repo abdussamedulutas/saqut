@@ -27,6 +27,8 @@
 #include "module/module_graph.hpp"
 #include "core/module_registry.hpp"
 
+class ImportDeclNode;
+
 class SymbolCollector {
 public:
     SymbolCollector(SymbolTable& t, DiagnosticEngine& d) : table_(t), diag_(d) {}
@@ -48,6 +50,10 @@ private:
 
     // Import doğrulaması: export edilmiş mi? İsim var mı? Scope'a bağla.
     void validateImports(ModuleGraph& graph);
+
+    // ADR-034 (#107): tırnaksız import (`import {sqrt} from math;`) — gömülü
+    // FfiCatalog'dan çöz, global scope'a hostFnId taşıyan Symbol tanımla.
+    void resolveFfiImport(ImportDeclNode* imp);
 
     // Geçiş 2 — fonksiyon gövdelerini gez, isimleri çöz
     void pass2Bodies(ASTNode* program, int moduleId);

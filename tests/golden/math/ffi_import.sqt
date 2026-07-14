@@ -1,0 +1,17 @@
+// ADR-034 (#107): FFI import-gated math modülü uçtan uca — ES6-tarzı named
+// import, gömülü root.sqt üzerinden sayısal host dispatch.
+import {abs, absf, min, max, minf, maxf, sqrt, pow, floor, ceil, round} from math;
+
+void main() {
+    print(abs(-5));
+    print(absf(-3.5));
+    print(min(3, 9));
+    print(max(3, 9));
+    print(minf(3.5, 9.1));
+    print(maxf(3.5, 9.1));
+    print(sqrt(4.0));
+    print(pow(2.0, 10.0));
+    print(floor(3.7));
+    print(ceil(3.2));
+    print(round(3.5));
+}

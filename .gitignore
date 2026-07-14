@@ -27,3 +27,11 @@ scripts/bench/*.class
 
 # AI asistan önbellek ve çalışma dizinleri
 .deepseek/
+
+# Website
+webside/
+webside/*
+saqutwebside/
+
+# Belge ekran görüntüleri (üretilmiş, README/wiki'ye elle seçilerek eklenir)
+screenshots/

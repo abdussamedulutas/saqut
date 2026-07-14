@@ -33,6 +33,10 @@ ffi float pow(float b, float e)   : MATH_POW   from math;
 ffi float floor(float x)          : MATH_FLOOR from math;
 ffi float ceil(float x)           : MATH_CEIL  from math;
 ffi float round(float x)          : MATH_ROUND from math;
+// #89: gerçek importable sabit yok (ffi yalnızca fonksiyon) — sıfır-argümanlı
+// saf fonksiyon olarak sunulur: import {PI} from math; PI();
+ffi float PI()                    : MATH_PI    from math;
+ffi float E()                     : MATH_E     from math;
 
 // ── caps modülü (pledge modeli, capability'siz — #91) ───────────────────────
 // drop geri alınamaz; ekleme fonksiyonu YOK (güvenlik değeri buradan gelir).

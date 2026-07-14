@@ -1,0 +1,6 @@
+import {PI, E} from math;
+
+void main() {
+    print(PI() > 3.14 && PI() < 3.15);
+    print(E() > 2.71 && E() < 2.72);
+}

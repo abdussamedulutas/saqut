@@ -55,6 +55,14 @@ static Value math_ceil(const std::vector<Value>& a, HostContext&) {
 static Value math_round(const std::vector<Value>& a, HostContext&) {
     return Value::fromFloat(std::round(a[0].floatValue));
 }
+// #89: sabit yok — ffi bildirimi yalnızca fonksiyon; PI/E sıfır-argümanlı
+// saf fonksiyon olarak sunulur (import {PI, E} from math; PI();).
+static Value math_PI(const std::vector<Value>&, HostContext&) {
+    return Value::fromFloat(3.14159265358979323846);
+}
+static Value math_E(const std::vector<Value>&, HostContext&) {
+    return Value::fromFloat(2.71828182845904523536);
+}
 
 // ── caps implementasyonları (#91, ADR-035) ──────────────────────────────────
 // drop/has caps::drop kendisi capability istemez (izin düşürmek her zaman
@@ -294,6 +302,8 @@ const std::vector<HostFn>& hostFnTable() {
         { "MATH_FLOOR", 1, math_floor },
         { "MATH_CEIL",  1, math_ceil  },
         { "MATH_ROUND", 1, math_round },
+        { "MATH_PI",    0, math_PI    },
+        { "MATH_E",     0, math_E     },
         { "CAPS_DROP",  1, caps_drop  },
         { "CAPS_HAS",   1, caps_has   },
         { "FS_READ_FILE",   1, fs_readFile   },

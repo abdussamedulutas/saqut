@@ -212,6 +212,10 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - `docs/adr/ADR-033-builtin-sozdizimi-ufcs.md` — Builtin reformu: UFCS nokta
   çağrısı (birincil) + array::/string::/struct:: ad alanları; alan gölgeleme;
   eski ElemTip::metod W006 ile v0.7.0'a kadar.
+- `docs/adr/ADR-034-ffi-declaration-modeli.md` — Gömülü root.sqt'te `ffi` bildirim
+  (imza+modül+sembolik host id+requires cap+unstable); import-gated stdlib
+  (tırnaksız=modül, tırnaklı=dosya); sayısal host dispatch (HostFnId enum, O(1),
+  print taşınır); `fs::`/`math::` çağrı sözdizimini eler (#107).
 - `docs/adr/ADR-032-mir-jit-gomulu-runtime-aot.md` — İkinci backend: MIR JIT +
   gömülü-runtime AOT (`saqut build`); shadow stack GC kökleri; C transpile/libgccjit
   elendi, LLVM fiilen kapalı; VM referans backend, diferansiyel test zorunlu.

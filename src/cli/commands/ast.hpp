@@ -41,7 +41,7 @@ inline int cmdAst(const CliArgs& args) {
     // ── Symbol + type analysis (required for --optimized; optional for plain ast) ──
     SymbolTable      symbolTable;
     DiagnosticEngine diag;
-    SymbolCollector(symbolTable, diag).collect(ast);
+    SymbolCollector(symbolTable, diag, args.allowedCaps).collect(ast);
     TypeChecker(symbolTable, diag).check(ast);
     StructuralValidator(diag).validate(ast);
 

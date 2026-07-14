@@ -969,13 +969,26 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 }
             } else if (instr.functionName == "__ffi__") {
                 // ADR-034 (#107): sayısal host id ile FFI dispatch
+                // ADR-036 (#76): runtime capability backstop (A+B modelinin B'si)
+                if (instr.requiredCap && caps_.find(*instr.requiredCap) == caps_.end()) {
+                    pendingThrow_ = makeErrorValue(
+                        std::string("requires --allow-") + capabilityName(*instr.requiredCap) +
+                            " capability",
+                        "E_CAP_MISSING", instr.sourceLine, instr.sourceCol);
+                    break;
+                }
                 std::vector<Value> argVals;
                 argVals.reserve(instr.argSlots.size());
                 for (int s : instr.argSlots)
                     argVals.push_back(frame.slots[s]);
-                Value ret = callHostFn(instr.intValue, argVals);
-                if (instr.dest >= 0)
-                    callStack_.back().slots[instr.dest] = ret;
+                try {
+                    Value ret = callHostFn(instr.intValue, argVals);
+                    if (instr.dest >= 0)
+                        callStack_.back().slots[instr.dest] = ret;
+                } catch (const std::runtime_error& e) {
+                    pendingThrow_ = makeErrorValue(e.what(), "E_FFI",
+                                                   instr.sourceLine, instr.sourceCol);
+                }
             } else {
                 executeHostFunction(instr.functionName, frame.slots, instr.argSlots);
             }

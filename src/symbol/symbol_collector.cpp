@@ -392,6 +392,18 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
             continue;
         }
 
+        // ADR-036 (#76): `requires <cap>` — A+B modelinin "A" yarısı (derleme
+        // zamanı tanı). B yarısı (runtime backstop) VM CALLHOST'ta uygulanır.
+        std::optional<Capability> reqCap;
+        if (!decl->requiresCap.empty()) {
+            reqCap = capabilityFromName(decl->requiresCap);
+            if (reqCap && allowedCaps_.find(*reqCap) == allowedCaps_.end()) {
+                diag_.report("E_CAP_MISSING", imp->loc,
+                    "'" + name + "' requires --allow-" + decl->requiresCap + " capability",
+                    "run with --allow-" + decl->requiresCap);
+            }
+        }
+
         if (table_.resolve(name)) continue; // zaten tanımlı (tekrar import vb.)
 
         std::vector<Type> paramTypes;
@@ -406,9 +418,10 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
                                   Type::function(retType, paramTypes),
                                   decl->loc, ModuleRegistry::BUILTIN_ID);
         if (!s) continue;
-        s->paramNames = paramNames;
-        s->hostFnId   = hostId;
-        s->ffiModule  = imp->sourcePath;
+        s->paramNames  = paramNames;
+        s->hostFnId    = hostId;
+        s->ffiModule   = imp->sourcePath;
+        s->requiredCap = reqCap;
     }
 }
 

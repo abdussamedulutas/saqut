@@ -15,6 +15,7 @@
 #ifndef SAQUT_SYMBOL_COLLECTOR
 #define SAQUT_SYMBOL_COLLECTOR
 
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -23,6 +24,7 @@
 #include "diagnostic/diagnostic_engine.hpp"
 #include "core/type.hpp"
 #include "core/location.hpp"
+#include "core/capability.hpp"
 #include "parser/ast_node.hpp"
 #include "module/module_graph.hpp"
 #include "core/module_registry.hpp"
@@ -31,7 +33,9 @@ class ImportDeclNode;
 
 class SymbolCollector {
 public:
-    SymbolCollector(SymbolTable& t, DiagnosticEngine& d) : table_(t), diag_(d) {}
+    SymbolCollector(SymbolTable& t, DiagnosticEngine& d,
+                     std::set<Capability> allowedCaps = {})
+        : table_(t), diag_(d), allowedCaps_(std::move(allowedCaps)) {}
 
     // Tek dosya (geriye dönük uyumluluk): seedBuiltins → 3 geçiş → structCycles
     void collect(ASTNode* program);
@@ -66,6 +70,7 @@ private:
 
     SymbolTable&      table_;
     DiagnosticEngine& diag_;
+    std::set<Capability> allowedCaps_; // ADR-036 (#76): --allow-fs/net/sys
     int               currentModuleId_ = -1;
 
     // struct adı → içerdiği struct-tip alan adları (cycle check için)

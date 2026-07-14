@@ -30,7 +30,7 @@ inline int cmdSymbols(const CliArgs& args) {
     DiagnosticEngine diag;
 
     if (ast) {
-        SymbolCollector(table, diag).collect(ast);
+        SymbolCollector(table, diag, args.allowedCaps).collect(ast);
     } else {
         diag.report("E000", SourceLocation{}, "failed to build AST");
     }

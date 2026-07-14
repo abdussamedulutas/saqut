@@ -21,9 +21,11 @@
 
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
+#include "core/capability.hpp"
 
 struct CliArgs {
     std::string command;
@@ -40,6 +42,12 @@ struct CliArgs {
     bool verbose     = false;  // --verbose: her aşamanın bitişini canlı yaz
     int  gcThreshold = 0;      // --gc-threshold=N: GC eşiği (0 = VM varsayılanı, negatif = GC kapalı)
     bool gcStats     = false;  // --gc-stats: koşu sonunda GC istatistiklerini stderr'e yaz
+
+    // ADR-036 (#76): --allow-fs/--allow-net/--allow-sys — varsayılan hepsi kapalı.
+    std::set<Capability> allowedCaps;
+    bool showCapabilities = false; // --capabilities: kullanılan cap'leri raporla (saqut ir)
+    // `--` sonrası argümanlar — sys::args() ile programa geçilir.
+    std::vector<std::string> programArgs;
 };
 
 // ============================================================================
@@ -50,6 +58,17 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
+
+        // `--` sonrası her şey programArgs — sys::args() (#90).
+        if (arg == "--") {
+            for (int j = i + 1; j < argc; j++)
+                args.programArgs.push_back(argv[j]);
+            break;
+        }
+        if (arg == "--allow-fs")  { args.allowedCaps.insert(Capability::Fs);  continue; }
+        if (arg == "--allow-net") { args.allowedCaps.insert(Capability::Net); continue; }
+        if (arg == "--allow-sys") { args.allowedCaps.insert(Capability::Sys); continue; }
+        if (arg == "--capabilities") { args.showCapabilities = true; continue; }
 
         if (arg == "-") {
             args.stdinMode = true;

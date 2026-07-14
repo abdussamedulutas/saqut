@@ -880,6 +880,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
         bool        isBuiltin = false;
         int         ffiHostId = -1;
         bool        ffiReturnsVoid = false;
+        std::optional<Capability> ffiRequiredCap;
 
         if (call->callee && call->callee->kind == ASTKind::Identifier) {
             auto* calleeId = (IdentifierNode*)call->callee;
@@ -895,6 +896,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 ffiHostId      = calleeId->resolvedSymbol->hostFnId;
                 ffiReturnsVoid = calleeId->resolvedSymbol->type.returnType &&
                                  calleeId->resolvedSymbol->type.returnType->isVoid();
+                ffiRequiredCap = calleeId->resolvedSymbol->requiredCap;
             }
         }
 
@@ -912,6 +914,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.intValue     = ffiHostId;
             ins.dest         = destSlot;
             ins.argSlots     = argSlots;
+            ins.requiredCap  = ffiRequiredCap;
             ins.sourceLine   = call->loc.line;
             ins.sourceCol    = call->loc.column;
             ins.sourceFile   = call->loc.filePath;

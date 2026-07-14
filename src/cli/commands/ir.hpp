@@ -6,7 +6,9 @@
 #define SAQUT_CLI_IR
 
 #include <iostream>
+#include <set>
 #include "cli/args.hpp"
+#include "core/capability.hpp"
 #include "module/module_loader.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
@@ -27,7 +29,7 @@ inline int cmdIr(const CliArgs& args) {
     ModuleGraph      graph = ModuleLoader(registry, diag).load(filePath);
 
     SymbolTable symbolTable;
-    SymbolCollector(symbolTable, diag).collectModuleGraph(graph);
+    SymbolCollector(symbolTable, diag, args.allowedCaps).collectModuleGraph(graph);
     if (!diag.hasErrors()) {
         for (auto& unit : graph.units) TypeChecker(symbolTable, diag).check(unit.ast);
         for (auto& unit : graph.units) StructuralValidator(diag).validate(unit.ast);
@@ -49,6 +51,22 @@ inline int cmdIr(const CliArgs& args) {
 
     IRGenerator irGenerator;
     IRProgram   program = irGenerator.generateModuleGraph(graph, symbolTable);
+
+    // ADR-036 (#76): statik capability analizi — programın hangi cap'lere
+    // ihtiyaç duyduğunu raporlar. caps::drop RUNTIME davranışıdır, bu üst
+    // sınır raporundan ETKİLENMEZ (ayrım kasıtlı — #91).
+    if (args.showCapabilities) {
+        std::set<Capability> used;
+        for (auto& [name, fn] : program.functions)
+            for (auto& instr : fn.instructions)
+                if (instr.requiredCap) used.insert(*instr.requiredCap);
+        std::cout << "capabilities:";
+        if (used.empty()) std::cout << " (none)";
+        for (auto c : used) std::cout << " " << capabilityName(c);
+        std::cout << "\n";
+        return 0;
+    }
+
     program.dump();
 
     return 0;

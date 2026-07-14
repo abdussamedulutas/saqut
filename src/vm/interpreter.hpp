@@ -21,6 +21,7 @@
 #include <utility>
 #include "ir/ir_program.hpp"
 #include "core/module_registry.hpp"
+#include "core/capability.hpp"
 #include "vm/call_frame.hpp"
 #include "vm/object.hpp"
 
@@ -64,6 +65,15 @@ public:
     void      setGCThreshold(int n) { gcInitialThreshold_ = n; gcThreshold_ = n; }
     int       gcRuns() const       { return heap_.gcRuns; }
     long long gcFreedTotal() const { return heap_.freedTotal; }
+
+    // ADR-036 (#76): --allow-fs/--allow-net/--allow-sys — CLI'dan doldurulur.
+    void setCapabilities(std::set<Capability> caps) { caps_ = std::move(caps); }
+    // #90: `--` sonrası argümanlar — sys::args() ile programa geçirilir.
+    void setProgramArgs(std::vector<std::string> a) { programArgs_ = std::move(a); }
+    const std::vector<std::string>& programArgs() const { return programArgs_; }
+    // #91: caps::drop/caps::has runtime erişimi.
+    bool hasCapability(Capability c) const { return caps_.find(c) != caps_.end(); }
+    void dropCapability(Capability c) { caps_.erase(c); }
 
     // ── DAP API ───────────────────────────────────────────────────────────────
     enum class RunState { Running, Paused, Finished };
@@ -132,6 +142,9 @@ private:
     static constexpr int kGCDefaultThreshold = 1024;
     int gcInitialThreshold_ = kGCDefaultThreshold;
     int gcThreshold_        = kGCDefaultThreshold; // bir sonraki tetikleme eşiği
+
+    std::set<Capability>     caps_;       // ADR-036 (#76): açık capability'ler
+    std::vector<std::string> programArgs_; // #90: `--` sonrası argümanlar
 
     // Faz 5: bütçe/step kısıtlarını kontrol eder, true = durmalı
     bool shouldStop();

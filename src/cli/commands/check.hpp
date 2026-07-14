@@ -28,7 +28,7 @@ inline int cmdCheck(const CliArgs& args) {
 
     if (!diag.hasErrors()) {
         SymbolTable table;
-        SymbolCollector(table, diag).collectModuleGraph(graph);
+        SymbolCollector(table, diag, args.allowedCaps).collectModuleGraph(graph);
 
         if (!diag.hasErrors()) {
             for (auto& unit : graph.units) TypeChecker(table, diag).check(unit.ast);

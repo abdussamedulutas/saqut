@@ -29,9 +29,11 @@
 #ifndef SAQUT_IR_INSTRUCTION
 #define SAQUT_IR_INSTRUCTION
 
+#include <optional>
 #include <string>
 #include <vector>
 #include "core/decimal.hpp"
+#include "core/capability.hpp"
 
 // ----------------------------------------------------------------------------
 // Opcode — Sanal Makinenin Anlayacağı İşlem Kodları
@@ -287,6 +289,11 @@ struct Instruction {
     int         sourceLine = 0;
     int         sourceCol  = 0;
     std::string sourceFile;
+
+    // ADR-036 (#76): CALLHOST("__ffi__") için gereken capability — yoksa
+    // nullopt. VM'de runtime backstop (B), `saqut ir --capabilities`'te
+    // statik raporlama için kullanılır.
+    std::optional<Capability> requiredCap;
 
     explicit Instruction(Opcode op) : opcode(op) {}
 };

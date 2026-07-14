@@ -23,6 +23,7 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 #include "core/location.hpp"
 #include "core/sourcefile.hpp"
@@ -64,7 +65,7 @@ public:
 
     // --- Dosya Sonu ve Pozisyon Sorgulama ---
     bool isEnd();            // offset >= size ise true (EOF)
-    int* positionRange();    // [start, end] offset aralığı (tahsis eder, silinmeli!)
+    std::pair<int, int> positionRange(); // [start, end] offset aralığı
     std::string getPositionRange(); // Pozisyon aralığındaki metni döndür
 
     // --- Desen Eşleme ---

@@ -68,25 +68,23 @@ void Lexer::rejectPosition() {
 
 // --------------------------------------------------------------------------
 // positionRange: Yığındaki en dış ve en iç konumu [start, end] olarak döndür.
-// UYARI: new int[2] ile heap'te tahsis eder. Çağıran sorumludur.
-// TODO: std::pair<int,int> veya yapı kullanarak tahsisi kaldır.
 // --------------------------------------------------------------------------
-int* Lexer::positionRange() {
+std::pair<int, int> Lexer::positionRange() {
     int len = offsetMap.size();
     if (len == 0)
-        return new int[2]{0, offset};
+        return {0, offset};
     if (len == 1)
-        return new int[2]{offset, offsetMap[0]};
-    return new int[2]{offsetMap[len - 2], offsetMap[len - 1]};
+        return {offset, offsetMap[0]};
+    return {offsetMap[len - 2], offsetMap[len - 1]};
 }
 
 // --------------------------------------------------------------------------
 // getPositionRange: positionRange() aralığındaki metni string olarak döndür.
 // --------------------------------------------------------------------------
 std::string Lexer::getPositionRange() {
-    int* a = positionRange();
+    auto [start, end] = positionRange();
     std::string mem;
-    for (int i = a[0]; i < a[1]; i++)
+    for (int i = start; i < end; i++)
         mem.push_back(input.at(i));
     return mem;
 }

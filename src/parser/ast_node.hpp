@@ -212,6 +212,15 @@ inline const char* literalTypeToString(LiteralType t) {
 
 class ASTNode {
 public:
+    /* ====== Profiling sayacı (byproduct) ====== */
+    // Süreç boyunca kurulan toplam AST düğümü sayısı. --profile "parser"
+    // aşamasının node adedini, ModuleLoader::load() öncesi/sonrası bu sayacın
+    // delta'sıyla okur (ayrı bir ağaç gezme YOK — her düğüm zaten burada tek
+    // bir kez kuruluyor). Tek-iş-parçacıklı derleme; senkronizasyon gerekmez.
+    static inline long long s_constructedCount = 0;
+
+    ASTNode() { ++s_constructedCount; }
+
     /* ====== Her düğümün tipi ====== */
     ASTKind kind;                    // Düğüm tipi (Program, FunctionDecl, ...)
                                      //   switch(kind) ile tip kontrolü.

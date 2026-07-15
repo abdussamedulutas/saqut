@@ -37,7 +37,13 @@ inline int cmdRun(const CliArgs& args) {
     DiagnosticEngine diag;
     ModuleLoader     loader(registry, diag);
     loader.setProfiler(profilerPtr);
+    // --profile: "parser" node sayısı = load() boyunca kurulan AST düğümü
+    // delta'sı (ayrı ağaç gezme yok; ASTNode yapıcısı sayıyor). "token"/
+    // "parser" SÜRELERİ ModuleLoader içinde ScopedStage ile ölçülüyor.
+    long long nodesBefore = ASTNode::s_constructedCount;
     ModuleGraph      graph = loader.load(filePath);
+    if (profilerPtr)
+        profilerPtr->count("parser", ASTNode::s_constructedCount - nodesBefore, "node");
 
     if (diag.hasErrors()) {
         diag.printAll(std::cerr);
@@ -69,10 +75,16 @@ inline int cmdRun(const CliArgs& args) {
 
     // ── Aşama 4 (opsiyonel): Optimizasyon ────────────────────────────────
     if (args.optimized) {
+        profiling::StageTimer::ScopedStage _prof(profilerPtr, "optimizasyon");
         CompilerConfig   cfg;
         DiagnosticEngine optDiag;
+        // --profile: "geçiş" = fixpoint tur sayısı (her modül için ayrı ayrı
+        // toplanır); runPassesInPlace zaten bu sayacı tutuyor (byproduct).
+        long long totalRounds = 0;
         for (auto& unit : graph.units)
-            OptimizationManager(cfg, optDiag).runPassesInPlace(unit.ast, &symbolTable);
+            totalRounds += OptimizationManager(cfg, optDiag)
+                               .runPassesInPlace(unit.ast, &symbolTable);
+        if (profilerPtr) profilerPtr->count("optimizasyon", totalRounds, "gecis");
         if (optDiag.errorCount() + optDiag.warningCount() > 0)
             optDiag.printAll(std::cerr);
     }
@@ -83,6 +95,13 @@ inline int cmdRun(const CliArgs& args) {
     {
         profiling::StageTimer::ScopedStage _prof(profilerPtr, "ir-gen");
         program = irGenerator.generateModuleGraph(graph, symbolTable);
+    }
+    // --profile: "instr" = üretilen toplam IR talimatı (tüm fonksiyonlar).
+    if (profilerPtr) {
+        long long totalInstr = 0;
+        for (auto& [name, fn] : program.functions)
+            totalInstr += static_cast<long long>(fn.instructions.size());
+        profilerPtr->count("ir-gen", totalInstr, "instr");
     }
 
     // ── Aşama 6: Çalıştırma backend'i ────────────────────────────────────

@@ -44,13 +44,18 @@ public:
 
     // Pass'leri verilen AST üstünde yerinde çalıştırır — klon yok.
     // run / ir ve diğer tek-versiyon komutları bu yolu kullanır.
-    void runPassesInPlace(ASTNode* root, SymbolTable* table) {
-        for (int round = 0; round < maxRounds_; ++round) {
+    // DÖNÜŞ: fixpoint'e ulaşana dek çalışan tur (geçiş) sayısı — --profile
+    //   "optimizasyon" aşamasının iş miktarı olarak raporlanır (byproduct;
+    //   ekstra hesap yok, döngü zaten bu sayacı tutuyor).
+    int runPassesInPlace(ASTNode* root, SymbolTable* table) {
+        int round = 0;
+        for (; round < maxRounds_; ++round) {
             bool anyChange = false;
             for (auto& pass : passes_)
                 if (pass->run(root, table)) anyChange = true;
-            if (!anyChange) break;
+            if (!anyChange) { ++round; break; }
         }
+        return round;
     }
 
     // Önce deepClone, sonra runPassesInPlace. Orijinal dokunulmaz.

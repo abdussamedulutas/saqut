@@ -69,6 +69,9 @@ void ModuleLoader::loadUnit(const std::string& filePath, ModuleGraph& graph,
         profiling::StageTimer::ScopedStage _prof(profiler_, "token");
         tokens = tokenizer.scan(source, filePath);
     }
+    // --profile: bu dosyanın token sayısı "token" aşamasına eklenir
+    // (çok-modüllü derlemede count() toplar). profiler_ nullptr ise no-op.
+    if (profiler_) profiler_->count("token", static_cast<long long>(tokens.size()), "token");
 
     // Faz 2: diag_ enjekte edilir — sözdizimi hataları artık konumlu tanı
     // (E9xx) olarak DiagnosticEngine'e gider, parse yine de devam eder

@@ -641,33 +641,66 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                             slotKindOf(fn, instr.dest) == SlotType::Float ? MIR_DMOV : MIR_MOV,
                             R(instr.dest), R(instr.src)));
                     break;
+                // ── int32 aritmetiği (#113/ADR-040) ──────────────────────
+                // saQut `int` 32-bit; MIR "S"-op'ları alt 32-bit'te çalışır ama
+                // sonucun üst yarısı TANIMSIZ (MIR.md §insns) → her sonucu EXT32
+                // ile sign-extend edip register'ı normalize tutuyoruz. Böylece
+                // taşma VM'in int32 wrap'iyle birebir eşleşir (ADR-032/038).
                 case Opcode::ADD:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_ADD, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_ADDS, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_EXT32, R(instr.dest), R(instr.dest)));
                     break;
                 case Opcode::SUB:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_SUB, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_SUBS, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_EXT32, R(instr.dest), R(instr.dest)));
                     break;
                 case Opcode::MUL:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MUL, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MULS, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_EXT32, R(instr.dest), R(instr.dest)));
                     break;
                 case Opcode::DIV: {
-                    MIR_label_t okLabel = MIR_new_label(ctx);
+                    MIR_label_t okLabel   = MIR_new_label(ctx);
+                    MIR_label_t doDiv     = MIR_new_label(ctx);
+                    MIR_label_t doneLabel = MIR_new_label(ctx);
+                    // /0 → yakalanabilir hata (VM ile aynı)
                     MIR_append_insn(ctx, func,
                         MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_int_op(ctx, 0)));
                     MIR_append_insn(ctx, func,
                         MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, divZeroProto), MIR_new_ref_op(ctx, divZeroImport)));
                     MIR_append_insn(ctx, func, okLabel);
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_DIV, R(instr.dest), R(instr.left), R(instr.right)));
+                    // INT_MIN / -1 donanımda tuzak (#DE) → 2's-complement sonucu INT_MIN
+                    MIR_append_insn(ctx, func,
+                        MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, doDiv), R(instr.right), MIR_new_int_op(ctx, -1)));
+                    MIR_append_insn(ctx, func,
+                        MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, doDiv), R(instr.left), MIR_new_int_op(ctx, INT_MIN)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV, R(instr.dest), MIR_new_int_op(ctx, INT_MIN)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
+                    MIR_append_insn(ctx, func, doDiv);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_DIVS, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_EXT32, R(instr.dest), R(instr.dest)));
+                    MIR_append_insn(ctx, func, doneLabel);
                     break;
                 }
                 case Opcode::MOD: {
-                    MIR_label_t okLabel = MIR_new_label(ctx);
+                    MIR_label_t okLabel   = MIR_new_label(ctx);
+                    MIR_label_t doMod     = MIR_new_label(ctx);
+                    MIR_label_t doneLabel = MIR_new_label(ctx);
                     MIR_append_insn(ctx, func,
                         MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_int_op(ctx, 0)));
                     MIR_append_insn(ctx, func,
                         MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, modZeroProto), MIR_new_ref_op(ctx, modZeroImport)));
                     MIR_append_insn(ctx, func, okLabel);
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOD, R(instr.dest), R(instr.left), R(instr.right)));
+                    // INT_MIN % -1 → tuzak → 2's-complement sonucu 0
+                    MIR_append_insn(ctx, func,
+                        MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, doMod), R(instr.right), MIR_new_int_op(ctx, -1)));
+                    MIR_append_insn(ctx, func,
+                        MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, doMod), R(instr.left), MIR_new_int_op(ctx, INT_MIN)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV, R(instr.dest), MIR_new_int_op(ctx, 0)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
+                    MIR_append_insn(ctx, func, doMod);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MODS, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_EXT32, R(instr.dest), R(instr.dest)));
+                    MIR_append_insn(ctx, func, doneLabel);
                     break;
                 }
                 // ── Float aritmetiği (Dilim 1.5) ────────────────────────
@@ -711,10 +744,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_XOR, R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::SHL:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_LSH, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_LSHS, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_EXT32, R(instr.dest), R(instr.dest)));
                     break;
                 case Opcode::SHR:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_RSH, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_RSHS, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_EXT32, R(instr.dest), R(instr.dest)));
                     break;
                 case Opcode::BNOT:
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_XOR, R(instr.dest), R(instr.src), MIR_new_int_op(ctx, -1)));

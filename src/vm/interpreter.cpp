@@ -22,6 +22,22 @@
 #include <algorithm>
 #include <cmath>
 #include <climits>
+#include <cstdint>
+
+// int32 aritmetiği: taşma TANIMLI 2's-complement wrap (#113/ADR-040). saQut `int`
+// 32-bit; iki backend (VM/JIT) birebir aynı sonucu vermek zorunda (ADR-032/038).
+// C++ signed overflow UB olduğundan toplama/çıkarma/çarpma uint32 üzerinden yapılır;
+// INT_MIN/-1 bölme/mod donanımda tuzak (x86 #DE) → elle 2's-complement sonucu verilir.
+namespace {
+inline int wrapAddI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b)); }
+inline int wrapSubI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) - static_cast<uint32_t>(b)); }
+inline int wrapMulI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) * static_cast<uint32_t>(b)); }
+inline int wrapDivI32(int a, int b) { return (a == INT_MIN && b == -1) ? INT_MIN : a / b; }
+inline int wrapModI32(int a, int b) { return (a == INT_MIN && b == -1) ? 0 : a % b; }
+// Kaydırma miktarı 5-bit maskelenir (x86/MIR native davranışı; b&31), sonuç 32-bit.
+inline int wrapShlI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) << (b & 31)); }
+inline int wrapShrI32(int a, int b) { return a >> (b & 31); }
+} // namespace
 
 // ── buildTrace ─────────────────────────────────────────────────────────────────
 // Mevcut callStack_'i en içten dışa gezerek stacktrace string'i üretir.
@@ -419,26 +435,26 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         // İstisna: sıfıra bölme gerçek bir çalışma zamanı koşuludur, kontrol edilir.
         case Opcode::ADD:
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue + frame.slots[instr.right].intValue);
+                wrapAddI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
             break;
         case Opcode::SUB:
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue - frame.slots[instr.right].intValue);
+                wrapSubI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
             break;
         case Opcode::MUL:
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue * frame.slots[instr.right].intValue);
+                wrapMulI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
             break;
         case Opcode::DIV: {
             int d = frame.slots[instr.right].intValue;
             if (d == 0) { pendingThrow_ = makeErrorValue("division by zero", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
-            frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue / d);
+            frame.slots[instr.dest] = Value::fromInt(wrapDivI32(frame.slots[instr.left].intValue, d));
             break;
         }
         case Opcode::MOD: {
             int d = frame.slots[instr.right].intValue;
             if (d == 0) { pendingThrow_ = makeErrorValue("sıfıra bölme (mod)", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
-            frame.slots[instr.dest] = Value::fromInt(frame.slots[instr.left].intValue % d);
+            frame.slots[instr.dest] = Value::fromInt(wrapModI32(frame.slots[instr.left].intValue, d));
             break;
         }
 
@@ -457,11 +473,11 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         case Opcode::SHL:
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue << frame.slots[instr.right].intValue);
+                wrapShlI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
             break;
         case Opcode::SHR:
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue >> frame.slots[instr.right].intValue);
+                wrapShrI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
             break;
         case Opcode::BNOT:
             frame.slots[instr.dest] = Value::fromInt(~frame.slots[instr.src].intValue);

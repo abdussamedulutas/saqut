@@ -1,0 +1,22 @@
+// #113/ADR-040: int 32-bit, taşma TANIMLI 2's-complement wrap.
+// VM ve JIT birebir aynı sonucu vermek zorunda (ADR-032/038); bu golden
+// VM çıktısını dondurur, JIT diferansiyeli #92 altyapısında otomatikleşir.
+// Değişken kullanılır: sabit ifadeler frontend'de fold edilir, runtime
+// backend aritmetiği ancak değişkenlerle sınanır.
+
+int main() {
+    int max = 2147483647;
+    int min = -2147483647 - 1;   // INT_MIN (literal -2147483648 lexer'da taşar)
+    int one = 1;
+    int two = 2;
+    int big = 1000000;
+
+    print(max + one);          // -2147483648 (taşma wrap)
+    print(min - one);          //  2147483647 (alt taşma wrap)
+    print(max * two);          // -2
+    print(min / (0 - one));    // -2147483648 (INT_MIN / -1 tuzağı → wrap)
+    print(min % (0 - one));    //  0          (INT_MIN % -1 → 0)
+    print(one << 31);          // -2147483648 (işaret bitine kaydırma)
+    print(big * big);          // -727379968  (10^12 alt 32-bit)
+    return 0;
+}

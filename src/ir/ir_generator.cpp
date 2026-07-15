@@ -1342,11 +1342,18 @@ void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
                 case Opcode::STRUCT_NEW: case Opcode::ARRAY_NEW:
                     nk = SlotType::Ref; break;
                 case Opcode::LOAD_STRING: case Opcode::STRING_CONCAT:
+                case Opcode::CAST_INT_TO_STR: case Opcode::CAST_FLOAT_TO_STR:
+                case Opcode::CAST_BOOL_TO_STR: case Opcode::CAST_DECIMAL_TO_STR:
                     nk = SlotType::Str; break;
+                case Opcode::CAST_STR_TO_FLOAT: case Opcode::CAST_DECIMAL_TO_FLOAT:
+                    nk = SlotType::Float; break;
+                // CAST_STR_TO_INT / CAST_FLOAT_TO_INT_CHECKED /
+                // CAST_INT_TO_BYTE_CHECKED / CAST_DECIMAL_TO_INT → Int (default).
                 case Opcode::LOAD_DECIMAL:
                 case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
                 case Opcode::DDIV: case Opcode::DMOD: case Opcode::DNEG:
                 case Opcode::INT_TO_DECIMAL: case Opcode::FLOAT_TO_DECIMAL:
+                case Opcode::CAST_STR_TO_DECIMAL:
                     nk = SlotType::Decimal; break;
                 case Opcode::LOAD_SLOT:
                     nk = kindOf(ins.src); break;

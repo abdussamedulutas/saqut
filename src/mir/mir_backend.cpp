@@ -14,6 +14,8 @@
 
 #include "mir/mir_backend.hpp"
 
+#include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iomanip>
@@ -83,6 +85,64 @@ extern "C" int64_t rt_jit_string_eq(void* a, void* b) {
     return static_cast<StringObject*>(a)->data == static_cast<StringObject*>(b)->data ? 1 : 0;
 }
 
+// ── Cast trampolinleri (Dilim 3). Hepsi non-nullable hedef; başarısızlık
+// uncaught (try/catch JIT'te yok) → rt_jit_cast_error, VM'in uncaught-throw
+// mesaj gövdesiyle birebir (interpreter.cpp CAST_* dalları). ──────────────────
+extern "C" void rt_jit_cast_error(const char* what) {
+    std::cerr << "runtime error: " << what << "\n";  // div_zero deseniyle tutarlı
+    std::exit(1);
+}
+extern "C" void* rt_jit_int_to_str(int64_t v) {
+    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(std::to_string(v)));
+    return g_jitRuntimeStrings.back().get();
+}
+extern "C" void* rt_jit_float_to_str(double v) {
+    std::ostringstream oss;
+    oss << v;  // VM CAST_FLOAT_TO_STR default precision (print_float'tan FARKLI — birebir)
+    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(oss.str()));
+    return g_jitRuntimeStrings.back().get();
+}
+extern "C" void* rt_jit_bool_to_str(int64_t v) {
+    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(v ? "true" : "false"));
+    return g_jitRuntimeStrings.back().get();
+}
+extern "C" int64_t rt_jit_str_to_int(void* s) {
+    const std::string& str = static_cast<StringObject*>(s)->data;
+    try {
+        size_t pos;
+        long long v = std::stoll(str, &pos);
+        if (pos != str.size()) throw std::invalid_argument("incomplete");
+        if (v < INT_MIN || v > INT_MAX) throw std::out_of_range("overflow");
+        return static_cast<int64_t>(static_cast<int>(v));
+    } catch (...) {
+        rt_jit_cast_error(("'" + str + "' cannot convert to int").c_str());
+        return 0;  // ulaşılmaz (exit)
+    }
+}
+extern "C" double rt_jit_str_to_float(void* s) {
+    const std::string& str = static_cast<StringObject*>(s)->data;
+    try {
+        size_t pos;
+        double v = std::stod(str, &pos);
+        if (pos != str.size()) throw std::invalid_argument("incomplete");
+        return v;
+    } catch (...) {
+        rt_jit_cast_error(("'" + str + "' cannot convert to float").c_str());
+        return 0.0;  // ulaşılmaz
+    }
+}
+extern "C" int64_t rt_jit_float_to_int_checked(double fv) {
+    if (!std::isfinite(fv) || fv < static_cast<double>(INT_MIN) || fv > static_cast<double>(INT_MAX))
+        rt_jit_cast_error("float value out of int range or NaN/Inf");
+    return static_cast<int64_t>(static_cast<int>(fv));  // sıfıra kırp
+}
+extern "C" int64_t rt_jit_int_to_byte_checked(int64_t iv) {
+    if (iv < 0 || iv > 255)
+        rt_jit_cast_error(("integer value " + std::to_string(iv) +
+                           " out of byte range (0-255)").c_str());
+    return iv;
+}
+
 // Sıfıra bölme — bu Dilim'de try/catch (ENTER_TRY/THROW) reddedildiğinden
 // yakalanamaz; VM'de de aynı program uncaught throw ile sonlanırdı. Mesaj/çıkış
 // VM davranışıyla eşleşir (interpreter.cpp E_DIVZERO).
@@ -136,6 +196,18 @@ bool opcodeSupported(const Instruction& instr) {
         // Dilim 3: string skaler (kutulu — pointer register'da taşınır, ADR-037)
         case Opcode::LOAD_STRING:
         case Opcode::STRING_CONCAT:
+        // Dilim 3: cast (skaler). Nullable hedef (instr.left==1 → başarısızlıkta null)
+        // JIT'te desteklenmez — null'un register temsili ayrı tasarım turu. Yalnızca
+        // non-nullable hedef (başarısızlık = uncaught throw, VM ile aynı).
+        case Opcode::CAST_INT_TO_STR:
+        case Opcode::CAST_FLOAT_TO_STR:
+        case Opcode::CAST_BOOL_TO_STR:
+            return true;
+        case Opcode::CAST_STR_TO_INT:
+        case Opcode::CAST_STR_TO_FLOAT:
+        case Opcode::CAST_FLOAT_TO_INT_CHECKED:
+        case Opcode::CAST_INT_TO_BYTE_CHECKED:
+            return instr.left != 1;  // nullable hedef → reddet
         case Opcode::ADD:
         case Opcode::SUB:
         case Opcode::MUL:
@@ -264,6 +336,22 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_var_t  strEqArgs[2]     = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "b", 0}};
     MIR_item_t strEqProto      = MIR_new_proto_arr(ctx, "str_eq_proto", 1, &i64Ret, 2, strEqArgs);
     MIR_item_t strEqImport     = MIR_new_import(ctx, "rt_jit_string_eq");
+    // Cast trampolinleri (Dilim 3). ret I64 (pointer/int) veya D; arg I64/D.
+    MIR_type_t dRet            = MIR_T_D;
+    MIR_item_t castI2SProto    = MIR_new_proto(ctx, "cast_i2s_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
+    MIR_item_t castI2SImport   = MIR_new_import(ctx, "rt_jit_int_to_str");
+    MIR_item_t castF2SProto    = MIR_new_proto(ctx, "cast_f2s_proto", 1, &i64Ret, 1, MIR_T_D, "v");
+    MIR_item_t castF2SImport   = MIR_new_import(ctx, "rt_jit_float_to_str");
+    MIR_item_t castB2SProto    = MIR_new_proto(ctx, "cast_b2s_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
+    MIR_item_t castB2SImport   = MIR_new_import(ctx, "rt_jit_bool_to_str");
+    MIR_item_t castS2IProto    = MIR_new_proto(ctx, "cast_s2i_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
+    MIR_item_t castS2IImport   = MIR_new_import(ctx, "rt_jit_str_to_int");
+    MIR_item_t castS2FProto    = MIR_new_proto(ctx, "cast_s2f_proto", 1, &dRet, 1, MIR_T_I64, "v");
+    MIR_item_t castS2FImport   = MIR_new_import(ctx, "rt_jit_str_to_float");
+    MIR_item_t castF2IProto    = MIR_new_proto(ctx, "cast_f2i_proto", 1, &i64Ret, 1, MIR_T_D, "v");
+    MIR_item_t castF2IImport   = MIR_new_import(ctx, "rt_jit_float_to_int_checked");
+    MIR_item_t castI2BProto    = MIR_new_proto(ctx, "cast_i2b_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
+    MIR_item_t castI2BImport   = MIR_new_import(ctx, "rt_jit_int_to_byte_checked");
     MIR_item_t divZeroProto    = MIR_new_proto(ctx, "divzero_proto", 0, nullptr, 0);
     MIR_item_t divZeroImport   = MIR_new_import(ctx, "rt_jit_div_zero");
     MIR_item_t modZeroProto    = MIR_new_proto(ctx, "modzero_proto", 0, nullptr, 0);
@@ -388,6 +476,28 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, concatProto),
                             MIR_new_ref_op(ctx, concatImport),
                             R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                // ── Cast (Dilim 3) — hepsi dest = rt_jit_<cast>(src) runtime call ──
+                case Opcode::CAST_INT_TO_STR:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castI2SProto), MIR_new_ref_op(ctx, castI2SImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_FLOAT_TO_STR:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2SProto), MIR_new_ref_op(ctx, castF2SImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_BOOL_TO_STR:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castB2SProto), MIR_new_ref_op(ctx, castB2SImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_STR_TO_INT:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2IProto), MIR_new_ref_op(ctx, castS2IImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_STR_TO_FLOAT:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2FProto), MIR_new_ref_op(ctx, castS2FImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_FLOAT_TO_INT_CHECKED:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2IProto), MIR_new_ref_op(ctx, castF2IImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_INT_TO_BYTE_CHECKED:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castI2BProto), MIR_new_ref_op(ctx, castI2BImport), R(instr.dest), R(instr.src)));
                     break;
                 case Opcode::LOAD_SLOT:
                     // Float slot kopyası DMOV, diğerleri MOV (pointer/int I64).
@@ -568,6 +678,13 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_print_str",   reinterpret_cast<void*>(rt_jit_print_str));
     MIR_load_external(ctx, "rt_jit_string_concat", reinterpret_cast<void*>(rt_jit_string_concat));
     MIR_load_external(ctx, "rt_jit_string_eq",     reinterpret_cast<void*>(rt_jit_string_eq));
+    MIR_load_external(ctx, "rt_jit_int_to_str",           reinterpret_cast<void*>(rt_jit_int_to_str));
+    MIR_load_external(ctx, "rt_jit_float_to_str",         reinterpret_cast<void*>(rt_jit_float_to_str));
+    MIR_load_external(ctx, "rt_jit_bool_to_str",          reinterpret_cast<void*>(rt_jit_bool_to_str));
+    MIR_load_external(ctx, "rt_jit_str_to_int",           reinterpret_cast<void*>(rt_jit_str_to_int));
+    MIR_load_external(ctx, "rt_jit_str_to_float",         reinterpret_cast<void*>(rt_jit_str_to_float));
+    MIR_load_external(ctx, "rt_jit_float_to_int_checked", reinterpret_cast<void*>(rt_jit_float_to_int_checked));
+    MIR_load_external(ctx, "rt_jit_int_to_byte_checked",  reinterpret_cast<void*>(rt_jit_int_to_byte_checked));
     MIR_load_external(ctx, "rt_jit_div_zero",    reinterpret_cast<void*>(rt_jit_div_zero));
     MIR_load_external(ctx, "rt_jit_mod_zero",    reinterpret_cast<void*>(rt_jit_mod_zero));
     MIR_load_external(ctx, "rt_jit_fdiv_zero",   reinterpret_cast<void*>(rt_jit_fdiv_zero));

@@ -54,6 +54,14 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
         }
         program.moduleGlobalCounts[currentModuleId_] = (int)globalVars.size();
 
+        // Dilim 1.5: CALL sonuç türü için tüm fonksiyonların dönüş türünü
+        // gövdeler üretilmeden önce topla (bu modülün fonksiyonları).
+        for (ASTNode* child : unit.ast->getChildren()) {
+            if (child->kind != ASTKind::FunctionDecl) continue;
+            auto* fnDecl = static_cast<FunctionDeclNode*>(child);
+            funcReturnKind_[fnDecl->name] = slotTypeFromTypeName(fnDecl->returnType);
+        }
+
         // Fonksiyonları üret
         for (ASTNode* child : unit.ast->getChildren()) {
             if (child->kind != ASTKind::FunctionDecl) continue;
@@ -78,6 +86,7 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
 
             generateFunction(child);
             currentFunction_->slotCount = nextSlot_;
+            finalizeSlotTypes(currentFunction_, fnDecl);
         }
     }
     return program;
@@ -111,6 +120,13 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
     // Tek modül: moduleId = "" ile slot sayısını kaydet
     program.moduleGlobalCounts[currentModuleId_] = program.globalCount;
 
+    // Dilim 1.5: CALL sonuç türü için dönüş türlerini önceden topla.
+    for (ASTNode* child : programNode->getChildren()) {
+        if (child->kind != ASTKind::FunctionDecl) continue;
+        auto* fnDecl = (FunctionDeclNode*)child;
+        funcReturnKind_[fnDecl->name] = slotTypeFromTypeName(fnDecl->returnType);
+    }
+
     // 2. Geçiş: fonksiyonları üret
     for (ASTNode* child : programNode->getChildren()) {
         if (child->kind == ASTKind::FunctionDecl) {
@@ -136,6 +152,7 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
 
             generateFunction(child);
             currentFunction_->slotCount = nextSlot_;
+            finalizeSlotTypes(currentFunction_, fnDecl);
         }
     }
 
@@ -1274,6 +1291,82 @@ int IRGenerator::lookupVariable(const std::string& name) {
         return 0;
     }
     return it->second;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slot tipi hesaplama (Dilim 1.5, MIRPLAN §3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+SlotType IRGenerator::slotTypeFromTypeName(const std::string& t) const {
+    if (t == "float" || t == "double")             return SlotType::Float;
+    if (t == "decimal")                            return SlotType::Decimal;
+    if (t == "string")                             return SlotType::Str;
+    if (t == "date")                               return SlotType::Date;
+    if (t == "int" || t == "bool" || t == "byte")  return SlotType::Int;
+    // Array (`int[]`) veya bilinen struct → referans.
+    if (t.size() > 2 && t.substr(t.size() - 2) == "[]") return SlotType::Ref;
+    if (structLayouts_.count(t))                   return SlotType::Ref;
+    // enum → int değeri; void/bilinmeyen → Int (nötr varsayılan).
+    return SlotType::Int;
+}
+
+void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
+    if (fn->slotCount <= 0) { fn->slotTypes.clear(); return; }
+    fn->slotTypes.assign(static_cast<size_t>(fn->slotCount), SlotType::Int);
+
+    // 1. Parametre slot'ları (0..paramCount-1) — bildirilen tipten.
+    for (size_t i = 0; i < decl->params.size() &&
+                       i < static_cast<size_t>(fn->slotCount); ++i)
+        fn->slotTypes[i] = slotTypeFromTypeName(decl->params[i]->varType);
+
+    // 2. Üreten opcode'dan türet. Slot türü sabit olduğundan (ADR-020) tek
+    // yön yeterli, ama LOAD_SLOT propagasyonu geriye-atlamalarda gecikebilir
+    // → küçük bir fixpoint (tavan 8) güvenli ve ucuz.
+    auto kindOf = [&](int slot) -> SlotType {
+        return (slot >= 0 && slot < fn->slotCount)
+                   ? fn->slotTypes[static_cast<size_t>(slot)] : SlotType::Int;
+    };
+    bool changed = true;
+    for (int guard = 0; changed && guard < 8; ++guard) {
+        changed = false;
+        for (const Instruction& ins : fn->instructions) {
+            if (ins.dest < 0 || ins.dest >= fn->slotCount) continue;
+            SlotType cur = fn->slotTypes[static_cast<size_t>(ins.dest)];
+            SlotType nk  = cur;
+            switch (ins.opcode) {
+                case Opcode::LOAD_FLOAT:
+                case Opcode::FADD: case Opcode::FSUB: case Opcode::FMUL:
+                case Opcode::FDIV: case Opcode::FNEG:
+                case Opcode::INT_TO_FLOAT:
+                    nk = SlotType::Float; break;
+                case Opcode::STRUCT_NEW: case Opcode::ARRAY_NEW:
+                    nk = SlotType::Ref; break;
+                case Opcode::LOAD_STRING: case Opcode::STRING_CONCAT:
+                    nk = SlotType::Str; break;
+                case Opcode::LOAD_DECIMAL:
+                case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
+                case Opcode::DDIV: case Opcode::DMOD: case Opcode::DNEG:
+                case Opcode::INT_TO_DECIMAL: case Opcode::FLOAT_TO_DECIMAL:
+                    nk = SlotType::Decimal; break;
+                case Opcode::LOAD_SLOT:
+                    nk = kindOf(ins.src); break;
+                case Opcode::CALL: {
+                    auto it = funcReturnKind_.find(ins.functionName);
+                    if (it != funcReturnKind_.end()) nk = it->second;
+                    break;
+                }
+                // FIELD_GET/ARRAY_GET/LOAD_GLOBAL: sonuç türü opcode'dan
+                // belli değil (eleman/alan türü gerekir). Dilim 1.5 JIT'i bu
+                // opcode'ları zaten reddediyor; `--types` için Int kalır.
+                // TODO(Dilim 2/3): bu opcode'lara sonuç-türü alanı ekle.
+                default: break;  // Int-üreten opcode'lar: varsayılan Int
+            }
+            if (nk != cur) {
+                fn->slotTypes[static_cast<size_t>(ins.dest)] = nk;
+                changed = true;
+            }
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

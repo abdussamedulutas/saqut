@@ -32,6 +32,8 @@
 #include "parser/ast_node.hpp"
 #include "module/module_graph.hpp"
 
+class FunctionDeclNode;  // finalizeSlotTypes imzası için (tanım .cpp'de)
+
 class IRGenerator {
 public:
     // Tek dosya — geriye dönük uyumluluk
@@ -174,6 +176,21 @@ private:
 
     bool isGlobal(const std::string& name) const;
     int  getGlobalIndex(const std::string& name) const;
+
+    // ── Slot tipi hesaplama (Dilim 1.5, MIRPLAN §3) ──────────────────────
+    // Fonksiyon adı → dönüş türü. Gövdeler üretilmeden önce tüm FunctionDecl'
+    // lerin dönüş tipinden doldurulur (CALL sonuç slot'unun türü için).
+    std::unordered_map<std::string, SlotType> funcReturnKind_;
+
+    // Bir tip adını ("float"/"int"/struct/array...) SlotType'a eşler.
+    SlotType slotTypeFromTypeName(const std::string& typeName) const;
+
+    // Fonksiyon gövdesi bittikten sonra (slotCount kesinleştiğinde) çağrılır:
+    // slotTypes'ı doldurur — parametreler bildirilen tipten, geri kalan
+    // slotlar üreten opcode'dan (fixpoint tarama; LOAD_SLOT propagasyonu,
+    // CALL dönüş türü). Ekstra semantik analiz DEĞİL — opcode başına sonuç
+    // türü statik (VM'in ValueKind mantığının derleme-zamanı karşılığı).
+    void finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl);
 };
 
 #endif // SAQUT_IR_GENERATOR

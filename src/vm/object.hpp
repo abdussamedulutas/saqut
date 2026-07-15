@@ -28,7 +28,7 @@
 // Toplama fonksiyon dönüşünde tetiklenir (deterministik safepoint).
 // Nesne modeli bir daha değiştirilmez — collect() lokal bir eklemedir.
 
-enum class ObjectType { Array, Struct };
+enum class ObjectType { Array, Struct, String };
 
 struct Value; // object.hpp <-> value.hpp çapraz bağımlılık; tam tanım value.hpp'de
 
@@ -69,6 +69,31 @@ struct StructObject : Object {
     }
 
     void markChildren() override;
+};
+
+// ── StringObject (JIT sınırı, ADR-037) ──────────────────────────────────────
+//
+// VM string'i inline tutar (value.hpp: ValueKind::String, gömülü std::string —
+// ADR-024 immutable değer-tipi). JIT sınırında bir MIR register bir string'in
+// tamamını taşıyamaz; bu yüzden JIT tarafında her string heap'e kutulanır ve
+// register yalnızca bu nesneye bir pointer (MIR_T_I64) taşır. ADR-037:
+// "JIT'in gördüğü her String değeri heap'e kutulanır (StringObject : Object)".
+//
+// Kutulama farkı kasıtlı ve kayıtlı: iki backend'in İÇ bellek modeli farklı
+// (VM inline, JIT kutulu) ama GÖZLEMLENEN davranış (stdout, içerik-eşitliği,
+// immutability) aynı — diferansiyel test (#92) bunu doğrular.
+//
+// GC notu: string'in ref çocuğu yoktur (markChildren no-op). Dilim 3'te JIT
+// string'leri henüz VM Heap'ine bağlanmaz (host-taraflı intern tablosunda
+// yaşar, bkz. mir_backend.cpp); shadow-stack entegrasyonu Dilim 2/§8 işi.
+struct StringObject : Object {
+    std::string data;
+
+    explicit StringObject(std::string s = "") : data(std::move(s)) {
+        type = ObjectType::String;
+    }
+
+    void markChildren() override {}  // string'in ref çocuğu yok
 };
 
 // ── Heap ─────────────────────────────────────────────────────────────────────

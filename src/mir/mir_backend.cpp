@@ -18,13 +18,17 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "mir/vendor/mir-gen.h"
 #include "mir/vendor/mir.h"
+#include "vm/value.hpp"   // Value tam tanımı — object.hpp'nin vector<Value> üyeleri için
+#include "vm/object.hpp"  // StringObject — JIT string kutulama (ADR-037)
 
 namespace mir_backend {
 
@@ -45,6 +49,14 @@ extern "C" void rt_jit_print_float(double v) {
     if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
         s += ".0";
     std::cout << s << "\n";
+}
+
+// ── print(string) trampoline'i (Dilim 3, ADR-037). Argüman, JIT register'ında
+// pointer olarak taşınan bir StringObject*'tir (kutulanmış string). VM'in
+// Value::toString() String dalı ham içeriği döndürür (value.hpp:104), print
+// host'u "\n" ekler → burada data + "\n". Diferansiyel test buna bağlı. ──────
+extern "C" void rt_jit_print_str(void* strObj) {
+    std::cout << static_cast<StringObject*>(strObj)->data << "\n";
 }
 
 // Sıfıra bölme — bu Dilim'de try/catch (ENTER_TRY/THROW) reddedildiğinden
@@ -97,6 +109,8 @@ bool opcodeSupported(const Instruction& instr) {
     switch (instr.opcode) {
         case Opcode::LOAD_CONST:
         case Opcode::LOAD_SLOT:
+        // Dilim 3: string skaler (kutulu — pointer register'da taşınır, ADR-037)
+        case Opcode::LOAD_STRING:
         case Opcode::ADD:
         case Opcode::SUB:
         case Opcode::MUL:
@@ -149,9 +163,32 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
                 outReason.opcodeName   = opcodeName(instr.opcode);
                 return false;
             }
+            // String operandlı karşılaştırma henüz DOĞRU codegen edilemez:
+            // ADR-023 gereği string == içerik karşılaştırmasıdır (rt_string_eq
+            // runtime call), oysa native MIR_EQ/NE/LT... pointer/skaler eşitliği
+            // yapar. Sabit stringlerde intern şans eseri doğru sonuç verir ama
+            // üretilen (concat) stringlerde bozulur. Sessiz-yanlış yerine açıkça
+            // reddet — doğru hâli sonraki adım (rt_string_eq/cmp).
+            switch (instr.opcode) {
+                case Opcode::LESS:      case Opcode::LESS_EQUAL:
+                case Opcode::GREATER:   case Opcode::GREATER_EQUAL:
+                case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:
+                    if (slotKindOf(fn, instr.left) == SlotType::Str ||
+                        slotKindOf(fn, instr.right) == SlotType::Str) {
+                        outReason.functionName = name;
+                        outReason.opcodeName =
+                            std::string(opcodeName(instr.opcode)) + " <string operand>";
+                        return false;
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
         for (SlotType st : fn.slotTypes) {
-            if (st != SlotType::Int && st != SlotType::Float) {
+            // Int/Float register-skaler; Str kutulu pointer (I64, ADR-037).
+            // Ref/Decimal/Date hâlâ sonraki dilimlerde (shadow stack / kutulama).
+            if (st != SlotType::Int && st != SlotType::Float && st != SlotType::Str) {
                 outReason.functionName = name;
                 outReason.opcodeName =
                     std::string("<desteklenmeyen slot turu: ") + slotTypeName(st) + ">";
@@ -194,12 +231,32 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t printImport     = MIR_new_import(ctx, "rt_jit_print_int");
     MIR_item_t printFProto     = MIR_new_proto(ctx, "print_f_proto", 0, nullptr, 1, MIR_T_D, "v");
     MIR_item_t printFImport    = MIR_new_import(ctx, "rt_jit_print_float");
+    MIR_item_t printSProto     = MIR_new_proto(ctx, "print_s_proto", 0, nullptr, 1, MIR_T_I64, "v");
+    MIR_item_t printSImport    = MIR_new_import(ctx, "rt_jit_print_str");
     MIR_item_t divZeroProto    = MIR_new_proto(ctx, "divzero_proto", 0, nullptr, 0);
     MIR_item_t divZeroImport   = MIR_new_import(ctx, "rt_jit_div_zero");
     MIR_item_t modZeroProto    = MIR_new_proto(ctx, "modzero_proto", 0, nullptr, 0);
     MIR_item_t modZeroImport   = MIR_new_import(ctx, "rt_jit_mod_zero");
     MIR_item_t fdivZeroProto   = MIR_new_proto(ctx, "fdivzero_proto", 0, nullptr, 0);
     MIR_item_t fdivZeroImport  = MIR_new_import(ctx, "rt_jit_fdiv_zero");
+
+    // ── String sabit havuzu (Dilim 3, ADR-037). LOAD_STRING derleme zamanında
+    // string'i kutular; StringObject* pointer'ı native koda int sabiti olarak
+    // gömülür (JIT in-process, pointer geçerli). intern tablosu aynı içeriği
+    // tek nesneye indirger → döngüde tekrar kutulama/leak yok. Nesneler bu
+    // fonksiyon kapsamı boyunca (native compiled() çağrısı dahil) yaşar.
+    // NOT: AOT (#81) bu yolu runtime call'a (rt_intern_string + string_data)
+    // çevirmeli — farklı process'te derleme-zamanı host pointer'ı gömülemez.
+    std::vector<std::unique_ptr<StringObject>>     stringPool;
+    std::unordered_map<std::string, StringObject*> internTable;
+    auto internString = [&](const std::string& s) -> StringObject* {
+        auto it = internTable.find(s);
+        if (it != internTable.end()) return it->second;
+        stringPool.push_back(std::make_unique<StringObject>(s));
+        StringObject* obj = stringPool.back().get();
+        internTable.emplace(s, obj);
+        return obj;
+    };
 
     // ── Aşama 1: TÜM fonksiyonlar için proto + forward (ileri-referanslı
     // CALL çözümü, MIRPLAN §2). Tip-imzalar slotTypes'tan (MIRPLAN §3). ──
@@ -278,6 +335,15 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func,
                         MIR_new_insn(ctx, MIR_DMOV, R(instr.dest), MIR_new_double_op(ctx, instr.floatValue)));
                     break;
+                case Opcode::LOAD_STRING: {
+                    // Sabit string'i derleme zamanı kutula, pointer'ını int
+                    // sabiti olarak register'a taşı (ADR-037: Str = I64 pointer).
+                    StringObject* obj = internString(instr.stringValue);
+                    MIR_append_insn(ctx, func,
+                        MIR_new_insn(ctx, MIR_MOV, R(instr.dest),
+                            MIR_new_int_op(ctx, reinterpret_cast<int64_t>(obj))));
+                    break;
+                }
                 case Opcode::LOAD_SLOT:
                     // Float slot kopyası DMOV, diğerleri MOV (pointer/int I64).
                     MIR_append_insn(ctx, func,
@@ -406,11 +472,15 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 }
                 case Opcode::CALLHOST: {
                     // isSupportedCallhost() yalnizca tek-argumanli print'i gecirdi.
-                    // Argüman türüne göre int/float trampolinini seç.
-                    int a = instr.argSlots[0];
-                    if (slotKindOf(fn, a) == SlotType::Float)
+                    // Argüman türüne göre int/float/string trampolinini seç.
+                    int      a  = instr.argSlots[0];
+                    SlotType at = slotKindOf(fn, a);
+                    if (at == SlotType::Float)
                         MIR_append_insn(ctx, func,
                             MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printFProto), MIR_new_ref_op(ctx, printFImport), R(a)));
+                    else if (at == SlotType::Str)
+                        MIR_append_insn(ctx, func,
+                            MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printSProto), MIR_new_ref_op(ctx, printSImport), R(a)));
                     else
                         MIR_append_insn(ctx, func,
                             MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printProto), MIR_new_ref_op(ctx, printImport), R(a)));
@@ -432,6 +502,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_module(ctx, mod);
     MIR_load_external(ctx, "rt_jit_print_int",   reinterpret_cast<void*>(rt_jit_print_int));
     MIR_load_external(ctx, "rt_jit_print_float", reinterpret_cast<void*>(rt_jit_print_float));
+    MIR_load_external(ctx, "rt_jit_print_str",   reinterpret_cast<void*>(rt_jit_print_str));
     MIR_load_external(ctx, "rt_jit_div_zero",    reinterpret_cast<void*>(rt_jit_div_zero));
     MIR_load_external(ctx, "rt_jit_mod_zero",    reinterpret_cast<void*>(rt_jit_mod_zero));
     MIR_load_external(ctx, "rt_jit_fdiv_zero",   reinterpret_cast<void*>(rt_jit_fdiv_zero));

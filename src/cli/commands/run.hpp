@@ -21,15 +21,22 @@
 #include "ir/ir_generator.hpp"
 #include "vm/interpreter.hpp"
 #include "mir/mir_backend.hpp"
+#include "profiling/stage_timer.hpp"
 
 inline int cmdRun(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
     if (filePath.empty()) { std::cerr << "error: no input file\n"; return 1; }
 
+    // src/profiling/ (--profile): args.profile false ise timer kullanılmaz,
+    // ScopedStage'ler no-op kalır (StageTimer::ScopedStage tasarımı gereği).
+    profiling::StageTimer  stageTimer;
+    profiling::StageTimer* profilerPtr = args.profile ? &stageTimer : nullptr;
+
     // ── Aşama 1: Tüm modülleri yükle (BFS parse) ─────────────────────────
     ModuleRegistry   registry;
     DiagnosticEngine diag;
     ModuleLoader     loader(registry, diag);
+    loader.setProfiler(profilerPtr);
     ModuleGraph      graph = loader.load(filePath);
 
     if (diag.hasErrors()) {
@@ -72,7 +79,11 @@ inline int cmdRun(const CliArgs& args) {
 
     // ── Aşama 5: IR üretimi ───────────────────────────────────────────────
     IRGenerator irGenerator;
-    IRProgram   program = irGenerator.generateModuleGraph(graph, symbolTable);
+    IRProgram   program;
+    {
+        profiling::StageTimer::ScopedStage _prof(profilerPtr, "ir-gen");
+        program = irGenerator.generateModuleGraph(graph, symbolTable);
+    }
 
     // ── Aşama 6: Çalıştırma backend'i ────────────────────────────────────
     // #80/MIRPLAN.md: --jit istenirse önce MIR Dilim 0'ı dene (yalnızca
@@ -85,8 +96,14 @@ inline int cmdRun(const CliArgs& args) {
         if (mainForJit) {
             int         jitResult = 0;
             std::string jitError;
-            if (mir_backend::tryCompileAndRun(*mainForJit, jitResult, jitError)) {
+            bool jitOk;
+            {
+                profiling::StageTimer::ScopedStage _prof(profilerPtr, "vm/jit");
+                jitOk = mir_backend::tryCompileAndRun(*mainForJit, jitResult, jitError);
+            }
+            if (jitOk) {
                 if (args.verbose) std::cerr << "[jit] Dilim 0 ile calistirildi\n";
+                if (args.profile) stageTimer.printReport(std::cerr);
                 return jitResult;
             }
             if (args.verbose) std::cerr << "[jit] VM'e dusuldu: " << jitError << "\n";
@@ -101,7 +118,10 @@ inline int cmdRun(const CliArgs& args) {
         if (args.gcThreshold != 0) vm.setGCThreshold(args.gcThreshold);
         vm.setCapabilities(args.allowedCaps);
         vm.setProgramArgs(args.programArgs);
-        exitCode = vm.run();
+        {
+            profiling::StageTimer::ScopedStage _prof(profilerPtr, "vm/jit");
+            exitCode = vm.run();
+        }
         // --gc-stats: golden testlerin stdout karşılaştırmasını bozmamak
         // için stderr'e yazılır
         if (args.gcStats)
@@ -112,6 +132,8 @@ inline int cmdRun(const CliArgs& args) {
         std::cerr << "runtime error: " << e.what() << "\n";
         exitCode = 1;
     }
+
+    if (args.profile) stageTimer.printReport(std::cerr);
 
     return exitCode;
 }

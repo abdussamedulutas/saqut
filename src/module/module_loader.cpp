@@ -64,13 +64,21 @@ void ModuleLoader::loadUnit(const std::string& filePath, ModuleGraph& graph,
 
     // Tokenize + parse
     Tokenizer tokenizer;
-    auto tokens = tokenizer.scan(source, filePath);
+    std::vector<Token*> tokens;
+    {
+        profiling::StageTimer::ScopedStage _prof(profiler_, "token");
+        tokens = tokenizer.scan(source, filePath);
+    }
 
     // Faz 2: diag_ enjekte edilir — sözdizimi hataları artık konumlu tanı
     // (E9xx) olarak DiagnosticEngine'e gider, parse yine de devam eder
     // (panic-mode recovery, bkz. Parser::synchronizeAndMakeError).
     Parser parser(&diag_);
-    ASTNode* ast = parser.parse(tokens);
+    ASTNode* ast = nullptr;
+    {
+        profiling::StageTimer::ScopedStage _prof(profiler_, "parser");
+        ast = parser.parse(tokens);
+    }
     if (!ast) {
         diag_.report("E_MODULE_PARSE", SourceLocation{},
             "failed to parse module '" + filePath + "'");

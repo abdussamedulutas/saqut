@@ -22,6 +22,7 @@
 #include "module/module_graph.hpp"
 #include "core/module_registry.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
+#include "profiling/stage_timer.hpp"
 
 // ModuleLoader: import bildirimlerini izleyerek tüm bağımlı dosyaları
 // yükler ve parse eder. Döngüsel bağımlılık (A→B→A) E_MODULE_CYCLE
@@ -47,6 +48,11 @@ public:
     // units[0] her zaman giriş dosyasıdır.
     ModuleGraph load(const std::string& entryFilePath);
 
+    // `saqut run --profile` (src/profiling/) için: verilirse her dosyanın
+    // tokenize/parse süresi "token"/"parser" adları altında toplanır.
+    // nullptr (varsayılan) = ölçüm yapılmaz, hiçbir ek maliyet yok.
+    void setProfiler(profiling::StageTimer* profiler) { profiler_ = profiler; }
+
 private:
     // Tek bir dosyayı yükle, parse et, ImportDeclNode'larını takip et.
     // Zaten yüklenmiş dosyalar atlanır (seen_ ile kontrol); yükleme
@@ -62,6 +68,7 @@ private:
     ModuleRegistry&   registry_;
     DiagnosticEngine& diag_;
     SourceOverlay     overlay_;
+    profiling::StageTimer* profiler_ = nullptr;
 
     // Yüklemesi başlatılmış dosyalar (canonical path) — tekrar yüklemeyi
     // ve hata alan dosya için mükerrer tanıyı önler.

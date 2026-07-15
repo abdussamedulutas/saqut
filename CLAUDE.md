@@ -322,6 +322,14 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   yazım engellenemez); isim ise marka ile korunur.
 
 ## Çalışma konvansiyonları
+- **Hızlı kod denemesi için `saqut exec "<kod>"` kullan — geçici dosya OLUŞTURMA.**
+  Kodu doğrudan parametre olarak alır: ifade (`saqut exec "3+4*2"` → 11), çok
+  deyim + var decl + print (`saqut exec "int x=5; print(x*x);"` → 25). Çıplak
+  ifade sonucunu da basar; saf deyim istiyorsan `;` ile bitir (yoksa fazladan
+  değer satırı gelir). ⚠️ **`exec --jit` şu an bozuk** ("undeclared reg 0" —
+  exec sarmalayıcısı JIT'in beklediği main'i üretmiyor, ayrı bug); JIT
+  diferansiyel testi için gerçek `main()` içeren küçük bir `.sqt` dosyası gerekir.
+  Dosya gerekiyorsa scratchpad'e yaz, repo'yu kirletme.
 - **Karar netleşince BELGELE** (ADR/CLAUDE.md/ilgili döküman) ve uygula. Fikir sormak/
   onay almak sorun DEĞİL (kullanıcı fikir alışverişini ister); yorucu olan gereksiz
   açıklama ve seçenekleri kavram-anlatımıyla şişirmek. Kısa tut: seçenek/risk/öneriyi

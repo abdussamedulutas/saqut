@@ -1,88 +1,63 @@
-# saQut — 0.8.0 ve 0.9.0 İş Sırası
+# PLAN.md — MIR JIT Kalan İş Planı (#80)
 
-> 0.7.0 kapandıktan sonra hazırlandı. Yalnızca mevcut GitHub issue'larının
-> sıralı bir özeti — yeni tasarım kararı içermez (kararlar kendi issue'larında
-> ve ilgili ADR'lerde).
+> Bu belge JIT backend'e dönünce nereden devam edileceğinin haritasıdır.
+> Detaylı ilerleme kaydı: hafıza `mir-jit-ilerleme` + issue #80.
+> Tasarım: ADR-032 (backend), ADR-037 (Value ABI), ADR-039 (IR tip zenginleştirme).
 
-## 0.7.0 kapanışı (referans — bu dalda tamamlandı)
+## Durum (2026-07-15)
 
-- #108 IR scope-shadowing düzeltmesi
-- #76/ADR-035 capability çekirdeği (`--allow-fs/net/sys`, A+B enforcement)
-- #91 `caps::drop`/`caps::has`
-- #87 fs modülü
-- #90 sys modülü
-- #88/ADR-036 date tipi + modülü
-- #89 math modülü (+ `PI()`/`E()` sabitleri)
-- #107 FFI declaration modeli (ADR-034) — math ile birlikte uçtan uca doğrulandı
-- Kod kalitesi: Lexer `positionRange()` leak-prone ham işaretçi → `std::pair`
-- `docs/CLI.md`: CLI parametre formatı tasarımı (üç alternatif, hibrit önerisi)
+| Dilim | Kapsam | Durum |
+|---|---|---|
+| 0/1 | İskelet + int-skaler tam küme (fibonacci JIT) | ✅ |
+| 1.5 | slot-tip tablosu + float skaler | ✅ |
+| 3 | string (LOAD_STRING/concat/==/!=), cast (skaler), decimal (kutulu) | ✅ |
+| — | IR tip zenginleştirme ŞEMASI (ADR-039: valueType, globalSlotTypes) | ✅ (doldurma bekliyor) |
+| 2 | struct/array + shadow-stack GC | ⏳ altyapı hazır, codegen yok |
+| — | global (LOAD/STORE_GLOBAL) | ⏳ IR şema hazır |
+| — | nullable (null/T?) | ⏳ tasarım gerekli |
+| 5 | try/catch (ENTER_TRY/LEAVE_TRY/THROW) | ⛔ #110 bloklu |
 
-## 0.8.0 — MIR JIT + diferansiyel test
+Tüm biten dilimler VM≡JIT diferansiyel geçti. Nesneler host arenasında
+(g_jitRuntimeStrings/g_jitDecimals), program sonu toplu silinir (GC #112'ye ertelendi).
 
-**Sıra gerekçesi:** #92 (diferansiyel test altyapısı) #80'den (MIR JIT) ÖNCE
-bitmeli — ADR-032'nin "VM ve JIT aynı IR'de bire bir aynı çıktı vermek
-ZORUNDA" kısıtı, JIT kodu yazılmaya başlamadan ÖNCE otomatik doğrulama
-iskelesinin hazır olmasını gerektirir; aksi halde JIT'teki sapmalar sessizce
-golden testlere karışır.
+## Sıradaki: struct/array + global (IR altyapısı ADR-039 ile kuruldu)
 
-1. **#92 — Diferansiyel test altyapısı.** Her golden test'in VM ve (henüz
-   yazılmamış) JIT çıktısını bayt-bayt karşılaştıran koşum mekanizması.
-   JIT henüz yokken bu adım "iskeleti kur + VM'i kendi kendine karşı çalıştır"
-   olarak başlar (regresyon bariyeri); #80 ilerledikçe gerçek karşılaştırmaya
-   döner.
-2. **`--allow` ayrıştırıcısı** (`docs/CLI.md` v3 — onaylandı). Yalnızca
-   permission/capability kategorisi (fs/net/sys) toplu bayrağa taşınır:
-   `--allow-fs --allow-net --allow-sys` üç ayrı bayrak yerine
-   `--allow fs,net,sys` (tekrarlanan `--allow fs --allow net` de kabul).
-   GC bayrakları (`--gc-threshold`, `--gc-stats`) ve servis bayrakları
-   (`mcp`'nin `--port`/`--host`) kendi düz bayrak modelinde KALIYOR —
-   permission ile kavramsal olarak ayrı, GC yeniden tasarımı beklerken
-   erken soyutlanmıyor. `src/cli/allow_spec.hpp` (`parseAllow`) +
-   `CliArgs::allowedCaps` (zaten `set<Capability>`, veri modeli değişmiyor).
-3. **#80 — MIR JIT backend (ADR-032).** ⚠️ **Kullanıcı talimatı: buraya
-   gelince DUR ve sor.** Bu belge yalnızca sırayı kaydeder, kod yazımına
-   başlanmaz. Ön koşullar: (1) #92'nin gerçek VM↔JIT karşılaştırması yapacak
-   hale gelmesi, (2) shadow-stack GC kökü tasarımının ADR-032'de zaten
-   çizilen taslaktan koda geçirilmesi.
+**Adım 1 — IRGenerator doldurma:**
+- `Type → SlotType` köprü helper'ı (isArray/isStruct→Ref; String→Str; Decimal→Decimal;
+  Date→Date; Float/Double→Float; Int/Byte/Bool/Char→Int).
+- emit noktalarında `ins.valueType` doldur: `emitFieldGet` (field tipi, structLayouts_'tan),
+  `emitArrayGet`/`emitArrayNew` (eleman tipi, node.resolvedType'tan), `emitLoadGlobal`
+  (global tipi). Emit imzalarına SlotType param ekle; çağıranlar node.resolvedType'tan geçir.
+- Global tipleri `program.globalSlotTypes[moduleId]`'e doldur (VarDecl global işlenirken,
+  ir_generator.cpp:50/114 civarı).
 
-## 0.9.0 — AOT + net + crypto
+**Adım 2 — finalizeSlotTypes:**
+- FIELD_GET/ARRAY_GET/LOAD_GLOBAL dest tipini `ins.valueType`'tan çöz (şu an Int'te
+  tıkanıyor). Bu, slotTypes fixpoint'ini açar → JIT bu opcode'ları görebilir.
 
-**Sıra gerekçesi:** #81 (AOT) MIR JIT'in (#80) IR→makine-kodu yolunu yeniden
-kullanır ("gömülü-runtime AOT" modeli `deno compile`'a benzer — runtime
-kopyası + IR gömülü tek exe), bu yüzden 0.8.0'ın ürünlerine bağımlı. #93/#94
-(net/crypto) capability modeline (ADR-035, 0.7.0'da kuruldu) ve FFI seam'ine
-(ADR-034) bağımlı ama JIT'e bağımlı DEĞİL — teorik olarak 0.8.0 ile paralel
-de yürüyebilir, ama sürüm numarasına göre 0.9.0'a bırakıldı.
+**Adım 3 — mir_backend (Value↔register köprüsü):**
+- SlotType::Ref register izni (I64 pointer).
+- STRUCT_NEW/ARRAY_NEW: host arena'da StructObject/ArrayObject (allocStruct/allocArray
+  benzeri; GC #112'ye kadar leak-then-bulk-free). dest = pointer.
+- FIELD_GET/SET, ARRAY_GET/SET, ARRAY_LEN: elemanlar tagged Value; register tek-tip →
+  eleman tipine göre (valueType) trampolin: Value↔register dönüşümü. ⚠️ String elemanı:
+  JIT StringObject* ↔ VM Value inline string köprüsü (ADR-037 kutulama farkı elemanda).
+- LOAD_GLOBAL/STORE_GLOBAL: sabit-adres global storage (flat, globalSlotTypes'tan tip),
+  mem load/store (float→D, diğer→I64).
+- Her adımda diferansiyel test (VM≡JIT).
 
-1. **#81 — `saqut build` (gömülü-runtime AOT).** Tek exe paketleme; linker'sız
-   (kullanıcı makinesinde sıfır toolchain kısıtı, ADR-032). CLI'ya yeni komut
-   ekler (`saqut build`) — `docs/CLI.md`'deki düz-komut kuralına uyar (tek
-   eylem, grup gerektirmiyor).
-2. **#93 — net modülü.** Ham TCP connect/send/receive/close, `--allow-net`.
-   HTTP/TLS kapsam dışı (issue'da açıkça işaretli). fs/sys ile aynı desen:
-   `HostContext` üzerinden VM'ye erişim gerekebilir (soket handle'ları için
-   — ADR-034 §5'teki "handle YOK, tek atımlık" ilkesinin TCP'ye nasıl
-   uyarlanacağı bu issue'nun kendi açık sorusu).
-3. **#94 — crypto modülü.** Monocypher vendoring (kripto elle yazılmaz
-   ilkesi, ADR-017); blake2b/sha256/hmac/randomBytes/Ed25519. `sys::random`
-   (0.7.0) genel amaçlı CSPRNG'den beslenir ama kriptografik garantisi yok —
-   bu modül ayrı, kriptografik kaliteli kaynak sağlar (issue'nun kendi
-   ayrımı).
+## Sonraki (ayrı turlar)
 
-## Bu sırada YER ALMAYAN (bilinçli dışarıda bırakıldı)
-
-- **Faz 4 refaktör devamı** (parser.cpp/symbol_collector.cpp dosya bölünmesi):
-  0.7.0 kapanışında yalnızca Lexer'daki gerçek bellek-güvenliği sorunu
-  düzeltildi; daha büyük dosya-bölme refaktörleri risk/fayda oranı düşük
-  görüldüğü için ertelendi. Gerekirse ayrı, dar kapsamlı bir refaktör turu
-  olarak 0.8.0/0.9.0 arasına sıkıştırılabilir — MIR JIT'ten önce `ir_generator`/
-  `interpreter` CALLHOST dispatch'inin büyümesi izlenmeli (şu an 3 dal:
-  `__builtin_method__`/`__ffi__`/host-fn; JIT ikinci bir backend eklerse bu
-  dispatch'in iki backend'de de aynı davranması gerekecek — o noktada
-  paylaşılan bir dispatch tablosu gerçek bir ihtiyaç haline gelebilir).
-- **#106** (heavy-IR idiom tanıma): `fikir` etiketli, versiyon atanmamış —
-  kullanıcı talimatı gereği bu tur dışında.
-- **#99/#100/#101/#102** (WASM, record-replay, roadmap-meta, editör
-  entegrasyonları): `fikir` etiketli veya v1.1.0+ — kapsam dışı.
-- **#95/#96/#97/#98** (CI matrix, 1.0 stabilizasyon, website, ekran görüntüleri):
-  v0.10.0 etiketli — bu plan yalnızca 0.8.0/0.9.0'ı kapsıyor.
+- **nullable**: null'un register temsili (int? null≠0) + null-safe path (null string
+  deref). LOAD_NULL + nullable-hedef cast şu an REDDEDİLİYOR (temiz unsupported).
+- **GC (#112)**: shadow-stack kökleri (MIRPLAN §8) → arena'yı mark-sweep'e çevir.
+  Sahibin algoritması issue #112'de.
+- **Dilim 5 try/catch (#110 bloklu)**: deterministik-stacktrace açık sorusu kapanmadan
+  kod YAZILMAZ. Bununla birlikte **uncaught hata prefix farkı** ("runtime error:" vs
+  "exec: runtime error:") çözülür — JIT trampolinleri exit ile çıkıp exec/run
+  wrapper'ından geçmiyor; hata-yayma mimarisi birleştirecek.
+- **exec --jit bozuk** ("undeclared reg 0"): exec sarmalayıcısı JIT'in beklediği main'i
+  üretmiyor (double-wrap kaynaklı) — ayrı bug, diferansiyel testte gerçek `.sqt` dosyası kullan.
+- **AOT (#81)**: LOAD_STRING/LOAD_DECIMAL derleme-zamanı-pointer-gömme yolu farklı
+  process'te çalışmaz → runtime call'a çevrilecek.
+- **Diferansiyel test altyapısı (#92)**: şu an elle; otomatik golden'a bağlanmalı.

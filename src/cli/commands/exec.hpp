@@ -26,6 +26,57 @@
 #include "diagnostic/diagnostic_engine.hpp"
 #include "ir/ir_generator.hpp"
 #include "vm/interpreter.hpp"
+#include "mir/mir_backend.hpp"
+
+// startsWithStatement — Kullanıcı girdisinin bir DEYİM mi (for/while/if/
+// değişken tanımı ...) yoksa bir İFADE mi (call/literal/aritmetik ...) ile
+// başladığını hafif bir ön-parse ("probe") ile saptar.
+//
+// GEREKÇE: exec, tarihsel olarak girdiyi print(...) içine sarar (int main() {
+// print(<expr>); ... }). Bu, `1 + 2` gibi ifadelerde doğru ama `for(...){...}`
+// gibi deyimlerde print(for(...)) üretip sözdizimi hatası verir. Bu yüzden önce
+// girdiyi olduğu gibi bir gövdeye koyup parse eder, main gövdesinin İLK
+// statement'ının türüne bakarız:
+//   - ExpressionStatement  → ifade  → print(...) ile sarılmalı (true DEĞİL)
+//   - diğer her şey (For/While/If/VariableDecl/DoWhile/Switch/Try ...) → deyim
+//     → sarılmamalı (true)
+// Belirsiz / parse edilemeyen durumda `false` döner → eski (print ile sar)
+// davranışı korunur (geri uyumluluk).
+//
+// Probe kendi yerel DiagnosticEngine'ini kullanır ki başarısız parse'ta
+// stderr'e gürültü basmasın (gerçek hata, asıl pipeline'da raporlanır).
+inline bool startsWithStatement(const std::string& input) {
+    const std::string probeSource = "int main() {\n" + input + ";\n}\n";
+
+    Tokenizer tokenizer;
+    auto      tokens = tokenizer.scan(probeSource, "<exec-probe>");
+
+    DiagnosticEngine probeDiag;  // hataları yutar, cerr'e basmaz
+    Parser           parser(&probeDiag);
+    ASTNode*         ast = parser.parse(tokens);
+
+    bool isStatement = false;
+    if (ast && !probeDiag.hasErrors()) {
+        // Program → FunctionDecl(main) → Block(gövde) → ilk statement
+        for (auto* top : ast->getChildren()) {
+            if (top->kind != ASTKind::FunctionDecl) continue;
+            for (auto* bodyChild : top->getChildren()) {
+                if (bodyChild->kind != ASTKind::Block) continue;
+                auto& stmts = bodyChild->getChildren();
+                if (!stmts.empty()) {
+                    // ExpressionStatement = ifade; gerisi = deyim.
+                    isStatement = stmts[0]->kind != ASTKind::ExpressionStatement;
+                }
+                break;
+            }
+            break;
+        }
+    }
+
+    delete ast;
+    for (auto* t : tokens) delete t;
+    return isStatement;
+}
 
 inline int cmdExec(const CliArgs& args) {
     if (args.positional.empty()) {
@@ -34,9 +85,16 @@ inline int cmdExec(const CliArgs& args) {
         return 1;
     }
 
-    // Kullanıcının girdiği ifadeyi minimal programa sar
+    // Kullanıcının girdisini minimal programa sar. Deyimle başlıyorsa (for/while/
+    // değişken tanımı ...) olduğu gibi çalıştır; ifadeyle başlıyorsa print(...) ile
+    // sarıp değerini bastır (klasik `exec "1 + 2"` → 3 davranışı).
     const std::string& expr = args.positional[0];
-    std::string source = "int main() {\n    print(" + expr + ");\n    return 0;\n}\n";
+    std::string        source;
+    if (startsWithStatement(expr)) {
+        source = "int main() {\n    " + expr + ";\n    return 0;\n}\n";
+    } else {
+        source = "int main() {\n    print(" + expr + ");\n    return 0;\n}\n";
+    }
     const std::string syntheticPath = "<exec>";
 
     Tokenizer        tokenizer;
@@ -71,10 +129,24 @@ inline int cmdExec(const CliArgs& args) {
 
     int exitCode = 0;
     try {
-        Interpreter vm(program);
-        vm.setCapabilities(args.allowedCaps);
-        vm.setProgramArgs(args.programArgs);
-        exitCode = vm.run();
+        if (args.useJit) {
+            int jitResult = 0;
+            mir_backend::UnsupportedReason reason;
+            bool jitOk = mir_backend::tryCompileAndRunProgram(program, jitResult, reason);
+            if (jitOk) {
+                exitCode = jitResult;
+            } else {
+                std::cerr << "exec: --jit unsupported for expression '" << expr
+                          << "' (function '" << reason.functionName
+                          << "', opcode: " << reason.opcodeName << ")\n";
+                exitCode = 1;
+            }
+        } else {
+            Interpreter vm(program);
+            vm.setCapabilities(args.allowedCaps);
+            vm.setProgramArgs(args.programArgs);
+            exitCode = vm.run();
+        }
     } catch (const std::exception& e) {
         std::cerr << "exec: runtime error: " << e.what() << "\n";
         exitCode = 1;

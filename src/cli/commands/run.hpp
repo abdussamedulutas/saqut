@@ -86,28 +86,29 @@ inline int cmdRun(const CliArgs& args) {
     }
 
     // ── Aşama 6: Çalıştırma backend'i ────────────────────────────────────
-    // #80/MIRPLAN.md: --jit istenirse önce MIR Dilim 0'ı dene (yalnızca
-    // LOAD_CONST/ADD/SUB/MUL/RETURN, parametresiz main). Desteklenmeyen bir
-    // şey görülürse (bugün hemen hemen her program) VM'e düşülür — bu, tek
-    // dispatch noktası ilkesinin (MIRPLAN.md §1) ilk hâli: JIT/VM seçimi
-    // burada, TEK bir yerde yapılır.
+    // #80/MIRPLAN.md: --jit istenirse KISMİ/sessiz VM'e düşme YOK —
+    // kullanıcı talimatı: "JIT diyorsam baştan sona JIT derlemesi
+    // gerekiyor". Program.functions'daki HER fonksiyon Dilim 1'in
+    // desteklediği opcode kümesinde değilse, HİÇBİR ŞEY çalıştırılmadan
+    // açık bir hatayla çıkılır — VM devreye asla girmez.
     if (args.useJit) {
-        IRFunction* mainForJit = program.findFunction("main");
-        if (mainForJit) {
-            int         jitResult = 0;
-            std::string jitError;
-            bool jitOk;
-            {
-                profiling::StageTimer::ScopedStage _prof(profilerPtr, "vm/jit");
-                jitOk = mir_backend::tryCompileAndRun(*mainForJit, jitResult, jitError);
-            }
-            if (jitOk) {
-                if (args.verbose) std::cerr << "[jit] Dilim 0 ile calistirildi\n";
-                if (args.profile) stageTimer.printReport(std::cerr);
-                return jitResult;
-            }
-            if (args.verbose) std::cerr << "[jit] VM'e dusuldu: " << jitError << "\n";
+        int                             jitResult = 0;
+        mir_backend::UnsupportedReason  reason;
+        bool                            jitOk;
+        {
+            profiling::StageTimer::ScopedStage _prof(profilerPtr, "vm/jit");
+            jitOk = mir_backend::tryCompileAndRunProgram(program, jitResult, reason);
         }
+        if (jitOk) {
+            if (args.verbose) std::cerr << "[jit] program bastan sona JIT'lendi (VM calismadi)\n";
+            if (args.profile) stageTimer.printReport(std::cerr);
+            return jitResult;
+        }
+        std::cerr << "error: --jit bu programi tam olarak derleyemiyor "
+                   << "(fonksiyon '" << reason.functionName << "', desteklenmeyen opcode: "
+                   << reason.opcodeName << ") — VM'e sessizce dusulmuyor, "
+                   << "bkz. MIRPLAN.md.\n";
+        return 1;
     }
 
     // ── Aşama 6b: VM çalıştır (varsayılan yol) ───────────────────────────

@@ -82,6 +82,35 @@ haritasında zaten yazılıydı ("stabilize olunca varsayılan"); burada netleş
 şey yalnızca mekanizma: **bayrak yön değiştirir, dispatch noktası
 değişmez** — `run.hpp`'deki tek `if` her iki sürümde de aynı şekli korur.
 
+### §1.1 Arayüz şekli — bugünkü hâl ve ileride açılması (not)
+
+Dilim 1'de inşa edilen gerçek arayüz, yukarıdaki taslak `compileFunction(...)`
+DEĞİL; tek çağrıda init→derle→çalıştır→finish yapan bütün-program biçimidir:
+
+```cpp
+bool tryCompileAndRunProgram(IRProgram&, int& outExitCode,
+                             UnsupportedReason&, StageTimer* = nullptr);
+```
+
+Bu, "kısmi JIT yok — programın TAMAMI desteklenmeli" kuralı için DOĞRU şekil
+(fonksiyon-fonksiyon derleyip ortada takılmaz). Ama şu üç iş **derle/çalıştır
+ayrımını** zorunlu kılacak — ileride bu arayüz açılmalı:
+
+- **AOT (`saqut build`, #81):** derlemeyi çalıştırmadan üretip diske
+  gömmeli (init→derle→**serialize**, run yok).
+- **Diferansiyel test (#92):** VM ile JIT'i AYNI süreçte, `exit()` olmadan
+  çalıştırıp stdout'u kıyaslamalı. ⚠️ Bugün `rt_jit_div_zero` doğrudan
+  `std::exit(1)` çağırıyor (Dilim 1 kanıtı için kabul edilir) — in-process
+  diff'ten önce bu, yakalanabilir bir hata-yayma yoluna çevrilmeli, yoksa
+  test süreci sonlanır. Bu, "cage" ilkesiyle de uyumlu (bir runtime yardımcısı
+  tek taraflı süreç sonlandırmamalı).
+- **Debuggable-mod (#109):** context canlı tutulup tek fonksiyon yeniden
+  derlenmeli (§11).
+
+**Şimdilik yapılacak bir şey yok** — yalnızca "bütün-program `tryCompileAndRun`
+şekli Dilim 1 için doğru ama #81/#92/#109 geldiğinde derle/çalıştır ayrımına
+evrilecek" notu düşülüyor ki o dilimlerde sürpriz olmasın.
+
 ## 2. Fonksiyon/modül eşlemesi
 
 Her `IRFunction` → bir `MIR_item_t` (MIR fonksiyonu), hepsi tek bir
@@ -270,6 +299,48 @@ Uygulamaya geçmeden önce kullanıcıyla ayrı doğrulanmalı (ADR-025'in
 "deterministik stacktrace" gereksinimiyle `longjmp`'in stack unwind sırasında
 satır/iz bilgisini nasıl koruyacağı da netleşmeli).
 
+### §7.1 Performans profili — "try yoksa maliyet yok" (kullanıcı endişesi)
+
+Kullanıcı endişesi: JIT'lenmiş kodun **runtime'da yavaşlaması/tıkanması**
+istenmiyor. setjmp/longjmp modeli bu hedefi rakiplerinden DAHA İYİ karşılar:
+
+- **try/catch KULLANMAYAN kod → sıfır maliyet.** setjmp/longjmp yalnızca
+  `ENTER_TRY`'da kod üretir. İçinde hiç `try` olmayan bir fonksiyon (sıcak
+  döngüler dahil) hata yönetimi adına **tek bir ekstra talimat bile**
+  taşımaz. Bu, "normal yol bedava" güvencesidir — asıl istenen bu.
+- **`throw` (longjmp) yavaş yoldur** — ama istisna zaten istisnai; sıcak
+  yolda değil. Maliyet atış anında ödenir, her talimatta değil.
+- **Bu bir "tıkanma" (per-instruction check) DEĞİL.** longjmp tüm programı
+  yavaşlatmaz, non-try kod runtime'ına hiç dokunmaz. VM'in eski yorumlayıcı
+  safepoint'i gibi her adımda çalışan bir kontrol yok.
+- **Kıyas — neden aday (2) elendi bu açıdan da doğru:** dönüş-kodu yayılması
+  HER `CALL` sonrası bir dallanma ekler → maliyeti tüm programa yayar. İşte
+  "runtime yavaşlaması" tam olarak budur; setjmp/longjmp bundan kaçınır.
+
+**Tek gerçek yerel maliyet — ve §11 ile birleştirilerek çözülür:** longjmp
+sonrası MIR register'larının değeri **belirsizdir** (setjmp semantiği: yalnızca
+setjmp ile longjmp arasında değişmemiş ya da bellek-destekli değerler güvenli).
+JIT'te saQut slot'ları register'da yaşıyor → catch bloğunun okuyacağı, try
+gövdesinde DEĞİŞTİRİLMİŞ slot'lar çöp olabilir. Çözüm: **try gövdesi içindeki
+slot'ları serbest register'a değil, §11'in debuggable-mod için tarif ettiği
+sabit-offsetli bellek çerçevesine (`slots[]`) koy** — catch bellekten okur,
+register çöpünden değil. Bu maliyet YALNIZCA try gövdesi içine yazılan slot'lar
+için bir bellek-store'dur (§8 shadow-stack'in ref-yazma modeliyle aynı desen,
+"~%5-10 ek yazma"); try dışındaki sıcak döngü ETKİLENMEZ. Yani:
+
+| Kod şekli | Ek maliyet |
+|---|---|
+| try/catch yok | **sıfır** (hiçbir şey üretilmez) |
+| try var, sıcak döngü try DIŞINDA | sıfır (döngü serbest register'da) |
+| sıcak döngü try İÇİNDE | değişen slot başına bir bellek-store (yalnız orada) |
+| `throw` atış anı | longjmp (yavaş yol, istisnai) |
+
+**Sonuç:** setjmp/longjmp önerisi kullanıcının "runtime tıkanması istemiyorum"
+kısıtını KARŞILAR — try/catch mekanizması §11 bellek-çerçevesiyle birleştiği
+sürece maliyet yalnızca try bloklarına yereldir, program geneline yayılmaz. Bu
+birleştirme (Dilim 5 = Dilim 6/§11 mekanizmasını devralır) uygulama sırasına
+yazıldı (§10).
+
 ## 8. GC — shadow stack somutlaştırma
 
 ADR-032 §3'te taslak: "JIT'lenmiş fonksiyon girişte N slot açar, referans
@@ -337,16 +408,46 @@ geçerli — tüm opcode tablosunu tek seferde uygulamak yerine:
    `mir_backend.hpp` boş arayüz, tek bir `int add(int,int)` saQut
    fonksiyonunu (yalnızca `LOAD_CONST`/`ADD`/`RETURN`) gerçekten JIT'leyip
    çalıştıran kanıt. GC/try-catch/string yok.
-2. **Dilim 1 — skaler tam küme:** tüm int/float aritmetik+karşılaştırma+
-   kontrol akışı+fonksiyon çağrısı (CALL/RETURN) — `fibonacci.sqt` MIR ile
-   çalışsın (VM ile bit-bit aynı çıktı, ilk diferansiyel test hedefi).
+2. **Dilim 1 — int-skaler tam küme (TAMAMLANDI):** tüm int aritmetik+
+   bitsel+karşılaştırma+kontrol akışı+fonksiyon çağrısı (CALL/RETURN) +
+   print(int). `fibonacci.sqt` MIR ile çalışıyor, VM ile aynı çıktı.
+   ⚠️ **float HENÜZ YOK** — Dilim 1'in kapsamı yalnızca int-skaler; float
+   Dilim 1.5'e taşındı çünkü register-tip seçimini (I64↔D) zorlayan ilk
+   özellik o (aşağı bkz).
+2b. **Dilim 1.5 — slot-tip tablosu + float (TAMAMLANDI ✅):** Yapıldı:
+   - `IRFunction::slotTypes` (`std::vector<SlotType>`) eklendi; `SlotType`
+     IR katmanında tanımlı (`ir_function.hpp`), VM `ValueKind`'ına bağımlı
+     değil. IRGenerator::finalizeSlotTypes doldurur — parametreler bildirilen
+     tipten, geri kalan slotlar üreten opcode'dan (fixpoint tarama; LOAD_SLOT
+     propagasyonu, CALL dönüş türü). Ekstra semantik analiz değil (§0 uyumlu).
+   - MIR codegen register tipini bu tablodan seçiyor (Float → `MIR_T_D`,
+     diğerleri → `MIR_T_I64`). Proto/func imzaları, CALL, print(int/float)
+     hepsi türe göre.
+   - float opcode'ları eklendi: LOAD_FLOAT, FADD/FSUB/FMUL/FDIV(sıfır guard'lı,
+     `MIR_DBNE`)/FNEG, INT_TO_FLOAT/FLOAT_TO_INT, ve karşılaştırmaların
+     D-varyantları (operand türüne göre codegen'de seçilir).
+   - `rt_jit_print_float` VM'in `Value::toString()` Float dalıyla birebir
+     biçim. Diferansiyel test: float aritmetik + fonksiyon çağrısı + döngü,
+     VM ile **bit-bit aynı çıktı** (doğrulandı).
+   - Slot türü Int/Float DIŞINDA (Ref/Str/Decimal/Date) ise program reddedilir
+     — o türler sonraki dilimlerde (kutulama + shadow stack).
+   - **Kalan (bu dilimin dışına düşen küçük işler):** `saqut ir --types` cam
+     kutu dökümü (**#111**); FIELD_GET/ARRAY_GET/LOAD_GLOBAL sonuç türü
+     `slotTypes`'ta Int varsayılıyor (JIT'te zaten reddedildikleri için
+     zararsız; Dilim 2/3'te bu opcode'lara sonuç-türü alanı eklenecek).
 3. **Dilim 2 — GC'li tipler:** STRUCT_NEW/ARRAY_*/FIELD_* + shadow stack
-   (§8) gerçek uygulaması.
+   (§8) gerçek uygulaması. Ref-slot tespiti Dilim 1.5'in `slotTypes`
+   tablosundan gelir.
 4. **Dilim 3 — string/decimal/date/cast:** runtime call katmanı (§4 tablosu,
-   kutulama).
+   kutulama). ⚠️ **ÖN KOŞUL: ADR-037 (JIT string kutulama) yazılmış olmalı**
+   (§3, açık sorular #1).
 5. **Dilim 4 — CALLHOST köprüsü:** mevcut FFI'nin MIR'den çağrılması (§6).
-6. **Dilim 5 — try/catch:** §7'deki açık sorunun kararlaştırılıp
-   uygulanması (bu dilimden önce AYRI onay turu şart).
+6. **Dilim 5 — try/catch:** §7'deki açık sorunun (**#110**) kararlaştırılıp
+   uygulanması (bu dilimden önce AYRI onay turu şart). ⚠️ **§7.1 gereği bu
+   dilim, §11/Dilim 6'nın bellek-çerçeveli slot mekanizmasını DEVRALIR**
+   (longjmp register-çöpü sorunu ancak böyle çözülür) — yani Dilim 6 hazır
+   değilse try gövdesi için en azından o bellek-çerçeve alt-parçası bu
+   dilimde inşa edilmeli.
 
 Her dilim kendi commit'i/PR'ı, her dilimden sonra ilgili golden testler VM
 ile JIT arasında (o dilimin kapsadığı kadarıyla) diferansiyel karşılaştırılır
@@ -356,10 +457,17 @@ MIR'in dilimleriyle birlikte organik olarak büyüyecek).
 
 ## Açık sorular (kod yazımından önce netleşmeli)
 
-1. **ADR-037 (JIT Value ABI)** yazılmalı — §3'teki string kutulama farkı
-   VM/JIT arasında kayıtlı bir karar olmalı, bu belgedeki taslak yeterli
-   değil.
-2. **§7 hata yönetimi** — setjmp/longjmp önerisi onay bekliyor.
+0. **Slot-tip tablosu (Dilim 1.5, §10)** — ✅ ÇÖZÜLDÜ. `IRFunction::slotTypes`
+   eklendi, IRGenerator dolduruyor, MIR register tiplemesi kullanıyor. Dilim
+   2'nin shadow-stack ref-tespiti aynı tablodan gelecek.
+1. **ADR-037 (JIT Value ABI)** — ✅ YAZILDI (`docs/adr/ADR-037-jit-value-abi.md`).
+   String kutulama farkı VM/JIT arasında kayıt altına alındı. Dilim 3 ön koşulu
+   kapandı (kod hâlâ Dilim 3'te yazılacak).
+2. **§7 hata yönetimi** — setjmp/longjmp önerisi onay bekliyor. **Performans
+   endişesi §7.1'de çözümlendi:** try/catch yoksa sıfır maliyet, maliyet
+   yalnızca try bloklarına yerel; register-çöpü sorunu §11 bellek-çerçevesiyle
+   giderilir. Kalan açık nokta — deterministik stacktrace ile longjmp'in
+   uyumu — **#110'a taşındı** (Dilim 5 kodu bu issue kapanmadan yazılmamalı).
 3. **FIELD_GET/FIELD_SET doğrudan bellek erişimi** (v1 runtime call, v2
    muhtemelen doğrudan MOV) — `Object`'in virtual metoduyla (`markChildren`)
    birlikte vtable offset'i nasıl atlatılacağı (örn. `Object`'i non-virtual

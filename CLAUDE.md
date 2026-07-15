@@ -5,6 +5,12 @@
 
 ## İletişim
 - **Kullanıcıyla TÜM yazışmalar Türkçe.** (Sahibi: Abdussamed ULUTAŞ.)
+- **Kullanıcı deneyimli bir derleyici mühendisi.** SemVer, yank, tokenizer, parser,
+  Hyrum yasası, IR/codegen gibi alan kavramlarını BİLİR — bunları tanımlama/açıklama,
+  akran dili kullan. Fikir alışverişi hoş karşılanır (bana iş verirken fikrimi soruyor),
+  sorun onay sıklığı değil; sorun kullanıcıyı bildiğini bilmiyormuş gibi ele almak.
+  Rolüm: bir arkadaş/asistan — asıl katkım **dikkatli + hızlı kod yazımı**; tasarım
+  kararı kullanıcınındır, ben seçenekleri/riskleri net koyar, öneri veririm.
 
 ## Proje nedir?
 saQut, **programlanabilir ve incelenebilir bir derleyici** — bir "alet çantası"
@@ -316,12 +322,10 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   yazım engellenemez); isim ise marka ile korunur.
 
 ## Çalışma konvansiyonları
-- **Karar netleşince BELGELE, tekrar tekrar mikro-onay isteme** (kullanıcı talimatı):
-  bir tasarım kararı netleştiğinde onu ADR/CLAUDE.md/ilgili dökümanlara işle ve
-  uygula; her adımda "şunu mu bunu mu / commit'leyeyim mi" diye seçenek sunup
-  kullanıcıyı yorma. Yazılı karar > tekrar soru. Gerçek karar noktası (kullanıcının
-  vermesi gereken, koddan/karardan çıkmayan) varsa TEK ve net sor; gerisinde makul
-  varsayılanı uygula, ne yaptığını kısaca söyle, ilerle.
+- **Karar netleşince BELGELE** (ADR/CLAUDE.md/ilgili döküman) ve uygula. Fikir sormak/
+  onay almak sorun DEĞİL (kullanıcı fikir alışverişini ister); yorucu olan gereksiz
+  açıklama ve seçenekleri kavram-anlatımıyla şişirmek. Kısa tut: seçenek/risk/öneriyi
+  akran diliyle net koy, makul varsayılanı uygula, ilerle. Tanım paragrafı yazma.
 - Commit mesajlarına `Co-Authored-By` veya `Claude-Session` satırı **ekleme**.
 - Ana dal `0.1.0`; geliştirme branchi `0.2.0`. commit/push kullanıcı isteyince yapılır.
 - `build/` artık git'te izlenmiyor (.gitignore'da). `wiki/` klasörü repo'ya dahil edildi.

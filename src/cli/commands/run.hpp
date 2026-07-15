@@ -20,6 +20,7 @@
 #include "opt/optimization_manager.hpp"
 #include "ir/ir_generator.hpp"
 #include "vm/interpreter.hpp"
+#include "mir/mir_backend.hpp"
 
 inline int cmdRun(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
@@ -73,7 +74,26 @@ inline int cmdRun(const CliArgs& args) {
     IRGenerator irGenerator;
     IRProgram   program = irGenerator.generateModuleGraph(graph, symbolTable);
 
-    // ── Aşama 6: VM çalıştır ──────────────────────────────────────────────
+    // ── Aşama 6: Çalıştırma backend'i ────────────────────────────────────
+    // #80/MIRPLAN.md: --jit istenirse önce MIR Dilim 0'ı dene (yalnızca
+    // LOAD_CONST/ADD/SUB/MUL/RETURN, parametresiz main). Desteklenmeyen bir
+    // şey görülürse (bugün hemen hemen her program) VM'e düşülür — bu, tek
+    // dispatch noktası ilkesinin (MIRPLAN.md §1) ilk hâli: JIT/VM seçimi
+    // burada, TEK bir yerde yapılır.
+    if (args.useJit) {
+        IRFunction* mainForJit = program.findFunction("main");
+        if (mainForJit) {
+            int         jitResult = 0;
+            std::string jitError;
+            if (mir_backend::tryCompileAndRun(*mainForJit, jitResult, jitError)) {
+                if (args.verbose) std::cerr << "[jit] Dilim 0 ile calistirildi\n";
+                return jitResult;
+            }
+            if (args.verbose) std::cerr << "[jit] VM'e dusuldu: " << jitError << "\n";
+        }
+    }
+
+    // ── Aşama 6b: VM çalıştır (varsayılan yol) ───────────────────────────
     int exitCode = 0;
     try {
         Interpreter vm(program);

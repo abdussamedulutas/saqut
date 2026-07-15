@@ -411,3 +411,4 @@ MIR'in dilimleriyle birlikte organik olarak büyüyecek).
     kullanmaya devam eder (basit, çalışan, geriye dönük uyumlu fallback) —
     bu bir mimari sınırlama değil, yalnızca inşa sırası; Debuggable-mod
     hazır olunca DAP JIT'lenmiş kod üstünde de tam teşekküllü çalışır.
+    Ayrı issue olarak kaydedildi: **#109**.

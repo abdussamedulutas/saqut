@@ -43,6 +43,12 @@ struct CliArgs {
     int  gcThreshold = 0;      // --gc-threshold=N: GC eşiği (0 = VM varsayılanı, negatif = GC kapalı)
     bool gcStats     = false;  // --gc-stats: koşu sonunda GC istatistiklerini stderr'e yaz
 
+    // #80/MIRPLAN.md: --jit — Dilim 0 kapsamındaki fonksiyonlar için MIR
+    // JIT backend'ini dener (yalnızca LOAD_CONST/ADD/SUB/MUL/RETURN,
+    // parametresiz main). Desteklenmeyen bir şey görülürse VM'e düşer.
+    // 0.8.0'da opt-in; 1.0.0'da varsayılan yön döner (bkz. CLAUDE.md).
+    bool useJit = false;
+
     // ADR-035 (#76): --allow-fs/--allow-net/--allow-sys — varsayılan hepsi kapalı.
     std::set<Capability> allowedCaps;
     bool showCapabilities = false; // --capabilities: kullanılan cap'leri raporla (saqut ir)
@@ -124,6 +130,10 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         }
         if (arg == "--gc-stats") {
             args.gcStats = true;
+            continue;
+        }
+        if (arg == "--jit") {
+            args.useJit = true;
             continue;
         }
         if (arg.compare(0, 5, "file:") == 0) {

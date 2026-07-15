@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(saqut VERSION 0.1 LANGUAGES CXX)
+project(saqut VERSION 0.1 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,9 +17,32 @@ endif()
 # Tüm kaynak dosyaları topla
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
+# ── MIR JIT backend (Fast-mode, #80, MIRPLAN.md) ──────────────────────────
+# Yalnızca mir.c + mir-gen.c derlenir — c2mir (C->MIR derleyicisi) saQut'ta
+# hiç kullanılmıyor (MIRPLAN.md §1: MIR C API üzerinden doğrudan kod
+# üretiyoruz, metin/C kaynak yolu yok). mir-gen.c mimariyi kendi içinde
+# preprocessor ile seçer (mir-gen-x86_64.c vb.) — ayrı arch dosyası eklemek
+# gerekmez.
+add_library(mir_core STATIC
+    src/mir/vendor/mir.c
+    src/mir/vendor/mir-gen.c
+)
+target_include_directories(mir_core PUBLIC src/mir/vendor)
+target_compile_options(mir_core PRIVATE -std=gnu11 -Wno-abi -fsigned-char -fPIC)
+include(CheckCCompilerFlag)
+check_c_compiler_flag(-fno-tree-sra SAQUT_MIR_HAS_NO_TREE_SRA)
+if(SAQUT_MIR_HAS_NO_TREE_SRA)
+    target_compile_options(mir_core PRIVATE -fno-tree-sra)
+endif()
+check_c_compiler_flag(-fno-ipa-cp-clone SAQUT_MIR_HAS_NO_IPA_CP_CLONE)
+if(SAQUT_MIR_HAS_NO_IPA_CP_CLONE)
+    target_compile_options(mir_core PRIVATE -fno-ipa-cp-clone)
+endif()
+
 add_executable(saqut ${SOURCES})
 
 target_include_directories(saqut PRIVATE src)
+target_link_libraries(saqut PRIVATE mir_core)
 
 # ── Testler ──────────────────────────────────────────────────────────────────
 enable_testing()

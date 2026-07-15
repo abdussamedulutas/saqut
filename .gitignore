@@ -35,3 +35,17 @@ saqutwebside/
 
 # Belge ekran görüntüleri (üretilmiş, README/wiki'ye elle seçilerek eklenir)
 screenshots/
+
+# Vendored MIR (src/mir/vendor) — kaynak commit'lenir, kendi build çıktıları etmez
+src/mir/vendor/*.a
+src/mir/vendor/*.so*
+src/mir/vendor/*.d
+src/mir/vendor/c2m
+src/mir/vendor/m2b
+src/mir/vendor/b2m
+src/mir/vendor/b2ctab
+src/mir/vendor/mir-bin-run
+src/mir/vendor/c2mir/*.o
+src/mir/vendor/c2mir/*.d
+src/mir/vendor/mir-utils/*.o
+src/mir/vendor/mir-utils/*.d

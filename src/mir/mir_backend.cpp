@@ -59,6 +59,30 @@ extern "C" void rt_jit_print_str(void* strObj) {
     std::cout << static_cast<StringObject*>(strObj)->data << "\n";
 }
 
+// ── Runtime string havuzu (Dilim 3). LOAD_STRING sabitleri derleme zamanı
+// intern edilir (fonksiyon-local stringPool); CONCAT gibi ÇALIŞMA zamanı üretilen
+// stringler burada tutulur. GC henüz JIT tarafını taramadığından (Dilim 2/§8)
+// bunlar program-ömrü boyunca birikir ve tryCompileAndRunProgram sonunda toplu
+// silinir (leak değil, ama döngüde çok concat = çok nesne — GC gelince çözülür).
+// Tek-iş-parçacıklı varsayım (MIRPLAN §9: ileride thread-local). ──────────────
+namespace {
+std::vector<std::unique_ptr<StringObject>> g_jitRuntimeStrings;
+}
+
+// ── STRING_CONCAT trampolini — yeni (immutable, ADR-024) string üretir. ──────
+extern "C" void* rt_jit_string_concat(void* a, void* b) {
+    const std::string& sa = static_cast<StringObject*>(a)->data;
+    const std::string& sb = static_cast<StringObject*>(b)->data;
+    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(sa + sb));
+    return g_jitRuntimeStrings.back().get();
+}
+
+// ── string ==/!= trampolini — ADR-023 istisnası: string eşitliği İÇERİK.
+// VM'in EQUAL_EQUAL String dalıyla birebir (interpreter.cpp: stringValue==). ──
+extern "C" int64_t rt_jit_string_eq(void* a, void* b) {
+    return static_cast<StringObject*>(a)->data == static_cast<StringObject*>(b)->data ? 1 : 0;
+}
+
 // Sıfıra bölme — bu Dilim'de try/catch (ENTER_TRY/THROW) reddedildiğinden
 // yakalanamaz; VM'de de aynı program uncaught throw ile sonlanırdı. Mesaj/çıkış
 // VM davranışıyla eşleşir (interpreter.cpp E_DIVZERO).
@@ -111,6 +135,7 @@ bool opcodeSupported(const Instruction& instr) {
         case Opcode::LOAD_SLOT:
         // Dilim 3: string skaler (kutulu — pointer register'da taşınır, ADR-037)
         case Opcode::LOAD_STRING:
+        case Opcode::STRING_CONCAT:
         case Opcode::ADD:
         case Opcode::SUB:
         case Opcode::MUL:
@@ -163,16 +188,14 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
                 outReason.opcodeName   = opcodeName(instr.opcode);
                 return false;
             }
-            // String operandlı karşılaştırma henüz DOĞRU codegen edilemez:
-            // ADR-023 gereği string == içerik karşılaştırmasıdır (rt_string_eq
-            // runtime call), oysa native MIR_EQ/NE/LT... pointer/skaler eşitliği
-            // yapar. Sabit stringlerde intern şans eseri doğru sonuç verir ama
-            // üretilen (concat) stringlerde bozulur. Sessiz-yanlış yerine açıkça
-            // reddet — doğru hâli sonraki adım (rt_string_eq/cmp).
+            // String operandlı SIRALAMA (</<=/>/>=) JIT'te desteklenmez —
+            // zaten frontend'de reddedilir (E003: "for string use only == and
+            // !="), bu yalnızca savunmacı bir kalkan. Eşitlik (==/!=) İÇERİK
+            // karşılaştırmasıdır (ADR-023 istisnası) ve codegen'de rt_jit_string_eq
+            // runtime call'a çevrilir (native MIR_EQ pointer eşitliği YANLIŞ olurdu).
             switch (instr.opcode) {
-                case Opcode::LESS:      case Opcode::LESS_EQUAL:
-                case Opcode::GREATER:   case Opcode::GREATER_EQUAL:
-                case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:
+                case Opcode::LESS:    case Opcode::LESS_EQUAL:
+                case Opcode::GREATER: case Opcode::GREATER_EQUAL:
                     if (slotKindOf(fn, instr.left) == SlotType::Str ||
                         slotKindOf(fn, instr.right) == SlotType::Str) {
                         outReason.functionName = name;
@@ -233,6 +256,14 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t printFImport    = MIR_new_import(ctx, "rt_jit_print_float");
     MIR_item_t printSProto     = MIR_new_proto(ctx, "print_s_proto", 0, nullptr, 1, MIR_T_I64, "v");
     MIR_item_t printSImport    = MIR_new_import(ctx, "rt_jit_print_str");
+    // STRING_CONCAT / string ==,!= runtime call'ları (ret I64 pointer/bool, 2×I64 arg)
+    MIR_type_t i64Ret          = MIR_T_I64;
+    MIR_var_t  strConcatArgs[2] = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "b", 0}};
+    MIR_item_t concatProto     = MIR_new_proto_arr(ctx, "str_concat_proto", 1, &i64Ret, 2, strConcatArgs);
+    MIR_item_t concatImport    = MIR_new_import(ctx, "rt_jit_string_concat");
+    MIR_var_t  strEqArgs[2]     = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "b", 0}};
+    MIR_item_t strEqProto      = MIR_new_proto_arr(ctx, "str_eq_proto", 1, &i64Ret, 2, strEqArgs);
+    MIR_item_t strEqImport     = MIR_new_import(ctx, "rt_jit_string_eq");
     MIR_item_t divZeroProto    = MIR_new_proto(ctx, "divzero_proto", 0, nullptr, 0);
     MIR_item_t divZeroImport   = MIR_new_import(ctx, "rt_jit_div_zero");
     MIR_item_t modZeroProto    = MIR_new_proto(ctx, "modzero_proto", 0, nullptr, 0);
@@ -321,6 +352,13 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             return slotKindOf(fn, in.left) == SlotType::Float ||
                    slotKindOf(fn, in.right) == SlotType::Float;
         };
+        // Eşitlik karşılaştırması string operand mı alıyor (içerik karşılaştırması
+        // → rt_jit_string_eq runtime call, ADR-023). Tip denetleyici iki operandın
+        // da string olmasını garanti eder (karışık yasak).
+        auto stringOperands = [&](const Instruction& in) {
+            return slotKindOf(fn, in.left) == SlotType::Str ||
+                   slotKindOf(fn, in.right) == SlotType::Str;
+        };
 
         for (size_t i = 0; i < instrN; i++) {
             MIR_append_insn(ctx, func, labelAt[i]);
@@ -344,6 +382,13 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                             MIR_new_int_op(ctx, reinterpret_cast<int64_t>(obj))));
                     break;
                 }
+                case Opcode::STRING_CONCAT:
+                    // dest = rt_jit_string_concat(left, right) — yeni string kutusu.
+                    MIR_append_insn(ctx, func,
+                        MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, concatProto),
+                            MIR_new_ref_op(ctx, concatImport),
+                            R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
                 case Opcode::LOAD_SLOT:
                     // Float slot kopyası DMOV, diğerleri MOV (pointer/int I64).
                     MIR_append_insn(ctx, func,
@@ -443,10 +488,28 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DGE : MIR_GE, R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::EQUAL_EQUAL:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DEQ : MIR_EQ, R(instr.dest), R(instr.left), R(instr.right)));
+                    if (stringOperands(instr)) {
+                        // dest = rt_jit_string_eq(left, right)  (içerik, ADR-023)
+                        MIR_append_insn(ctx, func,
+                            MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, strEqProto),
+                                MIR_new_ref_op(ctx, strEqImport),
+                                R(instr.dest), R(instr.left), R(instr.right)));
+                    } else {
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DEQ : MIR_EQ, R(instr.dest), R(instr.left), R(instr.right)));
+                    }
                     break;
                 case Opcode::NOT_EQUAL:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DNE : MIR_NE, R(instr.dest), R(instr.left), R(instr.right)));
+                    if (stringOperands(instr)) {
+                        // dest = !rt_jit_string_eq(left, right) → eq sonra XOR 1
+                        MIR_append_insn(ctx, func,
+                            MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, strEqProto),
+                                MIR_new_ref_op(ctx, strEqImport),
+                                R(instr.dest), R(instr.left), R(instr.right)));
+                        MIR_append_insn(ctx, func,
+                            MIR_new_insn(ctx, MIR_XOR, R(instr.dest), R(instr.dest), MIR_new_int_op(ctx, 1)));
+                    } else {
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DNE : MIR_NE, R(instr.dest), R(instr.left), R(instr.right)));
+                    }
                     break;
                 case Opcode::JMP:
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, labelAt[static_cast<size_t>(instr.jumpTarget)])));
@@ -503,6 +566,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_print_int",   reinterpret_cast<void*>(rt_jit_print_int));
     MIR_load_external(ctx, "rt_jit_print_float", reinterpret_cast<void*>(rt_jit_print_float));
     MIR_load_external(ctx, "rt_jit_print_str",   reinterpret_cast<void*>(rt_jit_print_str));
+    MIR_load_external(ctx, "rt_jit_string_concat", reinterpret_cast<void*>(rt_jit_string_concat));
+    MIR_load_external(ctx, "rt_jit_string_eq",     reinterpret_cast<void*>(rt_jit_string_eq));
     MIR_load_external(ctx, "rt_jit_div_zero",    reinterpret_cast<void*>(rt_jit_div_zero));
     MIR_load_external(ctx, "rt_jit_mod_zero",    reinterpret_cast<void*>(rt_jit_mod_zero));
     MIR_load_external(ctx, "rt_jit_fdiv_zero",   reinterpret_cast<void*>(rt_jit_fdiv_zero));
@@ -533,6 +598,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
 
     MIR_gen_finish(ctx);
     MIR_finish(ctx);
+
+    // Çalışma-zamanı üretilen stringleri (CONCAT) topla — native kod bitti,
+    // pointer'lara artık erişilmiyor (GC Dilim 2/§8'e kadar elle temizlik).
+    g_jitRuntimeStrings.clear();
 
     outExitCode = static_cast<int>(nativeResult);
     return true;

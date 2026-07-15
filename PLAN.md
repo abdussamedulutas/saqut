@@ -30,11 +30,14 @@ golden testlere karışır.
    JIT henüz yokken bu adım "iskeleti kur + VM'i kendi kendine karşı çalıştır"
    olarak başlar (regresyon bariyeri); #80 ilerledikçe gerçek karşılaştırmaya
    döner.
-2. **ArgParser çekirdeği** (`docs/CLI.md`'de tasarlanan hibrit model —
-   Alternatif 3). `src/cli/arg_spec.hpp` + yeni `ArgParser`; önce `run`/`ir`
-   (en çok bayrak taşıyanlar) yeni şemaya taşınır, sonra basit komutlar
-   (`tokens`/`ast`/`symbols`). **Bu adım kullanıcı onayına bağlı** — `CLI.md`
-   üç alternatifi sundu, hangisinin seçildiği teyit edilmeden koda geçilmez.
+2. **`--with` ayrıştırıcısı** (`docs/CLI.md` v2 — onaylandı). Tüm
+   ortam/çalışma-zamanı yapılandırması (capability, kaynak limiti, servis
+   ayarı) tek `--with fs,net,port=8080` bayrağı altında toplanır;
+   `--allow-fs`/`--allow-net`/`--allow-sys` doğrudan `--with fs`/`--with net`/
+   `--with sys`'e değiştirilir (pre-1.0, geriye dönük uyumluluk yükü yok).
+   `src/cli/with_spec.hpp` (`parseWith`) + `CliArgs`'taki tek tek bool
+   alanların `unordered_map<string, ConfigValue> with`'e taşınması. Önce
+   `run`/`ir` (en çok yapılandırma taşıyanlar), sonra basit komutlar.
 3. **#80 — MIR JIT backend (ADR-032).** ⚠️ **Kullanıcı talimatı: buraya
    gelince DUR ve sor.** Bu belge yalnızca sırayı kaydeder, kod yazımına
    başlanmaz. Ön koşullar: (1) #92'nin gerçek VM↔JIT karşılaştırması yapacak

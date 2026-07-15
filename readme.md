@@ -169,6 +169,20 @@ The long version is in [`docs/architecture.md`](docs/architecture.md).
 
 ---
 
+## Compatibility & determinism
+
+The contract is **observed behavior** — stdout, return values, diagnostics, serialization output — never internal representation. Memory layout, value boxing, GC, and register allocation are the compiler's business and may differ between backends (the VM keeps strings inline, the JIT boxes them) and change between versions, as long as the observed result stays identical. Both backends (reference VM + MIR JIT) must produce the same output for the same IR; differential testing enforces this.
+
+Versioning (binding from 1.0.0, SemVer):
+
+- **Patch (`x.y.Z`)** — bug fixes only. A wrong result was never part of the contract, so it is corrected and backported to every affected minor line (`0.6.1` / `0.5.1` / `0.4.1`); the faulty `.0` is yanked.
+- **Minor (`x.Y.0`)** — the observable surface is **frozen**: syntax, builtin/FFI signatures, whether a function exists, CLI output formats. Code is compatible **both ways** (a program written for 1.7 also runs on 1.3). Only the GC internals and performance change (same result, faster). **No new observable features in a minor** — a deliberate departure from SemVer's additive-minor norm, to protect the hand-written tooling ecosystem.
+- **Major (`X.0.0`)** — a new product. Syntax, language identity, even this determinism rule itself may change. No compatibility promise across majors; intervals are long by design.
+
+Serialization output (`toJson()` and friends) is frozen once shipped — improvements arrive under a new name (`toJson2()`) or a new major, never by silently changing the format.
+
+---
+
 ## Design records
 
 Architectural decisions live in `docs/`:
@@ -177,7 +191,7 @@ Architectural decisions live in `docs/`:
 |---|---|
 | [`docs/fikirler.md`](docs/fikirler.md) | ADR-001–005: backend strategy, parser, header-only, token, IR |
 | [`docs/adr-frontend-analiz.md`](docs/adr-frontend-analiz.md) | ADR-006–028: analysis, optimization, execution model, FFI, memory, semantics |
-| [`docs/adr/`](docs/adr/) | ADR-029+: nested structs, heavyIR/lightIR, module cycles, MIR JIT + embedded-runtime AOT |
+| [`docs/adr/`](docs/adr/) | ADR-029+: nested structs, heavyIR/lightIR, module cycles, MIR JIT + embedded-runtime AOT, JIT value ABI, determinism & versioning |
 | [`docs/roadmap-frontend.md`](docs/roadmap-frontend.md) | Phase-by-phase implementation plan |
 | [`docs/architecture.md`](docs/architecture.md) | Full architecture reference (Turkish) |
 

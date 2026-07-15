@@ -109,6 +109,23 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - **FFI seam:** kasıtlı "host fonksiyonu çağır" mekanizması (`callhost`); `print`
   ilk müşteri (ADR-016). Batteries = sınır/FFI problemi, "zlib'i yeniden yaz"
   değil; kripto asla elle yazılmaz (ADR-017).
+- **Determinizm + sürüm uyumluluğu (ADR-038):** Sözleşme = **gözlemlenen davranış**
+  (stdout, dönüş, tanı, serileştirme), iç temsil DEĞİL. Bellek düzeni/kutulama/GC/
+  register hem iki backend arası (ADR-037: VM inline string vs JIT StringObject) hem
+  sürümler arası serbestçe değişir — **tek şart sonucu değiştirmemek** (diferansiyel
+  test #92 zorlar). **Üç eksen (1.0.0'dan bağlayıcı):** **PATCH** = bugfix; yanlış
+  çıktı "sözleşme dışı" → düzeltilir, etkilenen tüm minor serilerine backport
+  (0.6.1/0.5.1/0.4.1), hatalı `.0` **yank**'lenir. **MINOR** = gözlemlenebilir yüzey
+  DONUK (syntax, builtin/FFI imzaları, fonksiyon var/yokluğu, CLI çıktısı sabit);
+  iki-yön uyumlu (1.7 kodu 1.3'te DE çalışır); değişebilen SADECE GC+performans+
+  sonuç-koruyan iç yeniden yazım → **minor'da sıfır yeni gözlemlenebilir özellik**
+  (SemVer'den bilinçli ayrılık). **MAJOR** = yeni ürün (Python 2/3; syntax/OOP/
+  determinizm kuralı dahil her şey gidebilir, uzun aralıklı). Uyumluluğu bozan
+  (imza değişikliği, yeni fonksiyon varlığı, CLI çıktı değişikliği) → doğrudan major,
+  önce minor'larda `deprecated` uyarısı. Serileştirme çıktısı (`toJson()`) bir kez
+  yayınlanınca DONAR; iyileştirme `toJson2()` veya major. ⚠️ **Açık madde:** platform-
+  arası determinizm (endianness sabitleme, transandantal libm sin/cos/exp — sqrt hariç)
+  1.0 yaklaşırken karara bağlanacak.
 
 ## Mevcut durum (yapılan vs planlanan)
 - **✅ Birinci kilometre taşı AŞILDI:** `examples/fibonacci.sqt`
@@ -240,6 +257,14 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - `docs/adr/ADR-032-mir-jit-gomulu-runtime-aot.md` — İkinci backend: MIR JIT +
   gömülü-runtime AOT (`saqut build`); shadow stack GC kökleri; C transpile/libgccjit
   elendi, LLVM fiilen kapalı; VM referans backend, diferansiyel test zorunlu.
+- `docs/adr/ADR-035-capability-modeli.md` — FFI capability/permission modeli (#76).
+- `docs/adr/ADR-036-date-tipi.md` — `date` tipi (epoch-ms, int64 taşınır).
+- `docs/adr/ADR-037-jit-value-abi.md` — JIT Value ABI: register-skaler vs kutulu;
+  String/Decimal/Ref → I64 pointer; string VM'de inline / JIT'te StringObject
+  (kutulama farkı kasıtlı, gözlemlenen davranış aynı).
+- `docs/adr/ADR-038-determinizm-surum-uyumlulugu.md` — Determinizm + sürüm uyumluluğu
+  sözleşmesi: gözlemlenen davranış = sözleşme; PATCH(bugfix+backport+yank) /
+  MINOR(donuk yüzey, iki-yön, GC+perf) / MAJOR(yeni ürün); serileştirme çıktısı donar.
 - `docs/sonnet-handoff.md` — **Sonnet için uygulama promptu** (ADR-020…024'ü koda
   döken sıralı görev planı; ilk görev: GC-hazır nesne modeli + array runtime).
 - `docs/roadmap-frontend.md` — faz-faz uygulama planı (Faz 0–4 → fibonacci).
@@ -291,6 +316,12 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   yazım engellenemez); isim ise marka ile korunur.
 
 ## Çalışma konvansiyonları
+- **Karar netleşince BELGELE, tekrar tekrar mikro-onay isteme** (kullanıcı talimatı):
+  bir tasarım kararı netleştiğinde onu ADR/CLAUDE.md/ilgili dökümanlara işle ve
+  uygula; her adımda "şunu mu bunu mu / commit'leyeyim mi" diye seçenek sunup
+  kullanıcıyı yorma. Yazılı karar > tekrar soru. Gerçek karar noktası (kullanıcının
+  vermesi gereken, koddan/karardan çıkmayan) varsa TEK ve net sor; gerisinde makul
+  varsayılanı uygula, ne yaptığını kısaca söyle, ilerle.
 - Commit mesajlarına `Co-Authored-By` veya `Claude-Session` satırı **ekleme**.
 - Ana dal `0.1.0`; geliştirme branchi `0.2.0`. commit/push kullanıcı isteyince yapılır.
 - `build/` artık git'te izlenmiyor (.gitignore'da). `wiki/` klasörü repo'ya dahil edildi.

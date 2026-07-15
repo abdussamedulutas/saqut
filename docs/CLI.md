@@ -1,159 +1,122 @@
 # saQut CLI — Parametre Formatı Tasarımı
 
 > Durum: **tasarım belgesi** — bu belge yazıldığı turda kod değişmedi.
-> Seçilen alternatif onaylandıktan sonra uygulaması 0.8.0'da yapılır
-> (bkz. `PLAN.md`).
+> Uygulaması 0.8.0'da yapılır (bkz. `PLAN.md`).
+>
+> v2 — önceki sürümde üç alternatif (alt-komut / Deno-tarzı düz / hibrit)
+> sunulmuştu; hepsi her yeni özelliği ayrı bir `--allow-X` bayrağına
+> çeviriyordu (`--allow-fs --allow-net --allow-sys --allow-time ...`).
+> Bu, CLI büyüdükçe **bayrak patlaması**na yol açar — reddedildi. Bu sürüm
+> tek bir karara odaklanıyor: **tekil yapılandırılmış bayrak (`--with`)**.
 
-## Neden şimdi?
+## Neden bayrak-başına-özellik yanlış
 
-Bugün CLI düz `saqut <komut> [dosya] [bayrak...]` (`run`, `tokens`, `ast`,
-`symbols`, `check`, `ir`, `exec`, `bench`, `lsp`, `dap`) — hepsi tek seviye,
-`src/cli/args.hpp`'deki elle yazılmış tek geçişli ayrıştırıcıdan geçiyor.
-Yakın gelecekte gelecek komutlar bu modelin dışına taşıyor:
+Bugün her capability kendi bayrağı: `--allow-fs`, `--allow-net`, `--allow-sys`.
+Üç tanesi katlanabilir ama saQut'un kendi yol haritası bunun devamını
+işaret ediyor — `--allow-time` (#76'da tartışılan), ileride belki
+`--allow-net-write`/`--allow-net-read` gibi ayrımlar, MCP servisinin kendi
+bayrakları (`--port`, `--host`, `--max-connections`), GC ayarları
+(`--gc-threshold`, `--gc-stats`) zaten var. Her yeni özellik = yeni
+`--allow-X` demek, `saqut --help` çıktısı bir noktadan sonra okunmaz hale
+gelir ve `src/cli/args.hpp`'ye sürekli yeni `bool`/`int` alanı + yeni `if`
+eklemek gerekir (şu an 15+ bayrak birikmiş durumda — bu dosyanın kendisi
+zaten "tanrı struct" belirtisi gösteriyor).
 
-- `saqut project create` — **alt-komut grubu** (`project` altında `create`,
-  muhtemelen `init`, `add` vb.)
-- `saqut mcp --port 8080` — uzun ömürlü servis komutu, tip'li bayrak (int)
-- `saqut query ./project -only-struct -name 'Person*'` — pozisyonel +
-  çok bayrak + değerli bayrak (glob pattern) + gelecekte muhtemelen
-  `--format json`, `--recursive` gibi ek seçenekler
+## Karar: tekil yapılandırılmış bayrak — `--with`
 
-Mevcut `CliArgs` (tek düz struct, `positional: vector<string>`, birkaç
-`bool`/`int` alanı) ve `CliDispatcher` (isimden `execute(args)` bulan düz
-liste) bu üç örneği karşılayamaz: alt-komut kavramı yok, bayrak tipleri
-(int/string/bool/liste) elle `stoi`/substring ile çözülüyor, her yeni bayrak
-`args.hpp`'ye bir alan + `parseArgs`'a bir `if` demek (halihazırda `--allow-fs`,
-`--allow-net`, `--allow-sys`, `--capabilities`, `--gc-threshold=N` gibi 15+
-bayrak birikti — bu dosya da kendi büyüme sorununu yaşıyor).
+Tüm **ortam/çalışma-zamanı yapılandırması** (capability'ler, kaynak
+limitleri, servis ayarları) tek bir bayrak altında toplanır:
 
-## Bugünkü örnekler + gelecekteki örnekler (üç formatta yan yana)
-
-| Senaryo | Bugün | Alternatif 1 (alt-komut) | Alternatif 2 (Deno-tarzı düz) | Alternatif 3 (hibrit, önerilen) |
-|---|---|---|---|---|
-| Çalıştır | `saqut run --allow-fs prog.sqt` | `saqut run --allow-fs prog.sqt` | `saqut run --allow-fs prog.sqt` | `saqut run --allow-fs prog.sqt` |
-| Proje oluştur | *(yok)* | `saqut project create myapp` | `saqut project-create myapp` | `saqut project create myapp` |
-| MCP servisi | *(yok)* | `saqut mcp start --port 8080` | `saqut mcp --port 8080` | `saqut mcp --port 8080` |
-| Sembol sorgusu | *(yok)* | `saqut query run ./project --only-struct --name 'Person*'` | `saqut query ./project --only-struct --name 'Person*'` | `saqut query ./project --only-struct --name 'Person*'` |
-| Çoklu capability | `--allow-fs` (tek tek) | aynı | `--allow=fs,net` (liste) | `--allow-fs --allow-net` **+** `--allow=fs,net` ikisi de |
-
-## Alternatif 1 — Git/Docker tarzı iç içe alt-komut
-
-Her komut kendi alt-komut ağacına sahip: `saqut <grup> <eylem> [argümanlar] [bayraklar]`.
-`run`/`ir`/`ast` gibi bugünkü düz komutlar da `saqut compile run` gibi bir
-gruba taşınabilir (kırılma: mevcut kullanıcı alışkanlığı bozulur).
-
-**Artı:**
-- En tanıdık model (git, docker, kubectl, cargo) — kullanıcı hiç öğrenmeden tahmin eder.
-- `project create`, `project init`, `project add` gibi doğal aile büyümesi.
-- Her grup kendi yardım metnini taşıyabilir (`saqut project --help`).
-
-**Eksi:**
-- Bugünkü `saqut run prog.sqt` gibi tek-kelime komutları da gruplamaya
-  zorlarsa (`saqut compile run`) **kırılma** olur; gruplamazsa iki farklı
-  komut stili (düz + iç içe) bir arada yaşar — tutarsız görünür.
-- `query` gibi "eylem = komutun kendisi" olan durumlarda (`saqut query ...`)
-  gereksiz bir ekstra seviye ister (`saqut query run ...` tuhaf durur).
-
-## Alternatif 2 — Deno tarzı düz komut + zengin bayrak
-
-Tüm komutlar tek seviyede kalır (`saqut mcp`, `saqut project-create`,
-`saqut query`), ayrım tire ile (`kebab-case`) yapılır. Zengin bayrak
-sistemi: `--allow=fs,net` gibi virgüllü liste, `--` pozisyonel ayracı
-(zaten ADR-035 ile capability bayraklarında bu model kısmen kuruldu).
-
-**Artı:**
-- saQut'un capability modeli (`--allow-fs` vb.) zaten doğrudan Deno'yu
-  örnek alıyor (ADR-032, ADR-035) — tutarlılık avantajı, tek zihinsel model.
-- En basit ayrıştırıcı: hiç alt-komut ağacı yok, düz `command → handler` map.
-- Geriye dönük uyumlu: mevcut `saqut run`/`saqut ir` hiç değişmez.
-
-**Eksi:**
-- `project-create`, `project-init`, `project-add` gibi bir aile büyüdükçe
-  komut adları uzar ve gruplama görsel olarak kaybolur (`saqut project-create`
-  ile `saqut project-init` arasındaki ilişki isimden başka yerde görünmez).
-- `saqut mcp --port 8080` gibi **uzun ömürlü servis** komutları ile `saqut run`
-  gibi **tek atımlık** komutlar aynı düzeyde durur — kavramsal karışıklık.
-
-## Alternatif 3 — Hibrit: düz komutlar + opsiyonel alt-komut grubu (ÖNERİLEN)
-
-Kural: **bugünkü düz komutlar (`run`, `tokens`, `ast`, `symbols`, `check`,
-`ir`, `exec`, `bench`, `lsp`, `dap`) hiç değişmez** — geriye dönük uyumluluk
-korunur, mevcut scriptler/dokümantasyon kırılmaz. Yalnızca **gerçekten bir
-alt-komut ailesi gerektiren yeni alanlar** (`project`, muhtemelen ileride
-`cache`, `config`) grup alır; tek-eylemli yeni komutlar (`mcp`, `query`) düz
-kalır. Tüm bayraklar tek tip bir ayrıştırıcıdan geçer:
-
-- `--name value` ve `--name=value` ikisi de kabul edilir (bugünküyle aynı).
-- Kısa alias (`-o`, `-v`) yalnızca gerçekten sık kullanılan bayraklarda.
-- `--` pozisyonel/program-argümanı ayracı (ADR-035 ile `sys::args()` için
-  zaten kuruldu) korunur.
-- Çok-değerli bayraklar için **iki syntax birden** kabul edilir: tekrar eden
-  bayrak (`--allow-fs --allow-net`) ve virgüllü liste (`--allow=fs,net`) —
-  ikisi de aynı `set<Capability>`'ye toplanır. Kullanıcı hangisini
-  yazdıysa çalışır; belgeler tekrar-eden formu birincil gösterir (mevcut
-  `--allow-fs` kullanıcı alışkanlığını bozmaz).
-- `query` gibi filtre-ağır komutlarda `-only-struct` (tek tire, bayrak
-  değeri yok — boolean switch) ile `-name 'Person*'` (tek tire, değerli)
-  karışık kullanılabilir; ayrıştırıcı tek-tire ve çift-tire'yi eşdeğer kabul
-  eder (yaygın CLI toleransı, `find`/`grep` alışkanlığına yakın).
-
-**Artı:**
-- Sıfır kırılma — bugünkü hiçbir komut/script/golden-test etkilenmez.
-- Yeni büyüyen aileler (`project`) doğal grup alır, tek-atımlık yeni
-  komutlar (`mcp`, `query`) gereksiz seviye almaz.
-- Tek ayrıştırıcı çekirdeği → tutarlı hata mesajları, tutarlı `--help`.
-
-**Eksi:**
-- "Ne zaman grup, ne zaman düz komut" kararı öznel — büyüdükçe tutarsızlık
-  riski var (hafifletme: bu belgeye yeni komut eklerken kısa bir kural
-  yazıldı, aşağıya bak).
-
-### Grup mu, düz komut mu? (karar kuralı)
-
-Yeni bir komut eklerken: **komutun altında en az 2 farklı eylem varsa VE
-bu eylemler aynı isim alanını (`saqut project X` gibi bir "ad") paylaşıyorsa**
-→ alt-komut grubu. Aksi halde (tek eylem, doğrudan bir işi yapıyor) → düz
-komut. Örnek: `project create/init/add` → grup (üç eylem, ortak "proje"
-kavramı). `mcp --port 8080` → düz (tek eylem: sunucuyu başlat, `--port` bir
-konfigürasyon bayrağı, ayrı bir "eylem" değil). `query` → düz (tek eylem:
-sorgula; `-only-struct`/`-name` filtre bayrakları, ayrı eylemler değil).
-
-## Önerilen hedef mimari (`src/cli/` için, 0.8.0'da uygulanacak)
-
-Bugünkü `CliArgs` (düz struct) + `parseArgs()` (tek fonksiyon, ~15 `if`)
-yerine:
-
-```cpp
-// src/cli/arg_spec.hpp — her komut kendi bayrak/pozisyonel şemasını bildirir
-struct FlagSpec {
-    std::string name;        // "allow-fs", "port"
-    char        shortAlias;  // 'o', 0 = yok
-    FlagKind    kind;        // Bool | String | Int | StringList
-    std::string help;
-};
-
-struct CommandSpec {
-    std::string           name;         // "run", "project"
-    std::vector<std::string> subcommands; // boş = düz komut; ["create","init"] = grup
-    std::vector<FlagSpec>  flags;
-    std::string            help;
-};
+```
+--with <spec>[,<spec>...]
+spec := <anahtar>              (boolean açma — "fs" → true)
+      | <anahtar>=<değer>      (tipli değer — "port=8080")
 ```
 
-`CliDispatcher` bugünkü gibi `CommandSpec` listesi tutar; `--help` her
-komut için `flags`'ten otomatik üretilir (bugün elle yazılan `printHelp()`
-yerine). Ayrıştırma tek bir `ParsedArgs parse(CommandSpec&, argv)` üzerinden
-geçer — `CliArgs`'taki 15 ayrı bayrak alanı yerine `map<string, FlagValue>`
-+ tip-güvenli okuyucular (`args.getBool("allow-fs")`, `args.getInt("port")`).
+### Örnekler
 
-Bu mimari **bugünkü tüm komutları kırmadan** kademeli geçirilebilir: önce
-`ArgParser` çekirdeği yazılır, sonra komutlar tek tek (her biri kendi PR'ı)
-yeni şemaya taşınır — `run` ve `ir` ilk (en çok bayrak taşıyanlar, en çok
-fayda), `tokens`/`ast`/`symbols` son (basit, az bayrak).
+```
+saqut run --with fs prog.sqt
+saqut run --with fs,net prog.sqt
+saqut run --with fs,gc-threshold=1000,gc-stats prog.sqt
+saqut mcp --with port=8080
+saqut mcp --with port=8080,host=0.0.0.0
+```
 
-## Sonuç
+`--with` **tekrarlanabilir de** — script'lerde okunurluk için satır satır
+yazmak isteyenler `--with fs --with net --with gc-stats` de yazabilir,
+ayrıştırıcı hepsini aynı yapılandırma kümesine toplar. İki söz dizimi de
+(virgüllü tek bayrak / tekrarlanan bayrak) aynı sonucu üretir — kullanıcı
+hangisi okunur geliyorsa onu seçer.
 
-**Alternatif 3 (hibrit) önerilir.** Sıfır kırılma + gelecekteki üç örneğin
-(`project create`, `mcp --port`, `query -only-struct -name`) hepsini doğal
-karşılıyor. Onay sonrası uygulama işi 0.8.0'da `ArgParser` çekirdeğiyle
-başlar (bkz. `PLAN.md`).
+### Kapsam sınırı: `--with` her şeyi yutmaz
+
+`--with`, **çapraz-kesen ortam yapılandırması** içindir (capability, kaynak
+limiti, servis bağlama ayarı). Bir komuta **özgü iş mantığı bayrağı DEĞİLDİR**
+— örneğin `saqut query ./project -only-struct -name 'Person*'` içindeki
+`-only-struct`/`-name` sorgunun kendi filtreleridir, "ortam" değildir; normal
+bayrak olarak kalır. Ayrım kuralı: **birden fazla komutta anlamlı mı?**
+(`fs`/`net`/`port`/`gc-threshold` evet — hem `run` hem `mcp` hem ileride
+`build` bunlara ihtiyaç duyabilir) → `--with`. **Yalnızca bir komutun kendi
+semantiği mi?** (`-only-struct` yalnızca `query`'de anlamlı) → normal bayrak.
+
+## Alt-komut gruplaması (değişmedi)
+
+Bayrak tasarımından bağımsız bir eksen: yeni komutların ne zaman grup
+(`saqut project create`) ne zaman düz (`saqut mcp`, `saqut query`) olacağı.
+Kural aynı kalıyor: **komutun altında en az 2 farklı eylem varsa VE ortak
+bir "ad" paylaşıyorsa** → grup; tek eylemse → düz komut. Bugünkü düz komutlar
+(`run`, `tokens`, `ast`, `symbols`, `check`, `ir`, `exec`, `bench`, `lsp`,
+`dap`) hiç değişmez — geriye dönük uyumluluk korunur.
+
+## Örnekler (nihai format)
+
+| Senaryo | Komut |
+|---|---|
+| Çalıştır, fs izniyle | `saqut run --with fs prog.sqt` |
+| Çalıştır, fs+net+GC ayarı | `saqut run --with fs,net,gc-threshold=1000 prog.sqt` |
+| Proje oluştur | `saqut project create myapp` |
+| MCP servisi, port | `saqut mcp --with port=8080` |
+| Sembol sorgusu | `saqut query ./project -only-struct -name 'Person*'` |
+| Statik capability raporu | `saqut ir --capabilities prog.sqt` *(mod-değiştirici, tek komuta özgü → `--with` değil)* |
+
+## Mevcut `--allow-fs`/`--allow-net`/`--allow-sys`'in geleceği
+
+Pre-1.0 olduğumuz için (ADR-035 henüz `0.7.0`'da kuruldu) geriye dönük
+uyumluluk yükü taşımaya gerek yok — `--allow-fs` doğrudan `--with fs`'e
+**değiştirilir** (deprecated alias yok, tek bir CLI dili). Bu, "eski/yeni
+iki söz dizimi bir arada" karmaşasından kaçınır.
+
+## Ayrıştırıcı tasarımı (`src/cli/`, 0.8.0'da uygulanacak)
+
+```cpp
+// src/cli/with_spec.hpp
+enum class ConfigValueKind { Bool, Int, String };
+
+struct ConfigValue {
+    ConfigValueKind kind;
+    bool        boolVal   = true;   // bare "fs" → true
+    long long   intVal    = 0;      // "port=8080"
+    std::string stringVal;          // "host=0.0.0.0"
+};
+
+// "--with fs,net,port=8080" → {"fs":true, "net":true, "port":8080}
+std::unordered_map<std::string, ConfigValue> parseWith(const std::vector<std::string>& withArgs);
+```
+
+`CliArgs` bugünkü tek tek `bool allowFs`/`bool allowNet`/`bool allowSys`
+alanları yerine tek `std::unordered_map<std::string, ConfigValue> with;`
+taşır; tüketen kod (`Interpreter::setCapabilities` vb.) `with.count("fs")`
+gibi sorgular. Yeni bir capability veya servis ayarı eklemek **`args.hpp`'ye
+dokunmadan**, yalnızca tüketen tarafta bir `with.count("x")` kontrolüyle
+yapılabilir hale gelir — bugünkü "her yeni bayrak = yeni alan + yeni `if`"
+büyüme deseni ortadan kalkar.
+
+Komut şeması (`CommandSpec`/alt-komut ayrımı) önceki tasarımdaki gibi kalır;
+tek fark bayrak listesinde artık tek tek `--allow-fs` girdisi yerine
+`--with`'in kabul ettiği anahtar kümesi belgelenir (`fs`, `net`, `sys`,
+`gc-threshold`, `gc-stats`, `port`, `host`, ...).
+
+Geçiş: `run`/`ir` önce (en çok yapılandırma taşıyanlar), sonra basit
+komutlar. `mcp`/`project`/`query` doğrudan yeni modelle yazılır (henüz
+kod yok, eski modele geçiş maliyeti yok).

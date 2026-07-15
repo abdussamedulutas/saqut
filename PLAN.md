@@ -30,14 +30,15 @@ golden testlere karışır.
    JIT henüz yokken bu adım "iskeleti kur + VM'i kendi kendine karşı çalıştır"
    olarak başlar (regresyon bariyeri); #80 ilerledikçe gerçek karşılaştırmaya
    döner.
-2. **`--with` ayrıştırıcısı** (`docs/CLI.md` v2 — onaylandı). Tüm
-   ortam/çalışma-zamanı yapılandırması (capability, kaynak limiti, servis
-   ayarı) tek `--with fs,net,port=8080` bayrağı altında toplanır;
-   `--allow-fs`/`--allow-net`/`--allow-sys` doğrudan `--with fs`/`--with net`/
-   `--with sys`'e değiştirilir (pre-1.0, geriye dönük uyumluluk yükü yok).
-   `src/cli/with_spec.hpp` (`parseWith`) + `CliArgs`'taki tek tek bool
-   alanların `unordered_map<string, ConfigValue> with`'e taşınması. Önce
-   `run`/`ir` (en çok yapılandırma taşıyanlar), sonra basit komutlar.
+2. **`--allow` ayrıştırıcısı** (`docs/CLI.md` v3 — onaylandı). Yalnızca
+   permission/capability kategorisi (fs/net/sys) toplu bayrağa taşınır:
+   `--allow-fs --allow-net --allow-sys` üç ayrı bayrak yerine
+   `--allow fs,net,sys` (tekrarlanan `--allow fs --allow net` de kabul).
+   GC bayrakları (`--gc-threshold`, `--gc-stats`) ve servis bayrakları
+   (`mcp`'nin `--port`/`--host`) kendi düz bayrak modelinde KALIYOR —
+   permission ile kavramsal olarak ayrı, GC yeniden tasarımı beklerken
+   erken soyutlanmıyor. `src/cli/allow_spec.hpp` (`parseAllow`) +
+   `CliArgs::allowedCaps` (zaten `set<Capability>`, veri modeli değişmiyor).
 3. **#80 — MIR JIT backend (ADR-032).** ⚠️ **Kullanıcı talimatı: buraya
    gelince DUR ve sor.** Bu belge yalnızca sırayı kaydeder, kod yazımına
    başlanmaz. Ön koşullar: (1) #92'nin gerçek VM↔JIT karşılaştırması yapacak

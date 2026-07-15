@@ -143,6 +143,65 @@ extern "C" int64_t rt_jit_int_to_byte_checked(int64_t iv) {
     return iv;
 }
 
+// ── Decimal trampolinleri (Dilim 3, ADR-037: decimal her zaman kutulu). Değerler
+// g_jitDecimals havuzunda (program sonunda toplu silinir). Hata mesajları VM'in
+// D* / CAST_*_DECIMAL dallarıyla birebir. ────────────────────────────────────
+namespace {
+std::vector<std::unique_ptr<DecimalObject>> g_jitDecimals;
+DecimalValue& jitDV(void* p) { return static_cast<DecimalObject*>(p)->val; }
+DecimalObject* jitBoxDecimal(const DecimalValue& v) {
+    g_jitDecimals.push_back(std::make_unique<DecimalObject>(v));
+    return g_jitDecimals.back().get();
+}
+}
+extern "C" void* rt_jit_decimal_add(void* a, void* b) {
+    auto r = DecimalValue::add(jitDV(a), jitDV(b));
+    if (r.isOverflow()) rt_jit_cast_error("decimal overflow");
+    return jitBoxDecimal(r);
+}
+extern "C" void* rt_jit_decimal_sub(void* a, void* b) {
+    auto r = DecimalValue::sub(jitDV(a), jitDV(b));
+    if (r.isOverflow()) rt_jit_cast_error("decimal overflow");
+    return jitBoxDecimal(r);
+}
+extern "C" void* rt_jit_decimal_mul(void* a, void* b) {
+    auto r = DecimalValue::mul(jitDV(a), jitDV(b));
+    if (r.isOverflow()) rt_jit_cast_error("decimal overflow");
+    return jitBoxDecimal(r);
+}
+extern "C" void* rt_jit_decimal_div(void* a, void* b) {
+    if (jitDV(b).coeff == 0) rt_jit_cast_error("decimal division by zero");
+    return jitBoxDecimal(DecimalValue::div(jitDV(a), jitDV(b)));
+}
+extern "C" void* rt_jit_decimal_mod(void* a, void* b) {
+    if (jitDV(b).coeff == 0) rt_jit_cast_error("decimal modulo by zero");
+    return jitBoxDecimal(DecimalValue::mod(jitDV(a), jitDV(b)));
+}
+extern "C" void* rt_jit_decimal_neg(void* a) { return jitBoxDecimal(DecimalValue::neg(jitDV(a))); }
+extern "C" void* rt_jit_int_to_decimal(int64_t v)   { return jitBoxDecimal(DecimalValue::fromInt(v)); }
+extern "C" void* rt_jit_float_to_decimal(double v)  { return jitBoxDecimal(DecimalValue::fromDouble(v)); }
+extern "C" void* rt_jit_decimal_to_str(void* d) {
+    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(jitDV(d).toString()));
+    return g_jitRuntimeStrings.back().get();
+}
+extern "C" int64_t rt_jit_decimal_to_int(void* d) {
+    DecimalValue t = DecimalValue::truncate(jitDV(d));
+    if (t.coeff < INT_MIN || t.coeff > INT_MAX)
+        rt_jit_cast_error("decimal value out of int range");
+    return static_cast<int64_t>(static_cast<int>(t.coeff));
+}
+extern "C" double rt_jit_decimal_to_float(void* d) { return jitDV(d).toDouble(); }
+extern "C" void* rt_jit_str_to_decimal(void* s) {
+    const std::string& str = static_cast<StringObject*>(s)->data;
+    try {
+        return jitBoxDecimal(DecimalValue::fromString(str));
+    } catch (...) {
+        rt_jit_cast_error(("'" + str + "' cannot convert to decimal").c_str());
+        return nullptr;  // ulaşılmaz
+    }
+}
+extern "C" void rt_jit_print_decimal(void* d) { std::cout << jitDV(d).toString() << "\n"; }
+
 // Sıfıra bölme — bu Dilim'de try/catch (ENTER_TRY/THROW) reddedildiğinden
 // yakalanamaz; VM'de de aynı program uncaught throw ile sonlanırdı. Mesaj/çıkış
 // VM davranışıyla eşleşir (interpreter.cpp E_DIVZERO).
@@ -207,6 +266,16 @@ bool opcodeSupported(const Instruction& instr) {
         case Opcode::CAST_STR_TO_FLOAT:
         case Opcode::CAST_FLOAT_TO_INT_CHECKED:
         case Opcode::CAST_INT_TO_BYTE_CHECKED:
+            return instr.left != 1;  // nullable hedef → reddet
+        // Dilim 3: decimal (kutulu — pointer register'da, aritmetik runtime call)
+        case Opcode::LOAD_DECIMAL:
+        case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
+        case Opcode::DDIV: case Opcode::DMOD: case Opcode::DNEG:
+        case Opcode::INT_TO_DECIMAL: case Opcode::FLOAT_TO_DECIMAL:
+        case Opcode::CAST_DECIMAL_TO_STR: case Opcode::CAST_DECIMAL_TO_FLOAT:
+            return true;
+        case Opcode::CAST_DECIMAL_TO_INT:
+        case Opcode::CAST_STR_TO_DECIMAL:
             return instr.left != 1;  // nullable hedef → reddet
         case Opcode::ADD:
         case Opcode::SUB:
@@ -281,9 +350,10 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
             }
         }
         for (SlotType st : fn.slotTypes) {
-            // Int/Float register-skaler; Str kutulu pointer (I64, ADR-037).
-            // Ref/Decimal/Date hâlâ sonraki dilimlerde (shadow stack / kutulama).
-            if (st != SlotType::Int && st != SlotType::Float && st != SlotType::Str) {
+            // Int/Float register-skaler; Str/Decimal kutulu pointer (I64, ADR-037).
+            // Ref hâlâ sonraki dilimde (shadow stack).
+            if (st != SlotType::Int && st != SlotType::Float &&
+                st != SlotType::Str && st != SlotType::Decimal) {
                 outReason.functionName = name;
                 outReason.opcodeName =
                     std::string("<desteklenmeyen slot turu: ") + slotTypeName(st) + ">";
@@ -352,6 +422,27 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t castF2IImport   = MIR_new_import(ctx, "rt_jit_float_to_int_checked");
     MIR_item_t castI2BProto    = MIR_new_proto(ctx, "cast_i2b_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
     MIR_item_t castI2BImport   = MIR_new_import(ctx, "rt_jit_int_to_byte_checked");
+    // Decimal trampolinleri (Dilim 3). Kutulu → I64 pointer. Binary I64,I64→I64;
+    // unary I64→I64; float→dec D→I64; dec→float I64→D.
+    MIR_var_t  decBinArgs[2]   = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "b", 0}};
+    MIR_item_t decBinProto     = MIR_new_proto_arr(ctx, "dec_bin_proto", 1, &i64Ret, 2, decBinArgs);
+    MIR_item_t decAddImport    = MIR_new_import(ctx, "rt_jit_decimal_add");
+    MIR_item_t decSubImport    = MIR_new_import(ctx, "rt_jit_decimal_sub");
+    MIR_item_t decMulImport    = MIR_new_import(ctx, "rt_jit_decimal_mul");
+    MIR_item_t decDivImport    = MIR_new_import(ctx, "rt_jit_decimal_div");
+    MIR_item_t decModImport    = MIR_new_import(ctx, "rt_jit_decimal_mod");
+    MIR_item_t decUnIProto     = MIR_new_proto(ctx, "dec_uni_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
+    MIR_item_t decNegImport    = MIR_new_import(ctx, "rt_jit_decimal_neg");
+    MIR_item_t decI2DImport    = MIR_new_import(ctx, "rt_jit_int_to_decimal");
+    MIR_item_t decToStrImport  = MIR_new_import(ctx, "rt_jit_decimal_to_str");
+    MIR_item_t decToIntImport  = MIR_new_import(ctx, "rt_jit_decimal_to_int");
+    MIR_item_t decS2DImport    = MIR_new_import(ctx, "rt_jit_str_to_decimal");
+    MIR_item_t decFromFProto   = MIR_new_proto(ctx, "dec_fromf_proto", 1, &i64Ret, 1, MIR_T_D, "v");
+    MIR_item_t decF2DImport    = MIR_new_import(ctx, "rt_jit_float_to_decimal");
+    MIR_item_t decToFProto     = MIR_new_proto(ctx, "dec_tof_proto", 1, &dRet, 1, MIR_T_I64, "v");
+    MIR_item_t decToFImport    = MIR_new_import(ctx, "rt_jit_decimal_to_float");
+    MIR_item_t printDProto     = MIR_new_proto(ctx, "print_d_proto", 0, nullptr, 1, MIR_T_I64, "v");
+    MIR_item_t printDImport    = MIR_new_import(ctx, "rt_jit_print_decimal");
     MIR_item_t divZeroProto    = MIR_new_proto(ctx, "divzero_proto", 0, nullptr, 0);
     MIR_item_t divZeroImport   = MIR_new_import(ctx, "rt_jit_div_zero");
     MIR_item_t modZeroProto    = MIR_new_proto(ctx, "modzero_proto", 0, nullptr, 0);
@@ -498,6 +589,50 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     break;
                 case Opcode::CAST_INT_TO_BYTE_CHECKED:
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castI2BProto), MIR_new_ref_op(ctx, castI2BImport), R(instr.dest), R(instr.src)));
+                    break;
+                // ── Decimal (Dilim 3) — kutulu; sabit derleme zamanı, aritmetik call ──
+                case Opcode::LOAD_DECIMAL: {
+                    DecimalObject* obj = jitBoxDecimal(instr.decimalValue);
+                    MIR_append_insn(ctx, func,
+                        MIR_new_insn(ctx, MIR_MOV, R(instr.dest),
+                            MIR_new_int_op(ctx, reinterpret_cast<int64_t>(obj))));
+                    break;
+                }
+                case Opcode::DADD:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, decBinProto), MIR_new_ref_op(ctx, decAddImport), R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::DSUB:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, decBinProto), MIR_new_ref_op(ctx, decSubImport), R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::DMUL:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, decBinProto), MIR_new_ref_op(ctx, decMulImport), R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::DDIV:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, decBinProto), MIR_new_ref_op(ctx, decDivImport), R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::DMOD:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, decBinProto), MIR_new_ref_op(ctx, decModImport), R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::DNEG:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decNegImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::INT_TO_DECIMAL:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decI2DImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::FLOAT_TO_DECIMAL:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decFromFProto), MIR_new_ref_op(ctx, decF2DImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_DECIMAL_TO_STR:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decToStrImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_DECIMAL_TO_INT:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decToIntImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_DECIMAL_TO_FLOAT:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decToFProto), MIR_new_ref_op(ctx, decToFImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_STR_TO_DECIMAL:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decS2DImport), R(instr.dest), R(instr.src)));
                     break;
                 case Opcode::LOAD_SLOT:
                     // Float slot kopyası DMOV, diğerleri MOV (pointer/int I64).
@@ -654,6 +789,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     else if (at == SlotType::Str)
                         MIR_append_insn(ctx, func,
                             MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printSProto), MIR_new_ref_op(ctx, printSImport), R(a)));
+                    else if (at == SlotType::Decimal)
+                        MIR_append_insn(ctx, func,
+                            MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printDProto), MIR_new_ref_op(ctx, printDImport), R(a)));
                     else
                         MIR_append_insn(ctx, func,
                             MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printProto), MIR_new_ref_op(ctx, printImport), R(a)));
@@ -685,6 +823,19 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_str_to_float",         reinterpret_cast<void*>(rt_jit_str_to_float));
     MIR_load_external(ctx, "rt_jit_float_to_int_checked", reinterpret_cast<void*>(rt_jit_float_to_int_checked));
     MIR_load_external(ctx, "rt_jit_int_to_byte_checked",  reinterpret_cast<void*>(rt_jit_int_to_byte_checked));
+    MIR_load_external(ctx, "rt_jit_decimal_add", reinterpret_cast<void*>(rt_jit_decimal_add));
+    MIR_load_external(ctx, "rt_jit_decimal_sub", reinterpret_cast<void*>(rt_jit_decimal_sub));
+    MIR_load_external(ctx, "rt_jit_decimal_mul", reinterpret_cast<void*>(rt_jit_decimal_mul));
+    MIR_load_external(ctx, "rt_jit_decimal_div", reinterpret_cast<void*>(rt_jit_decimal_div));
+    MIR_load_external(ctx, "rt_jit_decimal_mod", reinterpret_cast<void*>(rt_jit_decimal_mod));
+    MIR_load_external(ctx, "rt_jit_decimal_neg", reinterpret_cast<void*>(rt_jit_decimal_neg));
+    MIR_load_external(ctx, "rt_jit_int_to_decimal",   reinterpret_cast<void*>(rt_jit_int_to_decimal));
+    MIR_load_external(ctx, "rt_jit_float_to_decimal", reinterpret_cast<void*>(rt_jit_float_to_decimal));
+    MIR_load_external(ctx, "rt_jit_decimal_to_str",   reinterpret_cast<void*>(rt_jit_decimal_to_str));
+    MIR_load_external(ctx, "rt_jit_decimal_to_int",   reinterpret_cast<void*>(rt_jit_decimal_to_int));
+    MIR_load_external(ctx, "rt_jit_decimal_to_float", reinterpret_cast<void*>(rt_jit_decimal_to_float));
+    MIR_load_external(ctx, "rt_jit_str_to_decimal",   reinterpret_cast<void*>(rt_jit_str_to_decimal));
+    MIR_load_external(ctx, "rt_jit_print_decimal",    reinterpret_cast<void*>(rt_jit_print_decimal));
     MIR_load_external(ctx, "rt_jit_div_zero",    reinterpret_cast<void*>(rt_jit_div_zero));
     MIR_load_external(ctx, "rt_jit_mod_zero",    reinterpret_cast<void*>(rt_jit_mod_zero));
     MIR_load_external(ctx, "rt_jit_fdiv_zero",   reinterpret_cast<void*>(rt_jit_fdiv_zero));
@@ -716,9 +867,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_gen_finish(ctx);
     MIR_finish(ctx);
 
-    // Çalışma-zamanı üretilen stringleri (CONCAT) topla — native kod bitti,
+    // Çalışma-zamanı üretilen string/decimal nesnelerini topla — native kod bitti,
     // pointer'lara artık erişilmiyor (GC Dilim 2/§8'e kadar elle temizlik).
     g_jitRuntimeStrings.clear();
+    g_jitDecimals.clear();
 
     outExitCode = static_cast<int>(nativeResult);
     return true;

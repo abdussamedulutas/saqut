@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include "core/decimal.hpp"  // DecimalObject (JIT decimal kutulama, ADR-037)
+
 // ADR-022: Taşımasız, stop-the-world, deterministik mark-sweep GC.
 //
 // Her heap nesnesinde üç alan:
@@ -28,7 +30,7 @@
 // Toplama fonksiyon dönüşünde tetiklenir (deterministik safepoint).
 // Nesne modeli bir daha değiştirilmez — collect() lokal bir eklemedir.
 
-enum class ObjectType { Array, Struct, String };
+enum class ObjectType { Array, Struct, String, Decimal };
 
 struct Value; // object.hpp <-> value.hpp çapraz bağımlılık; tam tanım value.hpp'de
 
@@ -94,6 +96,20 @@ struct StringObject : Object {
     }
 
     void markChildren() override {}  // string'in ref çocuğu yok
+};
+
+// ── DecimalObject (JIT sınırı, ADR-037) ──────────────────────────────────────
+// DecimalValue (coeff+exp, >8 byte) MIR register'ına sığmaz → JIT'te decimal
+// heap'e kutulanır, register pointer taşır. Aritmetik runtime call'a gider
+// (ADR-037: decimal v1'de her zaman kutulu). VM'de Value içine inline. GC çocuğu yok.
+struct DecimalObject : Object {
+    DecimalValue val;
+
+    explicit DecimalObject(const DecimalValue& v) : val(v) {
+        type = ObjectType::Decimal;
+    }
+
+    void markChildren() override {}
 };
 
 // ── Heap ─────────────────────────────────────────────────────────────────────

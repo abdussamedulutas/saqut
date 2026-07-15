@@ -26,6 +26,7 @@
 
 #include <string>
 #include "ir/ir_program.hpp"
+#include "profiling/stage_timer.hpp"
 
 namespace mir_backend {
 
@@ -40,8 +41,13 @@ struct UnsupportedReason {
 // değerini taşır — bu durumda program uçtan uca JIT'lenmiştir, VM hiç
 // devreye girmemiştir. Desteklenmeyen bir opcode/fonksiyon görülürse HİÇBİR
 // ŞEY çalıştırmadan false döner, outReason sebebi taşır.
+//
+// profiler != nullptr ise iki aşama ayrı raporlanır:
+//   "jit-warmup" — IR->MIR çeviri + gerçek native koda derleme (MIR_gen)
+//   "jit-exec"   — yalnızca derlenmiş native main()'in ÇALIŞTIRILMASI
 bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
-                              UnsupportedReason& outReason);
+                              UnsupportedReason& outReason,
+                              profiling::StageTimer* profiler = nullptr);
 
 }  // namespace mir_backend
 

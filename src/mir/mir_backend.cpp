@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -113,13 +114,22 @@ struct FuncEntry {
 }  // namespace
 
 bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
-                              UnsupportedReason& outReason) {
+                              UnsupportedReason& outReason,
+                              profiling::StageTimer* profiler) {
     if (!wholeProgramSupported(program, outReason)) return false;
     if (program.findFunction("main") == nullptr) {
         outReason.functionName = "main";
         outReason.opcodeName   = "(fonksiyon bulunamadi)";
         return false;
     }
+
+    // src/profiling/ (--profile): "jit-warmup" — IR->MIR ceviri + gercek
+    // native koda derleme (asagidaki MIR_gen dongusu dahil). Yalnizca
+    // derlenmis main()'in CALISTIRILMASI (compiled() cagrisi) bu kapsamin
+    // DISINDA — o "jit-exec" olarak ayri olculur. std::optional::reset()
+    // ile RAII kapsamini compiled()'dan HEMEN once kapatiyoruz.
+    std::optional<profiling::StageTimer::ScopedStage> profWarmup;
+    profWarmup.emplace(profiler, "jit-warmup");
 
     MIR_context_t ctx = MIR_init();
     MIR_module_t  mod = MIR_new_module(ctx, "saqut_jit_dilim1");
@@ -334,9 +344,15 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
         if (name == "main") mainPtr = p;
     }
 
+    profWarmup.reset();  // "jit-warmup" burada biter
+
     using SaqutMainFn = int64_t (*)(void);
-    auto    compiled     = reinterpret_cast<SaqutMainFn>(mainPtr);
-    int64_t nativeResult = compiled();
+    auto    compiled = reinterpret_cast<SaqutMainFn>(mainPtr);
+    int64_t nativeResult;
+    {
+        profiling::StageTimer::ScopedStage profExec(profiler, "jit-exec");
+        nativeResult = compiled();
+    }
 
     MIR_gen_finish(ctx);
     MIR_finish(ctx);

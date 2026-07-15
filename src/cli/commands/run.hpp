@@ -94,11 +94,11 @@ inline int cmdRun(const CliArgs& args) {
     if (args.useJit) {
         int                             jitResult = 0;
         mir_backend::UnsupportedReason  reason;
-        bool                            jitOk;
-        {
-            profiling::StageTimer::ScopedStage _prof(profilerPtr, "vm/jit");
-            jitOk = mir_backend::tryCompileAndRunProgram(program, jitResult, reason);
-        }
+        // profilerPtr dogrudan iceri gecirilir — "jit-warmup" (IR->MIR ceviri
+        // + native derleme) ve "jit-exec" (yalnizca calistirma) mir_backend
+        // TARAFINDAN ayri ayri raporlanir, burada tek bir "vm/jit" ile
+        // sarilmiyor (kullanici talimati: bu ikisi karistirilmasin).
+        bool jitOk = mir_backend::tryCompileAndRunProgram(program, jitResult, reason, profilerPtr);
         if (jitOk) {
             if (args.verbose) std::cerr << "[jit] program bastan sona JIT'lendi (VM calismadi)\n";
             if (args.profile) stageTimer.printReport(std::cerr);
@@ -119,10 +119,11 @@ inline int cmdRun(const CliArgs& args) {
         if (args.gcThreshold != 0) vm.setGCThreshold(args.gcThreshold);
         vm.setCapabilities(args.allowedCaps);
         vm.setProgramArgs(args.programArgs);
-        {
-            profiling::StageTimer::ScopedStage _prof(profilerPtr, "vm/jit");
-            exitCode = vm.run();
-        }
+        // "vm-warmup" (initForDebug — frame/global kurulumu) ve "vm-exec"
+        // (runUntilEvent'in ana döngüsü) Interpreter TARAFINDAN ayrı ayrı
+        // raporlanır — burada sarmalamaya gerek yok.
+        vm.setStageProfiler(profilerPtr);
+        exitCode = vm.run();
         // --gc-stats: golden testlerin stdout karşılaştırmasını bozmamak
         // için stderr'e yazılır
         if (args.gcStats)

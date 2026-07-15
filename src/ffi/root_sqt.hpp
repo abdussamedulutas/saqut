@@ -20,6 +20,9 @@
 
 // Gömülü root.sqt kaynağı. Bir kez parse edilir (ModuleLoader önbelleği).
 inline const char* kEmbeddedRootSqt = R"SQT(
+// ── core modülü (import gerektirmez, her zaman mevcut) ─────────────────────
+ffi string version() : CORE_VERSION from core;   // derleyici sürümü (0.8.0)
+
 // ── math modülü (saf hesap, capability'siz — #89) ──────────────────────────
 // Overload yok → int/float ayrımı isimle. sqrt(-1)=NaN, Error fırlatmaz.
 ffi int   abs(int x)              : MATH_ABS   from math;

@@ -334,6 +334,8 @@ const std::vector<HostFn>& hostFnTable() {
         { "DATE_DIFF_MS",          2, date_diffMillis     },
         { "DATE_PARSE",            1, date_parse          },
         { "DATE_FORMAT",           2, date_format         },
+        { "CORE_VERSION",        0, [](const std::vector<Value>&, HostContext&) {
+            return Value::fromString(SAQUT_VERSION); }},
     };
     return table;
 }

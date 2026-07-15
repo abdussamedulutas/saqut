@@ -1,17 +1,23 @@
 cmake_minimum_required(VERSION 3.16)
-project(saqut VERSION 0.1 LANGUAGES CXX C)
+project(saqut VERSION 0.8.0 LANGUAGES CXX C)
+
+# Derleyici sürümünü koda #define olarak geçir
+add_compile_definitions(SAQUT_VERSION="${PROJECT_VERSION}")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_options(-Wall -Wextra)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
+# Default: Release (static, optimized, no debug)
+# Use -DCMAKE_BUILD_TYPE=Debug for debug build
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(-g -O0)
-    message(STATUS "Debug modu aktif")
+    message(STATUS "Debug modu (yavas, debug sembollu)")
 else()
-    add_compile_options(-O3)
-    message(STATUS "Release modu aktif")
+    add_compile_options(-O3 -DNDEBUG -fno-omit-frame-pointer)
+    add_link_options(-static-libstdc++ -static-libgcc -static)
+    message(STATUS "Release modu (statik, optimize)")
 endif()
 
 # Tüm kaynak dosyaları topla

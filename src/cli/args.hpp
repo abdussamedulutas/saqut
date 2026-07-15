@@ -124,6 +124,10 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
             args.verbose = true;
             continue;
         }
+        if (arg == "--version" || arg == "-V") {
+            std::cout << "saQut " << SAQUT_VERSION << "\n";
+            exit(0);
+        }
         if (arg.compare(0, 7, "--runs=") == 0) {
             try { args.benchRuns = std::stoi(arg.substr(7)); } catch (...) {}
             continue;

@@ -28,7 +28,19 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   IR'de aynı çıktıyı vermek ZORUNDA (diferansiyel test). IR = **dar bel**: yeni
   özellik önce var olan opcodelara desugar edilmeye çalışılır. Tree-walker DEĞİL.
   Bellek = host C++ heap; özel allocator yok. WASM multi-backend planında,
-  tarayıcı/playground en son.
+  tarayıcı/playground en son. **1.0.0'da JIT/AOT bayraksız VARSAYILAN olacak,
+  VM yalnızca debug/interpreter amaçlı bayrakla erişilebilir kalacak** —
+  kullanıcı talimatı, dispatch noktası (`run.hpp`'deki tek `if`) değişmez,
+  yalnızca bayrağın varsayılan yönü döner. **MIR entegrasyon detayı
+  (opcode→MIR eşleme tablosu, Value ABI kutulama kararı, GC shadow-stack
+  somutlaştırma, hata yönetimi açık sorusu, çoklu-iş-parçacığı uyumu) →
+  `MIRPLAN.md`** (kök dizin) — koda başlamadan önce hâlâ **DUR ve sor**
+  kısıtı geçerli, bu belge yalnızca zemin hazırlığı.
+  **Optimizasyon seviyesi determinizm gerekçesiyle kısıtlanmaz** (kullanıcı
+  düzeltmesi): MIR'in kendi RA/DCE gibi klasik codegen optimizasyonları
+  LLVM'in UB-sömüren agresif dönüşümlerinden farklı, aynı girdi→aynı çıktı
+  verir; asıl determinizm tehdidi bir modülün kendi işi dışına taşması
+  (kapsam kayması), optimizasyon seviyesi değil.
 - **Dil kimliği:** prosedürel, C-ailesi sözdizimi, zorunlu class/main boilerplate
   yok. **Semantik (ADR-020):** primitive (`int`/`float`/`bool`/`decimal`) = **değer**;
   bileşik (`struct`/`array`/`string`) = **referans** (JS/Java/C# modeli). "Pointer
@@ -196,6 +208,15 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası
+- `PLAN.md` (kök dizin) — 0.8.0/0.9.0 sıralı iş listesi (mevcut GitHub
+  issue'ların özeti, yeni tasarım kararı içermez).
+- `MIRPLAN.md` (kök dizin) — MIR entegrasyon tasarım belgesi: opcode→MIR
+  eşleme tablosu, Value ABI (kutulama), GC shadow-stack somutlaştırma, hata
+  yönetimi açık sorusu, çoklu-iş-parçacığı uyumu notu. Kod yazımından önce
+  DUR-ve-sor kısıtı hâlâ geçerli.
+- `docs/CLI.md` — CLI parametre formatı tasarımı: `--allow` (yalnızca
+  permission/capability), GC bayrakları ayrı/değişmedi, servis bayrakları
+  komuta özgü kalır (v3, onaylı).
 - `readme.md` — toolbox çerçevesi, built-vs-planned, dil kimliği, çalıştırma modeli.
 - `docs/kod-standardı.md` — C++ kod standardı (biçim, adlandırma, yorum, modern C++ kullanımı).
 - `docs/fikirler.md` — ADR-001…005 (backend stratejisi, parser, header-only, token, IR).

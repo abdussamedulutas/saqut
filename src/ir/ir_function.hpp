@@ -24,28 +24,8 @@
 #include "ir/instruction.hpp"
 #include "core/module_registry.hpp"
 
-// SlotType — bir slot'un statik değer türü. saQut'ta bir slot ÇALIŞMA ZAMANINDA
-// tip değiştirmez (ADR-020; tip denetleyici garanti eder), bu yüzden slot başına
-// tek bir tür yeterli. İki amaca hizmet eder:
-//   1. MIR JIT (Dilim 1.5+): register tipi seçimi — Float → MIR_T_D, diğerleri
-//      → MIR_T_I64 (MIRPLAN §3). VM bu alanı kullanmaz (Value zaten kind taşır).
-//   2. Cam kutu: `saqut ir --types` slot türlerini dökebilir.
-// IR katmanında tutulur — VM'in ValueKind'ına KASITLI olarak bağımlı değil
-// (backend, frontend'in çözdüğü tipi devralır, yeniden türetmez — ADR-021).
-enum class SlotType : uint8_t { Int, Float, Ref, Str, Decimal, Date, Unknown };
-
-inline const char* slotTypeName(SlotType t) {
-    switch (t) {
-        case SlotType::Int:     return "int";
-        case SlotType::Float:   return "float";
-        case SlotType::Ref:     return "ref";
-        case SlotType::Str:     return "string";
-        case SlotType::Decimal: return "decimal";
-        case SlotType::Date:    return "date";
-        case SlotType::Unknown: return "?";
-    }
-    return "?";
-}
+// SlotType tanımı instruction.hpp'ye taşındı (Instruction::valueType için gerekli,
+// ADR-039); buradan include ile gelir.
 
 struct IRFunction {
     std::string              name;       // kaynak koddaki fonksiyon adı

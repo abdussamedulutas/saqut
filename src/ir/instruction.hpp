@@ -36,6 +36,28 @@
 #include "core/capability.hpp"
 
 // ----------------------------------------------------------------------------
+// SlotType — bir slot'un statik değer türü (ADR-020: slot çalışma zamanında tip
+// değiştirmez). Amaçlar: (1) MIR JIT register tipi seçimi (Float→MIR_T_D, diğerleri
+// →I64, MIRPLAN §3); (2) cam kutu `saqut ir --types`. VM bu alanı kullanmaz (Value
+// zaten kind taşır). IR katmanında — ValueKind'a KASITLI bağımsız (ADR-021).
+// instruction.hpp'de tanımlı çünkü Instruction::valueType (ADR-039) buna ihtiyaç duyar.
+// ----------------------------------------------------------------------------
+enum class SlotType : uint8_t { Int, Float, Ref, Str, Decimal, Date, Unknown };
+
+inline const char* slotTypeName(SlotType t) {
+    switch (t) {
+        case SlotType::Int:     return "int";
+        case SlotType::Float:   return "float";
+        case SlotType::Ref:     return "ref";
+        case SlotType::Str:     return "string";
+        case SlotType::Decimal: return "decimal";
+        case SlotType::Date:    return "date";
+        case SlotType::Unknown: return "?";
+    }
+    return "?";
+}
+
+// ----------------------------------------------------------------------------
 // Opcode — Sanal Makinenin Anlayacağı İşlem Kodları
 // ----------------------------------------------------------------------------
 enum class Opcode {
@@ -282,6 +304,13 @@ struct Instruction {
 
     // STRUCT_NEW için alan adları (sırasıyla) — toJson/dump'ta kullanılır
     std::vector<std::string> fieldNames;
+
+    // ADR-039: GET-tarafı opcode'ların sonuç/eleman türü — FIELD_GET / ARRAY_GET /
+    // LOAD_GLOBAL dest tipi, ARRAY_NEW eleman tipi. IR'de kaybolan tip bilgisini
+    // taşır (kaynak heap/global olduğu için opcode'dan türetilemez). finalizeSlotTypes
+    // GET dest'ini buradan çözer; JIT register/köprü tipi buradan seçer. SET-tarafı
+    // (FIELD_SET/ARRAY_SET/STORE_GLOBAL) gerektirmez — değer slot'undan bilinir.
+    SlotType valueType = SlotType::Unknown;
 
     // Kaynak konum — yalnızca hata-odaklı opcode'larda (CALL, RETURN, THROW,
     // ARRAY_GET/SET, FIELD_SET) set edilir. filePath IRFunction::moduleId'den

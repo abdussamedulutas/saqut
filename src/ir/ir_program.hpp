@@ -40,6 +40,11 @@ struct IRProgram {
     // Modül başına global slot sayısı: moduleId (int) → slot count
     std::unordered_map<int, int> moduleGlobalCounts;
 
+    // ADR-039: global slot statik tipleri. moduleId → (globalIdx → SlotType).
+    // LOAD_GLOBAL valueType'ı ve JIT global storage tipi buradan gelir. IRGenerator
+    // VarDecl'den doldurur; tek-modül fallback için INVALID_ID anahtarı kullanılır.
+    std::unordered_map<int, std::vector<SlotType>> globalSlotTypes;
+
     // Yeni fonksiyon ekle
     void addFunction(IRFunction fn) {
         functionOrder.push_back(fn.name);

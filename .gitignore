@@ -28,6 +28,15 @@ scripts/bench/*.class
 # AI asistan önbellek ve çalışma dizinleri
 .deepseek/
 
+# Rol iletişim dosyaları (geçici çalışma alanı — her iş sonunda sıfırlanır)
+/architect.md
+/project.md
+/coding.md
+/testscale.md
+
+# Kişisel/yerel Claude Code ayarı (asla commit edilmez)
+.claude/settings.local.json
+
 # Website
 webside/
 webside/*

@@ -336,3 +336,33 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   ayrımı el ile sağlanır. **Tüm yorumlar Türkçe, tüm tanımlayıcılar İngilizce.**
   Header-only eğilimli (ADR-003), `#pragma once` değil `#ifndef` guard. Yeni/mevcut
   kod bu kurallara uyar.
+
+## Rol Sistemi (AI iş bölümü)
+> Amaç: farklı işleri farklı, **yetkisi kısıtlı** ajanlara dağıtmak; sınırı davranışa
+> değil **mekanizmaya** dayamak. Roller `.claude/agents/*.md` subagent'ları olarak
+> tanımlıdır; yol-yetkisi `.claude/hooks/role-guard.sh` (PreToolUse, `agent_type`
+> anahtarlı) ile **mekanik** uygulanır (`exit 2` = engel).
+
+- **Dört rol / iletişim dosyası / model / sınır:**
+  | Rol | subagent | iletişim dosyası | model | mekanik sınır (hook) |
+  |---|---|---|---|---|
+  | **Mimar** | `architect` | `architect.md` | opus | `src/`'e Edit/Write YASAK |
+  | **Proje Yön.** | `project-manager` | `project.md` | opus | `src/`'e Edit/Write YASAK |
+  | **Kodcu** | `coder` | `coding.md` | sonnet | yalnızca `src/` + `coding.md` yazar |
+  | **Testçi** | `tester` | `testscale.md` | sonnet | `src/`'e her erişim (oku dahil) YASAK — kara kutu |
+- **İşleyiş:** Roller **birbiriyle doğrudan konuşmaz**; tüm iletişim kullanıcının
+  yönlendirmesiyle kök `*.md` iletişim dosyaları üzerinden. Kullanıcı köprüdür
+  ("kodcunun bulgusunu mimara okut, çözümü kodcuya ilet" vb.).
+- **İletişim dosyaları GEÇİCİ:** kök `architect.md`/`project.md`/`coding.md`/
+  `testscale.md` her iş sonunda sıfırlanır; `.gitignore`'da. Kalıcı bilgi buraya
+  DEĞİL — kalıcı karar `docs/adr/`, kalıcı planlanmış iş **GitHub issue**.
+- **Rol yoksa (ana ajan/orkestratör):** hook karışmaz, tam yetki. Sınırlar yalnızca
+  bir subagent'a devredilen iş içinde ısırır — kritik işi ilgili role devret.
+  ⚠️ **Rol verilmeden iş isteği gelirse DUR ve sor:** dosya değiştiren/kod yazan/
+  issue açan gibi somut bir iş, açık bir rol (mimar/PM/kodcu/testçi) atanmadan
+  istendiyse, doğrudan yapma — "bunu hangi rolde çalışayım?" diye sor. Yalnızca
+  rolden bağımsız işler (soru yanıtlama, dağıtım/orkestrasyon, salt-okuma keşif)
+  rolsüz sürdürülür.
+- **Kalıcı vs geçici katman:** GitHub issue = AI'lara ait kalıcı doküman/planlanmış
+  iş (geçici iş için DEĞİL). `docs/` + `docs/adr/` = değişmeyen bilgi/kararlar.
+  Kök `*.md` iletişim dosyaları = tek-iş ömürlü devir tamponu.

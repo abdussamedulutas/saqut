@@ -158,7 +158,15 @@ void TypeChecker::checkFunction(ASTNode* fnNode) {
         if (table_.structLayouts.count(fn->returnType))
             currentReturnType_ = Type::structType(fn->returnType);
         else {
+            // #64 regresyonunun nullable-özel-tip hali: "Book?"/"Color?" gibi
+            // nullable soneki önce çözülmeli (symbol_collector::typeFromName
+            // ile aynı desen), yoksa taban tip struct/enum olsa da bulunamaz.
             std::function<Type(const std::string&)> resolveType = [&](const std::string& name) -> Type {
+                if (!name.empty() && name.back() == '?') {
+                    Type base = resolveType(name.substr(0, name.size() - 1));
+                    if (!base.isError()) return base.asNullable();
+                    return Type::error();
+                }
                 Type t = Type::fromName(name);
                 if (!t.isError()) return t;
                 if (table_.structLayouts.count(name)) return Type::structType(name);
@@ -294,7 +302,14 @@ void TypeChecker::checkStmt(ASTNode* node) {
         if (targetType.isError() && table_.structLayouts.count(vd->varType))
             targetType = Type::structType(vd->varType);
         if (targetType.isError()) {
+            // #64 regresyonunun nullable-özel-tip hali (bkz. checkFunction) —
+            // "?" soneki önce çözülmeli, yoksa struct/enum taban tipi bulunamaz.
             std::function<Type(const std::string&)> resolveType = [&](const std::string& name) -> Type {
+                if (!name.empty() && name.back() == '?') {
+                    Type base = resolveType(name.substr(0, name.size() - 1));
+                    if (!base.isError()) return base.asNullable();
+                    return Type::error();
+                }
                 Type t = Type::fromName(name);
                 if (!t.isError()) return t;
                 if (table_.structLayouts.count(name)) return Type::structType(name);

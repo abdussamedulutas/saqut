@@ -1,0 +1,150 @@
+// Kütüphane Ödünç Verme Sistemi — iş kuralları.
+// Arama, ödünç verme/alma, gecikme cezası ve durum etiketleme burada.
+//
+// ⚠️ Not (bkz. testscale.md #4): `export int MAX_ACTIVE_LOANS = 2;` gibi
+// dışa aktarılmış bir GLOBAL DEĞİŞKEN modül sınırında görünmüyor
+// (E_IMPORT_NOT_EXPORTED — export bayrağı VariableDecl için düşüyor).
+// Workaround: sabiti dışa aktarılmış bir FONKSİYONA sardık (fonksiyon export
+// doğru çalışıyor).
+import {BookStatus, Book, Member, Address, Loan} from "library_types.sqt";
+
+export int maxActiveLoans() {
+    return 2;
+}
+
+export int? findBookIndex(Book[] catalog, int id) {
+    int i = 0;
+    while (i < catalog.length()) {
+        if (catalog[i].id == id) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return null;
+}
+
+export int? findMemberIndex(Member[] members, int id) {
+    int i = 0;
+    while (i < members.length()) {
+        if (members[i].id == id) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return null;
+}
+
+// Aktif (henüz iade edilmemiş) ödünç kaydını bookId'ye göre bulur.
+export int? findActiveLoanIndex(Loan[] loans, int bookId) {
+    int i = 0;
+    while (i < loans.length()) {
+        if (loans[i].bookId == bookId) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return null;
+}
+
+export Book makeBook(string title, string author, int id, byte shelfCode) {
+    Book b;
+    b.title = title;
+    b.author = author;
+    b.id = id;
+    b.shelfCode = shelfCode;
+    b.status = BookStatus.Available;
+    return b;
+}
+
+export Member makeMember(string name, int id, string city, string district) {
+    Member m;
+    m.name = name;
+    m.id = id;
+    m.address.city = city;
+    m.address.district = district;
+    m.activeLoans = 0;
+    return m;
+}
+
+export string statusLabel(BookStatus s) {
+    string label = "";
+    switch (s) {
+        case BookStatus.Available:
+            label = "musait";
+        case BookStatus.Loaned:
+            label = "odunc-verildi";
+        case BookStatus.Reserved:
+            label = "rezerve";
+        case BookStatus.Lost:
+            label = "kayip";
+        default:
+            label = "bilinmeyen";
+    }
+    return label;
+}
+
+// Ödünç verme. Geçersiz durumlarda struct-tabanlı Error fırlatır (ADR-025):
+// kitap müsait değilse E_NOT_AVAILABLE, üye limit doluysa E_LOAN_LIMIT.
+export void loanBook(Book[] catalog, Member[] members, Loan[] loans,
+                      int bookIdx, int memberIdx) {
+    if (catalog[bookIdx].status != BookStatus.Available) {
+        Error e;
+        e.code = "E_NOT_AVAILABLE";
+        e.message = "kitap musait degil: " + catalog[bookIdx].title;
+        throw e;
+    }
+    if (members[memberIdx].activeLoans >= maxActiveLoans()) {
+        Error e;
+        e.code = "E_LOAN_LIMIT";
+        e.message = "uye odunc limitine ulasti: " + members[memberIdx].name;
+        throw e;
+    }
+
+    catalog[bookIdx].status = BookStatus.Loaned;
+    members[memberIdx].activeLoans = members[memberIdx].activeLoans + 1;
+
+    Loan l;
+    l.bookId = catalog[bookIdx].id;
+    l.memberId = members[memberIdx].id;
+    l.daysOut = 0;
+    loans.push(l);
+}
+
+// Gecikme cezası: serbest günlerden sonraki her gün için sabit ücret.
+export decimal calcFine(int daysOut, int freeDays, decimal perDayFine) {
+    if (daysOut <= freeDays) {
+        return 0.0;
+    }
+    int lateDays = daysOut - freeDays;
+    return (lateDays as decimal) * perDayFine;
+}
+
+// İade. Ödünç kaydını siler, kitabı müsait yapar, üyenin sayaçını azaltır,
+// hesaplanan cezayı döndürür.
+export decimal returnBook(Book[] catalog, Member[] members, Loan[] loans,
+                           int loanIdx, int freeDays, decimal perDayFine) {
+    Loan l = loans[loanIdx];
+
+    int? bookIdx = findBookIndex(catalog, l.bookId);
+    if (bookIdx == null) {
+        Error e;
+        e.code = "E_CORRUPT_LOAN";
+        e.message = "odunc kaydinda kitap bulunamadi";
+        throw e;
+    }
+    int? memberIdx = findMemberIndex(members, l.memberId);
+    if (memberIdx == null) {
+        Error e;
+        e.code = "E_CORRUPT_LOAN";
+        e.message = "odunc kaydinda uye bulunamadi";
+        throw e;
+    }
+
+    decimal fine = calcFine(l.daysOut, freeDays, perDayFine);
+
+    catalog[bookIdx].status = BookStatus.Available;
+    members[memberIdx].activeLoans = members[memberIdx].activeLoans - 1;
+    loans.remove(loanIdx);
+
+    return fine;
+}

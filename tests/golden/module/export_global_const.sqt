@@ -1,0 +1,10 @@
+// #3: export edilmiş global değişken (`export int X = ...;`) modül sınırında
+// görünmüyordu — E_IMPORT_NOT_EXPORTED/E_SYMBOL_NOT_IMPORTED alınıyordu
+// sanki export hiç yazılmamış gibi. Fonksiyon/struct/enum export'u zaten
+// çalışıyordu, yalnızca global VariableDecl'in export bayrağı kayboluyordu.
+import {MAX_LOANS} from "export_global_const_lib.sqt";
+
+int main() {
+    print(MAX_LOANS);
+    return 0;
+}

@@ -255,9 +255,18 @@ ASTNode* Parser::parseExportDecl() {
         }
     }
 
-    // Buraya gelindiyse export edilemeyen bir bildirim (VariableDecl vb.)
-    // SymbolCollector E_INVALID_EXPORT üretecek — parser sessizce parse eder.
-    return parseDeclaration();
+    // Buraya gelindiyse global değişken bildirimi: `export int X = ...;` (#3).
+    // Fonksiyon/struct/enum ile aynı şekilde isExported bayrağını taşı —
+    // `int a, b;` çoklu bildirimindeki tüm kardeşler de dahil.
+    ASTNode* decl = parseDeclaration();
+    if (auto* vd = dynamic_cast<VariableDeclNode*>(decl)) {
+        vd->isExported = true;
+        for (ASTNode* sibling : vd->getChildren()) {
+            if (auto* svd = dynamic_cast<VariableDeclNode*>(sibling))
+                svd->isExported = true;
+        }
+    }
+    return decl;
 }
 
 ASTNode* Parser::parseDeclaration() {

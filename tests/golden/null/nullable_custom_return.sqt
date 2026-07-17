@@ -1,0 +1,43 @@
+// #2: nullable ÖZEL TİP dönüş tipi (StructAdi?/EnumAdi?) TypeChecker'da
+// yanlışlıkla void'e düşüyordu (parametre pozisyonunda bozuk değildi,
+// yalnızca dönüş tipinde — #64 regresyonunun nullable-özel-tip hali).
+// Hem struct hem enum için doğrulanır.
+
+struct Book { string title; int id; }
+enum Color { Red, Green, Blue }
+
+Book? findBook(Book[] books, int id) {
+    int i = 0;
+    while (i < books.length()) {
+        if (books[i].id == id) { return books[i]; }
+        i = i + 1;
+    }
+    return null;
+}
+
+Color? parseColor(string s) {
+    if (s == "red") { return Color.Red; }
+    return null;
+}
+
+int main() {
+    Book[] catalog = [];
+    Book b1;
+    b1.title = "A";
+    b1.id = 1;
+    catalog.push(b1);
+
+    Book? found = findBook(catalog, 1);
+    if (found != null) { print(found.title); }
+
+    Book? notfound = findBook(catalog, 99);
+    if (notfound == null) { print("book-null-ok"); }
+
+    Color? c = parseColor("red");
+    if (c != null) { print(c); }
+
+    Color? d = parseColor("x");
+    if (d == null) { print("color-null-ok"); }
+
+    return 0;
+}

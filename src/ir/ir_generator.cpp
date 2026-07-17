@@ -37,30 +37,42 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
     structLayouts_ = symbolTable.structLayouts;
     enumLayouts_   = symbolTable.enumLayouts;
 
+    // Ön-geçiş (#3 düzeltmesi): TÜM modüllerdeki global değişkenleri ve
+    // fonksiyon dönüş türlerini, HERHANGİ bir fonksiyon gövdesi üretilmeden
+    // önce topla. nameToGlobal_ programın tamamı için TEK düz ad alanı
+    // (import yalnızca görünürlük kısıtlar, ayrı ad alanı yaratmaz — sembol
+    // tablosuyla tutarlı, ADR-031/034). Bu ön-geçiş olmadan: (a) main'in
+    // bulunduğu modülden FARKLI bir modülde tanımlı export edilmiş global
+    // hiçbir zaman ilklendirilmiyordu (yalnızca main'i barındıran modülün
+    // KENDİ globalVars'ı main'e enjekte ediliyordu — `graph.units[0]` her
+    // zaman giriş dosyası/main'in modülü, bağımlılıklar SONRA yüklenir,
+    // dolayısıyla export edilmiş bir global her zaman main'den SONRA
+    // işlenen bir modülde kalıp hiç koşmuyordu); (b) main'den önce işlenen
+    // bir modül başka (henüz işlenmemiş) modülün fonksiyonunu çağırırsa
+    // dönüş türü bilinmiyordu.
+    std::vector<VariableDeclNode*> allGlobalVars;
+    nameToGlobal_.clear();
+    for (auto& unit : graph.units) {
+        program.moduleRegistry.intern(unit.filePath);
+        int moduleGlobalCount = 0;
+        for (ASTNode* child : unit.ast->getChildren()) {
+            if (child->kind == ASTKind::VariableDecl) {
+                auto* vd = static_cast<VariableDeclNode*>(child);
+                nameToGlobal_[vd->name] = globalCount_++;
+                program.globalCount++;
+                program.globalNames.push_back(vd->name);
+                allGlobalVars.push_back(vd);
+                ++moduleGlobalCount;
+            } else if (child->kind == ASTKind::FunctionDecl) {
+                auto* fnDecl = static_cast<FunctionDeclNode*>(child);
+                funcReturnKind_[fnDecl->name] = slotTypeFromTypeName(fnDecl->returnType);
+            }
+        }
+        program.moduleGlobalCounts[unit.moduleId] = moduleGlobalCount;
+    }
+
     for (auto& unit : graph.units) {
         currentModuleId_ = unit.moduleId;
-        program.moduleRegistry.intern(unit.filePath);
-
-        // Modül-düzeyi değişkenleri topla
-        std::vector<VariableDeclNode*> globalVars;
-        nameToGlobal_.clear();
-        for (ASTNode* child : unit.ast->getChildren()) {
-            if (child->kind != ASTKind::VariableDecl) continue;
-            auto* vd = static_cast<VariableDeclNode*>(child);
-            nameToGlobal_[vd->name] = globalCount_++;
-            program.globalCount++;
-            program.globalNames.push_back(vd->name);
-            globalVars.push_back(vd);
-        }
-        program.moduleGlobalCounts[currentModuleId_] = (int)globalVars.size();
-
-        // Dilim 1.5: CALL sonuç türü için tüm fonksiyonların dönüş türünü
-        // gövdeler üretilmeden önce topla (bu modülün fonksiyonları).
-        for (ASTNode* child : unit.ast->getChildren()) {
-            if (child->kind != ASTKind::FunctionDecl) continue;
-            auto* fnDecl = static_cast<FunctionDeclNode*>(child);
-            funcReturnKind_[fnDecl->name] = slotTypeFromTypeName(fnDecl->returnType);
-        }
 
         // Fonksiyonları üret
         for (ASTNode* child : unit.ast->getChildren()) {
@@ -76,7 +88,10 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
             currentFunction_ = program.findFunction(fnDecl->name);
 
             if (fnDecl->name == "main") {
-                for (VariableDeclNode* gv : globalVars) {
+                // main'i barındıran modülden bağımsız — TÜM modüllerin
+                // global başlangıç ifadeleri burada, ön-geçişteki (graph.units)
+                // sırayla çalıştırılır.
+                for (VariableDeclNode* gv : allGlobalVars) {
                     if (gv->initExpr) {
                         int initSlot = generateExpression(gv->initExpr);
                         emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);

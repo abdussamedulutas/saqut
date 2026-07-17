@@ -1,0 +1,2 @@
+// export_global_const.sqt yardımcı modülü — yalnızca global değişken export'u
+export int MAX_LOANS = 2;

@@ -35,6 +35,7 @@ public:
     std::string varType;
     std::string name;
     ASTNode*   initExpr = nullptr;
+    bool isExported = false; // yalnızca modül seviyesi global için anlamlı (#3)
     VariableDeclNode();
     ~VariableDeclNode() override { delete initExpr; }
     void log(int indent = 0) override;

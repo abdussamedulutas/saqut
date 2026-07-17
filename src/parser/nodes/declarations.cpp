@@ -43,6 +43,7 @@ std::string VariableDeclNode::toJson(int depth) {
     obj.add("name", name);
     obj.add("varType", varType);
     obj.add("isReachable", isReachable);
+    obj.add("isExported", isExported);
     if (initExpr) obj.addRaw("init", initExpr->toJson(depth + 1));
     obj.addRaw("location", loc.toJson());
     return obj.str();

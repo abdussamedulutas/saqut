@@ -1,0 +1,27 @@
+// #4: `throw <duz string>` sonrasi `catch (Error e) { e.code }` erisimi
+// "not a struct" ile cokuyordu (Error struct'i olmayan bir deger throw
+// edildiginde). Mimari karar: struct-olmayan throw degeri otomatik olarak
+// Error{message=<degerin string temsili>, code="", line, col, trace}'a
+// sarmalanir - boylece her catch(Error e) guvenle e.code/e.message okuyabilir.
+int main() {
+    try {
+        throw "custom error msg";
+    } catch (Error e) {
+        print(e.message);
+        print(e.code);
+    }
+
+    // Zaten bir Error struct'i throw edilirse sarmalama YAPILMAZ - kullanicinin
+    // doldurdugu code/message aynen korunur.
+    try {
+        Error e2;
+        e2.code = "E_CUSTOM";
+        e2.message = "manuel hata";
+        throw e2;
+    } catch (Error e3) {
+        print(e3.code);
+        print(e3.message);
+    }
+
+    return 0;
+}

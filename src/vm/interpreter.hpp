@@ -120,7 +120,15 @@ public:
 private:
     IRProgram&             program_;
     std::vector<CallFrame> callStack_;
-    std::unordered_map<int, std::vector<Value>> moduleSlots_;
+    // #3 (2026-07-16): tek DÜZ global slot dizisi — LOAD_GLOBAL/STORE_GLOBAL
+    // yürütülen fonksiyonun DEĞİL, IRGenerator'ın tüm programa yaydığı flat
+    // indekse göre çalışıyor (nameToGlobal_ ADR-034 import-gated stdlib'den
+    // önce de tek program-çapında sayaçtı). Önceki "moduleId → vector" haritası
+    // çapraz-modül global okuma/yazmada frame.function->moduleId'yi kullanıyordu
+    // — bildiren fonksiyonun DEĞİL çağıran fonksiyonun modülüne göre yanlış
+    // diziye erişiyordu (export edilmiş global başka modülden okunduğunda
+    // sessizce 0 dönüyordu).
+    std::vector<Value>     globalSlots_;
     Heap                   heap_;
     std::vector<TryFrame>  tryStack_;
     std::optional<Value>   pendingThrow_;
@@ -142,7 +150,7 @@ private:
     bool isBreakpoint() const;
     void checkBreakpoint();
 
-    // GC (#77): eşik aşıldıysa kökleri (moduleSlots_ + callStack_ +
+    // GC (#77): eşik aşıldıysa kökleri (globalSlots_ + callStack_ +
     // pendingThrow_) işaretleyip sweep koşar. YALNIZCA instruction sınırında
     // çağrılmalı — opcode ortasında slot'a bağlanmamış nesne toplanabilir.
     void maybeCollect();

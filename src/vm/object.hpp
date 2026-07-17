@@ -117,7 +117,7 @@ struct DecimalObject : Object {
 // Tahsis: allocArray / allocStruct — her yeni nesneyi intrusive listeye ekler.
 // Toplama: mark + sweep iki geçiş. Kökleri MARK EDEN Interpreter'dır
 // (Interpreter::maybeCollect) — kök kümesi VM'in iç yapısına bağlı olduğundan
-// (moduleSlots_ modül başına map, callStack_, uçuştaki pendingThrow_) Heap
+// (globalSlots_ program-çapında tek dizi, callStack_, uçuştaki pendingThrow_) Heap
 // yalnızca markValue/markSlots/sweep yapıtaşlarını sunar.
 //
 // Çocuk kaynakları:

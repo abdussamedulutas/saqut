@@ -342,6 +342,22 @@ void SymbolCollector::validateImports(ModuleGraph& graph) {
                         } else if (decl->kind == ASTKind::EnumDecl) {
                             auto* en = static_cast<EnumDeclNode*>(decl);
                             if (en->name == name) { exported = en->isExported; break; }
+                        } else if (decl->kind == ASTKind::VariableDecl) {
+                            // #3: global değişken export'u — kardeş bildirimler
+                            // (`export int a, b;`) de children'da VariableDecl olarak durur.
+                            auto* vd = static_cast<VariableDeclNode*>(decl);
+                            if (vd->name == name) { exported = vd->isExported; break; }
+                            bool foundInSibling = false;
+                            for (ASTNode* sibling : vd->getChildren()) {
+                                if (auto* svd = dynamic_cast<VariableDeclNode*>(sibling)) {
+                                    if (svd->name == name) {
+                                        exported = svd->isExported;
+                                        foundInSibling = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (foundInSibling) break;
                         }
                     }
                     break;

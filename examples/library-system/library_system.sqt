@@ -1,0 +1,224 @@
+// ============================================================================
+// Kütüphane Ödünç Verme Sistemi — saQut kara-kutu test uygulaması
+// ============================================================================
+// Testçi rolü tarafından, YALNIZCA dokümantasyona (readme.md, wiki/, docs/adr/)
+// dayanarak, src/ hiç görülmeden yazılmıştır (kara-kutu ilkesi).
+//
+// Kullandığı özellikler: struct (iç içe: Member.address), enum (BookStatus),
+// array (Book[]/Member[]/Loan[]), nullable (int?, akış-duyarlı daraltma),
+// kontrol akışı (if/while/for/do-while/switch), string işlemleri (birleştirme,
+// upper/trim builtin), hata yönetimi (try/catch/throw, struct-tabanlı Error),
+// decimal (gecikme cezası), byte (raf kodu), modül sistemi (import/export,
+// 3 dosya: library_types.sqt + library_ops.sqt + bu dosya).
+//
+// ⚠️ Bilinen derleyici bulguları (ayrıntı: testscale.md):
+//   #1 print() satır sonu eklemiyor; ardışık print() çıktıları ayraçsız yapışır.
+//   #2 String kaçış dizileri \n \t \r \b ÇALIŞMIYOR (literals.md'ye aykırı) —
+//      bu yüzden bu dosyada satır sonu YERİNE görünür ayraç dizgileri
+//      (" || ", " -> " vb.) kullanılmıştır; gerçek "\n" YAZILMAMIŞTIR.
+//   #3 `StructTip? f(...)` / `EnumTip? f(...)` dönüş tipi TypeChecker'da `void`
+//      olarak çözülüyor (parser doğru, semantik yanlış) — bu yüzden tüm arama
+//      fonksiyonları nullable STRUCT değil nullable INDEX (`int?`) döndürür.
+//   #4 `export int X = <değer>;` (dışa aktarılmış GLOBAL DEĞİŞKEN) modül
+//      sınırında görünmüyor (E_IMPORT_NOT_EXPORTED) — bu yüzden sabitler
+//      dışa aktarılmış FONKSİYONLARA sarıldı (`maxActiveLoans()`).
+//   #5 `throw "duz string";` sonrası `catch (Error e) { e.code }` erişimi
+//      "runtime error: not a struct" ile çöküyor — bu dosyada HER throw,
+//      önce `Error` struct'ı doldurulup öyle fırlatılıyor (workaround).
+// ============================================================================
+
+import {BookStatus, Book, Member, Address, Loan} from "library_types.sqt";
+import {maxActiveLoans, findBookIndex, findMemberIndex, findActiveLoanIndex,
+        makeBook, makeMember, statusLabel, loanBook, calcFine, returnBook}
+       from "library_ops.sqt";
+
+// Raftaki konuma göre kaba bir kategori — switch'in çok-değerli case (ADR-027)
+// kullanımını sergiler (int domeni üstünde, enum'a ek olarak).
+string shelfCategory(byte shelfCode) {
+    int code = shelfCode as int;
+    string category = "";
+    switch (code) {
+        case 1, 2, 3:
+            category = "on-raf";
+        case 4, 5, 6, 7:
+            category = "orta-raf";
+        default:
+            category = "ust-raf";
+    }
+    return category;
+}
+
+// Aktif tüm ödünç kayıtlarının gün sayacını bir ilerletir. En az bir kez
+// çalışması gereken bir işlem için do/while kullanır (ADR/wiki: do-while en az
+// bir kez çalışır).
+void advanceOneDay(Loan[] loans) {
+    int i = 0;
+    do {
+        loans[i].daysOut = loans[i].daysOut + 1;
+        i = i + 1;
+    } while (i < loans.length());
+}
+
+void advanceDays(Loan[] loans, int howMany) {
+    int d = 0;
+    while (d < howMany) {
+        if (loans.length() > 0) {
+            advanceOneDay(loans);
+        }
+        d = d + 1;
+    }
+}
+
+// Katalogdaki durum dağılımını sayar (Available/Loaned/Reserved/Lost).
+// switch + enum + for birlikte.
+void printStatusDistribution(Book[] catalog) {
+    int available = 0;
+    int loaned = 0;
+    int reserved = 0;
+    int lost = 0;
+
+    for (int i = 0; i < catalog.length(); i = i + 1) {
+        switch (catalog[i].status) {
+            case BookStatus.Available:
+                available = available + 1;
+            case BookStatus.Loaned:
+                loaned = loaned + 1;
+            case BookStatus.Reserved:
+                reserved = reserved + 1;
+            case BookStatus.Lost:
+                lost = lost + 1;
+        }
+    }
+
+    string report = "durum dagilimi -> musait: " + (available as string) +
+                     ", odunc: " + (loaned as string) +
+                     ", rezerve: " + (reserved as string) +
+                     ", kayip: " + (lost as string) + " || ";
+    print(report);
+}
+
+void printCatalog(Book[] catalog) {
+    print("=== KATALOG === || ");
+    for (int i = 0; i < catalog.length(); i = i + 1) {
+        Book b = catalog[i];
+        string line = "#" + (b.id as string) + " " + b.title.upper() +
+                      " (" + b.author + ") raf=" + (b.shelfCode as int as string) +
+                      "[" + shelfCategory(b.shelfCode) + "] durum=" +
+                      statusLabel(b.status) + " || ";
+        print(line);
+    }
+}
+
+// Bir ödünç işlemini güvenli biçimde dener; iş kuralı ihlalinde (E_NOT_AVAILABLE,
+// E_LOAN_LIMIT) hatayı yakalayıp raporlar, programı durdurmaz (Swift-tarzı
+// unchecked try/catch, ADR-025).
+void tryLoan(Book[] catalog, Member[] members, Loan[] loans, int bookId, int memberId) {
+    // ⚠️ id-arama + throw da try bloğunun İÇİNDE olmalı — dışında olsaydı
+    // main() bunu yakalamazdı ve program çöküp exit 1 verirdi (bunu bu
+    // dosyayı yazarken canlı gözlemledik; bkz. testscale.md "Kodlayıcı
+    // hatası (bug değil)" notu).
+    try {
+        int? bookIdx = findBookIndex(catalog, bookId);
+        int? memberIdx = findMemberIndex(members, memberId);
+
+        // Not: `bookIdx == null || memberIdx == null` tek koşulda İKİ değişkeni
+        // birden daraltmıyor (ADR-021: narrowing yalnızca nested/sıralı guard +
+        // `&&`, `||` ile çoklu-değişken guard YOK) — ayrı ayrı guard kullanılır.
+        if (bookIdx == null) {
+            Error e;
+            e.code = "E_ID_NOT_FOUND";
+            e.message = "kitap id bulunamadi: " + (bookId as string);
+            throw e;
+        }
+        if (memberIdx == null) {
+            Error e;
+            e.code = "E_ID_NOT_FOUND";
+            e.message = "uye id bulunamadi: " + (memberId as string);
+            throw e;
+        }
+
+        loanBook(catalog, members, loans, bookIdx, memberIdx);
+        string ok = "ODUNC OK: " + catalog[bookIdx].title + " -> " +
+                    members[memberIdx].name.trim() + " || ";
+        print(ok);
+    } catch (Error e) {
+        string fail = "ODUNC RED [" + e.code + "]: " + e.message + " || ";
+        print(fail);
+    }
+}
+
+void tryReturn(Book[] catalog, Member[] members, Loan[] loans, int bookId,
+               int freeDays, decimal perDayFine) {
+    try {
+        int? loanIdx = findActiveLoanIndex(loans, bookId);
+        if (loanIdx == null) {
+            Error e;
+            e.code = "E_NOT_LOANED";
+            e.message = "bu kitap icin aktif odunc kaydi yok: " + (bookId as string);
+            throw e;
+        }
+
+        decimal fine = returnBook(catalog, members, loans, loanIdx, freeDays, perDayFine);
+        string ok = "IADE OK: kitap=" + (bookId as string) +
+                    " ceza=" + (fine as string) + " || ";
+        print(ok);
+    } catch (Error e) {
+        string fail = "IADE RED [" + e.code + "]: " + e.message + " || ";
+        print(fail);
+    }
+}
+
+int main() {
+    Book[] catalog = [];
+    catalog.push(makeBook("Dune", "Frank Herbert", 1, 12));
+    catalog.push(makeBook("1984", "George Orwell", 2, 7));
+    catalog.push(makeBook("Sapiens", "Yuval Noah Harari", 3, 3));
+
+    Member[] members = [];
+    members.push(makeMember("Ayse Yilmaz", 1, "Ankara", "Cankaya"));
+    members.push(makeMember("Mehmet Demir", 2, "Istanbul", "Kadikoy"));
+    members.push(makeMember("Elif Kaya", 3, "Izmir", "Konak"));
+
+    Loan[] loans = [];
+
+    print("Kutuphane sistemi baslatildi. Uye limiti = " +
+          (maxActiveLoans() as string) + " || ");
+
+    printCatalog(catalog);
+
+    // --- İşlem 1: normal ödünçler ---
+    tryLoan(catalog, members, loans, 1, 1);   // Dune -> Ayse           (OK)
+    tryLoan(catalog, members, loans, 2, 1);   // 1984 -> Ayse           (OK, Ayse artik limitte)
+    tryLoan(catalog, members, loans, 3, 1);   // Sapiens -> Ayse        (RED: E_LOAN_LIMIT)
+    tryLoan(catalog, members, loans, 1, 2);   // Dune -> Mehmet         (RED: E_NOT_AVAILABLE)
+    tryLoan(catalog, members, loans, 3, 2);   // Sapiens -> Mehmet      (OK)
+
+    printStatusDistribution(catalog);
+
+    // --- Gün ilerlet: 5 gün geçti (do-while ile) ---
+    advanceDays(loans, 5);
+
+    int freeDays = 3;
+    decimal perDayFine = 1.5;
+
+    // --- İşlem 2: Dune'u iade et, cezasini gor, sonra baska uyeye ver ---
+    tryReturn(catalog, members, loans, 1, freeDays, perDayFine);   // gec: 5-3=2 gun * 1.5 = 3.0
+    tryLoan(catalog, members, loans, 1, 3);                        // Dune -> Elif (OK)
+
+    // --- 2 gun daha ilerlet ---
+    advanceDays(loans, 2);
+
+    // --- Islem 3: 1984'u iade et ---
+    tryReturn(catalog, members, loans, 2, freeDays, perDayFine);   // gec: 7-3=4 gun * 1.5 = 6.0
+
+    // --- Islem 4: olmayan kitap/uye id ile hata yolu (nullable guard) ---
+    tryLoan(catalog, members, loans, 99, 1);
+    tryReturn(catalog, members, loans, 42, freeDays, perDayFine);
+
+    printStatusDistribution(catalog);
+    printCatalog(catalog);
+
+    print("Aktif odunc kaydi sayisi: " + (loans.length() as string) + " || ");
+
+    return 0;
+}

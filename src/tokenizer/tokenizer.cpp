@@ -284,12 +284,23 @@ StringToken* Tokenizer::readString() {
                 if (!started) { started = true; }
                 else          { ended   = true; }
                 break;
-            case '\\':
+            case '\\': {
                 hmx.nextChar();
                 c = hmx.getchar();
                 st->token.push_back(c);
-                st->context.push_back(c);
+                // Kaçış dizisini gerçek kontrol/karakter değerine çevir
+                // (wiki/literals.md sözleşmesi: \n \t \r \b \\ \").
+                char actual = c;
+                switch (c) {
+                    case 'n': actual = '\n'; break;
+                    case 't': actual = '\t'; break;
+                    case 'r': actual = '\r'; break;
+                    case 'b': actual = '\b'; break;
+                    default:  actual = c;    break; // \\ ve \" dahil, olduğu gibi
+                }
+                st->context.push_back(actual);
                 break;
+            }
             default:
                 st->context.push_back(c);
                 break;

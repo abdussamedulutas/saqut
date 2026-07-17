@@ -275,7 +275,7 @@ bool Interpreter::shouldStop() {
 // maybeCollect — eşik tabanlı mark-sweep tetikleme (#77, ADR-022)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Kökler: moduleSlots_ (modül-düzeyi değişkenler), callStack_ (her frame'in
+// Kökler: globalSlots_ (modül-düzeyi değişkenler), callStack_ (her frame'in
 // slot'ları) ve pendingThrow_ (unwind sırasındaki Error nesnesi). Eşik
 // adaptif: toplama sonrası canlı kümenin 2 katına çıkar (küçülünce başlangıç
 // eşiğine iner) — canlı nesnesi çok programda her instruction'da sweep
@@ -284,8 +284,7 @@ bool Interpreter::shouldStop() {
 void Interpreter::maybeCollect() {
     if (gcThreshold_ <= 0 || heap_.allocCount < gcThreshold_) return;
 
-    for (auto& [id, slots] : moduleSlots_)
-        heap_.markSlots(slots);
+    heap_.markSlots(globalSlots_);
     for (const CallFrame& frame : callStack_)
         heap_.markSlots(frame.slots);
     if (pendingThrow_)
@@ -484,13 +483,15 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
 
         // ── Global değişken erişimi ────────────────────────────────────────
+        // #3: instr.intValue IRGenerator'ın program-çapında (modüller arası)
+        // tek flat indeksi — yürüten fonksiyonun moduleId'siyle KARIŞTIRILMAZ,
+        // aksi halde başka modülden import edilmiş bir global yanlış (ya da
+        // sınır dışı) diziye erişirdi.
         case Opcode::LOAD_GLOBAL:
-            frame.slots[instr.dest] =
-                moduleSlots_[frame.function->moduleId][instr.intValue];
+            frame.slots[instr.dest] = globalSlots_[instr.intValue];
             break;
         case Opcode::STORE_GLOBAL:
-            moduleSlots_[frame.function->moduleId][instr.intValue] =
-                frame.slots[instr.src];
+            globalSlots_[instr.intValue] = frame.slots[instr.src];
             break;
 
         // ── Karşılaştırma ─────────────────────────────────────────────────
@@ -611,7 +612,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             IRFunction* callee = program_.findFunction(instr.functionName);
             if (!callee)
                 throw std::runtime_error(
-                    "runtime error: '" + instr.functionName + "' function not found");
+                    "'" + instr.functionName + "' function not found");
 
             CallFrame newFrame;
             newFrame.function           = callee;
@@ -698,22 +699,22 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::FIELD_GET: {
             Value& objVal = frame.slots[instr.src];
             if (objVal.kind != ValueKind::Ref || !objVal.ref)
-                throw std::runtime_error("runtime error: not a struct");
+                throw std::runtime_error("not a struct");
             auto* obj = (StructObject*)objVal.ref;
             int idx = instr.intValue;
             if (idx < 0 || idx >= (int)obj->fields.size())
-                throw std::runtime_error("runtime error: invalid struct field index " + std::to_string(idx));
+                throw std::runtime_error("invalid struct field index " + std::to_string(idx));
             frame.slots[instr.dest] = obj->fields[idx];
             break;
         }
         case Opcode::FIELD_SET: {
             Value& objVal = frame.slots[instr.dest];
             if (objVal.kind != ValueKind::Ref || !objVal.ref)
-                throw std::runtime_error("runtime error: not a struct");
+                throw std::runtime_error("not a struct");
             auto* obj = (StructObject*)objVal.ref;
             int idx = instr.intValue;
             if (idx < 0 || idx >= (int)obj->fields.size())
-                throw std::runtime_error("runtime error: invalid struct field index " + std::to_string(idx));
+                throw std::runtime_error("invalid struct field index " + std::to_string(idx));
             obj->fields[idx] = frame.slots[instr.right];
             break;
         }
@@ -762,7 +763,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::ARRAY_LEN: {
             Value& arrVal = frame.slots[instr.src];
             if (arrVal.kind != ValueKind::Ref || !arrVal.ref)
-                throw std::runtime_error("runtime error: not an array");
+                throw std::runtime_error("not an array");
             auto* arr = (ArrayObject*)arrVal.ref;
             frame.slots[instr.dest] = Value::fromInt((int)arr->elements.size());
             break;
@@ -976,6 +977,13 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 auto* errObj = static_cast<StructObject*>(errVal.ref);
                 if ((int)errObj->fields.size() >= 4)
                     errObj->fields[3] = Value::fromString(buildTrace());
+            } else {
+                // #4 — mimari karar: struct-olmayan (düz string vb.) throw
+                // değeri otomatik Error{message=<değerin string temsili>,
+                // code="", line, col, trace}'a sarmalanır. Böylece her
+                // `catch (Error e)` güvenle e.code/e.message okuyabilir.
+                errVal = makeErrorValue(errVal.toString(), "",
+                                         instr.sourceLine, instr.sourceCol);
             }
             pendingThrow_ = errVal;
             break;
@@ -1070,16 +1078,12 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
 void Interpreter::initForDebug() {
     if (vmInitialized_) return;
 
-    // Globalleri sıfırla
-    for (auto& [id, count] : program_.moduleGlobalCounts)
-        moduleSlots_[id].assign(count, Value::fromInt(0));
-    if (program_.moduleGlobalCounts.empty() && program_.globalCount > 0)
-        moduleSlots_[ModuleRegistry::INVALID_ID].assign(
-            program_.globalCount, Value::fromInt(0));
+    // Globalleri sıfırla — tek flat dizi (bkz. globalSlots_ yorum notu, #3)
+    globalSlots_.assign(program_.globalCount, Value::fromInt(0));
 
     IRFunction* mainFunction = program_.findFunction("main");
     if (!mainFunction)
-        throw std::runtime_error("runtime error: 'main' function not found");
+        throw std::runtime_error("'main' function not found");
 
     CallFrame mainFrame;
     mainFrame.function           = mainFunction;
@@ -1121,7 +1125,7 @@ void Interpreter::executeHostFunction(const std::string&       name,
         }
         return;
     }
-    throw std::runtime_error("runtime error: unknown host function '" + name + "'");
+    throw std::runtime_error("unknown host function '" + name + "'");
 }
 
 // ── Built-in Method Dispatch ─────────────────────────────────────────────────
@@ -1139,7 +1143,7 @@ void Interpreter::executeHostFunction(const std::string&       name,
 // Yardımcı: Value'dan ArrayObject* al
 static ArrayObject* asArray(const Value& v, const char* ctx) {
     if (v.kind != ValueKind::Ref || !v.ref || v.ref->type != ObjectType::Array)
-        throw std::runtime_error(std::string("runtime error: ") + ctx + " — expected array");
+        throw std::runtime_error(std::string(ctx) + " — expected array");
     return static_cast<ArrayObject*>(v.ref);
 }
 
@@ -1235,7 +1239,7 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     case 2: {
         auto* arr = asArray(args[0], "pop");
         if (arr->elements.empty())
-            throw std::runtime_error("runtime error: pop on empty array");
+            throw std::runtime_error("pop on empty array");
         Value v = arr->elements.back();
         arr->elements.pop_back();
         return v;
@@ -1244,10 +1248,10 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     case 3: {
         auto* arr = asArray(args[0], "insert");
         if (args[1].kind != ValueKind::Int)
-            throw std::runtime_error("runtime error: insert — index must be int");
+            throw std::runtime_error("insert — index must be int");
         int idx = args[1].intValue;
         if (idx < 0 || idx > (int)arr->elements.size())
-            throw std::runtime_error("runtime error: insert — index out of bounds");
+            throw std::runtime_error("insert — index out of bounds");
         arr->elements.insert(arr->elements.begin() + idx, args[2]);
         return Value::fromInt(idx);
     }
@@ -1255,10 +1259,10 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     case 4: {
         auto* arr = asArray(args[0], "remove");
         if (args[1].kind != ValueKind::Int)
-            throw std::runtime_error("runtime error: remove — index must be int");
+            throw std::runtime_error("remove — index must be int");
         int idx = args[1].intValue;
         if (idx < 0 || idx >= (int)arr->elements.size())
-            throw std::runtime_error("runtime error: remove — index out of bounds");
+            throw std::runtime_error("remove — index out of bounds");
         Value v = arr->elements[idx];
         arr->elements.erase(arr->elements.begin() + idx);
         return v;
@@ -1316,13 +1320,13 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 11: string::length(string) -> int
     case 11: {
         if (args[0].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::length — expected string");
+            throw std::runtime_error("string::length — expected string");
         return Value::fromInt((int)args[0].stringValue.size());
     }
     // 12: string::upper(string) -> string
     case 12: {
         if (args[0].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::upper — expected string");
+            throw std::runtime_error("string::upper — expected string");
         std::string s = args[0].stringValue;
         for (char& c : s) c = (char)std::toupper((unsigned char)c);
         return Value::fromString(std::move(s));
@@ -1330,7 +1334,7 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 13: string::lower(string) -> string
     case 13: {
         if (args[0].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::lower — expected string");
+            throw std::runtime_error("string::lower — expected string");
         std::string s = args[0].stringValue;
         for (char& c : s) c = (char)std::tolower((unsigned char)c);
         return Value::fromString(std::move(s));
@@ -1338,7 +1342,7 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 14: string::trim(string) -> string
     case 14: {
         if (args[0].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::trim — expected string");
+            throw std::runtime_error("string::trim — expected string");
         const std::string& src = args[0].stringValue;
         size_t start = src.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) return Value::fromString("");
@@ -1348,7 +1352,7 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 15: string::split(string, string) -> string[]
     case 15: {
         if (args[0].kind != ValueKind::String || args[1].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::split — expected string, string");
+            throw std::runtime_error("string::split — expected string, string");
         const std::string& src = args[0].stringValue;
         const std::string& sep = args[1].stringValue;
         auto* arr = heap.allocArray();
@@ -1368,19 +1372,19 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 16: string::substring(string, int, int) -> string
     case 16: {
         if (args[0].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::substring — expected string");
+            throw std::runtime_error("string::substring — expected string");
         const std::string& s = args[0].stringValue;
         int from = args[1].intValue;
         int len  = args[2].intValue;
         if (from < 0 || from > (int)s.size())
-            throw std::runtime_error("runtime error: string::substring — index out of bounds");
+            throw std::runtime_error("string::substring — index out of bounds");
         if (len < 0) len = 0;
         return Value::fromString(s.substr(from, len));
     }
     // 17: string::replace(string, string, string) -> string
     case 17: {
         if (args[0].kind != ValueKind::String || args[1].kind != ValueKind::String || args[2].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::replace — expected string, string, string");
+            throw std::runtime_error("string::replace — expected string, string, string");
         std::string s   = args[0].stringValue;
         const std::string& from = args[1].stringValue;
         const std::string& to   = args[2].stringValue;
@@ -1396,7 +1400,7 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 18: string::repeat(string, int) -> string
     case 18: {
         if (args[0].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::repeat — expected string");
+            throw std::runtime_error("string::repeat — expected string");
         int n = args[1].intValue;
         if (n < 0) n = 0;
         std::string result;
@@ -1407,17 +1411,17 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 19: string::charAt(string, int) -> string
     case 19: {
         if (args[0].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::charAt — expected string");
+            throw std::runtime_error("string::charAt — expected string");
         const std::string& s = args[0].stringValue;
         int idx = args[1].intValue;
         if (idx < 0 || idx >= (int)s.size())
-            throw std::runtime_error("runtime error: string::charAt — index out of bounds");
+            throw std::runtime_error("string::charAt — index out of bounds");
         return Value::fromString(std::string(1, s[idx]));
     }
     // 20: string::indexOf(string, string) -> int?
     case 20: {
         if (args[0].kind != ValueKind::String || args[1].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::indexOf — expected string, string");
+            throw std::runtime_error("string::indexOf — expected string, string");
         size_t pos = args[0].stringValue.find(args[1].stringValue);
         if (pos == std::string::npos) return Value::null();
         return Value::fromInt((int)pos);
@@ -1425,14 +1429,14 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 21: string::contains(string, string) -> bool
     case 21: {
         if (args[0].kind != ValueKind::String || args[1].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::contains — expected string, string");
+            throw std::runtime_error("string::contains — expected string, string");
         bool found = args[0].stringValue.find(args[1].stringValue) != std::string::npos;
         return Value::fromInt(found ? 1 : 0);
     }
     // 22: string::startsWith(string, string) -> bool
     case 22: {
         if (args[0].kind != ValueKind::String || args[1].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::startsWith — expected string, string");
+            throw std::runtime_error("string::startsWith — expected string, string");
         const std::string& s = args[0].stringValue;
         const std::string& p = args[1].stringValue;
         bool ok = s.size() >= p.size() && s.substr(0, p.size()) == p;
@@ -1441,7 +1445,7 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 23: string::endsWith(string, string) -> bool
     case 23: {
         if (args[0].kind != ValueKind::String || args[1].kind != ValueKind::String)
-            throw std::runtime_error("runtime error: string::endsWith — expected string, string");
+            throw std::runtime_error("string::endsWith — expected string, string");
         const std::string& s = args[0].stringValue;
         const std::string& p = args[1].stringValue;
         bool ok = s.size() >= p.size() && s.substr(s.size() - p.size()) == p;
@@ -1478,6 +1482,6 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     }
 
     default:
-        throw std::runtime_error("runtime error: unknown builtin method id " + std::to_string(runtimeId));
+        throw std::runtime_error("unknown builtin method id " + std::to_string(runtimeId));
     }
 }

@@ -1,0 +1,15 @@
+// #1: kaçış dizileri \n \t \r \b gerçek kontrol karakteri üretmeli.
+// \\ ve \" zaten doğru çalışıyordu; bug yalnızca \n/\t/\r/\b'de backslash'i
+// düşürüp sıradaki harfi olduğu gibi bırakıyordu (ör. "\n" -> "n").
+// Bayt-tam karşılaştırma gerekir (xxd) — insan gözüyle okunan çıktı yeterli
+// değil, çünkü backslash'in düşüp harfin kalması görsel olarak fark
+// edilmeyebilir (bkz. wiki/literals.md kaçış tablosu).
+int main() {
+    print("a\tb");
+    print("\\");
+    print("\"q\"");
+    print("line1\nline2");
+    print("a\rb");
+    print("a\bb");
+    return 0;
+}

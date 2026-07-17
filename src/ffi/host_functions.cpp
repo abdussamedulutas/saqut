@@ -266,7 +266,7 @@ static Value date_parse(const std::vector<Value>& a, HostContext&) {
 // pattern alt kümesi: yyyy MM dd HH mm ss (ADR-035'te sabitlenir)
 static Value date_format(const std::vector<Value>& a, HostContext&) {
     auto b = date_calc::breakDown(a[0].int64Value);
-    char buf[8];
+    char buf[16];
     std::string out;
     const std::string& pat = a[1].stringValue;
     size_t i = 0;

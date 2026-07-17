@@ -24,22 +24,24 @@ inline const char* kEmbeddedRootSqt = R"SQT(
 ffi string version() : CORE_VERSION from core;   // derleyici sürümü (0.8.0)
 
 // ── math modülü (saf hesap, capability'siz — #89) ──────────────────────────
-// Overload yok → int/float ayrımı isimle. sqrt(-1)=NaN, Error fırlatmaz.
-ffi int   abs(int x)              : MATH_ABS   from math;
-ffi float absf(float x)           : MATH_ABSF  from math;
-ffi int   min(int a, int b)       : MATH_MIN   from math;
-ffi int   max(int a, int b)       : MATH_MAX   from math;
-ffi float minf(float a, float b)  : MATH_MINF  from math;
-ffi float maxf(float a, float b)  : MATH_MAXF  from math;
-ffi float sqrt(float x)           : MATH_SQRT  from math;
-ffi float pow(float b, float e)   : MATH_POW   from math;
-ffi float floor(float x)          : MATH_FLOOR from math;
-ffi float ceil(float x)           : MATH_CEIL  from math;
-ffi float round(float x)          : MATH_ROUND from math;
+// Overload yok → int/ondalık ayrımı isimle (abs/absf). ADR-040: ondalık
+// matematik 64-bit `double` üzerinden (isimlerdeki "f" tarihsel; tip double).
+// sqrt(-1)=NaN, Error fırlatmaz.
+ffi int    abs(int x)               : MATH_ABS   from math;
+ffi double absf(double x)           : MATH_ABSF  from math;
+ffi int    min(int a, int b)        : MATH_MIN   from math;
+ffi int    max(int a, int b)        : MATH_MAX   from math;
+ffi double minf(double a, double b) : MATH_MINF  from math;
+ffi double maxf(double a, double b) : MATH_MAXF  from math;
+ffi double sqrt(double x)           : MATH_SQRT  from math;
+ffi double pow(double b, double e)  : MATH_POW   from math;
+ffi double floor(double x)          : MATH_FLOOR from math;
+ffi double ceil(double x)           : MATH_CEIL  from math;
+ffi double round(double x)          : MATH_ROUND from math;
 // #89: gerçek importable sabit yok (ffi yalnızca fonksiyon) — sıfır-argümanlı
 // saf fonksiyon olarak sunulur: import {PI} from math; PI();
-ffi float PI()                    : MATH_PI    from math;
-ffi float E()                     : MATH_E     from math;
+ffi double PI()                     : MATH_PI    from math;
+ffi double E()                      : MATH_E     from math;
 
 // ── caps modülü (pledge modeli, capability'siz — #91) ───────────────────────
 // drop geri alınamaz; ekleme fonksiyonu YOK (güvenlik değeri buradan gelir).

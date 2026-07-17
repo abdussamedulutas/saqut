@@ -42,12 +42,14 @@
 // zaten kind taşır). IR katmanında — ValueKind'a KASITLI bağımsız (ADR-021).
 // instruction.hpp'de tanımlı çünkü Instruction::valueType (ADR-039) buna ihtiyaç duyar.
 // ----------------------------------------------------------------------------
-enum class SlotType : uint8_t { Int, Float, Ref, Str, Decimal, Date, Unknown };
+enum class SlotType : uint8_t { Int, LongInt, Float, Float32, Ref, Str, Decimal, Date, Unknown };
 
 inline const char* slotTypeName(SlotType t) {
     switch (t) {
         case SlotType::Int:     return "int";
+        case SlotType::LongInt: return "longint";
         case SlotType::Float:   return "float";
+        case SlotType::Float32: return "float32";
         case SlotType::Ref:     return "ref";
         case SlotType::Str:     return "string";
         case SlotType::Decimal: return "decimal";
@@ -119,6 +121,35 @@ enum class Opcode {
     INT_TO_FLOAT,  // slots[dest] = (double)slots[src]  — gizli int→float çevrimi (literal atamasında)
     FLOAT_TO_INT,  // slots[dest] = (int)slots[src]     — açık cast (ileride: int(x))
 
+    // --- Float32 aritmetik (ADR-040: 32-bit IEEE single, her sonuç (float) truncate) ---
+    LOAD_FLOAT32,  // slots[dest] = (float)floatValue (single sabit yükle)
+    F32ADD,        // slots[dest] = (float)(slots[left] + slots[right])
+    F32SUB,        // slots[dest] = (float)(slots[left] - slots[right])
+    F32MUL,        // slots[dest] = (float)(slots[left] * slots[right])
+    F32DIV,        // slots[dest] = (float)(slots[left] / slots[right])  (sıfır → runtime_error)
+    F32NEG,        // slots[dest] = (float)(-slots[src])
+    INT_TO_FLOAT32,   // slots[dest] = (float)slots[src]      — int → float32
+    FLOAT32_TO_INT,   // slots[dest] = (int)slots[src]        — float32 → int (checked)
+    FLOAT_TO_FLOAT32, // slots[dest] = (float)slots[src]      — double → float (E003 veri kaybı gerçekleşir)
+    FLOAT32_TO_FLOAT, // slots[dest] = (double)slots[src]     — float → double (kayıpsız widening)
+
+    // --- LongInt aritmetik (ADR-040: 64-bit signed, tanımlı 2's-complement wrap) ---
+    LOAD_LONG,     // slots[dest] = int64Value (64-bit sabit yükle)
+    LADD,          // slots[dest] = slots[left] + slots[right]  (longint, uint64 wrap)
+    LSUB,          // slots[dest] = slots[left] - slots[right]  (longint)
+    LMUL,          // slots[dest] = slots[left] * slots[right]  (longint)
+    LDIV,          // slots[dest] = slots[left] / slots[right]  (sıfır → Error; INT64_MIN/-1 → INT64_MIN)
+    LMOD,          // slots[dest] = slots[left] % slots[right]  (sıfır → Error; INT64_MIN/-1 → 0)
+    LNEG,          // slots[dest] = -slots[src]                 (longint tekli eksi)
+    LBAND,         // slots[dest] = slots[left] & slots[right]  (64-bit)
+    LBOR,          // slots[dest] = slots[left] | slots[right]  (64-bit)
+    LBXOR,         // slots[dest] = slots[left] ^ slots[right]  (64-bit)
+    LSHL,          // slots[dest] = slots[left] << slots[right] (64-bit)
+    LSHR,          // slots[dest] = slots[left] >> slots[right] (64-bit aritmetik)
+    LBNOT,         // slots[dest] = ~slots[src]                 (64-bit)
+    INT_TO_LONG,   // slots[dest] = (int64)slots[src]  — int → longint (kayıpsız genişletme)
+    LONG_TO_INT_CHECKED, // slots[dest] = (int32)slots[src]; int32 aralığı dışı → fallible
+
     // --- Struct (ADR-020: referans semantiği) ---
     STRUCT_NEW,  // slots[dest] = yeni StructObject(intValue alan sayısı); functionName = struct tipi adı
     FIELD_GET,   // slots[dest] = slots[src].fields[intValue]  (src=nesne, intValue=alan indeksi)
@@ -160,6 +191,12 @@ enum class Opcode {
     CAST_STR_TO_FLOAT,  // slots[dest] = parse_float(slots[src])
     CAST_FLOAT_TO_INT_CHECKED,  // slots[dest] = (int)slots[src]; NaN/Inf/taşma → fallible
     CAST_INT_TO_BYTE_CHECKED,   // slots[dest] = slots[src]; 0-255 dışı → fallible (#86)
+    // ADR-040 longint/float32 string cast'leri:
+    CAST_LONG_TO_STR,   // slots[dest] = to_string(int64Value)   — longint → string (hatasız)
+    CAST_STR_TO_LONG,   // slots[dest] = parse_int64(slots[src]) — string → longint (fallible)
+    CAST_FLOAT32_TO_STR,// slots[dest] = to_string single         — float32 → string (hatasız)
+    CAST_STR_TO_FLOAT32,// slots[dest] = (float)parse            — string → float32 (fallible)
+    CAST_FLOAT_TO_LONG_CHECKED, // slots[dest] = (int64)slots[src]; NaN/Inf/int64 taşma → fallible
 
     // --- Decimal aritmetik (ADR-028) ---
     LOAD_DECIMAL,       // slots[dest] = decimalValue (decimal sabit yükle)
@@ -208,12 +245,43 @@ inline const char* opcodeName(Opcode op) {
         case Opcode::FNEG:          return "FNEG";
         case Opcode::INT_TO_FLOAT:  return "INT_TO_FLOAT";
         case Opcode::FLOAT_TO_INT:  return "FLOAT_TO_INT";
+        case Opcode::LOAD_FLOAT32:  return "LOAD_FLOAT32";
+        case Opcode::F32ADD:        return "F32ADD";
+        case Opcode::F32SUB:        return "F32SUB";
+        case Opcode::F32MUL:        return "F32MUL";
+        case Opcode::F32DIV:        return "F32DIV";
+        case Opcode::F32NEG:        return "F32NEG";
+        case Opcode::INT_TO_FLOAT32:   return "INT_TO_FLOAT32";
+        case Opcode::FLOAT32_TO_INT:   return "FLOAT32_TO_INT";
+        case Opcode::FLOAT_TO_FLOAT32: return "FLOAT_TO_FLOAT32";
+        case Opcode::FLOAT32_TO_FLOAT: return "FLOAT32_TO_FLOAT";
+        case Opcode::LOAD_LONG:     return "LOAD_LONG";
+        case Opcode::LADD:          return "LADD";
+        case Opcode::LSUB:          return "LSUB";
+        case Opcode::LMUL:          return "LMUL";
+        case Opcode::LDIV:          return "LDIV";
+        case Opcode::LMOD:          return "LMOD";
+        case Opcode::LNEG:          return "LNEG";
+        case Opcode::LBAND:         return "LBAND";
+        case Opcode::LBOR:          return "LBOR";
+        case Opcode::LBXOR:         return "LBXOR";
+        case Opcode::LSHL:          return "LSHL";
+        case Opcode::LSHR:          return "LSHR";
+        case Opcode::LBNOT:         return "LBNOT";
+        case Opcode::INT_TO_LONG:         return "INT_TO_LONG";
+        case Opcode::LONG_TO_INT_CHECKED: return "LONG_TO_INT_CHECKED";
         case Opcode::CAST_INT_TO_STR:         return "CAST_INT_TO_STR";
         case Opcode::CAST_FLOAT_TO_STR:       return "CAST_FLOAT_TO_STR";
         case Opcode::CAST_BOOL_TO_STR:        return "CAST_BOOL_TO_STR";
         case Opcode::CAST_STR_TO_INT:         return "CAST_STR_TO_INT";
         case Opcode::CAST_STR_TO_FLOAT:       return "CAST_STR_TO_FLOAT";
         case Opcode::CAST_FLOAT_TO_INT_CHECKED: return "CAST_FLOAT_TO_INT_CHECKED";
+        case Opcode::CAST_INT_TO_BYTE_CHECKED:  return "CAST_INT_TO_BYTE_CHECKED";
+        case Opcode::CAST_LONG_TO_STR:        return "CAST_LONG_TO_STR";
+        case Opcode::CAST_STR_TO_LONG:        return "CAST_STR_TO_LONG";
+        case Opcode::CAST_FLOAT32_TO_STR:     return "CAST_FLOAT32_TO_STR";
+        case Opcode::CAST_STR_TO_FLOAT32:     return "CAST_STR_TO_FLOAT32";
+        case Opcode::CAST_FLOAT_TO_LONG_CHECKED: return "CAST_FLOAT_TO_LONG_CHECKED";
         case Opcode::LOAD_DECIMAL:          return "LOAD_DECIMAL";
         case Opcode::DADD:                  return "DADD";
         case Opcode::DSUB:                  return "DSUB";
@@ -280,7 +348,10 @@ struct Instruction {
     // LOAD_CONST için yüklenecek tam sayı sabiti
     int         intValue    =  0;
 
-    // LOAD_FLOAT için yüklenecek double sabiti (#44)
+    // LOAD_LONG için yüklenecek 64-bit tam sayı sabiti (ADR-040)
+    long long   int64Value  =  0;
+
+    // LOAD_FLOAT / LOAD_FLOAT32 için yüklenecek double sabiti (#44; float32'de (float) truncate)
     double       floatValue   = 0.0;
 
     // LOAD_DECIMAL için yüklenecek decimal sabiti (ADR-028)

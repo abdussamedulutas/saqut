@@ -40,7 +40,7 @@
 // Enum'lar
 // ============================================================================
 
-enum class PrimitiveKind { Int, Float, Double, Decimal, Byte, Char, String, Bool, Void, Date };
+enum class PrimitiveKind { Int, LongInt, Float, Double, Decimal, Byte, Char, String, Bool, Void, Date };
 
 enum class TypeKind { Primitive, Array, Struct, Enum, Function, Error };
 
@@ -86,6 +86,7 @@ struct Type {
         return t;
     }
     static Type Int()     { return primitive(PrimitiveKind::Int); }
+    static Type LongInt() { return primitive(PrimitiveKind::LongInt); }
     static Type Float()   { return primitive(PrimitiveKind::Float); }
     static Type Double()  { return primitive(PrimitiveKind::Double); }
     static Type Decimal() { return primitive(PrimitiveKind::Decimal); }
@@ -143,6 +144,7 @@ struct Type {
     bool isNumeric() const {
         return kind == TypeKind::Primitive &&
                (prim == PrimitiveKind::Int     ||
+                prim == PrimitiveKind::LongInt ||
                 prim == PrimitiveKind::Float   ||
                 prim == PrimitiveKind::Double  ||
                 prim == PrimitiveKind::Decimal ||
@@ -155,6 +157,18 @@ struct Type {
 
     bool isByte() const {
         return kind == TypeKind::Primitive && prim == PrimitiveKind::Byte;
+    }
+
+    // ADR-040: 64-bit genel amaçlı tamsayı; rank kulesine katılmaz (byte gibi
+    // izole) — int→longint serbest, longint↔float/double/decimal yalnızca `as`.
+    bool isLongInt() const {
+        return kind == TypeKind::Primitive && prim == PrimitiveKind::LongInt;
+    }
+
+    // int veya longint (her ikisi de tamsayı; aritmetik/cast dallarında ortak)
+    bool isIntegral() const {
+        return kind == TypeKind::Primitive &&
+               (prim == PrimitiveKind::Int || prim == PrimitiveKind::LongInt);
     }
 
     // #88 (ADR-036): date yalnızca karşılaştırılabilir — aritmetik YOK
@@ -216,6 +230,7 @@ struct Type {
     static const char* primName(PrimitiveKind p) {
         switch (p) {
             case PrimitiveKind::Int:     return "int";
+            case PrimitiveKind::LongInt: return "longint";
             case PrimitiveKind::Float:   return "float";
             case PrimitiveKind::Double:  return "double";
             case PrimitiveKind::Decimal: return "decimal";
@@ -239,6 +254,7 @@ struct Type {
             return error();
         }
         if (n == "int")     return Int();
+        if (n == "longint") return LongInt();
         if (n == "float")   return Float();
         if (n == "double")  return Double();
         if (n == "decimal") return Decimal();

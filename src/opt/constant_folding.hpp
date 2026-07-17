@@ -10,6 +10,7 @@
 #define SAQUT_OPT_CONSTANT_FOLDING
 
 #include <string>
+#include <climits>
 #include "opt/optimization_pass.hpp"
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/literal.hpp"
@@ -40,21 +41,37 @@ private:
     bool              changed_ = false;
 
     // ── Literal değer okuma ──────────────────────────────────────────────────
+    // ADR-040: constant folding int (32-bit) üzerinde çalışır. int32 aralığı
+    // dışındaki tamsayı literalleri (longint) katlanmaz — IR generator onları
+    // LOAD_LONG olarak üretir, 64-bit semantiği korunur.
+    static bool fitsInt32(const std::string& tok) {
+        try {
+            long long v = std::stoll(tok);
+            return v >= INT_MIN && v <= INT_MAX;
+        } catch (...) { return false; }  // taşma → int32'ye sığmaz
+    }
     static bool isIntLit(ASTNode* node) {
         auto* lit = dynamic_cast<LiteralNode*>(node);
-        return lit && lit->literalType == LiteralType::INTEGER;
+        if (!lit || lit->literalType != LiteralType::INTEGER) return false;
+        if (lit->hasDirectValue) return true;  // zaten int32 directIntValue
+        return lit->parserToken.token && fitsInt32(lit->parserToken.token->token);
     }
 
-    // Boolean veya integer literal — unary ! için her ikisi de geçerli
+    // Boolean veya integer literal — unary ! için her ikisi de geçerli.
+    // int32-dışı (longint) tamsayı literalleri hariç (bkz. isIntLit).
     static bool isScalarLit(ASTNode* node) {
         auto* lit = dynamic_cast<LiteralNode*>(node);
-        return lit && (lit->literalType == LiteralType::INTEGER ||
-                       lit->literalType == LiteralType::BOOLEAN);
+        if (!lit) return false;
+        if (lit->literalType == LiteralType::BOOLEAN) return true;
+        return isIntLit(node);
     }
 
     static int getIntVal(LiteralNode* lit) {
         if (lit->hasDirectValue) return lit->directIntValue;
-        if (lit->parserToken.token) return std::stoi(lit->parserToken.token->token);
+        if (lit->parserToken.token) {
+            try { return static_cast<int>(std::stoll(lit->parserToken.token->token)); }
+            catch (...) { return 0; }  // isIntLit zaten int32-dışını eledi
+        }
         return 0;
     }
 

@@ -29,7 +29,9 @@ struct Object;
 // Bool ayrı kind değil — boolean sonuçlar int olarak saklanır (0=yanlış, sıfır-dışı=doğru).
 enum class ValueKind {
     Int,
-    Float,    // #44: float/double tek kind; floatValue alanı taşır
+    LongInt,  // ADR-040: 64-bit işaretli tamsayı; int64Value alanı taşır
+    Float,    // ADR-040: 64-bit IEEE double; floatValue alanı taşır
+    Float32,  // ADR-040: 32-bit IEEE single; floatValue'yu tutar ama (float) truncate edilir
     Decimal,  // ADR-028: ondalık hassasiyet; decimalValue alanı taşır
     String,
     Ref,      // ADR-020: array/struct nesnesine Object* referansı
@@ -50,12 +52,21 @@ struct Value {
         Value v; v.kind = ValueKind::Int; v.intValue = n; return v;
     }
 
+    static Value fromLongInt(long long n) {
+        Value v; v.kind = ValueKind::LongInt; v.int64Value = n; return v;
+    }
+
     static Value fromDate(long long epochMs) {
         Value v; v.kind = ValueKind::Date; v.int64Value = epochMs; return v;
     }
 
     static Value fromFloat(double d) {
         Value v; v.kind = ValueKind::Float; v.floatValue = d; return v;
+    }
+
+    // ADR-040: 32-bit single — saklarken (float) truncate ederek gerçek precision
+    static Value fromFloat32(double d) {
+        Value v; v.kind = ValueKind::Float32; v.floatValue = (double)(float)d; return v;
     }
 
     static Value fromDecimal(const DecimalValue& d) {
@@ -74,10 +85,26 @@ struct Value {
         Value v; v.kind = ValueKind::Null; return v;
     }
 
+    // ADR-040: sayısal karşılaştırma için ortak erişim. Int/LongInt tamsayı
+    // alanından, Float/Float32 double alanından okur; karışık int↔float
+    // karşılaştırmaları double üzerinden yapılır (typechecker izin verdiği ölçüde).
+    bool isFloaty()  const { return kind == ValueKind::Float || kind == ValueKind::Float32; }
+    bool isIntegral() const { return kind == ValueKind::Int || kind == ValueKind::LongInt; }
+    long long asI64() const {
+        return kind == ValueKind::LongInt ? int64Value : (long long)intValue;
+    }
+    double asDouble() const {
+        if (isFloaty()) return floatValue;
+        if (kind == ValueKind::LongInt) return (double)int64Value;
+        return (double)intValue;
+    }
+
     bool isTruthy() const {
         switch (kind) {
             case ValueKind::Int:     return intValue != 0;
+            case ValueKind::LongInt: return int64Value != 0;
             case ValueKind::Float:   return floatValue != 0.0;
+            case ValueKind::Float32: return floatValue != 0.0;
             case ValueKind::Decimal: return decimalValue.isTruthy();
             case ValueKind::String:  return !stringValue.empty();
             case ValueKind::Ref:     return ref != nullptr;
@@ -90,11 +117,16 @@ struct Value {
     std::string toString() const {
         switch (kind) {
             case ValueKind::Int:     return std::to_string(intValue);
+            case ValueKind::LongInt: return std::to_string(int64Value);
             case ValueKind::Decimal: return decimalValue.toString();
-            case ValueKind::Float: {
-                // Tam sayıysa "3.0", değilse "3.14" gibi — gereksiz sıfırları kırp
+            case ValueKind::Float:
+            case ValueKind::Float32: {
+                // Tam sayıysa "3.0", değilse "3.14" gibi — gereksiz sıfırları kırp.
+                // Float32'yi single'ın gerçek değerini ayırt edecek ~9 anlamlı hane
+                // (max_digits10) ile yaz → 0.1f+0.2f "0.300000012" görünür; double
+                // için 10 hane. Böylece 32/64-bit precision farkı gözlemlenebilir.
                 std::ostringstream oss;
-                oss << std::setprecision(10) << floatValue;
+                oss << std::setprecision(kind == ValueKind::Float32 ? 9 : 10) << floatValue;
                 std::string s = oss.str();
                 // Nokta yoksa ".0" ekle (saQut float değerleri her zaman nokta içerir)
                 if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
@@ -112,7 +144,9 @@ struct Value {
     std::string typeName() const {
         switch (kind) {
             case ValueKind::Int:     return "int";
+            case ValueKind::LongInt: return "longint";
             case ValueKind::Float:   return "float";
+            case ValueKind::Float32: return "float";
             case ValueKind::Decimal: return "decimal";
             case ValueKind::String:  return "string";
             case ValueKind::Ref:     return "ref";

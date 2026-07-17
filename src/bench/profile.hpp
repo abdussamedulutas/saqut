@@ -265,7 +265,8 @@ static void walkAST(ASTNode* node, ASTStats& out) {
         }
         case ASTKind::ImportDecl:   ++out.declarations; ++out.importDecls; break;
         case ASTKind::StructDecl:
-        case ASTKind::EnumDecl:     ++out.declarations; break;
+        case ASTKind::EnumDecl:
+        case ASTKind::FfiDecl:      ++out.declarations; break;
 
         // ── Statements ────────────────────────────────────────────────────────
         case ASTKind::Block:
@@ -464,13 +465,6 @@ inline void printBenchProfile(const BenchProfile& p,
         while (ins > 0) { s.insert(ins, "."); ins -= 3; }
         return s;
     };
-    auto ns2us = [&](uint64_t ticks) -> std::string {
-        uint64_t ns = p.ticksToNs(ticks);
-        if (ns < 1000) return std::to_string(ns) + "ns";
-        if (ns < 1'000'000) return std::to_string(ns / 1000) + "µs";
-        return std::to_string(ns / 1'000'000) + "ms";
-    };
-
     std::cout << "\n";
     std::cout << "╔══════════════════════════════════════════════════════╗\n";
     std::cout << "║           saQut Aşama Profil Raporu                 ║\n";

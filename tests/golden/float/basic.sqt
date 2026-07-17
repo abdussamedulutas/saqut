@@ -1,11 +1,13 @@
+// ADR-040: `double` = 64-bit IEEE (temiz ondalık); float32 ayrımı için
+// bkz. numeric_widths.sqt (single precision davranışı).
 int main() {
-    float x = 3.14;
-    float y = 2.0;
+    double x = 3.14;
+    double y = 2.0;
     print(x + y);
     print(x * y);
     print(x - y);
     print(x / y);
-    float z = 1;
+    double z = 1;
     print(z);
     return 0;
 }

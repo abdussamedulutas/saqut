@@ -73,6 +73,14 @@ private:
                        const SourceLocation& loc = {});
     void emitIntToFloat(int destSlot, int srcSlot,
                         const SourceLocation& loc = {});
+    void emitLoadFloat32(int destSlot, double value,
+                         const SourceLocation& loc = {});
+    void emitLoadLong(int destSlot, long long value,
+                      const SourceLocation& loc = {});
+    void emitIntToFloat32(int destSlot, int srcSlot,
+                          const SourceLocation& loc = {});
+    void emitIntToLong(int destSlot, int srcSlot,
+                       const SourceLocation& loc = {});
     void emitLoadDecimal(int destSlot, const DecimalValue& value,
                          const SourceLocation& loc = {});
     void emitIntToDecimal(int destSlot, int srcSlot,

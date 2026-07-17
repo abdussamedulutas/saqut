@@ -144,8 +144,14 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   - Optimizasyon: constant folding (int/bool/logical) + dead code elimination (W003 dahil)
   - IR üreteci (3-adresli, slot tabanlı) + bytecode VM (yorumlayıcı döngü)
   - CLI: `tokens` / `ast` / `symbols` / `check` / `ir` / `run` / `exec` / `bench` / `lsp` / `dap`
-  - **Tipler:** `int`, `float`, `bool`, `string`, `decimal`, `byte` (0-255, #86),
-    `enum`, `struct` (nested dahil), `array`, nullable `T?`
+  - **Tipler:** `int` (32-bit), `longint` (64-bit, #113/ADR-040), `float`
+    (32-bit IEEE single), `double` (64-bit IEEE double), `bool`, `string`,
+    `decimal`, `byte` (0-255, #86), `enum`, `struct` (nested dahil), `array`,
+    nullable `T?`. **Sayısal genişlik sözleşmesi (ADR-040):** `int` taşması
+    tanımlı 2's-complement wrap; `longint` rank kulesi dışında izole (int→longint
+    kayıpsız serbest, longint↔float/double/decimal yalnızca açık `as`); `float`
+    gerçek 32-bit single (precision kaybı gözlemlenir), `double` 64-bit; çıplak
+    ondalık literal varsayılan `double`; VM ≡ JIT birebir (diferansiyel sözleşme).
   - **Operatörler:** aritmetik, bitwise, mantıksal, karşılaştırma, tüm bileşik atamalar (`%=` dahil)
   - **Kontrol akışı:** `if/else`, `for`, `while`, `do-while`, `switch-case`, `break`/`continue`/`return`
   - **Hata yönetimi:** `try/catch/throw` (ADR-025), cast `as` (ADR-026)
@@ -162,8 +168,10 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
     aynı IR); ikincil ad alanı (`array::push(arr,12)`, `string::upper(s)`,
     `struct::toJson(p)`). Struct alanı builtin'i gölgeler (çağrı hatası).
     Eski `ElemTip::metod` W006 ile çalışır, v0.7.0'da kalkar.
-  - **byte tipi (#86, ADR-026 genişlemesi):** 8-bit işaretsiz değer tipi
-    (0-255); VM'de int taşınır. Literal bağlam-güdümlü + aralık denetimi
+  - **byte tipi (#86, ADR-026 genişlemesi; ADR-040 kimlik kararı):** 0-255
+    aralık-kısıtlı değer tipi — gerçek 8-bit wrap DEĞİL, aritmetikte int'e
+    terfi eden aralık-denetimli sayı (`byte+byte→int`); VM'de int taşınır.
+    Literal bağlam-güdümlü + aralık denetimi
     (`byte b=300` derleme hatası); aritmetikte int'e terfi (`byte+byte→int`,
     bitwise dahil); cast `int↔byte` (int→byte fallible, CAST_INT_TO_BYTE_CHECKED),
     `byte→string`; `byte↔float/decimal` ve `string→byte` yasak (önce int'e).
@@ -269,6 +277,10 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - `docs/adr/ADR-038-determinizm-surum-uyumlulugu.md` — Determinizm + sürüm uyumluluğu
   sözleşmesi: gözlemlenen davranış = sözleşme; PATCH(bugfix+backport+yank) /
   MINOR(donuk yüzey, iki-yön, GC+perf) / MAJOR(yeni ürün); serileştirme çıktısı donar.
+- `docs/adr/ADR-040-sayisal-tip-genislikleri.md` — Sayısal tip genişlikleri (#113):
+  `int`=32-bit (tanımlı wrap), `longint`=64-bit (rank kulesi dışı izole),
+  `float`=32-bit single / `double`=64-bit (ayrı ValueKind), `byte`=aralık-kısıtlı
+  int'e terfi; VM≡JIT birebir (Faz 1–4 tamam).
 - `examples/fibonacci.sqt` — geçerli referans program.
 - `examples/parser-stress/` — yalnızca parser'ı zorlayan, **geçerli olmayan** fixture'lar.
 

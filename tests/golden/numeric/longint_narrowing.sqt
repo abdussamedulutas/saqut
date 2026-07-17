@@ -1,0 +1,7 @@
+// ADR-040: longint → int gizli dönüşüm yasak (rank kulesi dışı, açık `as` gerek).
+int main() {
+    longint L = 5000000000;
+    int i = L;          // E003: longint → int requires explicit cast
+    print(i);
+    return 0;
+}

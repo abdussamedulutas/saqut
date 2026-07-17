@@ -68,7 +68,9 @@ void DapHandler::sendEvent(const std::string& event,
 std::string DapHandler::valueToString(const Value& v, int depth) const {
     switch (v.kind) {
         case ValueKind::Int:     return std::to_string(v.intValue);
-        case ValueKind::Float:   {
+        case ValueKind::LongInt: return std::to_string(v.int64Value);
+        case ValueKind::Float:
+        case ValueKind::Float32: {
             std::ostringstream ss;
             ss << v.floatValue;
             return ss.str();

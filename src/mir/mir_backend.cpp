@@ -53,6 +53,18 @@ extern "C" void rt_jit_print_float(double v) {
     std::cout << s << "\n";
 }
 
+// ── print(float32) trampoline'i — VM'in Value::toString() Float32 dalıyla BİREBİR
+// (setprecision(9) + nokta yoksa ".0"). Argüman JIT'te MIR_T_F register olduğundan
+// çağrı öncesi F2D ile double'a genişletilip buraya double gelir. ─────────────
+extern "C" void rt_jit_print_float32(double v) {
+    std::ostringstream oss;
+    oss << std::setprecision(9) << (float)v;
+    std::string s = oss.str();
+    if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
+        s += ".0";
+    std::cout << s << "\n";
+}
+
 // ── print(string) trampoline'i (Dilim 3, ADR-037). Argüman, JIT register'ında
 // pointer olarak taşınan bir StringObject*'tir (kutulanmış string). VM'in
 // Value::toString() String dalı ham içeriği döndürür (value.hpp:104), print
@@ -104,6 +116,19 @@ extern "C" void* rt_jit_float_to_str(double v) {
 }
 extern "C" void* rt_jit_bool_to_str(int64_t v) {
     g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(v ? "true" : "false"));
+    return g_jitRuntimeStrings.back().get();
+}
+// ADR-040: longint (int64) → string. VM CAST_LONG_TO_STR ile birebir (to_string).
+extern "C" void* rt_jit_long_to_str(int64_t v) {
+    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(std::to_string(v)));
+    return g_jitRuntimeStrings.back().get();
+}
+// ADR-040: float32 → string. VM CAST_FLOAT32_TO_STR ile birebir (setprecision 9).
+// Argüman gerçek single (MIR_T_F) — F2D genişletmesi olmadan doğrudan.
+extern "C" void* rt_jit_float32_to_str(float v) {
+    std::ostringstream oss;
+    oss << std::setprecision(9) << v;
+    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(oss.str()));
     return g_jitRuntimeStrings.back().get();
 }
 extern "C" int64_t rt_jit_str_to_int(void* s) {
@@ -220,10 +245,15 @@ extern "C" void rt_jit_fdiv_zero() {
     std::exit(1);
 }
 
-// SlotType → MIR register tipi (MIRPLAN §3). Dilim 1.5'te yalnızca Int/Float
-// buraya ulaşır (diğerleri wholeProgramSupported'ta reddedilir).
+// SlotType → MIR register tipi (MIRPLAN §3; ADR-040 genişletmesi).
+//   Float   → MIR_T_D (64-bit double)
+//   Float32 → MIR_T_F (32-bit single — gerçek precision, VM ile birebir)
+//   LongInt → MIR_T_I64 (int gibi ama EXT32 yok, tam 64-bit)
+//   diğer (Int/Str/Decimal/…) → MIR_T_I64
 MIR_type_t mirType(SlotType t) {
-    return t == SlotType::Float ? MIR_T_D : MIR_T_I64;
+    if (t == SlotType::Float)   return MIR_T_D;
+    if (t == SlotType::Float32) return MIR_T_F;
+    return MIR_T_I64;
 }
 
 // Bir fonksiyonun dönüş türü — ilk RETURN'ün src slot türünden (tip denetleyici
@@ -266,6 +296,11 @@ bool opcodeSupported(const Instruction& instr) {
         case Opcode::CAST_STR_TO_FLOAT:
         case Opcode::CAST_FLOAT_TO_INT_CHECKED:
         case Opcode::CAST_INT_TO_BYTE_CHECKED:
+        // ADR-040 fallible cast'ler — nullable hedef JIT'te desteklenmez
+        case Opcode::CAST_STR_TO_LONG:
+        case Opcode::CAST_STR_TO_FLOAT32:
+        case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
+        case Opcode::LONG_TO_INT_CHECKED:
             return instr.left != 1;  // nullable hedef → reddet
         // Dilim 3: decimal (kutulu — pointer register'da, aritmetik runtime call)
         case Opcode::LOAD_DECIMAL:
@@ -297,6 +332,22 @@ bool opcodeSupported(const Instruction& instr) {
         case Opcode::FNEG:
         case Opcode::INT_TO_FLOAT:
         case Opcode::FLOAT_TO_INT:
+        // ADR-040: longint (64-bit) aritmetik — EXT32'siz native MIR op
+        case Opcode::LOAD_LONG:
+        case Opcode::LADD: case Opcode::LSUB: case Opcode::LMUL:
+        case Opcode::LDIV: case Opcode::LMOD: case Opcode::LNEG:
+        case Opcode::LBAND: case Opcode::LBOR: case Opcode::LBXOR:
+        case Opcode::LSHL: case Opcode::LSHR: case Opcode::LBNOT:
+        case Opcode::INT_TO_LONG:
+        // ADR-040: float32 (32-bit single) aritmetik — native MIR_T_F op
+        case Opcode::LOAD_FLOAT32:
+        case Opcode::F32ADD: case Opcode::F32SUB: case Opcode::F32MUL:
+        case Opcode::F32DIV: case Opcode::F32NEG:
+        case Opcode::INT_TO_FLOAT32: case Opcode::FLOAT32_TO_INT:
+        case Opcode::FLOAT_TO_FLOAT32: case Opcode::FLOAT32_TO_FLOAT:
+        // ADR-040: hatasız longint/float32 string cast'leri
+        case Opcode::CAST_LONG_TO_STR:
+        case Opcode::CAST_FLOAT32_TO_STR:
         // Karşılaştırmalar — operand türüne göre int/float varyantı codegen'de seçilir
         case Opcode::LESS:
         case Opcode::LESS_EQUAL:
@@ -350,9 +401,10 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
             }
         }
         for (SlotType st : fn.slotTypes) {
-            // Int/Float register-skaler; Str/Decimal kutulu pointer (I64, ADR-037).
-            // Ref hâlâ sonraki dilimde (shadow stack).
-            if (st != SlotType::Int && st != SlotType::Float &&
+            // Int/LongInt/Float/Float32 register-skaler; Str/Decimal kutulu
+            // pointer (I64, ADR-037). Ref hâlâ sonraki dilimde (shadow stack).
+            if (st != SlotType::Int && st != SlotType::LongInt &&
+                st != SlotType::Float && st != SlotType::Float32 &&
                 st != SlotType::Str && st != SlotType::Decimal) {
                 outReason.functionName = name;
                 outReason.opcodeName =
@@ -396,6 +448,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t printImport     = MIR_new_import(ctx, "rt_jit_print_int");
     MIR_item_t printFProto     = MIR_new_proto(ctx, "print_f_proto", 0, nullptr, 1, MIR_T_D, "v");
     MIR_item_t printFImport    = MIR_new_import(ctx, "rt_jit_print_float");
+    // ADR-040: float32 print (arg F2D ile double'a genişletilir → MIR_T_D)
+    MIR_item_t printF32Proto   = MIR_new_proto(ctx, "print_f32_proto", 0, nullptr, 1, MIR_T_D, "v");
+    MIR_item_t printF32Import  = MIR_new_import(ctx, "rt_jit_print_float32");
     MIR_item_t printSProto     = MIR_new_proto(ctx, "print_s_proto", 0, nullptr, 1, MIR_T_I64, "v");
     MIR_item_t printSImport    = MIR_new_import(ctx, "rt_jit_print_str");
     // STRING_CONCAT / string ==,!= runtime call'ları (ret I64 pointer/bool, 2×I64 arg)
@@ -414,6 +469,11 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t castF2SImport   = MIR_new_import(ctx, "rt_jit_float_to_str");
     MIR_item_t castB2SProto    = MIR_new_proto(ctx, "cast_b2s_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
     MIR_item_t castB2SImport   = MIR_new_import(ctx, "rt_jit_bool_to_str");
+    // ADR-040: longint→str (arg I64), float32→str (arg MIR_T_F). ret I64 pointer.
+    MIR_item_t castL2SProto    = MIR_new_proto(ctx, "cast_l2s_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
+    MIR_item_t castL2SImport   = MIR_new_import(ctx, "rt_jit_long_to_str");
+    MIR_item_t castF322SProto  = MIR_new_proto(ctx, "cast_f322s_proto", 1, &i64Ret, 1, MIR_T_F, "v");
+    MIR_item_t castF322SImport = MIR_new_import(ctx, "rt_jit_float32_to_str");
     MIR_item_t castS2IProto    = MIR_new_proto(ctx, "cast_s2i_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
     MIR_item_t castS2IImport   = MIR_new_import(ctx, "rt_jit_str_to_int");
     MIR_item_t castS2FProto    = MIR_new_proto(ctx, "cast_s2f_proto", 1, &dRet, 1, MIR_T_I64, "v");
@@ -531,6 +591,19 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             return slotKindOf(fn, in.left) == SlotType::Float ||
                    slotKindOf(fn, in.right) == SlotType::Float;
         };
+        // ADR-040: float32 operand mı (MIR single karşılaştırma varyantı için).
+        auto float32Operands = [&](const Instruction& in) {
+            return slotKindOf(fn, in.left) == SlotType::Float32 ||
+                   slotKindOf(fn, in.right) == SlotType::Float32;
+        };
+        // Karşılaştırma MIR op'unu operand türüne göre seç: int/longint (I),
+        // double (D), float32 (F). i=int, d=double, f=single opu.
+        auto cmpOp = [&](const Instruction& in, MIR_insn_code_t iOp,
+                         MIR_insn_code_t dOp, MIR_insn_code_t fOp) {
+            if (floatOperands(in))   return dOp;
+            if (float32Operands(in)) return fOp;
+            return iOp;
+        };
         // Eşitlik karşılaştırması string operand mı alıyor (içerik karşılaştırması
         // → rt_jit_string_eq runtime call, ADR-023). Tip denetleyici iki operandın
         // da string olmasını garanti eder (karışık yasak).
@@ -577,6 +650,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     break;
                 case Opcode::CAST_BOOL_TO_STR:
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castB2SProto), MIR_new_ref_op(ctx, castB2SImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_LONG_TO_STR:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castL2SProto), MIR_new_ref_op(ctx, castL2SImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_FLOAT32_TO_STR:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF322SProto), MIR_new_ref_op(ctx, castF322SImport), R(instr.dest), R(instr.src)));
                     break;
                 case Opcode::CAST_STR_TO_INT:
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2IProto), MIR_new_ref_op(ctx, castS2IImport), R(instr.dest), R(instr.src)));
@@ -634,13 +713,15 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 case Opcode::CAST_STR_TO_DECIMAL:
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decS2DImport), R(instr.dest), R(instr.src)));
                     break;
-                case Opcode::LOAD_SLOT:
-                    // Float slot kopyası DMOV, diğerleri MOV (pointer/int I64).
-                    MIR_append_insn(ctx, func,
-                        MIR_new_insn(ctx,
-                            slotKindOf(fn, instr.dest) == SlotType::Float ? MIR_DMOV : MIR_MOV,
-                            R(instr.dest), R(instr.src)));
+                case Opcode::LOAD_SLOT: {
+                    // Float→DMOV, Float32→FMOV, diğerleri MOV (pointer/int/longint I64).
+                    SlotType dk = slotKindOf(fn, instr.dest);
+                    MIR_insn_code_t mv = dk == SlotType::Float   ? MIR_DMOV
+                                       : dk == SlotType::Float32 ? MIR_FMOV
+                                       : MIR_MOV;
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, mv, R(instr.dest), R(instr.src)));
                     break;
+                }
                 // ── int32 aritmetiği (#113/ADR-040) ──────────────────────
                 // saQut `int` 32-bit; MIR "S"-op'ları alt 32-bit'te çalışır ama
                 // sonucun üst yarısı TANIMSIZ (MIR.md §insns) → her sonucu EXT32
@@ -734,6 +815,114 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 case Opcode::FLOAT_TO_INT:
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_D2I, R(instr.dest), R(instr.src)));
                     break;
+                // ── LongInt aritmetiği (ADR-040) — native 64-bit, EXT32 YOK ──
+                case Opcode::LOAD_LONG:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV, R(instr.dest), MIR_new_int_op(ctx, instr.int64Value)));
+                    break;
+                case Opcode::LADD:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_ADD, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::LSUB:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_SUB, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::LMUL:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MUL, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::LDIV: {
+                    MIR_label_t okLabel = MIR_new_label(ctx);
+                    MIR_label_t doDiv = MIR_new_label(ctx);
+                    MIR_label_t doneLabel = MIR_new_label(ctx);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_int_op(ctx, 0)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, divZeroProto), MIR_new_ref_op(ctx, divZeroImport)));
+                    MIR_append_insn(ctx, func, okLabel);
+                    // INT64_MIN / -1 → tuzak → 2's-complement sonucu INT64_MIN
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, doDiv), R(instr.right), MIR_new_int_op(ctx, -1)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, doDiv), R(instr.left), MIR_new_int_op(ctx, INT64_MIN)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV, R(instr.dest), MIR_new_int_op(ctx, INT64_MIN)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
+                    MIR_append_insn(ctx, func, doDiv);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_DIV, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, doneLabel);
+                    break;
+                }
+                case Opcode::LMOD: {
+                    MIR_label_t okLabel = MIR_new_label(ctx);
+                    MIR_label_t doMod = MIR_new_label(ctx);
+                    MIR_label_t doneLabel = MIR_new_label(ctx);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_int_op(ctx, 0)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, modZeroProto), MIR_new_ref_op(ctx, modZeroImport)));
+                    MIR_append_insn(ctx, func, okLabel);
+                    // INT64_MIN % -1 → tuzak → 0
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, doMod), R(instr.right), MIR_new_int_op(ctx, -1)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, doMod), R(instr.left), MIR_new_int_op(ctx, INT64_MIN)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV, R(instr.dest), MIR_new_int_op(ctx, 0)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
+                    MIR_append_insn(ctx, func, doMod);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOD, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, doneLabel);
+                    break;
+                }
+                case Opcode::LNEG:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_NEG, R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::LBAND:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_AND, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::LBOR:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_OR, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::LBXOR:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_XOR, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::LSHL:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_LSH, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::LSHR:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_RSH, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::LBNOT:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_XOR, R(instr.dest), R(instr.src), MIR_new_int_op(ctx, -1)));
+                    break;
+                case Opcode::INT_TO_LONG:
+                    // int (I64 register, sign-extended) → longint: kimlik kopya.
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV, R(instr.dest), R(instr.src)));
+                    break;
+                // ── Float32 aritmetiği (ADR-040) — native single MIR_T_F op ──
+                case Opcode::LOAD_FLOAT32:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_FMOV, R(instr.dest), MIR_new_float_op(ctx, (float)instr.floatValue)));
+                    break;
+                case Opcode::F32ADD:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_FADD, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::F32SUB:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_FSUB, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::F32MUL:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_FMUL, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                case Opcode::F32DIV: {
+                    MIR_label_t okLabel = MIR_new_label(ctx);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_FBNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_float_op(ctx, 0.0f)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, fdivZeroProto), MIR_new_ref_op(ctx, fdivZeroImport)));
+                    MIR_append_insn(ctx, func, okLabel);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_FDIV, R(instr.dest), R(instr.left), R(instr.right)));
+                    break;
+                }
+                case Opcode::F32NEG:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_FNEG, R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::INT_TO_FLOAT32:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_I2F, R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::FLOAT32_TO_INT:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_F2I, R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::FLOAT_TO_FLOAT32:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_D2F, R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::FLOAT32_TO_FLOAT:
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_F2D, R(instr.dest), R(instr.src)));
+                    break;
                 case Opcode::BAND:
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_AND, R(instr.dest), R(instr.left), R(instr.right)));
                     break;
@@ -756,16 +945,16 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     break;
                 // ── Karşılaştırmalar — float operand ise D-varyantı ──────
                 case Opcode::LESS:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DLT : MIR_LT, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_LT, MIR_DLT, MIR_FLT), R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::LESS_EQUAL:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DLE : MIR_LE, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_LE, MIR_DLE, MIR_FLE), R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::GREATER:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DGT : MIR_GT, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_GT, MIR_DGT, MIR_FGT), R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::GREATER_EQUAL:
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DGE : MIR_GE, R(instr.dest), R(instr.left), R(instr.right)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_GE, MIR_DGE, MIR_FGE), R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::EQUAL_EQUAL:
                     if (stringOperands(instr)) {
@@ -775,7 +964,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                                 MIR_new_ref_op(ctx, strEqImport),
                                 R(instr.dest), R(instr.left), R(instr.right)));
                     } else {
-                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DEQ : MIR_EQ, R(instr.dest), R(instr.left), R(instr.right)));
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_EQ, MIR_DEQ, MIR_FEQ), R(instr.dest), R(instr.left), R(instr.right)));
                     }
                     break;
                 case Opcode::NOT_EQUAL:
@@ -788,7 +977,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_append_insn(ctx, func,
                             MIR_new_insn(ctx, MIR_XOR, R(instr.dest), R(instr.dest), MIR_new_int_op(ctx, 1)));
                     } else {
-                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, floatOperands(instr) ? MIR_DNE : MIR_NE, R(instr.dest), R(instr.left), R(instr.right)));
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_NE, MIR_DNE, MIR_FNE), R(instr.dest), R(instr.left), R(instr.right)));
                     }
                     break;
                 case Opcode::JMP:
@@ -821,6 +1010,16 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     if (at == SlotType::Float)
                         MIR_append_insn(ctx, func,
                             MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printFProto), MIR_new_ref_op(ctx, printFImport), R(a)));
+                    else if (at == SlotType::Float32) {
+                        // float32 argümanı F2D ile double'a genişletilip print_f32'ye
+                        // geçilir (VM float32 toString biçimi trampolinde uygulanır).
+                        static int f32TmpCounter = 0;
+                        std::string tmpName = "f32print" + std::to_string(f32TmpCounter++);
+                        MIR_reg_t tmp = MIR_new_func_reg(ctx, func->u.func, MIR_T_D, tmpName.c_str());
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_F2D, MIR_new_reg_op(ctx, tmp), R(a)));
+                        MIR_append_insn(ctx, func,
+                            MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printF32Proto), MIR_new_ref_op(ctx, printF32Import), MIR_new_reg_op(ctx, tmp)));
+                    }
                     else if (at == SlotType::Str)
                         MIR_append_insn(ctx, func,
                             MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printSProto), MIR_new_ref_op(ctx, printSImport), R(a)));
@@ -848,7 +1047,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_module(ctx, mod);
     MIR_load_external(ctx, "rt_jit_print_int",   reinterpret_cast<void*>(rt_jit_print_int));
     MIR_load_external(ctx, "rt_jit_print_float", reinterpret_cast<void*>(rt_jit_print_float));
+    MIR_load_external(ctx, "rt_jit_print_float32", reinterpret_cast<void*>(rt_jit_print_float32));
     MIR_load_external(ctx, "rt_jit_print_str",   reinterpret_cast<void*>(rt_jit_print_str));
+    MIR_load_external(ctx, "rt_jit_long_to_str",    reinterpret_cast<void*>(rt_jit_long_to_str));
+    MIR_load_external(ctx, "rt_jit_float32_to_str", reinterpret_cast<void*>(rt_jit_float32_to_str));
     MIR_load_external(ctx, "rt_jit_string_concat", reinterpret_cast<void*>(rt_jit_string_concat));
     MIR_load_external(ctx, "rt_jit_string_eq",     reinterpret_cast<void*>(rt_jit_string_eq));
     MIR_load_external(ctx, "rt_jit_int_to_str",           reinterpret_cast<void*>(rt_jit_int_to_str));

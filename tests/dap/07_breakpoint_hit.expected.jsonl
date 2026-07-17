@@ -5,6 +5,6 @@
 {"body": null, "command": "configurationDone", "request_seq": 4, "seq": 104, "success": true, "type": "response"}
 {"body": {"reason": "breakpoint", "threadId": 1}, "event": "stopped", "seq": 105, "type": "event"}
 {"body": {"allThreadsContinued": true}, "command": "continue", "request_seq": 5, "seq": 106, "success": true, "type": "response"}
-{"body": {"category": "stdout", "output": "3\n"}, "event": "output", "seq": 107, "type": "event"}
+{"body": {"category": "stdout", "output": "3"}, "event": "output", "seq": 107, "type": "event"}
 {"body": {"exitCode": 0}, "event": "exited", "seq": 108, "type": "event"}
 {"body": null, "event": "terminated", "seq": 109, "type": "event"}

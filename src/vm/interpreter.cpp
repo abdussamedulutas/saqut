@@ -1119,9 +1119,9 @@ void Interpreter::executeHostFunction(const std::string&       name,
             const Value& val = slots[argSlots[0]];
             // Faz 7 (#105): DAP modunda çıktı sink üzerinden output event'ine
             // gider — protokol stdout'una çıplak bayt sızmaz.
-            std::string text = val.toString() + "\n";
+            std::string text = val.toString();
             if (outputSink_) outputSink_(text);
-            else             std::cout << text;
+            else             std::cout << text << std::flush;
         }
         return;
     }

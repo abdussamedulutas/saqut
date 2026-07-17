@@ -2,6 +2,6 @@
 {"body": null, "event": "initialized", "seq": 101, "type": "event"}
 {"body": null, "command": "launch", "request_seq": 2, "seq": 102, "success": true, "type": "response"}
 {"body": null, "command": "configurationDone", "request_seq": 3, "seq": 103, "success": true, "type": "response"}
-{"body": {"category": "stdout", "output": "3\n"}, "event": "output", "seq": 104, "type": "event"}
+{"body": {"category": "stdout", "output": "3"}, "event": "output", "seq": 104, "type": "event"}
 {"body": {"exitCode": 0}, "event": "exited", "seq": 105, "type": "event"}
 {"body": null, "event": "terminated", "seq": 106, "type": "event"}

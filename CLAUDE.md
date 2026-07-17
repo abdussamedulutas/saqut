@@ -39,9 +39,9 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   kullanıcı talimatı, dispatch noktası (`run.hpp`'deki tek `if`) değişmez,
   yalnızca bayrağın varsayılan yönü döner. **MIR entegrasyon detayı
   (opcode→MIR eşleme tablosu, Value ABI kutulama kararı, GC shadow-stack
-  somutlaştırma, hata yönetimi açık sorusu, çoklu-iş-parçacığı uyumu) →
-  `MIRPLAN.md`** (kök dizin) — koda başlamadan önce hâlâ **DUR ve sor**
-  kısıtı geçerli, bu belge yalnızca zemin hazırlığı.
+  somutlaştırma, hata yönetimi açık sorusu) → ADR-032 + kaldırılan
+  `MIRPLAN.md` git history'de** — koda başlamadan önce hâlâ **DUR ve sor**
+  kısıtı geçerli.
   **Optimizasyon seviyesi determinizm gerekçesiyle kısıtlanmaz** (kullanıcı
   düzeltmesi): MIR'in kendi RA/DCE gibi klasik codegen optimizasyonları
   LLVM'in UB-sömüren agresif dönüşümlerinden farklı, aynı girdi→aynı çıktı
@@ -180,7 +180,7 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   fetch-öncesi adım kontrolü (satır sınırındaki instruction yutulması
   düzeltildi — print adımlamada çalışmıyordu); duraklama satırı = sıradaki
   instruction. `tests/dap/` 10 senaryo.
-- **LSP/DAP kurtarma planı** (`docs/prompt-lsp-dap-kurtarma.md`, Faz 0–6):
+- **LSP/DAP kurtarma planı** (Faz 0–6, tamamlandı — plan belgesi kaldırıldı):
   Faz 0 tamam — `tests/lsp/` golden test altyapısı kuruldu. Faz 1 tamam —
   `ModuleLoader` artık bir `SourceOverlay` seam'i (`src/module/module_loader.hpp`)
   kabul ediyor; `DocumentStore::runPipeline` açık tüm belgeleri overlay olarak
@@ -231,17 +231,15 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - **İlke:** Önce uçtan uca tek **dikey dilim**, sonra çerçeve. Erken soyutlamadan kaçın.
 
 ## Belge haritası
-- `PLAN.md` (kök dizin) — 0.8.0/0.9.0 sıralı iş listesi (mevcut GitHub
-  issue'ların özeti, yeni tasarım kararı içermez).
-- `MIRPLAN.md` (kök dizin) — MIR entegrasyon tasarım belgesi: opcode→MIR
-  eşleme tablosu, Value ABI (kutulama), GC shadow-stack somutlaştırma, hata
-  yönetimi açık sorusu, çoklu-iş-parçacığı uyumu notu. Kod yazımından önce
-  DUR-ve-sor kısıtı hâlâ geçerli.
-- `docs/CLI.md` — CLI parametre formatı tasarımı: `--allow` (yalnızca
-  permission/capability), GC bayrakları ayrı/değişmedi, servis bayrakları
-  komuta özgü kalır (v3, onaylı).
+> **2026-07-16 agresif belge temizliği:** kök/`docs/` altındaki ADR-dışı tüm
+> snapshot/plan/handoff md'leri kaldırıldı (PLAN, MIRPLAN, TODO, TOOLING-PLAN,
+> docs/CLI, architecture, benchmark, durum-envanteri, issues, roadmap-frontend,
+> sonnet-handoff, tooling-buyuk-resim, transkript, kod-standardı, docs/kod/*,
+> lsp/dap-tasarim). İçerikleri git history'de. Anlık durum artık tek yerde:
+> **GitHub issue #101 (pinli Canlı Durum Panosu)**. Kalıcı kararlar → `docs/adr/`.
+- **Canlı durum → GitHub issue #101** (pinli) — aktif dal/sürüm, MIR JIT dilim
+  tablosu, açık borç, karar-bekleyenler, sürüm kuyruğu. Her iş sonunda güncellenir.
 - `readme.md` — toolbox çerçevesi, built-vs-planned, dil kimliği, çalıştırma modeli.
-- `docs/kod-standardı.md` — C++ kod standardı (biçim, adlandırma, yorum, modern C++ kullanımı).
 - `docs/fikirler.md` — ADR-001…005 (backend stratejisi, parser, header-only, token, IR).
 - `docs/adr-frontend-analiz.md` — ADR-006…028 (frontend, analiz/optimizasyon,
   çalıştırma modeli, FFI, interface, bellek, **değer/referans semantiği, null
@@ -271,16 +269,11 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - `docs/adr/ADR-038-determinizm-surum-uyumlulugu.md` — Determinizm + sürüm uyumluluğu
   sözleşmesi: gözlemlenen davranış = sözleşme; PATCH(bugfix+backport+yank) /
   MINOR(donuk yüzey, iki-yön, GC+perf) / MAJOR(yeni ürün); serileştirme çıktısı donar.
-- `docs/sonnet-handoff.md` — **Sonnet için uygulama promptu** (ADR-020…024'ü koda
-  döken sıralı görev planı; ilk görev: GC-hazır nesne modeli + array runtime).
-- `docs/roadmap-frontend.md` — faz-faz uygulama planı (Faz 0–4 → fibonacci).
-- `docs/kod/` — modül başına mimari dokümantasyon (15 belge + indeks).
-- `docs/transkript-frontend-tasarim.md` — tasarım oturumu transkripti.
 - `examples/fibonacci.sqt` — geçerli referans program.
 - `examples/parser-stress/` — yalnızca parser'ı zorlayan, **geçerli olmayan** fixture'lar.
 
 ## GitHub issue yönetimi
-- Repo: `github.com/abdussamedulutas/saqut` (GitHub). **Her zaman `gh` CLI kullan.**
+- Repo: `github.com/saqutlang/saqut` (GitHub). **Her zaman `gh` CLI kullan.**
   `scripts/gitea.py` ve git.saqut.com (Gitea) artık kullanılmıyor.
 - **Issue işlemleri:** `gh issue list`, `gh issue create`, `gh issue edit`,
   `gh issue comment`, `gh label list`, `gh pr create` vb.
@@ -338,8 +331,8 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
 - Ana dal `0.1.0`; geliştirme branchi `0.2.0`. commit/push kullanıcı isteyince yapılır.
 - `build/` artık git'te izlenmiyor (.gitignore'da). `wiki/` klasörü repo'ya dahil edildi.
 - Wiki GitHub repo'sundaki `wiki/` klasöründen yönetilir.
-- **Kod standardı:** `docs/kod-standardı.md`'ye uy. `.clang-format` biçimi otomatik
-  uygular; adlandırma, yorum dili, `class`/`struct` ayrımı gibi kurallar el ile
-  sağlanır. Yeni kod yazarken veya mevcut kodu değiştirirken bu standarda uy.
-  Tüm yorumlar Türkçe, tüm tanımlayıcılar İngilizce. Header-only eğilimli
-  (ADR-003), `#pragma once` değil `#ifndef` guard.
+- **Kod standardı** (ayrı belge kaldırıldı — çekirdek kurallar burada):
+  `.clang-format` biçimi otomatik uygular; adlandırma, yorum dili, `class`/`struct`
+  ayrımı el ile sağlanır. **Tüm yorumlar Türkçe, tüm tanımlayıcılar İngilizce.**
+  Header-only eğilimli (ADR-003), `#pragma once` değil `#ifndef` guard. Yeni/mevcut
+  kod bu kurallara uyar.

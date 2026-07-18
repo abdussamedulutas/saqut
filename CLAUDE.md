@@ -3,6 +3,12 @@
 > Bu dosya her oturumda yüklenir. Amaç: projenin kimliğini, kilitli kararları,
 > mevcut durumu ve çalışma konvansiyonlarını hızlıca hatırlatmak.
 
+> **AI ekip/rol şeması → kök [`organization.md`](organization.md) tek kaynak.**
+> Roller (Architect/PM/Coder/Tester), iletişim disiplini, sub-agent kuralları,
+> escalation ve karar yetkisi orada tanımlı; bu dosyadaki "Rol Sistemi" bölümü
+> yalnızca mekanik uygulamaya (`.claude/hooks/role-guard.sh`) işaret eder —
+> şemayı burada tekrarlama, organization.md'yi güncelle.
+
 ## İletişim
 - **Kullanıcıyla TÜM yazışmalar Türkçe.** (Sahibi: Abdussamed ULUTAŞ.)
 - **Kullanıcı deneyimli bir derleyici mühendisi.** SemVer, yank, tokenizer, parser,
@@ -281,6 +287,15 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   `int`=32-bit (tanımlı wrap), `longint`=64-bit (rank kulesi dışı izole),
   `float`=32-bit single / `double`=64-bit (ayrı ValueKind), `byte`=aralık-kısıtlı
   int'e terfi; VM≡JIT birebir (Faz 1–4 tamam).
+- `docs/adr/ADR-041-self-hosted-stdlib-thin-runtime.md` — Dört katman (0 backend /
+  1 intrinsic / 2 host-FFI / 3 self-hosted stdlib); saf+ifade-edilebilir işlemler
+  saQut kaynağıyla yazılır (backend'e görünmez IR), backend yalnızca ~50 intrinsic +
+  tek host-ABI bilir → yeni backend maliyeti builtin sayısından bağımsız. Mekanik
+  karar ağacı (§3), 25 fonksiyon sınıflandırması (§5), paketleme A (§7), dikey-dilim
+  migrasyon (§8), CI invariant (§9). Şemsiye: issue #122; dilimler #123–#129;
+  borçlar #130–#132.
+- `docs/architecture.md` — Katman 0–3 mimarisinin bütünsel resmi + backend-bağımsızlık
+  temel ilkesi ("yeni backend maliyeti builtin sayısından bağımsız"). ADR-041 omurga.
 - `examples/fibonacci.sqt` — geçerli referans program.
 - `examples/parser-stress/` — yalnızca parser'ı zorlayan, **geçerli olmayan** fixture'lar.
 
@@ -350,31 +365,28 @@ git'te **izlenmez** (üretilmiş dosyalar; `cmake -B build && ninja -C build` il
   kod bu kurallara uyar.
 
 ## Rol Sistemi (AI iş bölümü)
-> Amaç: farklı işleri farklı, **yetkisi kısıtlı** ajanlara dağıtmak; sınırı davranışa
-> değil **mekanizmaya** dayamak. Roller `.claude/agents/*.md` subagent'ları olarak
-> tanımlıdır; yol-yetkisi `.claude/hooks/role-guard.sh` (PreToolUse, `agent_type`
-> anahtarlı) ile **mekanik** uygulanır (`exit 2` = engel).
+> Şema/gerekçe/hiyerarşi → **kök [`organization.md`](organization.md)** (tek kaynak,
+> burada tekrar etme). Roller `.claude/agents/*.md` subagent'ları olarak tanımlı;
+> yol-yetkisi + sub-agent kuralı `.claude/hooks/role-guard.sh` (PreToolUse,
+> `agent_type` anahtarlı) ile **mekanik** uygulanır (`exit 2` = engel).
 
-- **Dört rol / iletişim dosyası / model / sınır:**
-  | Rol | subagent | iletişim dosyası | model | mekanik sınır (hook) |
-  |---|---|---|---|---|
-  | **Mimar** | `architect` | `architect.md` | opus | `src/`'e Edit/Write YASAK |
-  | **Proje Yön.** | `project-manager` | `project.md` | opus | `src/`'e Edit/Write YASAK |
-  | **Kodcu** | `coder` | `coding.md` | sonnet | yalnızca `src/` + `coding.md` yazar |
-  | **Testçi** | `tester` | `testscale.md` | sonnet | `src/`'e her erişim (oku dahil) YASAK — kara kutu |
-- **İşleyiş:** Roller **birbiriyle doğrudan konuşmaz**; tüm iletişim kullanıcının
-  yönlendirmesiyle kök `*.md` iletişim dosyaları üzerinden. Kullanıcı köprüdür
-  ("kodcunun bulgusunu mimara okut, çözümü kodcuya ilet" vb.).
-- **İletişim dosyaları GEÇİCİ:** kök `architect.md`/`project.md`/`coding.md`/
-  `testscale.md` her iş sonunda sıfırlanır; `.gitignore`'da. Kalıcı bilgi buraya
-  DEĞİL — kalıcı karar `docs/adr/`, kalıcı planlanmış iş **GitHub issue**.
-- **Rol yoksa (ana ajan/orkestratör):** hook karışmaz, tam yetki. Sınırlar yalnızca
-  bir subagent'a devredilen iş içinde ısırır — kritik işi ilgili role devret.
-  ⚠️ **Rol verilmeden iş isteği gelirse DUR ve sor:** dosya değiştiren/kod yazan/
-  issue açan gibi somut bir iş, açık bir rol (mimar/PM/kodcu/testçi) atanmadan
-  istendiyse, doğrudan yapma — "bunu hangi rolde çalışayım?" diye sor. Yalnızca
-  rolden bağımsız işler (soru yanıtlama, dağıtım/orkestrasyon, salt-okuma keşif)
-  rolsüz sürdürülür.
-- **Kalıcı vs geçici katman:** GitHub issue = AI'lara ait kalıcı doküman/planlanmış
-  iş (geçici iş için DEĞİL). `docs/` + `docs/adr/` = değişmeyen bilgi/kararlar.
-  Kök `*.md` iletişim dosyaları = tek-iş ömürlü devir tamponu.
+- **Dört rol / iletişim dosyası / model:** Mimar=`architect`/`architect.md`/opus,
+  Proje Yön.=`project-manager`/`project.md`/opus, Kodcu=`coder`/`coding.md`/sonnet,
+  Testçi=`tester`/`testscale.md`/sonnet. Mekanik sınırların tam listesi
+  `role-guard.sh` başındaki yorumda; organizasyon mantığı organization.md'de.
+- **Sub-agent kuralı (mekanik, organization.md → Sub-Agent Rules):** her rol
+  **yalnızca kendi rolünü çoğaltabilir** (`subagent_type` kendisiyle aynı) ya da
+  fork edebilir; çapraz role delegasyon (`architect`→`coder` vb.) hook'ta engelli.
+  Hangi rolün açılacağına **yalnızca kullanıcı** karar verir.
+- **İletişim dosyası mülkiyeti (mekanik):** hiçbir rol başka rolün iletişim
+  dosyasını (`architect.md`/`project.md`/`coding.md`/`testscale.md`) yazamaz —
+  yalnızca kendisininkini. Roller birbiriyle doğrudan konuşmaz, köprü kullanıcı.
+- **Testçi — Dirty Repository Rule (mekanik):** repo kirliyken (`git status
+  --porcelain` boş değilse) testçinin hiçbir `Bash` çağrısı geçmez.
+- **İletişim dosyaları GEÇİCİ:** her iş sonunda sıfırlanır, `.gitignore`'da.
+  Kalıcı bilgi buraya DEĞİL — kalıcı karar `docs/adr/` (+ organizasyon şeması
+  `organization.md`), kalıcı planlanmış iş **GitHub issue**.
+- **Rol yoksa (ana ajan/orkestratör):** hook karışmaz, tam yetki. ⚠️ **Rol
+  verilmeden somut iş isteği gelirse DUR ve sor** (dosya değiştirme/kod yazma/
+  issue açma gibi); yalnızca rolden bağımsız işler (soru yanıtlama, orkestrasyon,
+  salt-okuma keşif) rolsüz sürdürülür.

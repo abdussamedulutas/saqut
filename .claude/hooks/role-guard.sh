@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
-# role-guard: PreToolUse kancası — aktif rol (agent_type) başına dosya-yolu
-# yetkisini MEKANİK uygular. Girdi: stdin'de JSON. Çıkış 2 = tool çağrısını engelle.
+# role-guard: PreToolUse kancası — aktif rol (agent_type) başına dosya-yolu,
+# iletişim-dosyası mülkiyeti ve sub-agent yetkisini MEKANİK uygular. Şema
+# kaynağı: kök organization.md — bu betik onun mekanik yansımasıdır. Girdi:
+# stdin'de JSON. Çıkış 2 = tool çağrısını engelle.
 #
-# Roller ve sınırlar:
+# Roller ve sınırlar (detay: organization.md):
 #   architect / project-manager : src/ altına Edit/Write yasak.
 #   coder                       : yalnızca src/ ve coding.md'ye Edit/Write.
-#   tester                      : src/'e her tür erişim (Read/Grep/Glob/Bash) yasak.
+#   tester                      : src/'e her tür erişim (Read/Grep/Glob/Bash)
+#                                 yasak; repo kirliyken Bash yasak (Dirty
+#                                 Repository Rule).
+#   (dördü)                     : başka rolün iletişim dosyasını Edit/Write
+#                                 edemez (Team Communication); Task/Agent ile
+#                                 yalnızca kendi rolünü ya da fork'unu açabilir
+#                                 (Sub-Agent Rules — self-replication only).
 # Rol yoksa (ana ajan) kanca karışmaz.
 
 input=$(cat)
@@ -18,8 +26,57 @@ tool=$(printf '%s' "$input" | jq -r '.tool_name // ""')
 
 path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.path // ""')
 cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // ""')
+sub=$(printf '%s' "$input" | jq -r '.tool_input.subagent_type // ""')
 
 deny() { echo "ROL-GUARD [$agent]: $1" >&2; exit 2; }
+
+is_role() {
+  case "$1" in
+    architect|project-manager|coder|tester) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Sub-Agent Rules: roller yalnızca KENDİ rolünü çoğaltabilir (self-replication)
+# ya da fork edebilir (fork zaten aynı rolü sürdürür). Çapraz role delegasyon
+# (örn. architect → coder) yasak — kim hangi rolde çalışacağına yalnızca
+# kullanıcı karar verir.
+if is_role "$agent"; then
+  case "$tool" in
+    Task|Agent)
+      if [ "$sub" = "$agent" ] || [ "$sub" = "fork" ]; then
+        exit 0
+      fi
+      deny "yalnızca kendi rolünü (subagent_type=$agent) çoğaltabilir ya da fork edebilirsin; '$sub' rolüne çapraz delegasyon yasak. Kim hangi rolde çalışacağına yalnızca kullanıcı karar verir — ihtiyacını iletişim dosyana yaz."
+      ;;
+  esac
+fi
+
+# Team Communication: hiçbir rol başka rolün iletişim dosyasını düzenleyemez.
+own_comm_file() {
+  case "$1" in
+    architect) echo "architect.md" ;;
+    project-manager) echo "project.md" ;;
+    coder) echo "coding.md" ;;
+    tester) echo "testscale.md" ;;
+  esac
+}
+
+if is_role "$agent"; then
+  case "$tool" in
+    Edit|Write)
+      base=$(basename "$path")
+      case "$base" in
+        architect.md|project.md|coding.md|testscale.md)
+          own=$(own_comm_file "$agent")
+          if [ "$base" != "$own" ]; then
+            deny "başka mühendisin iletişim dosyasını ($base) düzenleyemezsin — yalnızca $own yazabilirsin."
+          fi
+          ;;
+      esac
+      ;;
+  esac
+fi
 
 # Yol src/ altında mı? (mutlak veya göreli)
 is_src() {
@@ -43,7 +100,7 @@ case "$agent" in
       Edit|Write)
         base=$(basename "$path")
         if ! is_src "$path" && [ "$base" != "coding.md" ]; then
-          deny "yalnızca src/ ve coding.md yazabilirsin. Başka dosya gerekiyorsa coding.md'ye yaz, mimara danışılsın."
+          deny "yalnızca src/ ve coding.md yazabilirsin. Mimari karar gerekiyorsa coding.md'ye yaz, PM'i bekle (PM gerekirse mimara taşır)."
         fi
         ;;
     esac
@@ -63,6 +120,10 @@ case "$agent" in
       Bash)
         if printf '%s' "$cmd" | grep -Eq '(^|[^A-Za-z0-9_/])src(/|$|[^A-Za-z0-9_])'; then
           deny "Bash komutun src/ referansı içeriyor; kara-kutu testçisin, kaynak koda erişemezsin."
+        fi
+        # Dirty Repository Rule: repo temiz değilken hiçbir test/komut çalıştıramazsın.
+        if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+          deny "repo kirli (commit edilmemiş değişiklik var) — Dirty Repository Rule gereği test YASAK. Durumu testscale.md'ye yaz ve bekle."
         fi
         ;;
     esac

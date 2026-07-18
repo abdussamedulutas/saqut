@@ -127,6 +127,23 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
         )
     endif()
 
+    # Diferansiyel test (#92): VM ile MIR JIT aynı fixture'ı koşar, stdout +
+    # exit code bayt-bayt karşılaştırılır. JIT henüz desteklemiyorsa (kısmi
+    # dilim kapsamı) test "Not Run" olarak atlanır — bkz. run_differential.cmake
+    # başlığı + SKIP_REGULAR_EXPRESSION altında.
+    if(EXISTS "${RUN_EXPECTED}")
+        add_test(
+            NAME "differential_${TNAME}"
+            COMMAND ${CMAKE_COMMAND}
+                -DBINARY=${SAQUT_BINARY}
+                -DSOURCE=${SQT_FILE}
+                -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
+                -P "${CMAKE_SOURCE_DIR}/cmake/run_differential.cmake"
+        )
+        set_tests_properties("differential_${TNAME}" PROPERTIES
+            SKIP_REGULAR_EXPRESSION "SKIP: JIT bu fixture")
+    endif()
+
     # Negatif test: .compile_error — derleme hatası beklenen golden testler.
     # Dosya içeriği stderr'de aranır (regex/düz dize).
     set(COMPILE_ERROR_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.compile_error")

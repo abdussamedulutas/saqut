@@ -53,6 +53,53 @@ done < <(find "$ROOT/tests/golden" -name "*.sqt" -print0 | sort -z)
 echo "  $PASS geçti, $FAIL başarısız"
 [ "$FAIL" -eq 0 ] || exit 1
 
+# ── Diferansiyel test (#92): VM ≡ MIR JIT ────────────────────────────────────
+# Her golden fixture'ı hem VM hem JIT ile koşup stdout+exit code'u bayt-bayt
+# karşılaştırır. JIT şu an MIR dilimlerinin kapsadığı opcode alt kümesiyle
+# sınırlı (mir_backend.hpp) — bir fixture bu kümenin dışına çıkan bir opcode
+# içeriyorsa (struct/array/global/try-catch/nullable vb.) JIT programın
+# TAMAMINI reddeder (kısmi JIT yok); bu durum parity hatası DEĞİL, henüz
+# kapsanmamış bir dilim demektir → SKIP sayılır, FAIL sayılmaz.
+echo "=== diferansiyel (VM≡JIT) ==="
+DPASS=0; DFAIL=0; DSKIP=0
+while IFS= read -r -d '' sqt; do
+    dir=$(dirname "$sqt")
+    base=$(basename "$sqt" .sqt)
+    exp="$dir/$base.expected"
+    [ -f "$exp" ] || continue
+
+    extra_flags=()
+    flags_file="$dir/$base.flags"
+    if [ -f "$flags_file" ]; then
+        mapfile -t extra_flags < "$flags_file"
+    fi
+
+    set +e
+    jit_err=$("$SAQUT" run --jit "${extra_flags[@]}" "$sqt" 2>&1 >/dev/null)
+    set -e
+    if echo "$jit_err" | grep -q "desteklenmeyen opcode"; then
+        DSKIP=$((DSKIP + 1))
+        continue
+    fi
+
+    set +e
+    vm_out=$("$SAQUT" run "${extra_flags[@]}" "$sqt" 2>/dev/null); vm_exit=$?
+    jit_out=$("$SAQUT" run --jit "${extra_flags[@]}" "$sqt" 2>/dev/null); jit_exit=$?
+    set -e
+
+    if [ "$vm_out" = "$jit_out" ] && [ "$vm_exit" = "$jit_exit" ]; then
+        DPASS=$((DPASS + 1))
+    else
+        echo "  FAIL (parity): ${sqt#"$ROOT"/} (vm_exit=$vm_exit jit_exit=$jit_exit)"
+        echo "    VM  : $(echo "$vm_out"  | head -1)"
+        echo "    JIT : $(echo "$jit_out" | head -1)"
+        DFAIL=$((DFAIL + 1))
+    fi
+done < <(find "$ROOT/tests/golden" -name "*.sqt" -print0 | sort -z)
+
+echo "  $DPASS geçti, $DFAIL başarısız, $DSKIP atlandı (JIT henüz desteklemiyor)"
+[ "$DFAIL" -eq 0 ] || exit 1
+
 # ── Modül döngüsü testleri (ADR-031, #78) ────────────────────────────────────
 # Döngüsel bağımlılık E_MODULE_CYCLE tanısı + sıfır-dışı exit üretmeli.
 echo "=== modül döngüsü ==="

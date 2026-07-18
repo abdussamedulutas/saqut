@@ -168,6 +168,48 @@ extern "C" int64_t rt_jit_int_to_byte_checked(int64_t iv) {
     return iv;
 }
 
+// ADR-040: string→longint / string→float32 / longint→int / float→longint.
+// VM'in CAST_STR_TO_LONG / CAST_STR_TO_FLOAT32 / LONG_TO_INT_CHECKED /
+// CAST_FLOAT_TO_LONG_CHECKED dallarıyla birebir (interpreter.cpp).
+extern "C" int64_t rt_jit_str_to_long(void* s) {
+    const std::string& str = static_cast<StringObject*>(s)->data;
+    try {
+        size_t pos;
+        long long v = std::stoll(str, &pos);
+        if (pos != str.size()) throw std::invalid_argument("incomplete");
+        return static_cast<int64_t>(v);
+    } catch (...) {
+        rt_jit_cast_error(("'" + str + "' cannot convert to longint").c_str());
+        return 0;  // ulaşılmaz (exit)
+    }
+}
+extern "C" float rt_jit_str_to_float32(void* s) {
+    const std::string& str = static_cast<StringObject*>(s)->data;
+    try {
+        size_t pos;
+        float v = std::stof(str, &pos);
+        if (pos != str.size()) throw std::invalid_argument("incomplete");
+        return v;
+    } catch (...) {
+        rt_jit_cast_error(("'" + str + "' cannot convert to float").c_str());
+        return 0.0f;  // ulaşılmaz
+    }
+}
+extern "C" int64_t rt_jit_long_to_int_checked(int64_t lv) {
+    if (lv < INT_MIN || lv > INT_MAX)
+        rt_jit_cast_error(("longint value " + std::to_string(lv) +
+                           " out of int range").c_str());
+    return static_cast<int64_t>(static_cast<int>(lv));
+}
+// Argüman her zaman double (float32 kaynak call-site'ta F2D ile genişletilir,
+// rt_jit_print_float32 desenindeki gibi — MIR call'da MIR_T_F/MIR_T_D karışımı
+// operand tip uyuşmazlığına düşer, bkz. opcodeSupported/codegen notu).
+extern "C" int64_t rt_jit_float_to_long_checked(double fv) {
+    if (!std::isfinite(fv) || fv < -9223372036854775808.0 || fv >= 9223372036854775808.0)
+        rt_jit_cast_error("float value out of longint range or NaN/Inf");
+    return static_cast<int64_t>(fv);  // sıfıra kırp
+}
+
 // ── Decimal trampolinleri (Dilim 3, ADR-037: decimal her zaman kutulu). Değerler
 // g_jitDecimals havuzunda (program sonunda toplu silinir). Hata mesajları VM'in
 // D* / CAST_*_DECIMAL dallarıyla birebir. ────────────────────────────────────
@@ -482,6 +524,17 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t castF2IImport   = MIR_new_import(ctx, "rt_jit_float_to_int_checked");
     MIR_item_t castI2BProto    = MIR_new_proto(ctx, "cast_i2b_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
     MIR_item_t castI2BImport   = MIR_new_import(ctx, "rt_jit_int_to_byte_checked");
+    // ADR-040: str→longint, str→float32 (ret F), longint→int, float→longint
+    // (arg her zaman D — float32 kaynak call-site'ta F2D ile genişletilir).
+    MIR_type_t fRet            = MIR_T_F;
+    MIR_item_t castS2LProto    = MIR_new_proto(ctx, "cast_s2l_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
+    MIR_item_t castS2LImport   = MIR_new_import(ctx, "rt_jit_str_to_long");
+    MIR_item_t castS2F32Proto  = MIR_new_proto(ctx, "cast_s2f32_proto", 1, &fRet, 1, MIR_T_I64, "v");
+    MIR_item_t castS2F32Import = MIR_new_import(ctx, "rt_jit_str_to_float32");
+    MIR_item_t castL2IProto    = MIR_new_proto(ctx, "cast_l2i_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
+    MIR_item_t castL2IImport   = MIR_new_import(ctx, "rt_jit_long_to_int_checked");
+    MIR_item_t castF2LProto    = MIR_new_proto(ctx, "cast_f2l_proto", 1, &i64Ret, 1, MIR_T_D, "v");
+    MIR_item_t castF2LImport   = MIR_new_import(ctx, "rt_jit_float_to_long_checked");
     // Decimal trampolinleri (Dilim 3). Kutulu → I64 pointer. Binary I64,I64→I64;
     // unary I64→I64; float→dec D→I64; dec→float I64→D.
     MIR_var_t  decBinArgs[2]   = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "b", 0}};
@@ -585,6 +638,22 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
         for (size_t i = 0; i < instrN; i++) labelAt[i] = MIR_new_label(ctx);
 
         auto R = [&](int slot) { return MIR_new_reg_op(ctx, regs[static_cast<size_t>(slot)]); };
+        // ADR-040: D (double) argüman bekleyen bir runtime call'a float32
+        // kaynak slot geçilecekse önce F2D ile genişlet (MIR call'da MIR_T_F/
+        // MIR_T_D operand tip uyuşmazlığına düşmemek için — rt_jit_print_float32
+        // çağrı-sitesindeki desenle aynı). CAST_FLOAT_TO_INT_CHECKED /
+        // CAST_FLOAT_TO_LONG_CHECKED her ikisi de kaynak float32 YA DA double
+        // olabilir (srcIsFloat = srcIsFloat32||srcIsDouble, ir_generator.cpp).
+        int f32ToDCounter = 0;
+        auto asDoubleOperand = [&](int slot) {
+            if (slotKindOf(fn, slot) == SlotType::Float32) {
+                std::string tmpName = "f32tod" + std::to_string(f32ToDCounter++);
+                MIR_reg_t tmp = MIR_new_func_reg(ctx, func->u.func, MIR_T_D, tmpName.c_str());
+                MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_F2D, MIR_new_reg_op(ctx, tmp), R(slot)));
+                return MIR_new_reg_op(ctx, tmp);
+            }
+            return R(slot);
+        };
         // Bir karşılaştırma/aritmetik talimatının FLOAT operand mı aldığını
         // (varyant seçimi için) statik slot türünden anla.
         auto floatOperands = [&](const Instruction& in) {
@@ -664,10 +733,24 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2FProto), MIR_new_ref_op(ctx, castS2FImport), R(instr.dest), R(instr.src)));
                     break;
                 case Opcode::CAST_FLOAT_TO_INT_CHECKED:
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2IProto), MIR_new_ref_op(ctx, castF2IImport), R(instr.dest), R(instr.src)));
+                    // srcType float32 OLABİLİR (ir_generator.cpp: srcIsFloat =
+                    // srcIsFloat32||srcIsDouble) — call D bekliyor, F2D şart.
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2IProto), MIR_new_ref_op(ctx, castF2IImport), R(instr.dest), asDoubleOperand(instr.src)));
                     break;
                 case Opcode::CAST_INT_TO_BYTE_CHECKED:
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castI2BProto), MIR_new_ref_op(ctx, castI2BImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_STR_TO_LONG:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2LProto), MIR_new_ref_op(ctx, castS2LImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_STR_TO_FLOAT32:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2F32Proto), MIR_new_ref_op(ctx, castS2F32Import), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::LONG_TO_INT_CHECKED:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castL2IProto), MIR_new_ref_op(ctx, castL2IImport), R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2LProto), MIR_new_ref_op(ctx, castF2LImport), R(instr.dest), asDoubleOperand(instr.src)));
                     break;
                 // ── Decimal (Dilim 3) — kutulu; sabit derleme zamanı, aritmetik call ──
                 case Opcode::LOAD_DECIMAL: {
@@ -1060,6 +1143,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_str_to_float",         reinterpret_cast<void*>(rt_jit_str_to_float));
     MIR_load_external(ctx, "rt_jit_float_to_int_checked", reinterpret_cast<void*>(rt_jit_float_to_int_checked));
     MIR_load_external(ctx, "rt_jit_int_to_byte_checked",  reinterpret_cast<void*>(rt_jit_int_to_byte_checked));
+    MIR_load_external(ctx, "rt_jit_str_to_long",           reinterpret_cast<void*>(rt_jit_str_to_long));
+    MIR_load_external(ctx, "rt_jit_str_to_float32",        reinterpret_cast<void*>(rt_jit_str_to_float32));
+    MIR_load_external(ctx, "rt_jit_long_to_int_checked",   reinterpret_cast<void*>(rt_jit_long_to_int_checked));
+    MIR_load_external(ctx, "rt_jit_float_to_long_checked", reinterpret_cast<void*>(rt_jit_float_to_long_checked));
     MIR_load_external(ctx, "rt_jit_decimal_add", reinterpret_cast<void*>(rt_jit_decimal_add));
     MIR_load_external(ctx, "rt_jit_decimal_sub", reinterpret_cast<void*>(rt_jit_decimal_sub));
     MIR_load_external(ctx, "rt_jit_decimal_mul", reinterpret_cast<void*>(rt_jit_decimal_mul));

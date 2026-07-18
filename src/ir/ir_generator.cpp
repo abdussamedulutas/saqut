@@ -1487,6 +1487,7 @@ void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
                 case Opcode::LBAND: case Opcode::LBOR: case Opcode::LBXOR:
                 case Opcode::LSHL: case Opcode::LSHR: case Opcode::LBNOT:
                 case Opcode::INT_TO_LONG: case Opcode::CAST_STR_TO_LONG:
+                case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
                     nk = SlotType::LongInt; break;
                 case Opcode::STRUCT_NEW: case Opcode::ARRAY_NEW:
                     nk = SlotType::Ref; break;

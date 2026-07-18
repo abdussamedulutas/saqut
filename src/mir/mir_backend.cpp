@@ -37,8 +37,10 @@ namespace mir_backend {
 namespace {
 
 // ── print(int) trampoline'i — VM'in Value::toString()'iyle birebir (ADR-024).
+// #120: VM (9ac66d5) trailing "\n" eklemeyi bıraktı (console:: FFI hazırlığı,
+// #115) — JIT aynı hizaya getirildi, yalnızca flush eklendi.
 extern "C" void rt_jit_print_int(int64_t v) {
-    std::cout << v << "\n";
+    std::cout << v << std::flush;
 }
 
 // ── print(float) trampoline'i — VM'in Value::toString() Float dalıyla BİREBİR
@@ -50,7 +52,7 @@ extern "C" void rt_jit_print_float(double v) {
     std::string s = oss.str();
     if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
         s += ".0";
-    std::cout << s << "\n";
+    std::cout << s << std::flush;
 }
 
 // ── print(float32) trampoline'i — VM'in Value::toString() Float32 dalıyla BİREBİR
@@ -62,15 +64,15 @@ extern "C" void rt_jit_print_float32(double v) {
     std::string s = oss.str();
     if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
         s += ".0";
-    std::cout << s << "\n";
+    std::cout << s << std::flush;
 }
 
 // ── print(string) trampoline'i (Dilim 3, ADR-037). Argüman, JIT register'ında
 // pointer olarak taşınan bir StringObject*'tir (kutulanmış string). VM'in
-// Value::toString() String dalı ham içeriği döndürür (value.hpp:104), print
-// host'u "\n" ekler → burada data + "\n". Diferansiyel test buna bağlı. ──────
+// Value::toString() String dalı ham içeriği döndürür (value.hpp:104); #120
+// öncesi print host'u "\n" ekliyordu, artık eklemiyor (VM ile birebir). ──────
 extern "C" void rt_jit_print_str(void* strObj) {
-    std::cout << static_cast<StringObject*>(strObj)->data << "\n";
+    std::cout << static_cast<StringObject*>(strObj)->data << std::flush;
 }
 
 // ── Runtime string havuzu (Dilim 3). LOAD_STRING sabitleri derleme zamanı
@@ -267,7 +269,7 @@ extern "C" void* rt_jit_str_to_decimal(void* s) {
         return nullptr;  // ulaşılmaz
     }
 }
-extern "C" void rt_jit_print_decimal(void* d) { std::cout << jitDV(d).toString() << "\n"; }
+extern "C" void rt_jit_print_decimal(void* d) { std::cout << jitDV(d).toString() << std::flush; }
 
 // Sıfıra bölme — bu Dilim'de try/catch (ENTER_TRY/THROW) reddedildiğinden
 // yakalanamaz; VM'de de aynı program uncaught throw ile sonlanırdı. Mesaj/çıkış

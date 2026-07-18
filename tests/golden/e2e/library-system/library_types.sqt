@@ -1,0 +1,33 @@
+// Kütüphane Ödünç Verme Sistemi — ortak veri modeli.
+// Katalog (Book), üye (Member, iç içe Address alanlı) ve ödünç kaydı (Loan).
+// Bu modül yalnızca tip tanımları içerir; işlemler library_ops.sqt'te.
+
+export enum BookStatus { Available, Loaned, Reserved, Lost }
+
+// Nested struct: Member.address, VarDecl anında özyinelemeli tahsis edilir
+// (ADR-029) — ayrı bir "new Address()" çağrısına gerek yok.
+export struct Address {
+    string city;
+    string district;
+}
+
+export struct Book {
+    string title;
+    string author;
+    int id;
+    byte shelfCode;
+    BookStatus status;
+}
+
+export struct Member {
+    string name;
+    int id;
+    Address address;
+    int activeLoans;
+}
+
+export struct Loan {
+    int bookId;
+    int memberId;
+    int daysOut;
+}

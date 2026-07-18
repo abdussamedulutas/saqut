@@ -19,6 +19,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
+#include <iomanip>
 #include <algorithm>
 #include <cmath>
 #include <climits>
@@ -37,6 +38,18 @@ inline int wrapModI32(int a, int b) { return (a == INT_MIN && b == -1) ? 0 : a %
 // Kaydırma miktarı 5-bit maskelenir (x86/MIR native davranışı; b&31), sonuç 32-bit.
 inline int wrapShlI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) << (b & 31)); }
 inline int wrapShrI32(int a, int b) { return a >> (b & 31); }
+
+// longint (64-bit) aritmetiği: aynı gerekçeyle tanımlı 2's-complement wrap
+// (ADR-040) — MIR backend'in native 64-bit MIR_ADD/SUB/MUL/LSH/RSH'siyle
+// birebir (mir_backend.cpp). INT64_MIN/-1 x86'da yine tuzak, elle ele alınır.
+inline long long wrapAddI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) + static_cast<uint64_t>(b)); }
+inline long long wrapSubI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) - static_cast<uint64_t>(b)); }
+inline long long wrapMulI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) * static_cast<uint64_t>(b)); }
+inline long long wrapDivI64(long long a, long long b) { return (a == INT64_MIN && b == -1) ? INT64_MIN : a / b; }
+inline long long wrapModI64(long long a, long long b) { return (a == INT64_MIN && b == -1) ? 0 : a % b; }
+inline long long wrapShlI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) << (b & 63)); }
+inline long long wrapShrI64(long long a, long long b) { return a >> (b & 63); }
+inline long long wrapNegI64(long long a) { return static_cast<int64_t>(0ULL - static_cast<uint64_t>(a)); }
 } // namespace
 
 // ── buildTrace ─────────────────────────────────────────────────────────────────
@@ -502,9 +515,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 r = (lv.int64Value < rv.int64Value ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) < 0 ? 1 : 0;
-            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                r = (lv.floatValue < rv.floatValue ? 1 : 0);
-            else r = (lv.intValue < rv.intValue ? 1 : 0);
+            else if (lv.isFloaty() || rv.isFloaty())
+                r = (lv.asDouble() < rv.asDouble() ? 1 : 0);
+            else r = (lv.asI64() < rv.asI64() ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
@@ -515,9 +528,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 r = (lv.int64Value <= rv.int64Value ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) <= 0 ? 1 : 0;
-            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                r = (lv.floatValue <= rv.floatValue ? 1 : 0);
-            else r = (lv.intValue <= rv.intValue ? 1 : 0);
+            else if (lv.isFloaty() || rv.isFloaty())
+                r = (lv.asDouble() <= rv.asDouble() ? 1 : 0);
+            else r = (lv.asI64() <= rv.asI64() ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
@@ -528,9 +541,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 r = (lv.int64Value > rv.int64Value ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) > 0 ? 1 : 0;
-            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                r = (lv.floatValue > rv.floatValue ? 1 : 0);
-            else r = (lv.intValue > rv.intValue ? 1 : 0);
+            else if (lv.isFloaty() || rv.isFloaty())
+                r = (lv.asDouble() > rv.asDouble() ? 1 : 0);
+            else r = (lv.asI64() > rv.asI64() ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
@@ -541,9 +554,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 r = (lv.int64Value >= rv.int64Value ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) >= 0 ? 1 : 0;
-            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                r = (lv.floatValue >= rv.floatValue ? 1 : 0);
-            else r = (lv.intValue >= rv.intValue ? 1 : 0);
+            else if (lv.isFloaty() || rv.isFloaty())
+                r = (lv.asDouble() >= rv.asDouble() ? 1 : 0);
+            else r = (lv.asI64() >= rv.asI64() ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
@@ -563,10 +576,10 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 r = (lv.stringValue == rv.stringValue ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = (lv.decimalValue == rv.decimalValue ? 1 : 0);
-            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                r = (lv.floatValue == rv.floatValue ? 1 : 0);
+            else if (lv.isFloaty() || rv.isFloaty())
+                r = (lv.asDouble() == rv.asDouble() ? 1 : 0);
             else
-                r = (lv.intValue == rv.intValue ? 1 : 0);
+                r = (lv.asI64() == rv.asI64() ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
@@ -585,10 +598,10 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 r = (lv.stringValue != rv.stringValue ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
                 r = (lv.decimalValue != rv.decimalValue ? 1 : 0);
-            else if (lv.kind == ValueKind::Float || rv.kind == ValueKind::Float)
-                r = (lv.floatValue != rv.floatValue ? 1 : 0);
+            else if (lv.isFloaty() || rv.isFloaty())
+                r = (lv.asDouble() != rv.asDouble() ? 1 : 0);
             else
-                r = (lv.intValue != rv.intValue ? 1 : 0);
+                r = (lv.asI64() != rv.asI64() ? 1 : 0);
             frame.slots[instr.dest] = Value::fromInt(r);
             break;
         }
@@ -688,6 +701,131 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::FLOAT_TO_INT:
             frame.slots[instr.dest] = Value::fromInt((int)frame.slots[instr.src].floatValue);
             break;
+
+        // ── float32 aritmetiği (ADR-040) — gerçek `float` hassasiyetiyle
+        // hesaplanır (double'a genişletip yuvarlamak değil), MIR'in native
+        // MIR_T_F FADD/FSUB/FMUL/FDIV'iyle bit-birebir aynı sonucu vermek için
+        // (çift-yuvarlama riskinden kaçınılır, VM≡JIT diferansiyel sözleşme).
+        case Opcode::LOAD_FLOAT32:
+            frame.slots[instr.dest] = Value::fromFloat32(instr.floatValue);
+            break;
+        case Opcode::F32ADD:
+            frame.slots[instr.dest] = Value::fromFloat32((double)(
+                (float)frame.slots[instr.left].floatValue + (float)frame.slots[instr.right].floatValue));
+            break;
+        case Opcode::F32SUB:
+            frame.slots[instr.dest] = Value::fromFloat32((double)(
+                (float)frame.slots[instr.left].floatValue - (float)frame.slots[instr.right].floatValue));
+            break;
+        case Opcode::F32MUL:
+            frame.slots[instr.dest] = Value::fromFloat32((double)(
+                (float)frame.slots[instr.left].floatValue * (float)frame.slots[instr.right].floatValue));
+            break;
+        case Opcode::F32DIV: {
+            float r = (float)frame.slots[instr.right].floatValue;
+            if (r == 0.0f) { pendingThrow_ = makeErrorValue("float division by zero", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
+            frame.slots[instr.dest] = Value::fromFloat32((double)((float)frame.slots[instr.left].floatValue / r));
+            break;
+        }
+        case Opcode::F32NEG:
+            frame.slots[instr.dest] = Value::fromFloat32((double)(-(float)frame.slots[instr.src].floatValue));
+            break;
+        case Opcode::INT_TO_FLOAT32:
+            frame.slots[instr.dest] = Value::fromFloat32((double)frame.slots[instr.src].intValue);
+            break;
+        case Opcode::FLOAT32_TO_INT: {
+            float fv = (float)frame.slots[instr.src].floatValue;
+            if (!std::isfinite(fv) || fv < (float)INT_MIN || fv > (float)INT_MAX) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "float value out of int range or NaN/Inf", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
+            } else {
+                frame.slots[instr.dest] = Value::fromInt((int)fv);
+            }
+            break;
+        }
+        case Opcode::FLOAT_TO_FLOAT32:
+            // double → float: veri kaybı gerçekleşir (E003 derleme zamanında uyardı).
+            frame.slots[instr.dest] = Value::fromFloat32(frame.slots[instr.src].floatValue);
+            break;
+        case Opcode::FLOAT32_TO_FLOAT:
+            // float → double: kayıpsız genişletme, kind değişir (Float32 → Float).
+            frame.slots[instr.dest] = Value::fromFloat(frame.slots[instr.src].floatValue);
+            break;
+
+        // ── longint aritmetiği (ADR-040) — 64-bit, rank kulesi dışında izole ──
+        case Opcode::LOAD_LONG:
+            frame.slots[instr.dest] = Value::fromLongInt(instr.int64Value);
+            break;
+        case Opcode::LADD:
+            frame.slots[instr.dest] = Value::fromLongInt(
+                wrapAddI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+            break;
+        case Opcode::LSUB:
+            frame.slots[instr.dest] = Value::fromLongInt(
+                wrapSubI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+            break;
+        case Opcode::LMUL:
+            frame.slots[instr.dest] = Value::fromLongInt(
+                wrapMulI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+            break;
+        case Opcode::LDIV: {
+            long long d = frame.slots[instr.right].int64Value;
+            if (d == 0) { pendingThrow_ = makeErrorValue("division by zero", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
+            frame.slots[instr.dest] = Value::fromLongInt(
+                wrapDivI64(frame.slots[instr.left].int64Value, d));
+            break;
+        }
+        case Opcode::LMOD: {
+            long long d = frame.slots[instr.right].int64Value;
+            if (d == 0) { pendingThrow_ = makeErrorValue("sıfıra bölme (mod)", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
+            frame.slots[instr.dest] = Value::fromLongInt(
+                wrapModI64(frame.slots[instr.left].int64Value, d));
+            break;
+        }
+        case Opcode::LNEG:
+            frame.slots[instr.dest] = Value::fromLongInt(wrapNegI64(frame.slots[instr.src].int64Value));
+            break;
+        case Opcode::LBAND:
+            frame.slots[instr.dest] = Value::fromLongInt(
+                frame.slots[instr.left].int64Value & frame.slots[instr.right].int64Value);
+            break;
+        case Opcode::LBOR:
+            frame.slots[instr.dest] = Value::fromLongInt(
+                frame.slots[instr.left].int64Value | frame.slots[instr.right].int64Value);
+            break;
+        case Opcode::LBXOR:
+            frame.slots[instr.dest] = Value::fromLongInt(
+                frame.slots[instr.left].int64Value ^ frame.slots[instr.right].int64Value);
+            break;
+        case Opcode::LSHL:
+            frame.slots[instr.dest] = Value::fromLongInt(
+                wrapShlI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+            break;
+        case Opcode::LSHR:
+            frame.slots[instr.dest] = Value::fromLongInt(
+                wrapShrI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+            break;
+        case Opcode::LBNOT:
+            frame.slots[instr.dest] = Value::fromLongInt(~frame.slots[instr.src].int64Value);
+            break;
+        case Opcode::INT_TO_LONG:
+            // int → longint: kayıpsız genişletme, işaret uzatılır (32→64 bit).
+            frame.slots[instr.dest] = Value::fromLongInt((long long)frame.slots[instr.src].intValue);
+            break;
+        case Opcode::LONG_TO_INT_CHECKED: {
+            long long lv = frame.slots[instr.src].int64Value;
+            if (lv < INT_MIN || lv > INT_MAX) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "longint value " + std::to_string(lv) + " out of int range", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
+            } else {
+                frame.slots[instr.dest] = Value::fromInt((int)lv);
+            }
+            break;
+        }
 
         // ── Struct (ADR-020: referans semantiği) ──────────────────────────
         case Opcode::STRUCT_NEW: {
@@ -827,6 +965,60 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                     instr.sourceLine, instr.sourceCol);
             } else {
                 frame.slots[instr.dest] = Value::fromInt((int)fv); // truncate to zero
+            }
+            break;
+        }
+        case Opcode::CAST_LONG_TO_STR: {
+            frame.slots[instr.dest] = Value::fromString(
+                std::to_string(frame.slots[instr.src].int64Value));
+            break;
+        }
+        case Opcode::CAST_STR_TO_LONG: {
+            const std::string& s = frame.slots[instr.src].stringValue;
+            try {
+                size_t pos;
+                long long v = std::stoll(s, &pos);
+                if (pos != s.size()) throw std::invalid_argument("incomplete parse");
+                frame.slots[instr.dest] = Value::fromLongInt(v);
+            } catch (...) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "'" + s + "' cannot convert to longint", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
+            }
+            break;
+        }
+        case Opcode::CAST_FLOAT32_TO_STR: {
+            // MIR rt_jit_float32_to_str ile birebir (setprecision(9), gerçek float).
+            std::ostringstream oss;
+            oss << std::setprecision(9) << (float)frame.slots[instr.src].floatValue;
+            frame.slots[instr.dest] = Value::fromString(oss.str());
+            break;
+        }
+        case Opcode::CAST_STR_TO_FLOAT32: {
+            const std::string& s = frame.slots[instr.src].stringValue;
+            try {
+                size_t pos;
+                float v = std::stof(s, &pos);
+                if (pos != s.size()) throw std::invalid_argument("incomplete parse");
+                frame.slots[instr.dest] = Value::fromFloat32((double)v);
+            } catch (...) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "'" + s + "' cannot convert to float", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
+            }
+            break;
+        }
+        case Opcode::CAST_FLOAT_TO_LONG_CHECKED: {
+            double fv = frame.slots[instr.src].floatValue;
+            if (!std::isfinite(fv) || fv < -9223372036854775808.0 || fv >= 9223372036854775808.0) {
+                if (instr.left == 1) frame.slots[instr.dest] = Value::null();
+                else pendingThrow_ = makeErrorValue(
+                    "float value out of longint range or NaN/Inf", "E_CAST",
+                    instr.sourceLine, instr.sourceCol);
+            } else {
+                frame.slots[instr.dest] = Value::fromLongInt((long long)fv); // sıfıra kırp
             }
             break;
         }
@@ -1153,7 +1345,9 @@ static bool valueEqual(const Value& a, const Value& b) {
     if (a.kind != b.kind) return false;
     switch (a.kind) {
         case ValueKind::Int:     return a.intValue  == b.intValue;
-        case ValueKind::Float:   return a.floatValue == b.floatValue;
+        case ValueKind::LongInt: return a.int64Value == b.int64Value;
+        case ValueKind::Float:
+        case ValueKind::Float32: return a.floatValue == b.floatValue;
         case ValueKind::Decimal: return a.decimalValue.toString() == b.decimalValue.toString();
         case ValueKind::String:  return a.stringValue == b.stringValue;
         case ValueKind::Ref:     return a.ref == b.ref;
@@ -1180,7 +1374,9 @@ static std::string structToJson(StructObject* obj) {
 static std::string valueToJsonStr(const Value& v) {
     switch (v.kind) {
         case ValueKind::Int:     return std::to_string(v.intValue);
-        case ValueKind::Float: {
+        case ValueKind::LongInt: return std::to_string(v.int64Value);
+        case ValueKind::Float:
+        case ValueKind::Float32: {
             std::ostringstream os; os << v.floatValue; return os.str();
         }
         case ValueKind::Decimal: return v.decimalValue.toString();

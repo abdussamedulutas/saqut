@@ -237,6 +237,19 @@ bool TypeChecker::checkAssign(const Type& target, const Type& src,
 
     if (target.equals(src)) return true;
 
+    // ADR-040: longint rank kulesi dışında izole (byte gibi) — int→longint
+    // kayıpsız serbest (uyarısız), longint→int VE longint↔float/double/decimal
+    // yalnızca açık `as` (numericRank longint içermez, burada elle ele alınır).
+    if (target.isLongInt() || src.isLongInt()) {
+        if (target.isLongInt() && src.isIntegral()) return true; // int/longint → longint
+        const std::string castTarget = hintExpr.empty() ? ctx : hintExpr;
+        diag_.report("E003", loc,
+            "'" + ctx + "': " + src.toString() + " → " + target.toString() +
+            " requires explicit cast (longint is isolated from the numeric rank tower)",
+            "use explicit cast: `" + castTarget + " as " + target.toString() + "`");
+        return false;
+    }
+
     int tRank = numericRank(target);
     int sRank = numericRank(src);
 
@@ -565,6 +578,9 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
                 }
                 // Bağlam daha geniş sayısal tip ise literal o tip olarak tiplenir (ADR-010/028).
                 else if (!expected.isError() && expected.isDecimal()) result = Type::Decimal();
+                // ADR-040: longint rank kulesi dışında (numericRank longint'i tanımaz,
+                // burada elle ele alınır) — longint bağlamında literal longint tiplenir.
+                else if (!expected.isError() && expected.isLongInt()) result = Type::LongInt();
                 else if (expRank > 0) result = expected; // float veya double bekleniyor
                 else                  result = Type::Int();
                 break;
@@ -719,11 +735,47 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         }
 
         // Arithmetic / bitwise: +, -, *, /, %, &, |, ^, <<, >>
+        // ADR-010/#114: bir operand literal, diğeri tipli bir ifadeyse literal
+        // diğer operandın tipine göre YENİDEN tiplenir (bağlama-göre tipleme
+        // yalnızca literal başlı-başına değerlendirildiğinde değil, ikili
+        // ifadenin İÇİNDE de geçerli olmalı) — aksi halde örn. `d + 0.2`
+        // (d: double) sağdaki `0.2` bağlamsız Float() (32-bit) tiplenir, sonra
+        // double'a genişletilir ve çift-yuvarlama precision farkı sızar.
+        if (bin->Left && bin->Left->kind == ASTKind::Literal &&
+            !rightType.isError() && rightType.isNumeric())
+            leftType = checkExpr(bin->Left, rightType);
+        if (bin->Right && bin->Right->kind == ASTKind::Literal &&
+            !leftType.isError() && leftType.isNumeric())
+            rightType = checkExpr(bin->Right, leftType);
+
         // byte C-modeli terfi (#86): byte operand int'e yükselir, sonuç asla
         // byte olmaz (byte + byte → int; byte & byte → int). numericRank byte
         // içermez, o yüzden burada elle int'e çeviriyoruz.
         Type lArith = leftType.isByte()  ? Type::Int() : leftType;
         Type rArith = rightType.isByte() ? Type::Int() : rightType;
+
+        // ADR-040: longint rank kulesi dışında izole (numericRank longint'i
+        // tanımaz) — int/longint karışımı serbest (sonuç longint), ama
+        // float/double/decimal ile karışım yasak (açık `as` gerekir).
+        if (lArith.isLongInt() || rArith.isLongInt()) {
+            if (lArith.isIntegral() && rArith.isIntegral()) {
+                result = Type::LongInt();
+                break;
+            } else if (!leftType.isError() && !rightType.isError()) {
+                diag_.report("E003", bin->loc,
+                    "arithmetic operator on longint mixed with " +
+                    (lArith.isLongInt() ? rArith.toString() : lArith.toString()) +
+                    ": explicit cast required (longint is isolated from the numeric rank tower)",
+                    "use explicit cast: `variable as longint` or `variable as " +
+                    (lArith.isLongInt() ? rArith.toString() : lArith.toString()) + "`");
+                result = Type::error();
+                break;
+            } else {
+                result = Type::error();
+                break;
+            }
+        }
+
         int lRank = numericRank(lArith);
         int rRank = numericRank(rArith);
 

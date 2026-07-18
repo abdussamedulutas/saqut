@@ -165,6 +165,10 @@ struct Type {
         return kind == TypeKind::Primitive && prim == PrimitiveKind::LongInt;
     }
 
+    bool isInt() const {
+        return kind == TypeKind::Primitive && prim == PrimitiveKind::Int;
+    }
+
     // int veya longint (her ikisi de tamsayı; aritmetik/cast dallarında ortak)
     bool isIntegral() const {
         return kind == TypeKind::Primitive &&

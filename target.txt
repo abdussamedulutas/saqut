@@ -1,0 +1,318 @@
+En büyük hata çoğu yeni dilin Go, Rust veya Zig ile aynı gün yarışmaya çalışması. Halbuki ilk 2-3 yıl boyunca asıl amaç **davranışı dondurmak** olmalı. Performans ikinci planda gelir.
+
+Ben olsam yaklaşık şöyle ilerlerdim.
+
+---
+
+# Faz 0 — Kendini kanıtla
+
+Henüz kullanıcı yok.
+
+Amaç:
+
+> "Bu derleyici her seferinde aynı sonucu veriyor."
+
+Bu aşamada;
+
+* parser
+* type checker
+* VM
+* determinism
+* differential testing
+
+tamamlanır.
+
+Bu zaten büyük ölçüde yaptığın şey.
+
+Ürün yok.
+
+Sadece teknoloji var.
+
+---
+
+# v0.8 - v0.9
+
+Artık insanlar denemeye başlayabilir.
+
+Beklediğim programlar:
+
+* hesap makinesi
+* json parser
+* markdown parser
+* csv okuyucu
+* mini template engine
+* log analyzer
+* config parser
+* CLI araçları
+
+Örneğin
+
+```
+age.sqt
+
+> Yaşınız?
+15
+
+=> Küçüksün.
+
+```
+
+veya
+
+```
+if(user.gender=="male")
+    print("Bay");
+else
+    print("Hanım");
+```
+
+Bu aşamada hiç GUI istemem.
+
+---
+
+# v1.0
+
+Burada insanlar "küçük araçlar" yazabilmeli.
+
+Beklediğim şeyler:
+
+* grep alternatifi
+* find alternatifi
+* rename tool
+* backup tool
+* küçük web scraper
+* zip extractor
+* csv dönüştürücü
+* image converter
+
+Yani
+
+Unix utility seviyesi.
+
+Burada şu eksikler bitmiş olmalı.
+
+* stdin
+* stdout
+* stderr
+* binary io
+* process
+* sockets
+* path
+* directory
+* serialization
+
+---
+
+# v1.2
+
+Artık veri yapıları yazılabilmeli.
+
+Mesela
+
+* AVL Tree
+* Red Black Tree
+* B Tree
+* B+ Tree
+* HashMap
+* LRU Cache
+* Bloom Filter
+
+Bunların yazılabiliyor olması çok önemli.
+
+Çünkü bunlar dili gerçekten test eder.
+
+Burada ben özellikle şunu görmek isterim.
+
+```
+import btree;
+
+tree.insert(...)
+
+```
+
+ve bunun tamamen saQut ile yazılmış olması.
+
+---
+
+# v1.5
+
+Şimdi biraz daha ciddi.
+
+Beklediğim uygulamalar:
+
+* sqlite clone
+* redis clone
+* tiny http server
+* markdown server
+* template engine
+* package manager
+* static site generator
+
+Yani
+
+"gerçek ürün"
+
+ama küçük.
+
+---
+
+# v2.0
+
+İşte burada VM artık olgun.
+
+Beklentim:
+
+* JIT
+* profiling
+* optimization
+* allocator iyileştirmeleri
+* generational GC
+* better IR
+
+Burada artık performans konuşulur.
+
+---
+
+# v2.2
+
+Networking.
+
+Beklediğim uygulamalar:
+
+* chat server
+* websocket server
+* mqtt broker
+* dns server
+* proxy
+
+---
+
+# v2.5
+
+Şimdi artık insanlar
+
+"iş yapmaya"
+
+başlayabilir.
+
+Beklediğim projeler:
+
+* Redis
+* SQLite
+* HTTP framework
+* ORM
+* Template engine
+* Scheduler
+* Job queue
+* RPC
+
+---
+
+# v3
+
+Artık production.
+
+Burada beklentim.
+
+Birisi çıkıp
+
+```
+CRM
+
+ERP
+
+E-ticaret
+
+```
+
+geliştirebilmeli.
+
+---
+
+# v4
+
+Şimdi artık
+
+PostgreSQL,
+
+Nginx,
+
+Redis,
+
+RabbitMQ,
+
+gibi şeyler konuşmaya başlarız.
+
+---
+
+# Benim "kilit kilometre taşlarım"
+
+Ben versiyon numarasına değil, şu uygulamalara bakarım.
+
+✅ CLI yazılabiliyor mu?
+
+↓
+
+✅ Binary dosya okunabiliyor mu?
+
+↓
+
+✅ B+Tree yazılabiliyor mu?
+
+↓
+
+✅ Redis yazılabiliyor mu?
+
+↓
+
+✅ SQLite yazılabiliyor mu?
+
+↓
+
+✅ HTTP Server yazılabiliyor mu?
+
+↓
+
+✅ PostgreSQL port edilebiliyor mu?
+
+↓
+
+✅ WASM backend geliyor mu?
+
+↓
+
+✅ Production.
+
+---
+
+# Ben reklamı ne zaman yapardım?
+
+İlginç şekilde **1.0'da değil**.
+
+Ben reklamı şu gün yapardım:
+
+> "Redis'in %100 saQut ile yazılmış ve production testlerinden geçmiş sürümü çalışıyor."
+
+veya
+
+> "SQLite test suite %100 geçiyor."
+
+Çünkü bu iki cümle, "programlama dili" demekten çok daha güçlüdür.
+
+İnsanlar yeni bir dilin sözüne değil, onun yazabildiği yazılımlara güvenir.
+
+---
+
+# Bir hedef daha eklerdim
+
+Bence saQut'un en büyük avantajı Rust olmak, Go olmak ya da C++ olmak değil.
+
+Ben şu sloganı hedeflerdim:
+
+> **"Bir backend yaz, bütün standart kütüphane ücretsiz gelsin."**
+
+Çünkü ADR-041 ile gittiğiniz yön bunu mümkün kılıyor.
+
+Bugün 50 builtin olabilir, yarın 800. Ama yeni bir backend ekleyen kişi sadece dar çekirdeği ve host köprüsünü uygularsa, bütün standart kütüphane otomatik çalışıyorsa, bu mimari gerçekten yıllarca ölçeklenebilir demektir.
+
+Bana göre asıl başarı ölçütü de budur: **yeni özellik eklemek değil, 5 yıl sonra bile yeni backend ve yeni kütüphaneler ekleyebilmenin maliyetini düşük tutmak.** Bu hedefe ulaşırsanız, sürüm numarası 1.0 mı 2.7 mi olduğu ikincil hale gelir.

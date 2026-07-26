@@ -55,6 +55,8 @@ yaz.
 - GitHub access denied olursa `gh auth switch/login/logout/refresh`, credential
   değişikliği veya webfetch fallback yapma. Hiçbir issue/git mutasyonu yapmadan
   `GITHUB AUTHORIZATION BLOCKED` de ve dur.
+- Issue/Project/PR işlemlerinde yalnız yerel `gh` CLI kullan; GitHub
+  eklentisi/app/connector/MCP veya browser aracı kullanma.
 
 ## Git ve PR güvenliği
 

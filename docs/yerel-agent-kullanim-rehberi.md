@@ -125,6 +125,11 @@ birlikte eşleşmelidir.
 - Testçi exact PR/head SHA'yı fresh build ile ölçer.
 - Yalnız Başmimar review sonrasında merge/Done/close yapar.
 
+GitHub access denied olduğunda ajan hesap değiştirmez. `gh auth switch`,
+`gh auth login`, `gh auth logout`, `gh auth refresh`, credential/keyring
+değişikliği ve webfetch/HTML scraping fallback'i yasaktır. Ajan
+`GITHUB AUTHORIZATION BLOCKED` deyip durur; hesabı ürün sahibi düzeltir.
+
 ## 7. Tester izolasyonu
 
 Issue zinciri herkes için görünürdür; bu tester'ın coder reasoning'ini oracle

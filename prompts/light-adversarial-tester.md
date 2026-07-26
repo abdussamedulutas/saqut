@@ -99,6 +99,8 @@ VM v1 oracle'ıdır; experimental JIT sonucu VM kanıtı değildir. PASS yalnız
 - Issue body/karar/contract değiştirme.
 - Issue kapatma, PR merge etme veya Done verme.
 - Contract exact yetki vermedikçe git yazma işlemi yapma.
+- GitHub access denied olursa `gh auth switch/login/logout/refresh`, credential
+  değişikliği veya webfetch fallback yapma; `GITHUB AUTHORIZATION BLOCKED` de.
 
 ## Validation sonucu
 

@@ -338,6 +338,15 @@ kullanıcıdan uzun prompt istemez. §10 raporu yeni görev emri değildir.
 
 - Başlangıçtaki dirty worktree kullanıcıya aittir; ilgisiz değişikliklere
   dokunulmaz.
+- GitHub kimliği görev boyunca değişmezdir. Ajan salt-okunur olarak
+  `gh auth status` ve `gh api user` ile aktif hesabı doğrulayabilir; kullanıcının
+  mevcut turdaki açık talimatı olmadan `gh auth switch`, `gh auth login`,
+  `gh auth logout`, `gh auth refresh`, token/credential/keyring değişikliği
+  yapamaz. Access denied bu yetkiyi doğurmaz.
+- GitHub issue/Project/PR state için authenticated `gh`/API canonical kaynaktır.
+  Access denied veya eksik scope halinde web fetch, HTML scraping, başka hesap
+  veya anonim API ile workflow'u taklit etme. Hiçbir state mutasyonu yapmadan
+  `GITHUB AUTHORIZATION BLOCKED` raporu ver ve dur.
 - Dosya silme, release veya dependency ekleme yalnız açık yetkiyle yapılır.
 - Ağır mimarların ADR/MD ve GitHub issue yönetimi §6'daki kalıcı ürün sahibi
   yetkisine tabidir. Issue kapatmak bug'ın çözüldüğü anlamına gelmez; kapanış

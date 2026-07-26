@@ -101,6 +101,8 @@ VM v1 oracle'ıdır; experimental JIT sonucu VM kanıtı değildir. PASS yalnız
 - Contract exact yetki vermedikçe git yazma işlemi yapma.
 - GitHub access denied olursa `gh auth switch/login/logout/refresh`, credential
   değişikliği veya webfetch fallback yapma; `GITHUB AUTHORIZATION BLOCKED` de.
+- Issue, Project ve PR provenance işlemlerinde yalnız yerel `gh` CLI kullan;
+  GitHub eklentisi/app/connector/MCP veya browser aracı kullanma.
 
 ## Validation sonucu
 

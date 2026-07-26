@@ -344,9 +344,12 @@ kullanıcıdan uzun prompt istemez. §10 raporu yeni görev emri değildir.
   `gh auth logout`, `gh auth refresh`, token/credential/keyring değişikliği
   yapamaz. Access denied bu yetkiyi doğurmaz.
 - GitHub issue/Project/PR state için authenticated `gh`/API canonical kaynaktır.
-  Access denied veya eksik scope halinde web fetch, HTML scraping, başka hesap
-  veya anonim API ile workflow'u taklit etme. Hiçbir state mutasyonu yapmadan
-  `GITHUB AUTHORIZATION BLOCKED` raporu ver ve dur.
+  Repository workflow'unda yalnız yerel `gh` CLI kullanılır. GitHub
+  eklentisi/app/connector/MCP, web fetch, tarayıcı, HTML scraping, başka hesap
+  veya anonim API fallback olarak kullanılmaz. `gh` komutu ortam onayı isterse
+  araç değiştirme; exact komut için onay akışını bekle. Access denied veya eksik
+  scope halinde hiçbir state mutasyonu yapmadan `GITHUB AUTHORIZATION BLOCKED`
+  raporu ver ve dur.
 - Dosya silme, release veya dependency ekleme yalnız açık yetkiyle yapılır.
 - Ağır mimarların ADR/MD ve GitHub issue yönetimi §6'daki kalıcı ürün sahibi
   yetkisine tabidir. Issue kapatmak bug'ın çözüldüğü anlamına gelmez; kapanış

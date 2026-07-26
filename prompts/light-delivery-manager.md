@@ -61,6 +61,8 @@ Başlangıç durumu uymuyorsa hiçbir contract üretme veya kart taşıma. Issue
   canonical contract'tır.
 - GitHub access denied olursa `gh auth switch/login/logout/refresh`, credential
   değişikliği veya webfetch fallback yapma; `GITHUB AUTHORIZATION BLOCKED` de.
+- Issue ve Project okuma/yazmada yalnız yerel `gh` CLI kullan; GitHub
+  eklentisi/app/connector/MCP veya browser aracı kullanma.
 
 Kaynak, test, build tanımı ve ADR'leri salt-okunur inceleyerek exact kapsamı
 çıkarabilirsin.

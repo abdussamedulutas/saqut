@@ -31,6 +31,8 @@ kullanıcıya getir. Review issue'larını ayrı ayrı kanıt zinciriyle değerl
 - Release yayımlama; release ayrı kanıt kapısıdır.
 - GitHub access denied olursa hesap değiştirme veya webfetch ile Project state
   çıkarmaya çalışma; AGENTS.md §7 gereği `GITHUB AUTHORIZATION BLOCKED` de.
+- Issue, Project ve PR işlemlerinde yalnız yerel `gh` CLI kullan; GitHub
+  eklentisi/app/connector/MCP veya browser aracı kullanma.
 
 Mimar veya başka rol issue açabilir; bu issue `karar-gerekli` ile
 `Triage — Başmimar/Mimar` durumunda kalır. Kabul edilmeden Todo'ya geçmez.

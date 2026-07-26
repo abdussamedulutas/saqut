@@ -130,6 +130,11 @@ GitHub access denied olduğunda ajan hesap değiştirmez. `gh auth switch`,
 değişikliği ve webfetch/HTML scraping fallback'i yasaktır. Ajan
 `GITHUB AUTHORIZATION BLOCKED` deyip durur; hesabı ürün sahibi düzeltir.
 
+GitHub issue, Project ve PR workflow'unda bütün roller yalnız yerel `gh` CLI
+kullanır. GitHub eklentisi/app/connector/MCP, webfetch veya browser aracı
+kullanılmaz. Ortam `gh` komutu için onay isterse aynı komutun onay akışı
+beklenir; başka araca kaçılmaz.
+
 ## 7. Tester izolasyonu
 
 Issue zinciri herkes için görünürdür; bu tester'ın coder reasoning'ini oracle

@@ -56,6 +56,20 @@ static const char* opSymbol(Opcode op) {
         case Opcode::DMUL:          return "*d";
         case Opcode::DDIV:          return "/d";
         case Opcode::DMOD:          return "%d";
+        case Opcode::F32ADD:        return "+f32";
+        case Opcode::F32SUB:        return "-f32";
+        case Opcode::F32MUL:        return "*f32";
+        case Opcode::F32DIV:        return "/f32";
+        case Opcode::LADD:          return "+l";
+        case Opcode::LSUB:          return "-l";
+        case Opcode::LMUL:          return "*l";
+        case Opcode::LDIV:          return "/l";
+        case Opcode::LMOD:          return "%l";
+        case Opcode::LBAND:         return "&l";
+        case Opcode::LBOR:          return "|l";
+        case Opcode::LBXOR:         return "^l";
+        case Opcode::LSHL:          return "<<l";
+        case Opcode::LSHR:          return ">>l";
         default:                    return "?";
     }
 }
@@ -73,6 +87,10 @@ static bool isBinaryOp(Opcode op) {
         case Opcode::STRING_CONCAT:
         case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
         case Opcode::DDIV: case Opcode::DMOD:
+        case Opcode::F32ADD: case Opcode::F32SUB: case Opcode::F32MUL: case Opcode::F32DIV:
+        case Opcode::LADD: case Opcode::LSUB: case Opcode::LMUL: case Opcode::LDIV: case Opcode::LMOD:
+        case Opcode::LBAND: case Opcode::LBOR: case Opcode::LBXOR:
+        case Opcode::LSHL: case Opcode::LSHR:
             return true;
         default: return false;
     }
@@ -179,6 +197,14 @@ void IRFunction::dump() const {
         } else if (ins.opcode == Opcode::LOAD_FLOAT) {
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " "
                       << Color::SoftTuruncu << ins.floatValue << Color::Reset;
+
+        } else if (ins.opcode == Opcode::LOAD_FLOAT32) {
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " "
+                      << Color::SoftTuruncu << ins.floatValue << Color::Reset << "f32";
+
+        } else if (ins.opcode == Opcode::LOAD_LONG) {
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " "
+                      << Color::SoftTuruncu << ins.int64Value << Color::Reset << "l";
 
         } else if (ins.opcode == Opcode::INT_TO_FLOAT) {
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
@@ -307,6 +333,9 @@ void IRFunction::dump() const {
             std::cout << Color::SoftGri << "return" << Color::Reset << " " << cs(ins.src);
         }
 
+        if (ins.requiredCap)
+            std::cout << " " << Color::SoftTurkuaz << "[cap:" << capabilityName(*ins.requiredCap)
+                      << "]" << Color::Reset;
         std::cout << "\n";
     }
     std::cout << "\n";

@@ -28,6 +28,11 @@ bir görev gibi baştan sona değerlendir. Contract'ları veya raporları issue'
 arasında birleştirme. Bir issue BLOCKED olursa onu doğru aşamaya gönderip kalan
 bağımsız issue'larla devam et.
 
+Project'teki diğer sütunları bağımlılık ve genel bağlam için okuyabilirsin;
+yalnız kendi Todo sütununda mutasyon yapabilirsin. Kendi sütununda issue yoksa
+yorum/label/status değişikliği yapma ve yalnız
+`Benlik iş yok; gelirse söyle.` yanıtını ver.
+
 ## Başlangıç kapısı
 
 1. `AGENTS.md` ve bu dosyayı tamamen oku.

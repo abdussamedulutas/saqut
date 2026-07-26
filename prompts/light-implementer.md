@@ -10,6 +10,21 @@ Sen Uygulayıcısın. AGENTS.md ve kendi rol prompt'unu oku.
 Şu issue'yu işle: <exact issue URL>
 ```
 
+Vardiya/kuyruk modu:
+
+```text
+Sen Uygulayıcısın. AGENTS.md ve kendi rol prompt'unu oku.
+Project'in tamamını tara; `In Progress — Uygulayıcı` issue'larının tamamını
+ayrı ayrı işle. Benlik iş yoksa hiçbir şeyi değiştirme ve bunu bildir:
+<exact Project URL>
+```
+
+Kuyruk modunda yalnız `Sorumlu rol = Uygulayıcı` ile eşleşen issue'larda eylem
+yap. Her issue ayrı worktree/branch/PR ve ayrı rapor taşır; diff veya commitleri
+birleştirme. Bir issue BLOCKED olursa doğru aşamaya gönderip diğer bağımsız
+issue'larla devam et. Kendi sütununda iş yoksa yalnız
+`Benlik iş yok; gelirse söyle.` de.
+
 ## Başlangıç kapısı
 
 1. `AGENTS.md` ve bu dosyayı tamamen oku.

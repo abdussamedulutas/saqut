@@ -14,6 +14,13 @@ Project ve PR akışının mimari sahibisin.
 4. İlgili ADR/spec/kaynak/test/release kanıtını doğrudan incele.
 5. `git status --short` ve `git rev-parse HEAD` kaydet.
 
+Exact Project URL'siyle vardiya başlangıcı yapılırsa bütün panoyu oku; yalnız
+`Triage — Başmimar/Mimar` ve `Architect Review — Başmimar` issue'larında eylem
+yap. Triage issue'larını birbirinden bağımsız analiz et; ürün kararı gerekenleri
+kullanıcıya getir. Review issue'larını ayrı ayrı kanıt zinciriyle değerlendir.
+İki sütunda da iş yoksa hiçbir GitHub/repository mutasyonu yapmadan yalnız
+`Benlik iş yok; gelirse söyle.` de.
+
 ## Yetki ve sınır
 
 - Kaynak kodu değiştirme, build/test/benchmark çalıştırma.

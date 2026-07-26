@@ -56,18 +56,29 @@ Sen <rol>sün. AGENTS.md ve kendi rol prompt'unu oku.
 Şu issue'yu işle: <exact issue URL>
 ```
 
-Teslimat Yöneticisi ve aynı role ait kuyruk toplu değerlendirilecekse kullanıcı
-exact Project URL'si ve sütun adını verebilir:
+Her kalıcı rol oturumu vardiya başlangıcında exact Project URL'siyle aktive
+edilebilir:
 
 ```text
-Sen Teslimat Yöneticisisin. AGENTS.md ve kendi rol prompt'unu oku.
-Şu Project'teki `Todo — Teslimat Yöneticisi` issue'larının tamamını ayrı ayrı işle:
+Sen <rol>sün. AGENTS.md ve kendi rol prompt'unu oku.
+Project'in tamamını tara; yalnız kendi sorumlu olduğun sütundaki issue'ları
+ayrı ayrı işle. Benlik iş yoksa hiçbir şeyi değiştirme ve bunu bildir:
 <exact Project URL>
 ```
 
+Rol-sütun eşleşmesi:
+
+- Başmimar/Mimar: `Triage — Başmimar/Mimar` ve Başmimar için ayrıca
+  `Architect Review — Başmimar`;
+- Teslimat Yöneticisi: `Todo — Teslimat Yöneticisi`;
+- Uygulayıcı: `In Progress — Uygulayıcı`;
+- Muhalif Testçi: `Validation — Muhalif Testçi`.
+
 Bu bir mega-task yetkisi değildir. Her issue kendi kararını, contract
-yorumlarını, label'larını ve status geçişini korur. Bir issue'nun blocker'ı
-diğer bağımsız issue'ların değerlendirilmesini durdurmaz.
+yorumlarını, branch/PR'ını ve status geçişini korur. Bir issue'nun blocker'ı
+diğer bağımsız issue'ların değerlendirilmesini durdurmaz. İlgili sütunda iş
+yoksa ajan Project veya issue üzerinde hiçbir mutasyon yapmadan yalnız
+`Benlik iş yok; gelirse söyle.` yanıtını verir.
 
 Issue veya Project alanları eksik/çelişkiliyse ajan tahminle çalışmaz; issue'ya
 rol-prefiksli `BLOCKED` yorumu ekler ve kendi izinli geri dönüşünü uygular.
@@ -317,12 +328,11 @@ testçi. Önceki testleri/contract'ları hatırlamak serbesttir ve çelişki yak
 için değerlidir; başka rolün ikna edici reasoning'ini taşımak yasaktır. Hafıza
 yetki değildir ve yeni task'ın kapsamını genişletemez.
 
-Hafif ajan aktivasyonu artık rol + exact issue URL'sidir. Teslimat Yöneticisi
-için rol + exact Project URL'si + kendi Todo sütunu da kuyruk aktivasyonu
-olabilir. Exact scope, write/git yetkisi ve acceptance kriterleri her issue body
-ve yetkili rol yorumundan ayrı ayrı gelir. Issue içeriği bunları taşımıyorsa
-hafif ajan `HANDOFF INVALID` veya `BLOCKED` yazar; kullanıcıdan uzun prompt
-istemez. §10 raporu yeni görev emri değildir.
+Hafif ajan aktivasyonu rol + exact issue URL'si veya rol + exact Project URL'si
+ile vardiya/kuyruk taramasıdır. Exact scope, write/git yetkisi ve acceptance
+kriterleri her issue body ve yetkili rol yorumundan ayrı ayrı gelir. Issue
+içeriği bunları taşımıyorsa hafif ajan `HANDOFF INVALID` veya `BLOCKED` yazar;
+kullanıcıdan uzun prompt istemez. §10 raporu yeni görev emri değildir.
 
 ## 7. Değişiklik güvenliği
 

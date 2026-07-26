@@ -76,6 +76,12 @@ Sen Muhalif Testçisin. AGENTS.md ve kendi rol prompt'unu oku.
 Başka prompt taşınmaz. Rol, kapsam, dosya allowlist'i, git yetkisi ve test
 oracle'ı issue'dan okunur. Eksikse ajan çalışmak yerine BLOCKED yazar.
 
+Vardiya başlangıcında her kalıcı rol oturumuna aynı Project URL'si verilebilir.
+Her rol bütün panoyu okur ama yalnız kendi sütununda eylem yapar. Kendi
+sütununda iş yoksa GitHub/repository durumuna dokunmadan
+`Benlik iş yok; gelirse söyle.` der. Issue başına yeni oturum açılmaz; rol
+başına kalıcı oturum korunur. Uygulayıcı ve Testçi yine ayrı oturumlardır.
+
 ## 4. Canonical yorum başlıkları
 
 ```text

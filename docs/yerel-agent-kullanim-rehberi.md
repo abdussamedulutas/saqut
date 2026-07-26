@@ -48,6 +48,17 @@ Sen Teslimat Yöneticisisin. AGENTS.md ve kendi rol prompt'unu oku.
 Şu issue'yu işle: https://github.com/saqutlang/saqut/issues/NNN
 ```
 
+Todo kuyruğunun tamamı:
+
+```text
+Sen Teslimat Yöneticisisin. AGENTS.md ve kendi rol prompt'unu oku.
+Şu Project'teki `Todo — Teslimat Yöneticisi` issue'larının tamamını ayrı ayrı işle:
+https://github.com/orgs/saqutlang/projects/2
+```
+
+Bu komut issue'ları birleştirmez. PM her issue için ayrı contract/BLOCKED
+yorumu ve ayrı Project geçişi üretir.
+
 Uygulayıcı:
 
 ```text

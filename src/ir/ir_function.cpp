@@ -27,6 +27,45 @@ static std::string slot(int s) {
     return "s" + std::to_string(s);
 }
 
+// Keep the dump renderer coupled to the complete opcode vocabulary.  With
+// -Wswitch, adding an Opcode without adding it here is a build-time diagnostic.
+static void verifyDumpOpcodeCoverage(Opcode op) {
+    switch (op) {
+        case Opcode::LOAD_CONST: case Opcode::LOAD_STRING: case Opcode::LOAD_NULL:
+        case Opcode::LOAD_SLOT: case Opcode::ADD: case Opcode::SUB: case Opcode::MUL:
+        case Opcode::DIV: case Opcode::MOD: case Opcode::BAND: case Opcode::BOR:
+        case Opcode::BXOR: case Opcode::SHL: case Opcode::SHR: case Opcode::BNOT:
+        case Opcode::LESS: case Opcode::LESS_EQUAL: case Opcode::GREATER:
+        case Opcode::GREATER_EQUAL: case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:
+        case Opcode::JMP: case Opcode::JIF_FALSE: case Opcode::JIF_TRUE: case Opcode::CALL:
+        case Opcode::RETURN: case Opcode::LOAD_FLOAT: case Opcode::FADD: case Opcode::FSUB:
+        case Opcode::FMUL: case Opcode::FDIV: case Opcode::FNEG: case Opcode::INT_TO_FLOAT:
+        case Opcode::FLOAT_TO_INT: case Opcode::LOAD_FLOAT32: case Opcode::F32ADD:
+        case Opcode::F32SUB: case Opcode::F32MUL: case Opcode::F32DIV: case Opcode::F32NEG:
+        case Opcode::INT_TO_FLOAT32: case Opcode::FLOAT32_TO_INT: case Opcode::FLOAT_TO_FLOAT32:
+        case Opcode::FLOAT32_TO_FLOAT: case Opcode::LOAD_LONG: case Opcode::LADD:
+        case Opcode::LSUB: case Opcode::LMUL: case Opcode::LDIV: case Opcode::LMOD:
+        case Opcode::LNEG: case Opcode::LBAND: case Opcode::LBOR: case Opcode::LBXOR:
+        case Opcode::LSHL: case Opcode::LSHR: case Opcode::LBNOT: case Opcode::INT_TO_LONG:
+        case Opcode::LONG_TO_INT_CHECKED: case Opcode::STRUCT_NEW: case Opcode::FIELD_GET:
+        case Opcode::FIELD_SET: case Opcode::ARRAY_NEW: case Opcode::ARRAY_GET:
+        case Opcode::ARRAY_SET: case Opcode::ARRAY_LEN: case Opcode::LOAD_GLOBAL:
+        case Opcode::STORE_GLOBAL: case Opcode::STRING_CONCAT: case Opcode::ENTER_TRY:
+        case Opcode::LEAVE_TRY: case Opcode::THROW: case Opcode::CAST_INT_TO_STR:
+        case Opcode::CAST_FLOAT_TO_STR: case Opcode::CAST_BOOL_TO_STR:
+        case Opcode::CAST_STR_TO_INT: case Opcode::CAST_STR_TO_FLOAT:
+        case Opcode::CAST_FLOAT_TO_INT_CHECKED: case Opcode::CAST_INT_TO_BYTE_CHECKED:
+        case Opcode::CAST_LONG_TO_STR: case Opcode::CAST_STR_TO_LONG:
+        case Opcode::CAST_FLOAT32_TO_STR: case Opcode::CAST_STR_TO_FLOAT32:
+        case Opcode::CAST_FLOAT_TO_LONG_CHECKED: case Opcode::LOAD_DECIMAL: case Opcode::DADD:
+        case Opcode::DSUB: case Opcode::DMUL: case Opcode::DDIV: case Opcode::DMOD:
+        case Opcode::DNEG: case Opcode::INT_TO_DECIMAL: case Opcode::FLOAT_TO_DECIMAL:
+        case Opcode::CAST_DECIMAL_TO_STR: case Opcode::CAST_DECIMAL_TO_FLOAT:
+        case Opcode::CAST_DECIMAL_TO_INT: case Opcode::CAST_STR_TO_DECIMAL:
+        case Opcode::CALLHOST: break;
+    }
+}
+
 // İkili op sembolü: ADD → "+"
 static const char* opSymbol(Opcode op) {
     switch (op) {
@@ -123,6 +162,7 @@ void IRFunction::dump() const {
     // Talimatlar
     for (int i = 0; i < (int)instructions.size(); i++) {
         const Instruction& ins = instructions[i];
+        verifyDumpOpcodeCoverage(ins.opcode);
 
         // Satır numarası
         std::cout << "  " << Color::SoftGri << std::setw(3) << std::right << i << Color::Reset << "  ";

@@ -1,0 +1,1 @@
+/tmp/saqut-sq090-baseline-4WbBYH/saqut exec print(1); print(2);

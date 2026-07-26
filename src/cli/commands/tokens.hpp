@@ -6,6 +6,7 @@
 #define SAQUT_CLI_TOKENS
 
 #include <iostream>
+#include <iomanip>
 #include "cli/args.hpp"
 #include "tokenizer/tokenizer.hpp"
 
@@ -21,8 +22,8 @@ inline int cmdTokens(const CliArgs& args) {
         // SourceLocation::column is derived from the UTF-8 source byte
         // offset; it is not a Unicode code-point or visual-terminal column.
         const int byteLength = t->end - t->start;
-        std::cout << "  [" << t->gettype() << "] \"" << t->token << "\""
-                  << " file=" << inputFilePath(args)
+        std::cout << "  [" << t->gettype() << "] " << std::quoted(t->token)
+                  << " file=" << std::quoted(inputFilePath(args))
                   << " byteOffset=" << t->start
                   << " byteLength=" << byteLength
                   << " line=" << t->loc.line

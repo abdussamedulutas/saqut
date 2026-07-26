@@ -62,6 +62,12 @@ add_test(
     COMMAND bash "${CMAKE_SOURCE_DIR}/tests/run.sh"
 )
 
+add_test(
+    NAME golden_check_jsonl
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/check_jsonl_test.sh"
+            "${SAQUT_BINARY}" "${CMAKE_SOURCE_DIR}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

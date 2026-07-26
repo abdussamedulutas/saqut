@@ -21,6 +21,10 @@
 inline int cmdCheck(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
     if (filePath.empty()) return 1;
+    if (args.compact) {
+        std::cerr << "error: check --compact is invalid for JSONL output\n";
+        return 64;
+    }
 
     ModuleRegistry   registry;
     DiagnosticEngine diag;
@@ -36,12 +40,23 @@ inline int cmdCheck(const CliArgs& args) {
         }
     }
 
-    nlohmann::json out;
-    out["file"]        = filePath;
-    out["diagnostics"] = diag.toJsonObj();
-    std::cout << (args.compact ? out.dump() : out.dump(2)) << "\n";
+    nlohmann::json header = {
+        {"kind", "check.header"}, {"schemaVersion", 1}, {"file", filePath}
+    };
+    std::cout << header.dump() << "\n";
+    for (const auto& d : diag.all()) {
+        nlohmann::json record = d.toJsonObj();
+        record["kind"] = "check.diagnostic";
+        std::cout << record.dump() << "\n";
+    }
+    nlohmann::json end = {
+        {"kind", "check.end"},
+        {"errorCount", diag.errorCount()},
+        {"warningCount", diag.warningCount()}
+    };
+    std::cout << end.dump() << "\n";
 
-    return diag.hasErrors() ? 1 : 0;
+    return diag.hasErrors() ? 65 : 0;
 }
 
 #endif // SAQUT_CLI_CHECK

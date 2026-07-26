@@ -1,0 +1,5 @@
+void main() {
+    /* first line
+       second line */
+    int value = 1;
+}

@@ -18,7 +18,15 @@ inline int cmdTokens(const CliArgs& args) {
 
     std::cout << "Tokenler (" << tokens.size() << " adet):\n";
     for (auto* t : tokens) {
-        std::cout << "  [" << t->gettype() << "] \"" << t->token << "\"\n";
+        // SourceLocation::column is derived from the UTF-8 source byte
+        // offset; it is not a Unicode code-point or visual-terminal column.
+        const int byteLength = t->end - t->start;
+        std::cout << "  [" << t->gettype() << "] \"" << t->token << "\""
+                  << " file=" << inputFilePath(args)
+                  << " byteOffset=" << t->start
+                  << " byteLength=" << byteLength
+                  << " line=" << t->loc.line
+                  << " column=" << t->loc.column << "\n";
     }
 
     for (auto* t : tokens) delete t;

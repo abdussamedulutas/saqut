@@ -37,6 +37,7 @@ struct CliArgs {
     bool compact     = false;  // --compact: boşluksuz JSON
     bool optimized   = false;  // --optimized: sabit katlama + ölü kod eleme
     bool jsonOutput  = false;  // --json: JSON çıktı üret (varsayılan: düz metin)
+    bool jsonlOutput = false;  // --jsonl: makine-okunur satır akışı
     int  benchRuns   = 5;      // --runs=N: benchmark tekrar sayısı
     bool compileOnly = false;  // --compile-only: VM çalıştırmasını atla
     bool verbose     = false;  // --verbose: her aşamanın bitişini canlı yaz
@@ -110,6 +111,10 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         }
         if (arg == "--json") {
             args.jsonOutput = true;
+            continue;
+        }
+        if (arg == "--jsonl") {
+            args.jsonlOutput = true;
             continue;
         }
         if (arg == "--optimized") {

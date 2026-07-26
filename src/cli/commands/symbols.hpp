@@ -16,6 +16,14 @@
 #include "vendor/nlohmann/json.hpp"
 
 inline int cmdSymbols(const CliArgs& args) {
+    if (args.jsonOutput && args.jsonlOutput) {
+        std::cerr << "error: --json and --jsonl are mutually exclusive\n";
+        return 64;
+    }
+    if (args.jsonlOutput && args.compact) {
+        std::cerr << "error: --compact is not valid with --jsonl\n";
+        return 64;
+    }
     std::string filePath = inputFilePath(args);
     std::string source   = readSource(args);
     if (source.empty()) return 1;
@@ -35,7 +43,26 @@ inline int cmdSymbols(const CliArgs& args) {
         diag.report("E000", SourceLocation{}, "failed to build AST");
     }
 
-    if (args.jsonOutput) {
+    if (args.jsonlOutput) {
+        nlohmann::json header = {{"kind", "symbols.header"}, {"schemaVersion", 1}, {"file", filePath}};
+        std::cout << header.dump() << "\n";
+        int symbolCount = 0;
+        for (Symbol* s : table.allSymbols()) {
+            if (s->isBuiltin) continue;
+            nlohmann::json refs = nlohmann::json::array();
+            for (const SourceLocation& r : s->references) refs.push_back(r.toJsonObj());
+            std::cout << nlohmann::json({{"kind", "symbol"}, {"name", s->name},
+                {"symbolKind", symbolKindName(s->kind)}, {"type", s->type.toString()},
+                {"definition", s->definitionLoc.toJsonObj()}, {"referenceCount", (int)s->references.size()},
+                {"references", refs}}).dump() << "\n";
+            ++symbolCount;
+        }
+        for (const auto& d : diag.all())
+            std::cout << nlohmann::json({{"kind", "diagnostic"}, {"code", d.code}, {"message", d.message},
+                {"severity", d.level == DiagLevel::Error ? "error" : "warning"}}).dump() << "\n";
+        std::cout << nlohmann::json({{"kind", "symbols.end"}, {"symbolCount", symbolCount},
+            {"diagnosticCount", (int)diag.all().size()}}).dump() << "\n";
+    } else if (args.jsonOutput) {
         // ── JSON çıktı ──────────────────────────────────────────────────────
         nlohmann::json out;
         out["file"] = filePath;

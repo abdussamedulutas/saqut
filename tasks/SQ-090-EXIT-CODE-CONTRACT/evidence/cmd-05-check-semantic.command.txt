@@ -1,0 +1,1 @@
+saqut check file:tests/golden/numeric/longint_narrowing.sqt

@@ -1,0 +1,7 @@
+#!/bin/bash
+# argv representation:
+  /tmp/saqut-sq090-amendment01-build-H5aiLe/saqut
+  ast
+  --json
+  /tmp/saqut-sq090-amendment01-fixtures-S66rsq/empty.sqt
+# ---

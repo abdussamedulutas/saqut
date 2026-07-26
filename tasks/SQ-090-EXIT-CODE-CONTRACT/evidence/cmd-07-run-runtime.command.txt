@@ -1,0 +1,1 @@
+saqut run file:tests/golden/arithmetic/mod_by_zero.sqt

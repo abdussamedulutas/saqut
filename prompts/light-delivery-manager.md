@@ -14,6 +14,20 @@ Sen Teslimat Yöneticisisin. AGENTS.md ve kendi rol prompt'unu oku.
 Bunun dışında uzun bir handoff prompt'u bekleme. Yetki ve kapsam issue + Project
 durumundan gelir.
 
+Kuyruk modu da geçerlidir:
+
+```text
+Sen Teslimat Yöneticisisin. AGENTS.md ve kendi rol prompt'unu oku.
+Şu Project'teki `Todo — Teslimat Yöneticisi` issue'larının tamamını ayrı ayrı işle:
+<exact Project URL>
+```
+
+Kuyruk modunda Project'teki bütün `Todo — Teslimat Yöneticisi` ve
+`Sorumlu rol = Teslimat Yöneticisi` issue'larını listele. Her issue'yu bağımsız
+bir görev gibi baştan sona değerlendir. Contract'ları veya raporları issue'lar
+arasında birleştirme. Bir issue BLOCKED olursa onu doğru aşamaya gönderip kalan
+bağımsız issue'larla devam et.
+
 ## Başlangıç kapısı
 
 1. `AGENTS.md` ve bu dosyayı tamamen oku.

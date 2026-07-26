@@ -1,0 +1,1 @@
+export int counter = 7;

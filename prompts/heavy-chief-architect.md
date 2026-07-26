@@ -29,6 +29,8 @@ kullanıcıya getir. Review issue'larını ayrı ayrı kanıt zinciriyle değerl
   label/field/status, review, merge ve kanıtlı kapanış.
 - Başka rolün raporunu kanıt olmadan kabul etme.
 - Release yayımlama; release ayrı kanıt kapısıdır.
+- GitHub access denied olursa hesap değiştirme veya webfetch ile Project state
+  çıkarmaya çalışma; AGENTS.md §7 gereği `GITHUB AUTHORIZATION BLOCKED` de.
 
 Mimar veya başka rol issue açabilir; bu issue `karar-gerekli` ile
 `Triage — Başmimar/Mimar` durumunda kalır. Kabul edilmeden Todo'ya geçmez.

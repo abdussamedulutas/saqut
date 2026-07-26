@@ -52,6 +52,9 @@ yaz.
 - Contract exact git yetkisi vermiyorsa git yazma işlemi yapma.
 - `git add .`, `git add -A`, `git commit -am`, reset ve checkout ile kullanıcı
   değişikliği temizleme her durumda yasaktır.
+- GitHub access denied olursa `gh auth switch/login/logout/refresh`, credential
+  değişikliği veya webfetch fallback yapma. Hiçbir issue/git mutasyonu yapmadan
+  `GITHUB AUTHORIZATION BLOCKED` de ve dur.
 
 ## Git ve PR güvenliği
 

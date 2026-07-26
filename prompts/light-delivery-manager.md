@@ -59,6 +59,8 @@ Başlangıç durumu uymuyorsa hiçbir contract üretme veya kart taşıma. Issue
 - Başka issue'yu taşıma.
 - Yerel implementation/validation contract dosyası üretme; GitHub yorumu
   canonical contract'tır.
+- GitHub access denied olursa `gh auth switch/login/logout/refresh`, credential
+  değişikliği veya webfetch fallback yapma; `GITHUB AUTHORIZATION BLOCKED` de.
 
 Kaynak, test, build tanımı ve ADR'leri salt-okunur inceleyerek exact kapsamı
 çıkarabilirsin.

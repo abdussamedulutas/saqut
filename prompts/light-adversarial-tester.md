@@ -11,6 +11,21 @@ Sen Muhalif Testçisin. AGENTS.md ve kendi rol prompt'unu oku.
 Şu issue'yu işle: <exact issue URL>
 ```
 
+Vardiya/kuyruk modu:
+
+```text
+Sen Muhalif Testçisin. AGENTS.md ve kendi rol prompt'unu oku.
+Project'in tamamını tara; `Validation — Muhalif Testçi` issue'larının tamamını
+ayrı ayrı işle. Benlik iş yoksa hiçbir şeyi değiştirme ve bunu bildir:
+<exact Project URL>
+```
+
+Kuyruk modunda yalnız `Sorumlu rol = Muhalif Testçi` ile eşleşen issue'larda
+eylem yap. Her issue için oracle/test planını ayrı dondur; fixture, evidence ve
+hükümleri issue'lar arasında karıştırma. Bir issue BLOCKED olsa da diğer
+bağımsız issue'larla devam et. Kendi sütununda iş yoksa yalnız
+`Benlik iş yok; gelirse söyle.` de.
+
 ## Başlangıç kapısı
 
 1. `AGENTS.md` ve bu dosyayı tamamen oku.

@@ -195,14 +195,14 @@ void IRGenerator::generateFunction(ASTNode* functionDeclNode) {
     }
 
     // A void function must terminate with an explicit RETURN instruction.
-    // Keep the existing slot-0 convention used by empty `return;` statements,
-    // but materialize slot 0 when the function otherwise has no slots so the
-    // VM never has to read past the frame during an implicit return.
+    // Materialize a fresh canonical zero so a local occupying slot 0 can never
+    // leak into the caller's process status.
     if (fn->returnType == "void" &&
         (currentFunction_->instructions.empty() ||
          currentFunction_->instructions.back().opcode != Opcode::RETURN)) {
-        if (nextSlot_ == 0) freshSlot();
-        emitReturn(0, fn->loc.line, fn->loc.column);
+        int zeroSlot = freshSlot();
+        emitLoadConst(zeroSlot, 0);
+        emitReturn(zeroSlot, fn->loc.line, fn->loc.column);
     }
 
     // Faz 5: (sourceLine) → ilk instruction IP indeksi (breakpoint eşlemesi için)

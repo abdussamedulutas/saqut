@@ -31,7 +31,6 @@ struct CliArgs {
     std::string command;
     std::vector<std::string> positional;
     std::string outputFile;
-    std::string format;
     bool showHelp    = false;
     bool stdinMode   = false;
     bool compact     = false;  // --compact: boşluksuz JSON
@@ -92,16 +91,12 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
             args.outputFile = arg.substr(9);
             continue;
         }
-        if (arg.compare(0, 9, "--format=") == 0) {
-            args.format = arg.substr(9);
-            continue;
+        if (arg.compare(0, 9, "--format=") == 0 || arg == "--format") {
+            std::cerr << "error: --format option was removed; it was not consumed by any command\n";
+            exit(64);
         }
         if (arg == "--output" || arg == "-o") {
             if (i + 1 < argc) args.outputFile = argv[++i];
-            continue;
-        }
-        if (arg == "--format") {
-            if (i + 1 < argc) args.format = argv[++i];
             continue;
         }
         if (arg == "--compact") {

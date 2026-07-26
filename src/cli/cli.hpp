@@ -87,12 +87,10 @@ public:
 
         std::cout << "\nOPTIONS:\n";
         std::cout << "  -o, --output <file>    Output file\n";
-        std::cout << "  --format <json|text>   Output format (default: text)\n";
         std::cout << "  -h, --help             Show this help\n\n";
         std::cout << "EXAMPLES:\n";
         std::cout << "  saqut run source.sqt\n";
         std::cout << "  saqut tokens source.sqt\n";
-        std::cout << "  saqut ast source.sqt --format=json\n";
         std::cout << "  saqut symbols source.sqt\n";
     }
 

@@ -1,6 +1,14 @@
 # ADR-032 — İkinci Backend: MIR JIT + Gömülü-Runtime AOT (ADR-015 Revizyonu)
 
-**Durum:** Kabul
+> **v1 kapsam notu (2026-07-25): ADR-042 bu ADR'nin v1 takvimini ve ürün
+> iddialarını supersede eder.** VM v1'in tek stabil backend'idir; MIR JIT
+> `[EXPERIMENTAL]`, executable paketleme ise v1 dışıdır. Burada “gömülü-runtime
+> AOT” denen yöntem klasik AOT değildir ve bundan sonra
+> **bundled-runtime executable packaging** olarak anılacaktır. Aşağıdaki metin
+> tarihsel backend değerlendirmesi olarak korunmuştur.
+
+**Durum:** Uzun vadeli yön olarak kabul; v1 ürün kapsamı ADR-042 ile supersede
+edildi.
 **Tarih:** 2026-07-11
 **Revize eder:** ADR-015 ("makine-kodu JIT kapsam dışı" maddesi), ADR-001/005'teki
 backend değerlendirmeleri.

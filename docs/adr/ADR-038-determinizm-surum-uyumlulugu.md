@@ -1,5 +1,13 @@
 # ADR-038 — Determinizm ve Sürüm Uyumluluğu Sözleşmesi
 
+> **Durum (2026-07-25): Kısmen supersede edildi — ADR-042.**
+> §2'deki minor sürümde sıfır yeni özellik/iki yönlü uyumluluk, zorunlu
+> backport+yank; §3'te yeni public işlevin doğrudan major olması ve exact
+> insan-okunur diagnostic metninin donması artık yürürlükte değildir. Major
+> sürümün ayrı ürün olması, iç temsil serbestliği ve açıkça sürümlenen
+> gözlemlenebilir sözleşmeler korunur. Ayrıntı:
+> `ADR-042-v1-feedback-mvp-ve-surumleme.md`.
+
 İlgili: ADR-032 (backend kararı: VM referans + MIR JIT, diferansiyel test zorunlu),
 ADR-037 (JIT Value ABI — kutulama farkı "gözlemlenen davranışa uygulanır" ilkesi),
 LICENSE.md (ürün kimliği: v1 bir ürün / v2 başka ürün), #92 (in-process

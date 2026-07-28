@@ -1,13 +1,18 @@
 # ADR-041 — Self-Hosted Standard Library & Thin Runtime Architecture
 
+> **Durum (2026-07-25): Geçici mimari hipotez; v1 kilidi kaldırıldı.**
+> ADR-042, bu belgenin “kilitli karar” statüsünü ve #122–#129'un v1 release
+> takvimi olmasını supersede eder. Self-hosted stdlib/thin runtime yaklaşımı,
+> v1 doğrulama programlarından bakım ve ergonomi verisi geldikten sonra yeniden
+> değerlendirilecektir. Aşağıdaki özgün metin karar geçmişi olarak korunmuştur.
+
 İlgili: ADR-032 (MIR JIT + gömülü-runtime AOT), ADR-034 (FFI declaration modeli +
 sayısal host dispatch), ADR-037 (JIT Value ABI), ADR-038 (determinizm + sürüm
 uyumluluğu), ADR-017 (batteries = sınır/FFI problemi; kripto elle yazılmaz),
 ADR-033 (UFCS builtin sözdizimi), ADR-035 (capability modeli), #119 (string
 yönetimi), #92 (diferansiyel test).
 
-Durum: **Kabul edildi — kilitli karar.** Bu ADR'den sonra "builtin/FFI davranışı
-nerede yaşar" sorusu yoruma açık değildir; §3'teki karar ağacı mekanik yanıt verir.
+Önceki durum: **Kabul edildi — kilitli karar.** Bu statü ADR-042 ile kaldırıldı.
 
 ---
 

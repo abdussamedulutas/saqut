@@ -50,6 +50,16 @@ add_executable(saqut ${SOURCES})
 target_include_directories(saqut PRIVATE src)
 target_link_libraries(saqut PRIVATE mir_core)
 
+# IR-K6 (#139): saqut ir dump'ının operand renderer'ı Opcode üzerinde
+# default'suz bir switch'tir (src/ir/ir_function.cpp). Bu dosyada -Wswitch'i
+# -Werror'a yükseltmek, yeni bir Opcode enum değeri eklenip renderer'a case
+# eklenmezse build'i kırar — yeni opcode sessizce operandsız satıra düşemez.
+# Yalnızca bu dosyaya uygulanır; projenin geri kalanındaki mevcut switch'leri
+# etkilemez.
+set_source_files_properties(src/ir/ir_function.cpp PROPERTIES
+    COMPILE_OPTIONS "-Werror=switch"
+)
+
 # ── Testler ──────────────────────────────────────────────────────────────────
 enable_testing()
 
@@ -60,6 +70,28 @@ set(GOLDEN_SCRIPT "${CMAKE_SOURCE_DIR}/cmake/run_golden.cmake")
 add_test(
     NAME unit_tests
     COMMAND bash "${CMAKE_SOURCE_DIR}/tests/run.sh"
+)
+
+# #156: kUsageError (64) tracked regresyon — run/check/ir "-" (stdin, henüz
+# desteklenmiyor) ile çağrıldığında merkezi kullanım-hatası sınıfını verir.
+add_test(
+    NAME exit_code_usage_error
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/exit_code_usage_error_test.sh" "${SAQUT_BINARY}"
+)
+
+# #147: --format kaldırıldı (usage error 64), --output/canlı seçen matrisi
+# korunuyor.
+add_test(
+    NAME cli_dead_option_removal
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/cli_dead_option_removal_test.sh"
+            "${SAQUT_BINARY}" "${CMAKE_SOURCE_DIR}"
+)
+
+# #141: saqut ir yalnız gerçek TTY'de renkli; redirect/pipe'ta ANSI CSI yok.
+add_test(
+    NAME ir_tty_color
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/ir_tty_color_test.sh"
+            "${SAQUT_BINARY}" "${CMAKE_SOURCE_DIR}"
 )
 
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
@@ -108,6 +140,25 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -DEXPECTED=${IR_OPT_EXPECTED}
                 -DCOMMAND=ir
                 -DOPTIMIZED=1
+                -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
+                -P "${GOLDEN_SCRIPT}"
+        )
+    endif()
+
+    # Beyaz-kutu: saqut ir (plain, optimize edilmemiş) çıktısı. #139'un
+    # Başmimar review'unda istenen "plain IR tracked regression" — daha önce
+    # yalnız --optimized dump tracked'dı, optimize edilmemiş HeavyIR hiç
+    # golden'a bağlanmamıştı.
+    set(IR_PLAIN_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.ir_plain.expected")
+    if(EXISTS "${IR_PLAIN_EXPECTED}")
+        add_test(
+            NAME "golden_${TNAME}_ir_plain"
+            COMMAND ${CMAKE_COMMAND}
+                -DBINARY=${SAQUT_BINARY}
+                -DSOURCE=${SQT_FILE}
+                -DEXPECTED=${IR_PLAIN_EXPECTED}
+                -DCOMMAND=ir
+                -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
                 -P "${GOLDEN_SCRIPT}"
         )
     endif()
@@ -144,6 +195,16 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
             SKIP_REGULAR_EXPRESSION "SKIP: JIT bu fixture")
     endif()
 
+    # #156: BASE.expected_exit (opsiyonel) — mevcut varsa run_golden_error.cmake
+    # yalnız "exit != 0" yerine merkezi 0/64/65/70 sınıfının exact değerini
+    # doğrular. Dosya yoksa davranış değişmez (geriye dönük uyumlu).
+    set(EXPECTED_EXIT_FILE "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.expected_exit")
+    set(EXPECTED_EXIT_ARG "")
+    if(EXISTS "${EXPECTED_EXIT_FILE}")
+        file(STRINGS "${EXPECTED_EXIT_FILE}" EXPECTED_EXIT_VALUE LIMIT_COUNT 1)
+        set(EXPECTED_EXIT_ARG "-DEXPECTED_EXIT=${EXPECTED_EXIT_VALUE}")
+    endif()
+
     # Negatif test: .compile_error — derleme hatası beklenen golden testler.
     # Dosya içeriği stderr'de aranır (regex/düz dize).
     set(COMPILE_ERROR_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.compile_error")
@@ -155,12 +216,14 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -DSOURCE=${SQT_FILE}
                 -DEXPECTED=${COMPILE_ERROR_EXPECTED}
                 -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
+                ${EXPECTED_EXIT_ARG}
                 -P "${CMAKE_SOURCE_DIR}/cmake/run_golden_error.cmake"
         )
     endif()
 
     # Negatif test: .runtime_error — çalışma zamanı hatası beklenen golden testler.
-    # Aynı altyapı: exit code != 0 + stderr içeriği kontrolü.
+    # Aynı altyapı: exit code != 0 (veya BASE.expected_exit varsa exact değer)
+    # + stderr içeriği kontrolü.
     set(RUNTIME_ERROR_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.runtime_error")
     if(EXISTS "${RUNTIME_ERROR_EXPECTED}")
         add_test(
@@ -170,6 +233,7 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -DSOURCE=${SQT_FILE}
                 -DEXPECTED=${RUNTIME_ERROR_EXPECTED}
                 -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
+                ${EXPECTED_EXIT_ARG}
                 -P "${CMAKE_SOURCE_DIR}/cmake/run_golden_error.cmake"
         )
     endif()

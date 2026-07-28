@@ -87,6 +87,13 @@ add_test(
             "${SAQUT_BINARY}" "${CMAKE_SOURCE_DIR}"
 )
 
+# #141: saqut ir yalnız gerçek TTY'de renkli; redirect/pipe'ta ANSI CSI yok.
+add_test(
+    NAME ir_tty_color
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/ir_tty_color_test.sh"
+            "${SAQUT_BINARY}" "${CMAKE_SOURCE_DIR}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

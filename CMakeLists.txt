@@ -79,6 +79,14 @@ add_test(
     COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/exit_code_usage_error_test.sh" "${SAQUT_BINARY}"
 )
 
+# #147: --format kaldırıldı (usage error 64), --output/canlı seçen matrisi
+# korunuyor.
+add_test(
+    NAME cli_dead_option_removal
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/cli_dead_option_removal_test.sh"
+            "${SAQUT_BINARY}" "${CMAKE_SOURCE_DIR}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

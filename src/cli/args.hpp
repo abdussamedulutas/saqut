@@ -19,12 +19,14 @@
 #ifndef SAQUT_CLI_ARGS
 #define SAQUT_CLI_ARGS
 
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <set>
 #include <sstream>
 #include <string>
 #include <vector>
+#include "cli/exit_codes.hpp"
 #include "core/capability.hpp"
 
 struct CliArgs {
@@ -93,7 +95,7 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         }
         if (arg.compare(0, 9, "--format=") == 0 || arg == "--format") {
             std::cerr << "error: --format option was removed; it was not consumed by any command\n";
-            exit(64);
+            exit(saqut::exit_code::kUsageError);
         }
         if (arg == "--output" || arg == "-o") {
             if (i + 1 < argc) args.outputFile = argv[++i];

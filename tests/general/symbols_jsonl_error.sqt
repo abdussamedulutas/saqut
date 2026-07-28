@@ -1,0 +1,4 @@
+int main() {
+    print(undefined_var);
+    return 0;
+}

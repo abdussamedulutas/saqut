@@ -8,6 +8,7 @@
 #include <iostream>
 #include "tools.hpp"
 #include "cli/args.hpp"
+#include "cli/exit_codes.hpp"
 #include "tokenizer/tokenizer.hpp"
 #include "parser/parser.hpp"
 #include "symbol/symbol_table.hpp"
@@ -16,17 +17,20 @@
 #include "vendor/nlohmann/json.hpp"
 
 inline int cmdSymbols(const CliArgs& args) {
-    if (args.jsonOutput && args.jsonlOutput) {
-        std::cerr << "error: --json and --jsonl are mutually exclusive\n";
-        return 64;
+    // #145: eski tek-doküman --json preview yüzeyi kaldırıldı; symbols
+    // artık yalnız düz metin (varsayılan) veya --jsonl üretir. --json
+    // text/JSONL'e sessizce düşmez, açık usage error verir.
+    if (args.jsonOutput) {
+        std::cerr << "error: --json is removed for symbols; use --jsonl\n";
+        return saqut::exit_code::kUsageError;
     }
     if (args.jsonlOutput && args.compact) {
         std::cerr << "error: --compact is not valid with --jsonl\n";
-        return 64;
+        return saqut::exit_code::kUsageError;
     }
     std::string filePath = inputFilePath(args);
     std::string source   = readSource(args);
-    if (source.empty()) return 1;
+    if (source.empty()) return saqut::exit_code::kUsageError;
 
     Tokenizer tokenizer;
     auto tokens = tokenizer.scan(source, filePath);
@@ -62,37 +66,6 @@ inline int cmdSymbols(const CliArgs& args) {
                 {"severity", d.level == DiagLevel::Error ? "error" : "warning"}}).dump() << "\n";
         std::cout << nlohmann::json({{"kind", "symbols.end"}, {"symbolCount", symbolCount},
             {"diagnosticCount", (int)diag.all().size()}}).dump() << "\n";
-    } else if (args.jsonOutput) {
-        // ── JSON çıktı ──────────────────────────────────────────────────────
-        nlohmann::json out;
-        out["file"] = filePath;
-
-        nlohmann::json symArray = nlohmann::json::array();
-        for (Symbol* s : table.allSymbols()) {
-            if (s->isBuiltin) continue;
-
-            nlohmann::json refs = nlohmann::json::array();
-            for (const SourceLocation& r : s->references)
-                refs.push_back(r.toJsonObj());
-
-            symArray.push_back({
-                {"name",           s->name},
-                {"kind",           symbolKindName(s->kind)},
-                {"type",           s->type.toString()},
-                {"typeDetail",     s->type.toJsonObj()},
-                {"sourceModule",   s->moduleId == 0 ? "__builtin__"
-                                                    : s->moduleId < 0  ? "<main>"
-                                                    : "<module:" + std::to_string(s->moduleId) + ">"},
-                {"definition",     s->definitionLoc.toJsonObj()},
-                {"referenceCount", static_cast<int>(s->references.size())},
-                {"references",     refs},
-                {"isBuiltin",      s->isBuiltin}
-            });
-        }
-        out["symbols"]     = symArray;
-        out["diagnostics"] = diag.toJsonObj();
-
-        std::cout << (args.compact ? out.dump() : out.dump(2)) << "\n";
     } else {
         // ── Düz metin çıktı ─────────────────────────────────────────────────
         for (Symbol* s : table.allSymbols()) {
@@ -124,7 +97,7 @@ inline int cmdSymbols(const CliArgs& args) {
 
     delete ast;
     for (auto* t : tokens) delete t;
-    return diag.hasErrors() ? 1 : 0;
+    return diag.hasErrors() ? saqut::exit_code::kDataError : saqut::exit_code::kSuccess;
 }
 
 #endif // SAQUT_CLI_SYMBOLS

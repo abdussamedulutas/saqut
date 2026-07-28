@@ -78,7 +78,10 @@ run_live() {
     fi
 }
 run_live symbols --compact
-run_live symbols --json
+# #145 (bu branch'te merge edilmiş): symbols'ta --json kaldırıldı, gerçek
+# JSON stream bayrağı --jsonl. --compact zaten --jsonl'siz de canlı
+# kalıyor (yukarıdaki satır); burada --jsonl'in kendisini smoke ediyoruz.
+run_live symbols --jsonl
 run_live run --optimized
 run_live run --jit
 run_live run --profile

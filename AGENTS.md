@@ -303,6 +303,20 @@ kullanılabilir. Ağır modeller çatışırsa son hüküm ürün sahibine aitti
   sonra `MUHALİF TESTÇİ — VALIDATION RESULT` yorumunda exact revision, build,
   komut, expected/actual, stdout/stderr/exit ve PASS/FAIL/BLOCKED sonuçlarını
   raporlar.
+- **(#143, Mimar Ç-1 bulgusu — üç ayrı task'ta tekrarlanan validation-theater
+  kalıbını kapatır.)**
+  1. Testçi, `UYGULAYICI — IMPLEMENTATION REPORT`'un yalnız
+     **"Kanıtlanmayanlar"** başlığını okur; orada karşılanmadığı açıkça
+     beyan edilen bir kriter için PASS veremez — o kriteri `NOT TESTED`
+     veya `FAIL` olarak işaretler. Raporun reasoning/kök-neden bölümleri
+     okunmaz; oracle izolasyonu bu okumayla bozulmaz, yalnız kapsam beyanı
+     kontrol edilir.
+  2. Binary provenance **tam 64-hex SHA-256** olarak yazılır; kısaltılmış
+     hash kabul edilmez.
+  3. Contract "full suite" veya "fresh full tracked suite" istiyorsa,
+     regresyon tam `ctest` çıktısıyla (komut + exit + özet satırı)
+     raporlanır; bir alt küme koşusu (`ctest -R ...`) full suite yerine
+     geçmez.
 - Sonuç ne olursa olsun task'ı `Architect Review — Başmimar` durumuna taşır ve
   sorumlu rolü Başmimar yapar. Kod düzeltmez veya doğrudan coder'a geri yollamaz.
 - Issue açamaz/kapatamaz; issue body, başlık, milestone, kabul kriteri veya

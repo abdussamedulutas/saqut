@@ -50,6 +50,16 @@ add_executable(saqut ${SOURCES})
 target_include_directories(saqut PRIVATE src)
 target_link_libraries(saqut PRIVATE mir_core)
 
+# IR-K6 (#139): saqut ir dump'ının operand renderer'ı Opcode üzerinde
+# default'suz bir switch'tir (src/ir/ir_function.cpp). Bu dosyada -Wswitch'i
+# -Werror'a yükseltmek, yeni bir Opcode enum değeri eklenip renderer'a case
+# eklenmezse build'i kırar — yeni opcode sessizce operandsız satıra düşemez.
+# Yalnızca bu dosyaya uygulanır; projenin geri kalanındaki mevcut switch'leri
+# etkilemez.
+set_source_files_properties(src/ir/ir_function.cpp PROPERTIES
+    COMPILE_OPTIONS "-Werror=switch"
+)
+
 # ── Testler ──────────────────────────────────────────────────────────────────
 enable_testing()
 
@@ -114,6 +124,25 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -DEXPECTED=${IR_OPT_EXPECTED}
                 -DCOMMAND=ir
                 -DOPTIMIZED=1
+                -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
+                -P "${GOLDEN_SCRIPT}"
+        )
+    endif()
+
+    # Beyaz-kutu: saqut ir (plain, optimize edilmemiş) çıktısı. #139'un
+    # Başmimar review'unda istenen "plain IR tracked regression" — daha önce
+    # yalnız --optimized dump tracked'dı, optimize edilmemiş HeavyIR hiç
+    # golden'a bağlanmamıştı.
+    set(IR_PLAIN_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.ir_plain.expected")
+    if(EXISTS "${IR_PLAIN_EXPECTED}")
+        add_test(
+            NAME "golden_${TNAME}_ir_plain"
+            COMMAND ${CMAKE_COMMAND}
+                -DBINARY=${SAQUT_BINARY}
+                -DSOURCE=${SQT_FILE}
+                -DEXPECTED=${IR_PLAIN_EXPECTED}
+                -DCOMMAND=ir
+                -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
                 -P "${GOLDEN_SCRIPT}"
         )
     endif()

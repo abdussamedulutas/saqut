@@ -72,6 +72,13 @@ add_test(
     COMMAND bash "${CMAKE_SOURCE_DIR}/tests/run.sh"
 )
 
+# #156: kUsageError (64) tracked regresyon — run/check/ir "-" (stdin, henüz
+# desteklenmiyor) ile çağrıldığında merkezi kullanım-hatası sınıfını verir.
+add_test(
+    NAME exit_code_usage_error
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/exit_code_usage_error_test.sh" "${SAQUT_BINARY}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)
@@ -173,6 +180,16 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
             SKIP_REGULAR_EXPRESSION "SKIP: JIT bu fixture")
     endif()
 
+    # #156: BASE.expected_exit (opsiyonel) — mevcut varsa run_golden_error.cmake
+    # yalnız "exit != 0" yerine merkezi 0/64/65/70 sınıfının exact değerini
+    # doğrular. Dosya yoksa davranış değişmez (geriye dönük uyumlu).
+    set(EXPECTED_EXIT_FILE "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.expected_exit")
+    set(EXPECTED_EXIT_ARG "")
+    if(EXISTS "${EXPECTED_EXIT_FILE}")
+        file(STRINGS "${EXPECTED_EXIT_FILE}" EXPECTED_EXIT_VALUE LIMIT_COUNT 1)
+        set(EXPECTED_EXIT_ARG "-DEXPECTED_EXIT=${EXPECTED_EXIT_VALUE}")
+    endif()
+
     # Negatif test: .compile_error — derleme hatası beklenen golden testler.
     # Dosya içeriği stderr'de aranır (regex/düz dize).
     set(COMPILE_ERROR_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.compile_error")
@@ -184,12 +201,14 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -DSOURCE=${SQT_FILE}
                 -DEXPECTED=${COMPILE_ERROR_EXPECTED}
                 -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
+                ${EXPECTED_EXIT_ARG}
                 -P "${CMAKE_SOURCE_DIR}/cmake/run_golden_error.cmake"
         )
     endif()
 
     # Negatif test: .runtime_error — çalışma zamanı hatası beklenen golden testler.
-    # Aynı altyapı: exit code != 0 + stderr içeriği kontrolü.
+    # Aynı altyapı: exit code != 0 (veya BASE.expected_exit varsa exact değer)
+    # + stderr içeriği kontrolü.
     set(RUNTIME_ERROR_EXPECTED "${CMAKE_SOURCE_DIR}/tests/golden/${BASE}.runtime_error")
     if(EXISTS "${RUNTIME_ERROR_EXPECTED}")
         add_test(
@@ -199,6 +218,7 @@ foreach(SQT_FILE ${ALL_GOLDEN_SQT})
                 -DSOURCE=${SQT_FILE}
                 -DEXPECTED=${RUNTIME_ERROR_EXPECTED}
                 -DEXTRA_ARGS=${EXTRA_ARGS_JOINED}
+                ${EXPECTED_EXIT_ARG}
                 -P "${CMAKE_SOURCE_DIR}/cmake/run_golden_error.cmake"
         )
     endif()

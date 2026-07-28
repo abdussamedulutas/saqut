@@ -1,0 +1,8 @@
+int main() {
+    longint big = 9223372036854775807;
+    float small = 0.125;
+    print(big);
+    print(small);
+    print("\n");
+    return 0;
+}

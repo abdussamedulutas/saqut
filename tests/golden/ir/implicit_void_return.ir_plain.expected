@@ -1,0 +1,12 @@
+IR DUMP
+
+NAME=helper PARAMS=0 SLOTS=1
+    0  LOAD_CONST      s0 = 0
+    1  RETURN          return s0
+
+NAME=main PARAMS=0 SLOTS=2
+    0  CALL            s0 = helper()
+    1  LOAD_CONST      s1 = 0
+    2  RETURN          return s1
+
+END

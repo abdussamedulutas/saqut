@@ -1,0 +1,41 @@
+// #139 SQ-090-IR-DUMP-COMPLETE — dump() içinde daha önce sessizce
+// operandsız kalan opcode'lar için görünürlük regresyonu:
+// LNEG, LBNOT, F32NEG, LONG_TO_INT_CHECKED, CAST_INT_TO_BYTE_CHECKED,
+// CAST_LONG_TO_STR, CAST_STR_TO_LONG, CAST_FLOAT32_TO_STR,
+// CAST_STR_TO_FLOAT32, CAST_FLOAT_TO_LONG_CHECKED, INT_TO_FLOAT32.
+// Yalnız nullable ("?") fallible cast'ler kullanılır; hiçbiri throw etmez.
+int main() {
+    longint big = 100;
+    longint negBig = -big;
+    longint notBig = ~big;
+
+    float f = 1.5;
+    float negF = -f;
+
+    int? safeInt = big as int?;
+    byte? safeByte = 42 as byte?;
+
+    double d = 1.5;
+    longint? safeLong = d as longint?;
+
+    float widenedInt = 5 as float;
+
+    string s1 = big as string;
+    longint? s2 = "999" as longint?;
+
+    string s3 = f as string;
+    float? s4 = "2.25" as float?;
+
+    print(negBig);
+    print(notBig);
+    print(negF);
+    print(safeInt);
+    print(safeByte);
+    print(safeLong);
+    print(widenedInt);
+    print(s1);
+    print(s2);
+    print(s3);
+    print(s4);
+    return 0;
+}

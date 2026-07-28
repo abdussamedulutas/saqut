@@ -1,0 +1,9 @@
+IR DUMP
+
+NAME=main PARAMS=0 SLOTS=2
+    0  LOAD_CONST      s0 = 0
+    1  JIF_FALSE       !s0 → 4
+    2  CALLHOST        __ffi__() [cap:sys]
+    3  CALLHOST        print(s1)
+
+END

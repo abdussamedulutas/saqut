@@ -56,25 +56,21 @@ static const char* opSymbol(Opcode op) {
         case Opcode::DMUL:          return "*d";
         case Opcode::DDIV:          return "/d";
         case Opcode::DMOD:          return "%d";
+        case Opcode::F32ADD:        return "+f32";
+        case Opcode::F32SUB:        return "-f32";
+        case Opcode::F32MUL:        return "*f32";
+        case Opcode::F32DIV:        return "/f32";
+        case Opcode::LADD:          return "+l";
+        case Opcode::LSUB:          return "-l";
+        case Opcode::LMUL:          return "*l";
+        case Opcode::LDIV:          return "/l";
+        case Opcode::LMOD:          return "%l";
+        case Opcode::LBAND:         return "&l";
+        case Opcode::LBOR:          return "|l";
+        case Opcode::LBXOR:         return "^l";
+        case Opcode::LSHL:          return "<<l";
+        case Opcode::LSHR:          return ">>l";
         default:                    return "?";
-    }
-}
-
-static bool isBinaryOp(Opcode op) {
-    switch (op) {
-        case Opcode::ADD: case Opcode::SUB: case Opcode::MUL:
-        case Opcode::DIV: case Opcode::MOD:
-        case Opcode::FADD: case Opcode::FSUB: case Opcode::FMUL: case Opcode::FDIV:
-        case Opcode::BAND: case Opcode::BOR: case Opcode::BXOR:
-        case Opcode::SHL: case Opcode::SHR:
-        case Opcode::LESS: case Opcode::LESS_EQUAL:
-        case Opcode::GREATER: case Opcode::GREATER_EQUAL:
-        case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:
-        case Opcode::STRING_CONCAT:
-        case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
-        case Opcode::DDIV: case Opcode::DMOD:
-            return true;
-        default: return false;
     }
 }
 
@@ -112,33 +108,61 @@ void IRFunction::dump() const {
         // Opcode sütunu
         std::cout << Color::SoftMor << std::left << std::setw(16) << opcodeName(ins.opcode) << Color::Reset;
 
-        // Operandlar — opcode'a göre farklı format
-        if (ins.opcode == Opcode::LOAD_CONST) {
+        // Operandlar — opcode'a göre farklı format.
+        //
+        // Bilinçli olarak switch/default'suz: yeni bir Opcode enum değeri
+        // eklenip buraya bir case eklenmezse -Wswitch (CMakeLists.txt'te bu
+        // dosya için -Werror'a yükseltilir) derlemeyi kırar. Böylece yeni
+        // opcode hiçbir zaman sessizce operandsız satıra düşemez (IR-K6).
+        switch (ins.opcode) {
+        case Opcode::LOAD_CONST:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " " << ci(ins.intValue);
+            break;
 
-        } else if (ins.opcode == Opcode::LOAD_STRING) {
+        case Opcode::LOAD_STRING:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " \"" << Color::SoftPembe << ins.stringValue << Color::Reset << "\"";
+            break;
 
-        } else if (ins.opcode == Opcode::LOAD_SLOT) {
+        case Opcode::LOAD_SLOT:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " " << cs(ins.src);
+            break;
 
-        } else if (isBinaryOp(ins.opcode)) {
+        // İkili operatörler (dest = left OP right) — tek gövde paylaşılır.
+        case Opcode::ADD: case Opcode::SUB: case Opcode::MUL:
+        case Opcode::DIV: case Opcode::MOD:
+        case Opcode::FADD: case Opcode::FSUB: case Opcode::FMUL: case Opcode::FDIV:
+        case Opcode::BAND: case Opcode::BOR: case Opcode::BXOR:
+        case Opcode::SHL: case Opcode::SHR:
+        case Opcode::LESS: case Opcode::LESS_EQUAL:
+        case Opcode::GREATER: case Opcode::GREATER_EQUAL:
+        case Opcode::EQUAL_EQUAL: case Opcode::NOT_EQUAL:
+        case Opcode::STRING_CONCAT:
+        case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
+        case Opcode::DDIV: case Opcode::DMOD:
+        case Opcode::F32ADD: case Opcode::F32SUB: case Opcode::F32MUL: case Opcode::F32DIV:
+        case Opcode::LADD: case Opcode::LSUB: case Opcode::LMUL: case Opcode::LDIV: case Opcode::LMOD:
+        case Opcode::LBAND: case Opcode::LBOR: case Opcode::LBXOR:
+        case Opcode::LSHL: case Opcode::LSHR:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " "
                       << cs(ins.left) << " " << Color::SoftMor << opSymbol(ins.opcode) << Color::Reset
                       << " " << cs(ins.right);
+            break;
 
-        } else if (ins.opcode == Opcode::JMP) {
+        case Opcode::JMP:
             std::cout << Color::SoftGri << "→ " << Color::Reset << ci(ins.jumpTarget);
+            break;
 
-        } else if (ins.opcode == Opcode::JIF_FALSE) {
+        case Opcode::JIF_FALSE:
             std::cout << Color::SoftGri << "!" << Color::Reset << cs(ins.cond)
                       << " " << Color::SoftGri << "→" << Color::Reset << " " << ci(ins.jumpTarget);
+            break;
 
-        } else if (ins.opcode == Opcode::JIF_TRUE) {
+        case Opcode::JIF_TRUE:
             std::cout << cs(ins.cond) << " " << Color::SoftGri << "→" << Color::Reset << " " << ci(ins.jumpTarget);
+            break;
 
-        } else if (ins.opcode == Opcode::CALL) {
+        case Opcode::CALL:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " "
                       << Color::SoftYesil << ins.functionName << Color::Reset
                       << Color::SoftGri << "(" << Color::Reset;
@@ -147,8 +171,9 @@ void IRFunction::dump() const {
                 std::cout << cs(ins.argSlots[j]);
             }
             std::cout << Color::SoftGri << ")" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::CALLHOST) {
+        case Opcode::CALLHOST:
             if (ins.functionName == "__builtin_method__") {
                 const auto* bm = BuiltinMethodRegistry::instance().byId(ins.intValue);
                 std::string methodLabel = bm ? bm->name : ("id" + std::to_string(ins.intValue));
@@ -171,142 +196,271 @@ void IRFunction::dump() const {
                 }
                 std::cout << Color::SoftGri << ")" << Color::Reset;
             }
+            break;
 
-        } else if (ins.opcode == Opcode::BNOT) {
+        case Opcode::BNOT:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftMor << "~" << Color::Reset << cs(ins.src);
+            break;
 
-        } else if (ins.opcode == Opcode::LOAD_FLOAT) {
+        case Opcode::LBNOT:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftMor << "~l" << Color::Reset << cs(ins.src);
+            break;
+
+        case Opcode::LOAD_FLOAT:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " "
                       << Color::SoftTuruncu << ins.floatValue << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::INT_TO_FLOAT) {
+        case Opcode::LOAD_FLOAT32:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " "
+                      << Color::SoftTuruncu << ins.floatValue << Color::Reset << "f32";
+            break;
+
+        case Opcode::LOAD_LONG:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " "
+                      << Color::SoftTuruncu << ins.int64Value << Color::Reset << "l";
+            break;
+
+        case Opcode::INT_TO_FLOAT:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "(float)" << Color::Reset << cs(ins.src);
+            break;
 
-        } else if (ins.opcode == Opcode::FLOAT_TO_INT) {
+        case Opcode::FLOAT_TO_INT:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "(int)" << Color::Reset << cs(ins.src);
+            break;
 
-        } else if (ins.opcode == Opcode::CAST_INT_TO_STR) {
+        case Opcode::INT_TO_FLOAT32:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
-                      << " " << Color::SoftGri << "str(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
-        } else if (ins.opcode == Opcode::CAST_FLOAT_TO_STR) {
+                      << " " << Color::SoftGri << "(float32)" << Color::Reset << cs(ins.src);
+            break;
+
+        case Opcode::FLOAT_TO_FLOAT32:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
-                      << " " << Color::SoftGri << "str(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
-        } else if (ins.opcode == Opcode::CAST_BOOL_TO_STR) {
+                      << " " << Color::SoftGri << "(float32)" << Color::Reset << cs(ins.src);
+            break;
+
+        case Opcode::FLOAT32_TO_FLOAT:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
-                      << " " << Color::SoftGri << "str(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
-        } else if (ins.opcode == Opcode::CAST_STR_TO_INT) {
-            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
-                      << " " << Color::SoftGri << "int?(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
-                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
-        } else if (ins.opcode == Opcode::CAST_STR_TO_FLOAT) {
-            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
-                      << " " << Color::SoftGri << "float?(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
-                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
-        } else if (ins.opcode == Opcode::CAST_FLOAT_TO_INT_CHECKED) {
+                      << " " << Color::SoftGri << "(float)" << Color::Reset << cs(ins.src);
+            break;
+
+        case Opcode::FLOAT32_TO_INT:
+            // Fallible daralma (bkz. CAST_FLOAT_TO_INT_CHECKED); left: 0=throw, 1=null.
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "int(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
                       << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
 
-        } else if (ins.opcode == Opcode::FNEG) {
+        case Opcode::INT_TO_LONG:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "(longint)" << Color::Reset << cs(ins.src);
+            break;
+
+        case Opcode::LONG_TO_INT_CHECKED:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "int(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
+                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
+
+        case Opcode::CAST_INT_TO_BYTE_CHECKED:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "byte(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
+                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
+
+        case Opcode::CAST_LONG_TO_STR:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "str(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
+            break;
+
+        case Opcode::CAST_STR_TO_LONG:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "long?(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
+                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
+
+        case Opcode::CAST_FLOAT32_TO_STR:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "str(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
+            break;
+
+        case Opcode::CAST_STR_TO_FLOAT32:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "float32?(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
+                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
+
+        case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "long(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
+                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
+
+        case Opcode::CAST_INT_TO_STR:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "str(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
+            break;
+        case Opcode::CAST_FLOAT_TO_STR:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "str(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
+            break;
+        case Opcode::CAST_BOOL_TO_STR:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "str(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
+            break;
+        case Opcode::CAST_STR_TO_INT:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "int?(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
+                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
+        case Opcode::CAST_STR_TO_FLOAT:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "float?(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
+                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
+        case Opcode::CAST_FLOAT_TO_INT_CHECKED:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "int(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
+                      << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
+
+        case Opcode::FNEG:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftMor << "-" << Color::Reset << cs(ins.src);
+            break;
 
-        } else if (ins.opcode == Opcode::STRUCT_NEW) {
+        case Opcode::F32NEG:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftMor << "-f32" << Color::Reset << cs(ins.src);
+            break;
+
+        case Opcode::LNEG:
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftMor << "-l" << Color::Reset << cs(ins.src);
+            break;
+
+        case Opcode::STRUCT_NEW:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "struct<" << Color::Reset
                       << Color::SoftYesil << ins.functionName << Color::Reset
                       << Color::SoftGri << ">[" << Color::Reset << ci(ins.intValue)
                       << Color::SoftGri << " alan]" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::FIELD_GET) {
+        case Opcode::FIELD_GET:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << cs(ins.src) << Color::SoftGri << "." << Color::Reset << ci(ins.intValue);
+            break;
 
-        } else if (ins.opcode == Opcode::FIELD_SET) {
+        case Opcode::FIELD_SET:
             std::cout << cs(ins.dest) << Color::SoftGri << "." << Color::Reset << ci(ins.intValue)
                       << " " << Color::SoftGri << "=" << Color::Reset << " " << cs(ins.right);
+            break;
 
-        } else if (ins.opcode == Opcode::ARRAY_NEW) {
+        case Opcode::ARRAY_NEW:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "array[" << Color::Reset << ci(ins.intValue) << Color::SoftGri << "]" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::ARRAY_GET) {
+        case Opcode::ARRAY_GET:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << cs(ins.left) << Color::SoftGri << "[" << Color::Reset
                       << cs(ins.right) << Color::SoftGri << "]" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::ARRAY_SET) {
+        case Opcode::ARRAY_SET:
             std::cout << cs(ins.dest) << Color::SoftGri << "[" << Color::Reset
                       << cs(ins.left) << Color::SoftGri << "] =" << Color::Reset << " " << cs(ins.right);
+            break;
 
-        } else if (ins.opcode == Opcode::ARRAY_LEN) {
+        case Opcode::ARRAY_LEN:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "len(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::LOAD_GLOBAL) {
+        case Opcode::LOAD_GLOBAL:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "global[" << Color::Reset << ci(ins.intValue) << Color::SoftGri << "]" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::STORE_GLOBAL) {
+        case Opcode::STORE_GLOBAL:
             std::cout << Color::SoftGri << "global[" << Color::Reset << ci(ins.intValue)
                       << Color::SoftGri << "] =" << Color::Reset << " " << cs(ins.src);
+            break;
 
-        } else if (ins.opcode == Opcode::LOAD_NULL) {
+        case Opcode::LOAD_NULL:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftTurkuaz << "null" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::LOAD_DECIMAL) {
+        case Opcode::LOAD_DECIMAL:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset << " "
                       << Color::SoftTuruncu << ins.decimalValue.toString() << Color::Reset
                       << Color::SoftGri << "d" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::INT_TO_DECIMAL) {
+        case Opcode::INT_TO_DECIMAL:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "(decimal)" << Color::Reset << cs(ins.src);
+            break;
 
-        } else if (ins.opcode == Opcode::FLOAT_TO_DECIMAL) {
+        case Opcode::FLOAT_TO_DECIMAL:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "(decimal)" << Color::Reset << cs(ins.src);
+            break;
 
-        } else if (ins.opcode == Opcode::DNEG) {
+        case Opcode::DNEG:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "-d" << Color::Reset << " " << cs(ins.src);
+            break;
 
-        } else if (ins.opcode == Opcode::CAST_DECIMAL_TO_STR) {
+        case Opcode::CAST_DECIMAL_TO_STR:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "str(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::CAST_DECIMAL_TO_FLOAT) {
+        case Opcode::CAST_DECIMAL_TO_FLOAT:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "float(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset;
+            break;
 
-        } else if (ins.opcode == Opcode::CAST_DECIMAL_TO_INT) {
+        case Opcode::CAST_DECIMAL_TO_INT:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "int(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
                       << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
 
-        } else if (ins.opcode == Opcode::CAST_STR_TO_DECIMAL) {
+        case Opcode::CAST_STR_TO_DECIMAL:
             std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
                       << " " << Color::SoftGri << "decimal?(" << Color::Reset << cs(ins.src) << Color::SoftGri << ")" << Color::Reset
                       << (ins.left ? (std::string(" ") + Color::SoftTurkuaz + "[null]" + Color::Reset) : (std::string(" ") + Color::SoftTurkuaz + "[throw]" + Color::Reset));
+            break;
 
-        } else if (ins.opcode == Opcode::ENTER_TRY) {
+        case Opcode::ENTER_TRY:
             std::cout << Color::SoftGri << "err→" << Color::Reset << cs(ins.dest)
                       << "  " << Color::SoftGri << "catch→" << Color::Reset << ci(ins.jumpTarget);
+            break;
 
-        } else if (ins.opcode == Opcode::LEAVE_TRY) {
-            // operand yok
+        case Opcode::LEAVE_TRY:
+            // operand yok — bilinçli olarak boş case (N2)
+            break;
 
-        } else if (ins.opcode == Opcode::THROW) {
+        case Opcode::THROW:
             std::cout << cs(ins.src);
+            break;
 
-        } else if (ins.opcode == Opcode::RETURN) {
+        case Opcode::RETURN:
             std::cout << Color::SoftGri << "return" << Color::Reset << " " << cs(ins.src);
+            break;
         }
 
+        if (ins.requiredCap)
+            std::cout << " " << Color::SoftTurkuaz << "[cap:" << capabilityName(*ins.requiredCap)
+                      << "]" << Color::Reset;
         std::cout << "\n";
     }
     std::cout << "\n";

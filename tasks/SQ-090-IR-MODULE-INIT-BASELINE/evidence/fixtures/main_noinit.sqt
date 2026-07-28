@@ -1,0 +1,6 @@
+import {fortyTwo} from "util.sqt";
+
+int main() {
+    print(fortyTwo());
+    return 0;
+}

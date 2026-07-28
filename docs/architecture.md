@@ -1,5 +1,10 @@
 # saQut — Derleyici Mimarisi (Katman Modeli)
 
+> **Statü uyarısı (2026-07-25):** Bu belge mevcut kaynak kodun eksiksiz tarifi
+> veya v1 release sözleşmesi değildir. ADR-041'deki self-hosted stdlib/thin
+> runtime hedef hipotezini anlatır. ADR-042 ile bu mimari v1 için kilitli olmaktan
+> çıkarılmıştır. v1'in bağlayıcı kapsamı `v1.0-kapsam-bildirgesi.md` dosyasındadır.
+>
 > Bu belge saQut derleyicisinin **katman mimarisini** tanımlar. Kilitli kararlar
 > `docs/adr/`'de yaşar; bu belge onların bütünsel resmini verir. Anlık durum →
 > GitHub issue #101 (pinli). Çakışma olursa ADR'ler esastır.

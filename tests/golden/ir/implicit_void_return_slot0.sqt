@@ -1,0 +1,14 @@
+// #140 SQ-090-IR-VOID-RETURN — Başmimar review'unda istenen "slot-0
+// occupied" senaryosu: greet() içindeki yerel değişken slot 0'ı işgal
+// eder. Implicit RETURN taze bir slota (0 DEĞİL) LOAD_CONST 0 yazıp onu
+// döndürmeli; slot 0'ın içeriği (42) hiçbir şekilde process exit'ine veya
+// çağıranın gördüğü değere sızmamalı.
+void greet() {
+    int x = 42;
+    print(x);
+}
+
+int main() {
+    greet();
+    return 0;
+}

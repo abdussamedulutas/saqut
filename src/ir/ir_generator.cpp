@@ -194,6 +194,17 @@ void IRGenerator::generateFunction(ASTNode* functionDeclNode) {
         generateStatement(children[0]);
     }
 
+    // A void function must terminate with an explicit RETURN instruction.
+    // Materialize a fresh canonical zero so a local occupying slot 0 can never
+    // leak into the caller's process status.
+    if (fn->returnType == "void" &&
+        (currentFunction_->instructions.empty() ||
+         currentFunction_->instructions.back().opcode != Opcode::RETURN)) {
+        int zeroSlot = freshSlot();
+        emitLoadConst(zeroSlot, 0);
+        emitReturn(zeroSlot, fn->loc.line, fn->loc.column);
+    }
+
     // Faz 5: (sourceLine) → ilk instruction IP indeksi (breakpoint eşlemesi için)
     for (int i = 0; i < (int)currentFunction_->instructions.size(); ++i) {
         int sl = currentFunction_->instructions[i].sourceLine;

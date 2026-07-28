@@ -1,0 +1,5 @@
+int main() {
+    string s = "line1\nline2\ttab\"quote\\slash";
+    print(s);
+    return 0;
+}

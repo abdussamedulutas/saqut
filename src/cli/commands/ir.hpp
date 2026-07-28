@@ -8,6 +8,7 @@
 #include <iostream>
 #include <set>
 #include "cli/args.hpp"
+#include "cli/exit_codes.hpp"
 #include "core/capability.hpp"
 #include "module/module_loader.hpp"
 #include "symbol/symbol_table.hpp"
@@ -22,7 +23,7 @@
 
 inline int cmdIr(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
-    if (filePath.empty()) return 1;
+    if (filePath.empty()) return saqut::exit_code::kUsageError;
 
     ModuleRegistry   registry;
     DiagnosticEngine diag;
@@ -37,7 +38,7 @@ inline int cmdIr(const CliArgs& args) {
 
     if (diag.hasErrors()) {
         diag.printAll(std::cerr);
-        return 1;
+        return saqut::exit_code::kDataError;
     }
 
     if (args.optimized) {
@@ -64,12 +65,12 @@ inline int cmdIr(const CliArgs& args) {
         if (used.empty()) std::cout << " (none)";
         for (auto c : used) std::cout << " " << capabilityName(c);
         std::cout << "\n";
-        return 0;
+        return saqut::exit_code::kSuccess;
     }
 
     program.dump();
 
-    return 0;
+    return saqut::exit_code::kSuccess;
 }
 
 #endif // SAQUT_CLI_IR

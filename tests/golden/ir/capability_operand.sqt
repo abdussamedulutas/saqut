@@ -1,0 +1,7 @@
+import {random} from sys;
+
+void main() {
+    if (false) {
+        print(random());
+    }
+}

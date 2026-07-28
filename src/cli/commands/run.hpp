@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include "cli/args.hpp"
+#include "cli/exit_codes.hpp"
 #include "module/module_loader.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
@@ -25,7 +26,7 @@
 
 inline int cmdRun(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
-    if (filePath.empty()) { std::cerr << "error: no input file\n"; return 1; }
+    if (filePath.empty()) { std::cerr << "error: no input file\n"; return saqut::exit_code::kUsageError; }
 
     // src/profiling/ (--profile): args.profile false ise timer kullanılmaz,
     // ScopedStage'ler no-op kalır (StageTimer::ScopedStage tasarımı gereği).
@@ -47,7 +48,7 @@ inline int cmdRun(const CliArgs& args) {
 
     if (diag.hasErrors()) {
         diag.printAll(std::cerr);
-        return 1;
+        return saqut::exit_code::kDataError;
     }
 
     // ── Aşama 2: 3-geçiş sembol toplama + import doğrulama ───────────────
@@ -58,7 +59,7 @@ inline int cmdRun(const CliArgs& args) {
     if (diag.hasErrors()) {
         std::cerr << "compilation errors, cannot run program:\n";
         diag.printAll(std::cerr);
-        return 1;
+        return saqut::exit_code::kDataError;
     }
 
     // ── Aşama 3: Tip denetimi + yapısal doğrulama ─────────────────────────
@@ -70,7 +71,7 @@ inline int cmdRun(const CliArgs& args) {
     if (diag.hasErrors()) {
         std::cerr << "compilation errors, cannot run program:\n";
         diag.printAll(std::cerr);
-        return 1;
+        return saqut::exit_code::kDataError;
     }
 
     // ── Aşama 4 (opsiyonel): Optimizasyon ────────────────────────────────
@@ -127,7 +128,11 @@ inline int cmdRun(const CliArgs& args) {
                    << "(fonksiyon '" << reason.functionName << "', desteklenmeyen opcode: "
                    << reason.opcodeName << ") — VM'e sessizce dusulmuyor, "
                    << "bkz. MIRPLAN.md.\n";
-        return 1;
+        // Kullanıcı --jit'i doğru kullandı (kUsageError değil); programın
+        // kendisi de tanı hatası vermedi (kDataError değil) — derleyicinin
+        // JIT backend'i istenen işi tam yapamadı. "runtime/compiler çalışma
+        // hatası" sınıfı (70).
+        return saqut::exit_code::kSoftwareError;
     }
 
     // ── Aşama 6b: VM çalıştır (varsayılan yol) ───────────────────────────
@@ -151,7 +156,7 @@ inline int cmdRun(const CliArgs& args) {
                       << " live=" << vm.heapAllocCount() << "\n";
     } catch (const std::exception& e) {
         std::cerr << "runtime error: " << e.what() << "\n";
-        exitCode = 1;
+        exitCode = saqut::exit_code::kSoftwareError;
     }
 
     if (args.profile) stageTimer.printReport(std::cerr);

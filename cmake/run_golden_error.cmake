@@ -1,10 +1,13 @@
 # run_golden_error.cmake — derleme hatası BEKLEYEN golden test.
 #
 # Parametreler (cmake -D ile geçilir):
-#   BINARY   — saqut binary yolu
-#   SOURCE   — test .sqt dosyası (tam yol)
-#   EXPECTED — beklenen hata içeriği (.compile_error dosyası); stderr bu
-#              metni içermeli (regex veya düz dize olarak eşleşir)
+#   BINARY        — saqut binary yolu
+#   SOURCE        — test .sqt dosyası (tam yol)
+#   EXPECTED      — beklenen hata içeriği (.compile_error dosyası); stderr bu
+#                   metni içermeli (regex veya düz dize olarak eşleşir)
+#   EXPECTED_EXIT — opsiyonel (#156). Verilirse exit kodu tam bu değere eşit
+#                   olmalı (merkezi 0/64/65/70 sınıfı); verilmezse eski
+#                   davranış korunur: yalnız "exit != 0" kontrol edilir.
 
 # ADR-036 (#76): BASE.flags'ten gelen --allow-fs vb. bayraklar ("|" ile ayrık).
 set(EXTRA_FLAGS "")
@@ -19,7 +22,13 @@ execute_process(
     RESULT_VARIABLE EXIT_CODE
 )
 
-if(EXIT_CODE EQUAL 0)
+if(DEFINED EXPECTED_EXIT AND NOT EXPECTED_EXIT STREQUAL "")
+    if(NOT EXIT_CODE EQUAL EXPECTED_EXIT)
+        message(FATAL_ERROR
+            "Beklenen exact exit ${EXPECTED_EXIT}, gerçek ${EXIT_CODE}: ${SOURCE}\n"
+            "Çıktı: ${STDOUT_OUT}\nStderr: ${STDERR_OUT}")
+    endif()
+elseif(EXIT_CODE EQUAL 0)
     message(FATAL_ERROR
         "Derleme hatası bekleniyordu ama program başarıyla çalıştı: ${SOURCE}\n"
         "Çıktı: ${STDOUT_OUT}")

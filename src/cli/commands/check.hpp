@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include "cli/args.hpp"
+#include "cli/exit_codes.hpp"
 #include "module/module_loader.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
@@ -20,10 +21,10 @@
 
 inline int cmdCheck(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
-    if (filePath.empty()) return 1;
+    if (filePath.empty()) return saqut::exit_code::kUsageError;
     if (args.compact) {
         std::cerr << "error: check --compact is invalid for JSONL output\n";
-        return 64;
+        return saqut::exit_code::kUsageError;
     }
 
     ModuleRegistry   registry;
@@ -56,7 +57,7 @@ inline int cmdCheck(const CliArgs& args) {
     };
     std::cout << end.dump() << "\n";
 
-    return diag.hasErrors() ? 65 : 0;
+    return diag.hasErrors() ? saqut::exit_code::kDataError : saqut::exit_code::kSuccess;
 }
 
 #endif // SAQUT_CLI_CHECK

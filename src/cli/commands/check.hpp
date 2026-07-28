@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include "cli/args.hpp"
+#include "cli/exit_codes.hpp"
 #include "module/module_loader.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol_collector.hpp"
@@ -20,7 +21,7 @@
 
 inline int cmdCheck(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
-    if (filePath.empty()) return 1;
+    if (filePath.empty()) return saqut::exit_code::kUsageError;
 
     ModuleRegistry   registry;
     DiagnosticEngine diag;
@@ -41,7 +42,7 @@ inline int cmdCheck(const CliArgs& args) {
     out["diagnostics"] = diag.toJsonObj();
     std::cout << (args.compact ? out.dump() : out.dump(2)) << "\n";
 
-    return diag.hasErrors() ? 1 : 0;
+    return diag.hasErrors() ? saqut::exit_code::kDataError : saqut::exit_code::kSuccess;
 }
 
 #endif // SAQUT_CLI_CHECK

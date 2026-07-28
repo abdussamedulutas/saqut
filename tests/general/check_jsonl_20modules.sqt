@@ -1,0 +1,34 @@
+// #144 P4 — Başmimar review'unda istenen 20+ modüllü fixture: check
+// komutunun diagnostic kayıtlarını satır satır (streaming) ürettiğini,
+// büyük modül grafında da header ilk / end son sözleşmesini koruduğunu
+// gösterir. Her modülde bilinçli olarak kullanılmayan bir yerel değişken
+// var (uyarı üretir, hata değil) — errorCount=0 kalır, warningCount>=20.
+import {val00} from "check_jsonl_modules/mod_00.sqt";
+import {val01} from "check_jsonl_modules/mod_01.sqt";
+import {val02} from "check_jsonl_modules/mod_02.sqt";
+import {val03} from "check_jsonl_modules/mod_03.sqt";
+import {val04} from "check_jsonl_modules/mod_04.sqt";
+import {val05} from "check_jsonl_modules/mod_05.sqt";
+import {val06} from "check_jsonl_modules/mod_06.sqt";
+import {val07} from "check_jsonl_modules/mod_07.sqt";
+import {val08} from "check_jsonl_modules/mod_08.sqt";
+import {val09} from "check_jsonl_modules/mod_09.sqt";
+import {val10} from "check_jsonl_modules/mod_10.sqt";
+import {val11} from "check_jsonl_modules/mod_11.sqt";
+import {val12} from "check_jsonl_modules/mod_12.sqt";
+import {val13} from "check_jsonl_modules/mod_13.sqt";
+import {val14} from "check_jsonl_modules/mod_14.sqt";
+import {val15} from "check_jsonl_modules/mod_15.sqt";
+import {val16} from "check_jsonl_modules/mod_16.sqt";
+import {val17} from "check_jsonl_modules/mod_17.sqt";
+import {val18} from "check_jsonl_modules/mod_18.sqt";
+import {val19} from "check_jsonl_modules/mod_19.sqt";
+
+int main() {
+    int total = val00() + val01() + val02() + val03() + val04() + val05() +
+                val06() + val07() + val08() + val09() + val10() + val11() +
+                val12() + val13() + val14() + val15() + val16() + val17() +
+                val18() + val19();
+    print(total);
+    return 0;
+}

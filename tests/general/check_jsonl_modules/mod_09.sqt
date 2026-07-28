@@ -1,0 +1,6 @@
+// #144 P4 fixture — modül 09, kasıtlı W004 (implicit widening) uyarısı
+export int val09() {
+    int a = 09;
+    float b = a;
+    return a;
+}

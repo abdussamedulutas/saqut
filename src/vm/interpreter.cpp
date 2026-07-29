@@ -50,6 +50,152 @@ inline long long wrapModI64(long long a, long long b) { return (a == INT64_MIN &
 inline long long wrapShlI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) << (b & 63)); }
 inline long long wrapShrI64(long long a, long long b) { return a >> (b & 63); }
 inline long long wrapNegI64(long long a) { return static_cast<int64_t>(0ULL - static_cast<uint64_t>(a)); }
+
+bool dispatchStringBuiltinNoCopy(int runtimeId,
+                                 const std::vector<const Value*>& args,
+                                 Heap& heap,
+                                 Value& out) {
+    switch (runtimeId) {
+    case 11: {
+        if (args[0]->kind != ValueKind::String)
+            throw std::runtime_error("string::length — expected string");
+        out = Value::fromInt((int)args[0]->stringValue.size());
+        return true;
+    }
+    case 12: {
+        if (args[0]->kind != ValueKind::String)
+            throw std::runtime_error("string::upper — expected string");
+        std::string s = args[0]->stringValue;
+        for (char& c : s) c = (char)std::toupper((unsigned char)c);
+        out = Value::fromString(std::move(s));
+        return true;
+    }
+    case 13: {
+        if (args[0]->kind != ValueKind::String)
+            throw std::runtime_error("string::lower — expected string");
+        std::string s = args[0]->stringValue;
+        for (char& c : s) c = (char)std::tolower((unsigned char)c);
+        out = Value::fromString(std::move(s));
+        return true;
+    }
+    case 14: {
+        if (args[0]->kind != ValueKind::String)
+            throw std::runtime_error("string::trim — expected string");
+        const std::string& src = args[0]->stringValue;
+        size_t start = src.find_first_not_of(" \t\n\r");
+        if (start == std::string::npos) out = Value::fromString("");
+        else {
+            size_t end = src.find_last_not_of(" \t\n\r");
+            out = Value::fromString(src.substr(start, end - start + 1));
+        }
+        return true;
+    }
+    case 15: {
+        if (args[0]->kind != ValueKind::String || args[1]->kind != ValueKind::String)
+            throw std::runtime_error("string::split — expected string, string");
+        const std::string& src = args[0]->stringValue;
+        const std::string& sep = args[1]->stringValue;
+        auto* arr = heap.allocArray();
+        if (sep.empty()) {
+            for (char c : src)
+                arr->elements.push_back(Value::fromString(std::string(1, c)));
+        } else {
+            size_t pos = 0, found;
+            while ((found = src.find(sep, pos)) != std::string::npos) {
+                arr->elements.push_back(Value::fromString(src.substr(pos, found - pos)));
+                pos = found + sep.size();
+            }
+            arr->elements.push_back(Value::fromString(src.substr(pos)));
+        }
+        out = Value::fromRef(arr);
+        return true;
+    }
+    case 16: {
+        if (args[0]->kind != ValueKind::String)
+            throw std::runtime_error("string::substring — expected string");
+        const std::string& s = args[0]->stringValue;
+        int from = args[1]->intValue;
+        int len  = args[2]->intValue;
+        if (from < 0 || from > (int)s.size())
+            throw std::runtime_error("string::substring — index out of bounds");
+        if (len < 0) len = 0;
+        out = Value::fromString(s.substr(from, len));
+        return true;
+    }
+    case 17: {
+        if (args[0]->kind != ValueKind::String || args[1]->kind != ValueKind::String || args[2]->kind != ValueKind::String)
+            throw std::runtime_error("string::replace — expected string, string, string");
+        std::string s = args[0]->stringValue;
+        const std::string& from = args[1]->stringValue;
+        const std::string& to = args[2]->stringValue;
+        if (!from.empty()) {
+            size_t pos = 0;
+            while ((pos = s.find(from, pos)) != std::string::npos) {
+                s.replace(pos, from.size(), to);
+                pos += to.size();
+            }
+        }
+        out = Value::fromString(std::move(s));
+        return true;
+    }
+    case 18: {
+        if (args[0]->kind != ValueKind::String)
+            throw std::runtime_error("string::repeat — expected string");
+        int n = args[1]->intValue;
+        if (n < 0) n = 0;
+        std::string result;
+        result.reserve(args[0]->stringValue.size() * (size_t)n);
+        for (int i = 0; i < n; ++i) result += args[0]->stringValue;
+        out = Value::fromString(std::move(result));
+        return true;
+    }
+    case 19: {
+        if (args[0]->kind != ValueKind::String)
+            throw std::runtime_error("string::charAt — expected string");
+        const std::string& s = args[0]->stringValue;
+        int idx = args[1]->intValue;
+        if (idx < 0 || idx >= (int)s.size())
+            throw std::runtime_error("string::charAt — index out of bounds");
+        out = Value::fromString(std::string(1, s[idx]));
+        return true;
+    }
+    case 20: {
+        if (args[0]->kind != ValueKind::String || args[1]->kind != ValueKind::String)
+            throw std::runtime_error("string::indexOf — expected string, string");
+        size_t pos = args[0]->stringValue.find(args[1]->stringValue);
+        out = (pos == std::string::npos) ? Value::null() : Value::fromInt((int)pos);
+        return true;
+    }
+    case 21: {
+        if (args[0]->kind != ValueKind::String || args[1]->kind != ValueKind::String)
+            throw std::runtime_error("string::contains — expected string, string");
+        bool found = args[0]->stringValue.find(args[1]->stringValue) != std::string::npos;
+        out = Value::fromInt(found ? 1 : 0);
+        return true;
+    }
+    case 22: {
+        if (args[0]->kind != ValueKind::String || args[1]->kind != ValueKind::String)
+            throw std::runtime_error("string::startsWith — expected string, string");
+        const std::string& s = args[0]->stringValue;
+        const std::string& p = args[1]->stringValue;
+        bool ok = s.size() >= p.size() && s.compare(0, p.size(), p) == 0;
+        out = Value::fromInt(ok ? 1 : 0);
+        return true;
+    }
+    case 23: {
+        if (args[0]->kind != ValueKind::String || args[1]->kind != ValueKind::String)
+            throw std::runtime_error("string::endsWith — expected string, string");
+        const std::string& s = args[0]->stringValue;
+        const std::string& p = args[1]->stringValue;
+        bool ok = s.size() >= p.size() &&
+                  s.compare(s.size() - p.size(), p.size(), p) == 0;
+        out = Value::fromInt(ok ? 1 : 0);
+        return true;
+    }
+    default:
+        return false;
+    }
+}
 } // namespace
 
 // ── buildTrace ─────────────────────────────────────────────────────────────────
@@ -648,12 +794,12 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         // Toplama artık döngü başındaki eşik tabanlı maybeCollect() safepoint'i
         // (dönüş değeri o noktada caller slot'una yazılmış olur — kök kararlı).
         case Opcode::RETURN: {
-            Value returnValue    = frame.slots[instr.src];
+            Value returnValue    = std::move(frame.slots[instr.src]);
             int   returnDestSlot = frame.returnDestSlot;
             callStack_.pop_back();
 
             if (!callStack_.empty() && returnDestSlot != -1)
-                callStack_.back().slots[returnDestSlot] = returnValue;
+                callStack_.back().slots[returnDestSlot] = std::move(returnValue);
 
             if (callStack_.empty()) {
                 lastReturnValue_ = returnValue.intValue;
@@ -1146,11 +1292,16 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         }
 
         // ── String (ADR-024: immutable değer-tipi, içerik ==) ────────────
-        case Opcode::STRING_CONCAT:
-            frame.slots[instr.dest] = Value::fromString(
-                frame.slots[instr.left].stringValue +
-                frame.slots[instr.right].stringValue);
+        case Opcode::STRING_CONCAT: {
+            const std::string& left = frame.slots[instr.left].stringValue;
+            const std::string& right = frame.slots[instr.right].stringValue;
+            std::string joined;
+            joined.reserve(left.size() + right.size());
+            joined.append(left);
+            joined.append(right);
+            frame.slots[instr.dest] = Value::fromString(std::move(joined));
             break;
+        }
 
         // ── Hata yönetimi (ADR-025) ──────────────────────────────────────
         case Opcode::ENTER_TRY:
@@ -1177,7 +1328,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 errVal = makeErrorValue(errVal.toString(), "",
                                          instr.sourceLine, instr.sourceCol);
             }
-            pendingThrow_ = errVal;
+            pendingThrow_ = std::move(errVal);
             break;
         }
 
@@ -1186,15 +1337,27 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             if (vmTrace_) [[unlikely]] ++vmTrace_->vmFfiCalls;
             if (instr.functionName == "__builtin_method__") {
                 if (vmTrace_) [[unlikely]] ++vmTrace_->vmBuiltinCalls;
-                // Built-in metod: sabit id ile dispatch, O(1) tablo lookup
-                std::vector<Value> argVals;
-                argVals.reserve(instr.argSlots.size());
-                for (int s : instr.argSlots)
-                    argVals.push_back(frame.slots[s]);
                 try {
-                    Value ret = dispatchBuiltinMethod(instr.intValue, argVals, heap_);
+                    std::vector<const Value*> argRefs;
+                    argRefs.reserve(instr.argSlots.size());
+                    for (int s : instr.argSlots)
+                        argRefs.push_back(&frame.slots[s]);
+
+                    Value ret;
+                    if (dispatchStringBuiltinNoCopy(instr.intValue, argRefs, heap_, ret)) {
+                        if (instr.dest >= 0)
+                            callStack_.back().slots[instr.dest] = std::move(ret);
+                        break;
+                    }
+
+                    // Built-in metod: sabit id ile dispatch, O(1) tablo lookup
+                    std::vector<Value> argVals;
+                    argVals.reserve(instr.argSlots.size());
+                    for (const Value* v : argRefs)
+                        argVals.push_back(*v);
+                    ret = dispatchBuiltinMethod(instr.intValue, argVals, heap_);
                     if (instr.dest >= 0)
-                        callStack_.back().slots[instr.dest] = ret;
+                        callStack_.back().slots[instr.dest] = std::move(ret);
                 } catch (const std::runtime_error& e) {
                     pendingThrow_ = makeErrorValue(e.what(), "E_BUILTIN",
                                                    instr.sourceLine, instr.sourceCol);
@@ -1217,7 +1380,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                     HostContext ctx{&caps_, &programArgs_, &heap_};
                     Value ret = callHostFn(instr.intValue, argVals, ctx);
                     if (instr.dest >= 0)
-                        callStack_.back().slots[instr.dest] = ret;
+                        callStack_.back().slots[instr.dest] = std::move(ret);
                 } catch (const std::runtime_error& e) {
                     pendingThrow_ = makeErrorValue(e.what(), "E_FFI",
                                                    instr.sourceLine, instr.sourceCol);
@@ -1241,7 +1404,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 while (callStack_.size() > tf.callStackDepth)
                     callStack_.pop_back();
                 // Error'ı catch değişkenine bağla ve catch etiketine atla
-                callStack_.back().slots[tf.errorSlot] = errVal;
+                callStack_.back().slots[tf.errorSlot] = std::move(errVal);
                 callStack_.back().instructionPointer  = tf.catchTarget;
             } else {
                 // Uncaught error — extract message and raise as C++ exception
@@ -1436,7 +1599,7 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
         auto* arr = asArray(args[0], "pop");
         if (arr->elements.empty())
             throw std::runtime_error("pop on empty array");
-        Value v = arr->elements.back();
+        Value v = std::move(arr->elements.back());
         arr->elements.pop_back();
         return v;
     }
@@ -1459,7 +1622,7 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
         int idx = args[1].intValue;
         if (idx < 0 || idx >= (int)arr->elements.size())
             throw std::runtime_error("remove — index out of bounds");
-        Value v = arr->elements[idx];
+        Value v = std::move(arr->elements[idx]);
         arr->elements.erase(arr->elements.begin() + idx);
         return v;
     }

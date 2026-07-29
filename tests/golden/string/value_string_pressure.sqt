@@ -1,0 +1,24 @@
+string churn(string seed, int rounds) {
+    string acc = seed;
+    int i = 0;
+    while (i < rounds) {
+        string left = acc.substring(0, 16);
+        string right = acc.substring(acc.length() - 16, 16);
+        acc = left + "|" + acc + "|" + right;
+        if (acc.length() > 96) {
+            acc = acc.substring(3, 64);
+        }
+        i = i + 1;
+    }
+    return acc;
+}
+
+int main() {
+    string result = churn("abcdefghijklmnopQRSTUVWXYZ0123456789", 12);
+    print(result.length());
+    print(":");
+    print(result.substring(0, 10));
+    print(":");
+    print(result.substring(result.length() - 10, 10));
+    return 0;
+}

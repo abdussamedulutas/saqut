@@ -18,19 +18,17 @@
   yeniden doğrulandı: üçü (#134 exec parser hatası yutma, #135 statik
   string-indeksleme denetimi, #136 switch return-completeness) gerçek bug'lardı
   ve düzeltildi; #114 mimari borç olarak dispose edildi (aktif hata değil).
+- **#170 düzeltildi.** Parser'daki `(`/`[`/`{` kapanış delimiter'ı bekleyen
+  **25 site** (issue'nun bulduğu 19 + revalidasyonda bulunan 6 ek aynı-sınıf
+  site: import listesi, ffi bildirimi, struct/enum gövdesi) artık eksik
+  delimiter'da `E905` diagnostic'i basıyor — eskiden sessizce farklı bir
+  programa yeniden yorumlanıp exit 0 ile "başarıyla" çalışıyordu (ADR-038
+  ihlali). LSP'nin toleranslı kurtarma davranışı değişmedi, yalnız artık
+  gerçek bir diagnostic kaydediyor. Aynı turda, `import { ... }` listesinde
+  beklenmeyen bir token'da parser'ı sonsuz döngüye sokan bağımsız bir
+  hang/DoS hatası da bulunup düzeltildi (PR #173).
 
 ## Bilinen eksikler (dürüst liste)
-
-### Kritik — kapsam/önceliklendirme ürün sahibi kararı gerektirir
-
-- **saqutlang/saqut#170**: Parser, `parser.cpp` içindeki **19 ayrı yerde**
-  eksik kapanış delimiter'ını (`)`, `]`, `}`) hiçbir diagnostic üretmeden
-  sessizce kabul ediyor — fonksiyon çağrısı, array indeksleme, array
-  literal, parantezli ifade, if/while/for/do-while koşulu, fonksiyon
-  parametre listesi, blok, switch. Örnek: `print(2 print(3);` tüm
-  komutlarda (`run/check/ast/ir/symbols`) exit 0 veriyor. ADR-038
-  ("gözlemlenen davranış = sözleşme") ihlali sınıfında; düzeltmesi geniş
-  kapsamlı, dikkatli bir ayrı çalışma turu gerektiriyor.
 
 ### Orta — bilinen, izole, ayrı issue'larda
 

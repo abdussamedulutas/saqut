@@ -49,6 +49,16 @@ ffi double E()                      : MATH_E     from math;
 ffi void drop(string capName) : CAPS_DROP from caps;
 ffi bool has(string capName)  : CAPS_HAS  from caps;
 
+// ── path modülü (saf string işlemleri, capability'siz — #177) ───────────────
+// Filesystem'e dokunmaz; absolute/relative cwd bağımlı olduğu için burada yok.
+ffi string join(string a, string b)      : PATH_JOIN        from path;
+ffi string normalize(string path)        : PATH_NORMALIZE   from path;
+ffi string dirname(string path)          : PATH_DIRNAME     from path;
+ffi string basename(string path)         : PATH_BASENAME    from path;
+ffi string extension(string path)        : PATH_EXTENSION   from path;
+ffi bool   isAbsolute(string path)       : PATH_IS_ABSOLUTE from path;
+ffi string separator()                   : PATH_SEPARATOR   from path;
+
 // ── fs modülü (dosya sistemi, --allow-fs — #87) ─────────────────────────────
 // Handle/descriptor YOK — tek atımlık read/write (record-replay önkoşulu).
 ffi string  readFile(string path)                : FS_READ_FILE   from fs requires fs;

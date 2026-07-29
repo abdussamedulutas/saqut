@@ -1,0 +1,1 @@
+sep=[/];abs1=1;abs2=0;join=[/tmp/ghost.txt];norm_empty=[];norm_dot=[.];norm_complex=[a/c/];norm_parent=[../x];dirname_file=[/tmp/saqut-177-no-such-dir];basename_file=[file.txt];extension_file=[.txt];dirname_trailing=[a/b];basename_trailing=[];extension_none=[]

@@ -81,6 +81,48 @@ static Value caps_has(const std::vector<Value>& a, HostContext& ctx) {
     return Value::fromInt(has ? 1 : 0);
 }
 
+// ── path implementasyonları (#177) ──────────────────────────────────────────
+// Yalnız std::filesystem::path'in lexical API'leri kullanılır. Bu fonksiyonlar
+// exists/status/canonical/current_path gibi filesystem veya cwd gözlemi yapmaz.
+
+static Value path_join(const std::vector<Value>& a, HostContext&) {
+    auto joined = (std::filesystem::path(a[0].stringValue) /
+                   std::filesystem::path(a[1].stringValue)).lexically_normal();
+    return Value::fromString(joined.string());
+}
+
+static Value path_normalize(const std::vector<Value>& a, HostContext&) {
+    return Value::fromString(std::filesystem::path(a[0].stringValue)
+                                 .lexically_normal()
+                                 .string());
+}
+
+static Value path_dirname(const std::vector<Value>& a, HostContext&) {
+    return Value::fromString(std::filesystem::path(a[0].stringValue)
+                                 .parent_path()
+                                 .string());
+}
+
+static Value path_basename(const std::vector<Value>& a, HostContext&) {
+    return Value::fromString(std::filesystem::path(a[0].stringValue)
+                                 .filename()
+                                 .string());
+}
+
+static Value path_extension(const std::vector<Value>& a, HostContext&) {
+    return Value::fromString(std::filesystem::path(a[0].stringValue)
+                                 .extension()
+                                 .string());
+}
+
+static Value path_isAbsolute(const std::vector<Value>& a, HostContext&) {
+    return Value::fromInt(std::filesystem::path(a[0].stringValue).is_absolute() ? 1 : 0);
+}
+
+static Value path_separator(const std::vector<Value>&, HostContext&) {
+    return Value::fromString(std::string(1, std::filesystem::path::preferred_separator));
+}
+
 // ── fs implementasyonları (#87) ─────────────────────────────────────────────
 // v1: yol güvenliği yok (hepsi-ya-hiçbir-şey, --allow-fs). Handle/descriptor
 // YOK — tek atımlık read/write (record-replay v1.2.0 önkoşulu, ADR-034 §5).
@@ -306,6 +348,13 @@ const std::vector<HostFn>& hostFnTable() {
         { "MATH_E",     0, math_E     },
         { "CAPS_DROP",  1, caps_drop  },
         { "CAPS_HAS",   1, caps_has   },
+        { "PATH_JOIN",        2, path_join       },
+        { "PATH_NORMALIZE",   1, path_normalize  },
+        { "PATH_DIRNAME",     1, path_dirname    },
+        { "PATH_BASENAME",    1, path_basename   },
+        { "PATH_EXTENSION",   1, path_extension  },
+        { "PATH_IS_ABSOLUTE", 1, path_isAbsolute },
+        { "PATH_SEPARATOR",   0, path_separator  },
         { "FS_READ_FILE",   1, fs_readFile   },
         { "FS_WRITE_FILE",  2, fs_writeFile  },
         { "FS_APPEND",      2, fs_append     },

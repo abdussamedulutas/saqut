@@ -161,6 +161,7 @@ private:
 
     std::set<Capability>     caps_;       // ADR-035 (#76): açık capability'ler
     std::vector<std::string> programArgs_; // #90: `--` sonrası argümanlar
+    std::optional<int>       requestedExit_; // #175: process.exit(code)
 
     // Faz 5: bütçe/step kısıtlarını kontrol eder, true = durmalı
     bool shouldStop();

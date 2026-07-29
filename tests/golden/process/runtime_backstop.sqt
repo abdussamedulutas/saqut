@@ -1,0 +1,7 @@
+import {drop} from caps;
+import {pid} from process;
+
+void main() {
+    drop("sys");
+    print(pid());
+}

@@ -1,0 +1,5 @@
+import {pid} from process;
+
+void main() {
+    print(pid());
+}

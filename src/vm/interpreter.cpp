@@ -1214,10 +1214,16 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 for (int s : instr.argSlots)
                     argVals.push_back(frame.slots[s]);
                 try {
-                    HostContext ctx{&caps_, &programArgs_, &heap_};
+                    HostContext ctx{&caps_, &programArgs_, &heap_, &requestedExit_};
                     Value ret = callHostFn(instr.intValue, argVals, ctx);
                     if (instr.dest >= 0)
                         callStack_.back().slots[instr.dest] = ret;
+                    if (requestedExit_) {
+                        lastReturnValue_ = *requestedExit_;
+                        callStack_.clear();
+                        state_ = RunState::Finished;
+                        return RunReason::Finished;
+                    }
                 } catch (const std::runtime_error& e) {
                     pendingThrow_ = makeErrorValue(e.what(), "E_FFI",
                                                    instr.sourceLine, instr.sourceCol);

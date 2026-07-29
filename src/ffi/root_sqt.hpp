@@ -67,6 +67,14 @@ ffi string?  env(string name)                  : SYS_ENV        from sys require
 ffi void     sleep(int millis)                 : SYS_SLEEP      from sys requires sys;
 ffi string[] args()                            : SYS_ARGS       from sys requires sys;
 
+// ── process modülü (--allow-sys — #175) ─────────────────────────────────────
+// Dar CLI process yüzeyi; spawn/exec/fork/thread/abort/env bu modülde yoktur.
+ffi void   exit(int code)             : PROCESS_EXIT       from process requires sys;
+ffi int    pid()                      : PROCESS_PID        from process requires sys;
+ffi string cwd()                      : PROCESS_CWD        from process requires sys;
+ffi void   chdir(string path)         : PROCESS_CHDIR      from process requires sys;
+ffi string executable()               : PROCESS_EXECUTABLE from process requires sys;
+
 // ── date modülü (UTC epoch-ms değer tipi — #88, ADR-036) ────────────────────
 // Yalnızca now() capability ister; geri kalan saf hesap (determinizmi bozmaz).
 ffi date    now()                               : DATE_NOW           from date requires sys;

@@ -19,6 +19,9 @@
 #include <sstream>
 #include <thread>
 #include <unordered_map>
+#if defined(__unix__) || defined(__APPLE__)
+#include <unistd.h>
+#endif
 
 // ── math implementasyonları ─────────────────────────────────────────────────
 
@@ -189,6 +192,51 @@ static Value sys_args(const std::vector<Value>&, HostContext& ctx) {
     return Value::fromRef(arr);
 }
 
+// ── process implementasyonları (#175) ───────────────────────────────────────
+// Dar CLI process yüzeyi; tamamı --allow-sys ile gated. process.exit gerçek
+// C++ process'i öldürmez, VM'e normal döngüden çıkma isteği bırakır.
+
+static Value process_exit(const std::vector<Value>& a, HostContext& ctx) {
+    if (ctx.requestedExit)
+        *ctx.requestedExit = a[0].intValue;
+    return Value::fromInt(0); // void
+}
+
+static Value process_pid(const std::vector<Value>&, HostContext&) {
+#if defined(__unix__) || defined(__APPLE__)
+    return Value::fromInt(static_cast<int>(::getpid()));
+#else
+    return Value::fromInt(0);
+#endif
+}
+
+static Value process_cwd(const std::vector<Value>&, HostContext&) {
+    std::error_code ec;
+    std::filesystem::path p = std::filesystem::current_path(ec);
+    if (ec)
+        throw std::runtime_error("cwd: cannot read current directory: " + ec.message());
+    return Value::fromString(p.string());
+}
+
+static Value process_chdir(const std::vector<Value>& a, HostContext&) {
+    std::error_code ec;
+    std::filesystem::current_path(std::filesystem::path(a[0].stringValue), ec);
+    if (ec)
+        throw std::runtime_error("chdir: cannot change directory to '" +
+                                 a[0].stringValue + "': " + ec.message());
+    return Value::fromInt(0); // void
+}
+
+static Value process_executable(const std::vector<Value>&, HostContext&) {
+#if defined(__linux__)
+    std::error_code ec;
+    std::filesystem::path p = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec && !p.empty())
+        return Value::fromString(p.string());
+#endif
+    throw std::runtime_error("executable: cannot resolve executable path");
+}
+
 // ── date implementasyonları (#88, ADR-035) ──────────────────────────────────
 // Yalnızca now() capability ister (--allow-sys); geri kalan saf hesap.
 // ⚠️ v1 kısıtı: saQut'ta 64-bit int yok — fromEpochMillis/toEpochMillis
@@ -318,6 +366,11 @@ const std::vector<HostFn>& hostFnTable() {
         { "SYS_ENV",        1, sys_env       },
         { "SYS_SLEEP",      1, sys_sleep     },
         { "SYS_ARGS",       0, sys_args      },
+        { "PROCESS_EXIT",       1, process_exit       },
+        { "PROCESS_PID",        0, process_pid        },
+        { "PROCESS_CWD",        0, process_cwd        },
+        { "PROCESS_CHDIR",      1, process_chdir      },
+        { "PROCESS_EXECUTABLE", 0, process_executable },
         { "DATE_NOW",             0, date_now             },
         { "DATE_FROM_EPOCH_MS",   1, date_fromEpochMillis },
         { "DATE_TO_EPOCH_MS",     1, date_toEpochMillis   },

@@ -119,6 +119,14 @@ add_test(
             "${SAQUT_BINARY}"
 )
 
+# #175: dar process host yüzeyi --allow-sys ile çalışır ve process.exit gerçek
+# CLI exit kodunu belirler.
+add_test(
+    NAME process_surface
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/process_surface_test.sh"
+            "${SAQUT_BINARY}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

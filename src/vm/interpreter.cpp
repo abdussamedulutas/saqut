@@ -50,6 +50,15 @@ inline long long wrapModI64(long long a, long long b) { return (a == INT64_MIN &
 inline long long wrapShlI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) << (b & 63)); }
 inline long long wrapShrI64(long long a, long long b) { return a >> (b & 63); }
 inline long long wrapNegI64(long long a) { return static_cast<int64_t>(0ULL - static_cast<uint64_t>(a)); }
+
+Value defaultFieldValue(const Type& type, Heap& heap) {
+    Type base = type.asNonNull();
+    if (base.isString())
+        return Value::fromString("");
+    if (base.isArray())
+        return Value::fromRef(heap.allocArray());
+    return Value::fromInt(0);
+}
 } // namespace
 
 // ── buildTrace ─────────────────────────────────────────────────────────────────
@@ -831,6 +840,8 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::STRUCT_NEW: {
             StructObject* obj = heap_.allocStruct(instr.intValue);
             obj->fieldNames   = instr.fieldNames;
+            for (size_t i = 0; i < instr.fieldTypes.size() && i < obj->fields.size(); ++i)
+                obj->fields[i] = defaultFieldValue(instr.fieldTypes[i], heap_);
             callStack_.back().slots[instr.dest] = Value::fromRef(obj);
             break;
         }
@@ -1359,6 +1370,7 @@ static bool valueEqual(const Value& a, const Value& b) {
 
 // Yardımcı: struct alanını JSON string'e çevir (toJson için)
 static std::string valueToJsonStr(const Value& v);
+static std::string valueToDumpStr(const Value& v);
 static std::string structToJson(StructObject* obj) {
     std::string s = "{";
     for (size_t i = 0; i < obj->fields.size(); ++i) {
@@ -1411,6 +1423,37 @@ static std::string valueToJsonStr(const Value& v) {
         case ValueKind::Date: return std::to_string(v.int64Value);
     }
     return "null";
+}
+
+static std::string structToDump(StructObject* obj) {
+    std::string s = "struct{";
+    for (size_t i = 0; i < obj->fields.size(); ++i) {
+        if (i) s += ", ";
+        std::string key = (i < obj->fieldNames.size())
+                          ? obj->fieldNames[i]
+                          : ("field" + std::to_string(i));
+        s += key + "=" + valueToDumpStr(obj->fields[i]);
+    }
+    s += "}";
+    return s;
+}
+
+static std::string valueToDumpStr(const Value& v) {
+    if (v.kind != ValueKind::Ref || !v.ref)
+        return v.toString();
+    if (v.ref->type == ObjectType::Struct)
+        return structToDump(static_cast<StructObject*>(v.ref));
+    if (v.ref->type == ObjectType::Array) {
+        auto* arr = static_cast<ArrayObject*>(v.ref);
+        std::string s = "[";
+        for (size_t i = 0; i < arr->elements.size(); ++i) {
+            if (i) s += ",";
+            s += valueToDumpStr(arr->elements[i]);
+        }
+        s += "]";
+        return s;
+    }
+    return v.toString();
 }
 
 Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
@@ -1662,17 +1705,7 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     case 25: {
         if (args[0].kind == ValueKind::Ref && args[0].ref &&
             args[0].ref->type == ObjectType::Struct) {
-            auto* obj = static_cast<StructObject*>(args[0].ref);
-            std::string s = "struct{";
-            for (size_t i = 0; i < obj->fields.size(); ++i) {
-                if (i) s += ", ";
-                std::string key = (i < obj->fieldNames.size())
-                                  ? obj->fieldNames[i]
-                                  : ("field" + std::to_string(i));
-                s += key + "=" + obj->fields[i].toString();
-            }
-            s += "}";
-            return Value::fromString(s);
+            return Value::fromString(structToDump(static_cast<StructObject*>(args[0].ref)));
         }
         return Value::fromString("null");
     }

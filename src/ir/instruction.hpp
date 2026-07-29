@@ -34,6 +34,7 @@
 #include <vector>
 #include "core/decimal.hpp"
 #include "core/capability.hpp"
+#include "core/type.hpp"
 
 // ----------------------------------------------------------------------------
 // SlotType — bir slot'un statik değer türü (ADR-020: slot çalışma zamanında tip
@@ -375,6 +376,10 @@ struct Instruction {
 
     // STRUCT_NEW için alan adları (sırasıyla) — toJson/dump'ta kullanılır
     std::vector<std::string> fieldNames;
+
+    // STRUCT_NEW için alan tipleri (sırasıyla) — VM default ref alanlarını
+    // gerçek boş string/array olarak başlatır (#184).
+    std::vector<Type> fieldTypes;
 
     // ADR-039: GET-tarafı opcode'ların sonuç/eleman türü — FIELD_GET / ARRAY_GET /
     // LOAD_GLOBAL dest tipi, ARRAY_NEW eleman tipi. IR'de kaybolan tip bilgisini

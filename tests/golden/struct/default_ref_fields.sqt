@@ -1,0 +1,22 @@
+struct Box {
+    string label;
+    int[] items;
+    int count;
+}
+
+int main() {
+    Box b;
+    print(b.label.length());
+    print(":");
+    print(b.items.length());
+    print(":");
+    b.items.push(7);
+    print(b.items.length());
+    print(":");
+    print("label=[" + b.label + "]");
+    print(":");
+    print(b.dump());
+    print(":");
+    print(b.toJson());
+    return 0;
+}

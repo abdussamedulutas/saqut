@@ -1,0 +1,35 @@
+struct Inner {
+    string name;
+    int[] values;
+    int count;
+}
+
+struct Outer {
+    Inner inner;
+    int marker;
+}
+
+void touch(Outer o) {
+    o.inner.values.push(42);
+}
+
+int main() {
+    Outer o;
+    print(o.inner.name.length());
+    print(":");
+    print(o.inner.values.length());
+    print(":");
+    touch(o);
+    print(o.inner.values.length());
+    print(":");
+    print(o.inner.values[0]);
+    print(":");
+    print(o.inner.count);
+    print(":");
+    print(o.marker);
+    print(":");
+    print(o.dump());
+    print(":");
+    print(o.toJson());
+    return 0;
+}

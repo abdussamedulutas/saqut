@@ -1715,8 +1715,10 @@ void IRGenerator::emitStructNew(int destSlot, const std::string& structType,
     // Alan adlarını struct layout'tan al — toJson/dump'ta kullanılır
     auto it = structLayouts_.find(structType);
     if (it != structLayouts_.end())
-        for (const auto& kv : it->second)
+        for (const auto& kv : it->second) {
             ins.fieldNames.push_back(kv.first);
+            ins.fieldTypes.push_back(kv.second);
+        }
     currentFunction_->instructions.push_back(std::move(ins));
 }
 

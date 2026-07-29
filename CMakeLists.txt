@@ -94,6 +94,13 @@ add_test(
             "${SAQUT_BINARY}" "${CMAKE_SOURCE_DIR}"
 )
 
+# #134: saqut exec parser hatasını artık yutmuyor (run/check ile aynı kapı).
+add_test(
+    NAME exec_diagnostic_gate
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/exec_diagnostic_gate_test.sh"
+            "${SAQUT_BINARY}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

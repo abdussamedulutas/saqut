@@ -9,6 +9,7 @@
 
 #include "ffi/host_functions.hpp"
 #include "ffi/date_calc.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -147,6 +148,182 @@ static Value fs_remove(const std::vector<Value>& a, HostContext&) {
     if (ec) throw std::runtime_error("cannot remove '" + a[0].stringValue + "': " + ec.message());
     if (!removed) throw std::runtime_error("file not found: '" + a[0].stringValue + "'");
     return Value::fromInt(0); // void
+}
+
+static std::runtime_error fs_error(const std::string& op,
+                                   const std::filesystem::path& path,
+                                   const std::error_code& ec) {
+    return std::runtime_error(op + " '" + path.string() + "': " + ec.message());
+}
+
+static Value make_string_array(Heap* heap, const std::vector<std::string>& items) {
+    ArrayObject* arr = heap->allocArray((int)items.size());
+    for (const auto& item : items)
+        arr->elements.push_back(Value::fromString(item));
+    return Value::fromRef(arr);
+}
+
+static Value fs_copy(const std::vector<Value>& a, HostContext&) {
+    const std::filesystem::path from(a[0].stringValue);
+    const std::filesystem::path to(a[1].stringValue);
+    std::error_code ec;
+    std::filesystem::copy(from, to,
+        std::filesystem::copy_options::recursive |
+        std::filesystem::copy_options::overwrite_existing,
+        ec);
+    if (ec) throw fs_error("cannot copy", from, ec);
+    return Value::fromInt(0); // void
+}
+
+static Value fs_move(const std::vector<Value>& a, HostContext&) {
+    const std::filesystem::path from(a[0].stringValue);
+    const std::filesystem::path to(a[1].stringValue);
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (!ec) return Value::fromInt(0); // void
+
+    ec.clear();
+    std::filesystem::copy(from, to,
+        std::filesystem::copy_options::recursive |
+        std::filesystem::copy_options::overwrite_existing,
+        ec);
+    if (ec) throw fs_error("cannot move", from, ec);
+
+    ec.clear();
+    std::filesystem::remove_all(from, ec);
+    if (ec) throw fs_error("cannot remove moved source", from, ec);
+    return Value::fromInt(0); // void
+}
+
+static Value fs_rename(const std::vector<Value>& a, HostContext&) {
+    const std::filesystem::path from(a[0].stringValue);
+    const std::filesystem::path to(a[1].stringValue);
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (ec) throw fs_error("cannot rename", from, ec);
+    return Value::fromInt(0); // void
+}
+
+static Value fs_createDirectory(const std::vector<Value>& a, HostContext&) {
+    const std::filesystem::path path(a[0].stringValue);
+    std::error_code ec;
+    std::filesystem::create_directories(path, ec);
+    if (ec) throw fs_error("cannot create directory", path, ec);
+    return Value::fromInt(0); // void
+}
+
+static Value fs_removeDirectory(const std::vector<Value>& a, HostContext&) {
+    const std::filesystem::path path(a[0].stringValue);
+    std::error_code ec;
+    auto removed = std::filesystem::remove_all(path, ec);
+    if (ec) throw fs_error("cannot remove directory", path, ec);
+    if (removed == 0) throw std::runtime_error("directory not found: '" + path.string() + "'");
+    return Value::fromInt(0); // void
+}
+
+static Value fs_list(const std::vector<Value>& a, HostContext& ctx) {
+    const std::filesystem::path path(a[0].stringValue);
+    std::error_code ec;
+    std::vector<std::string> items;
+    std::filesystem::directory_iterator it(path, ec);
+    if (ec) throw fs_error("cannot list directory", path, ec);
+    for (const auto& entry : it)
+        items.push_back(entry.path().filename().string());
+    std::sort(items.begin(), items.end());
+    return make_string_array(ctx.heap, items);
+}
+
+static Value fs_walk(const std::vector<Value>& a, HostContext& ctx) {
+    const std::filesystem::path root(a[0].stringValue);
+    std::error_code ec;
+    std::vector<std::string> items;
+    std::filesystem::recursive_directory_iterator it(root, ec);
+    if (ec) throw fs_error("cannot walk directory", root, ec);
+    const std::filesystem::recursive_directory_iterator end;
+    for (; it != end; it.increment(ec)) {
+        if (ec) throw fs_error("cannot walk directory", root, ec);
+        items.push_back(it->path().lexically_relative(root).generic_string());
+    }
+    std::sort(items.begin(), items.end());
+    return make_string_array(ctx.heap, items);
+}
+
+static Value fs_isFile(const std::vector<Value>& a, HostContext&) {
+    const std::filesystem::path path(a[0].stringValue);
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) {
+        if (ec) throw fs_error("cannot stat file", path, ec);
+        return Value::fromInt(0);
+    }
+    bool result = std::filesystem::is_regular_file(path, ec);
+    if (ec) throw fs_error("cannot stat file", path, ec);
+    return Value::fromInt(result ? 1 : 0);
+}
+
+static Value fs_isDirectory(const std::vector<Value>& a, HostContext&) {
+    const std::filesystem::path path(a[0].stringValue);
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) {
+        if (ec) throw fs_error("cannot stat directory", path, ec);
+        return Value::fromInt(0);
+    }
+    bool result = std::filesystem::is_directory(path, ec);
+    if (ec) throw fs_error("cannot stat directory", path, ec);
+    return Value::fromInt(result ? 1 : 0);
+}
+
+static Value fs_fileSize(const std::vector<Value>& a, HostContext&) {
+    const std::filesystem::path path(a[0].stringValue);
+    std::error_code ec;
+    auto size = std::filesystem::file_size(path, ec);
+    if (ec) throw fs_error("cannot read file size", path, ec);
+    if (size > (uintmax_t)std::numeric_limits<int>::max())
+        throw std::runtime_error("file size exceeds int range: '" + path.string() + "'");
+    return Value::fromInt((int)size);
+}
+
+static Value fs_modifiedTime(const std::vector<Value>& a, HostContext&) {
+    const std::filesystem::path path(a[0].stringValue);
+    std::error_code ec;
+    auto ft = std::filesystem::last_write_time(path, ec);
+    if (ec) throw fs_error("cannot read modified time", path, ec);
+    auto sysTime = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+        ft - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+    long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       sysTime.time_since_epoch()).count();
+    return Value::fromDate(ms);
+}
+
+static std::filesystem::path make_temp_path(const char* prefix) {
+    std::error_code ec;
+    auto dir = std::filesystem::temp_directory_path(ec);
+    if (ec) throw std::runtime_error(std::string("cannot resolve temp directory: ") + ec.message());
+    static unsigned long long counter = 0;
+    auto stamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                     std::chrono::steady_clock::now().time_since_epoch()).count();
+    for (int i = 0; i < 1000; ++i) {
+        auto path = dir / (std::string(prefix) + "_" + std::to_string(stamp) + "_" +
+                           std::to_string(counter++) + "_" + std::to_string(i));
+        if (!std::filesystem::exists(path, ec) && !ec) return path;
+        ec.clear();
+    }
+    throw std::runtime_error("cannot allocate unique temp path");
+}
+
+static Value fs_createTempFile(const std::vector<Value>&, HostContext&) {
+    auto path = make_temp_path("saqut_tmp_file");
+    std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!f.is_open())
+        throw std::runtime_error("cannot create temp file '" + path.string() + "'");
+    return Value::fromString(path.string());
+}
+
+static Value fs_createTempDirectory(const std::vector<Value>&, HostContext&) {
+    auto path = make_temp_path("saqut_tmp_dir");
+    std::error_code ec;
+    std::filesystem::create_directory(path, ec);
+    if (ec) throw fs_error("cannot create temp directory", path, ec);
+    return Value::fromString(path.string());
 }
 
 // ── sys implementasyonları (#90) ────────────────────────────────────────────
@@ -313,6 +490,19 @@ const std::vector<HostFn>& hostFnTable() {
         { "FS_WRITE_BYTES", 2, fs_writeBytes },
         { "FS_EXISTS",      1, fs_exists     },
         { "FS_REMOVE",      1, fs_remove     },
+        { "FS_COPY",        2, fs_copy       },
+        { "FS_MOVE",        2, fs_move       },
+        { "FS_RENAME",      2, fs_rename     },
+        { "FS_CREATE_DIRECTORY", 1, fs_createDirectory },
+        { "FS_REMOVE_DIRECTORY", 1, fs_removeDirectory },
+        { "FS_LIST",        1, fs_list       },
+        { "FS_WALK",        1, fs_walk       },
+        { "FS_IS_FILE",     1, fs_isFile     },
+        { "FS_IS_DIRECTORY", 1, fs_isDirectory },
+        { "FS_FILE_SIZE",   1, fs_fileSize   },
+        { "FS_MODIFIED_TIME", 1, fs_modifiedTime },
+        { "FS_CREATE_TEMP_FILE", 0, fs_createTempFile },
+        { "FS_CREATE_TEMP_DIRECTORY", 0, fs_createTempDirectory },
         { "SYS_RANDOM",     0, sys_random    },
         { "SYS_RANDOM_INT", 2, sys_randomInt },
         { "SYS_ENV",        1, sys_env       },

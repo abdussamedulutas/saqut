@@ -1,0 +1,69 @@
+import {copy, createDirectory, createTempDirectory, createTempFile, exists, fileSize, isDirectory, isFile, list, modifiedTime, move, readFile, remove, removeDirectory, rename, walk, writeFile} from fs;
+import {year} from date;
+
+void main() {
+    string root = createTempDirectory();
+    string tmpFile = createTempFile();
+
+    writeFile(tmpFile, "x");
+    print("tmpfile=");
+    print(isFile(tmpFile));
+    print(";");
+    remove(tmpFile);
+    print("tmpgone=");
+    print(exists(tmpFile));
+    print(";");
+
+    createDirectory(root + "/b");
+    createDirectory(root + "/a");
+    writeFile(root + "/b/two.txt", "two");
+    writeFile(root + "/a/one.txt", "one");
+    print("dirs=");
+    print(isDirectory(root + "/a"));
+    print(isFile(root + "/a/one.txt"));
+    print(";");
+
+    string[] names = list(root);
+    print("list=");
+    for (int i = 0; i < names.length(); i = i + 1) {
+        print(names[i]);
+        print(",");
+    }
+    print(";");
+
+    string[] walked = walk(root);
+    print("walk=");
+    for (int j = 0; j < walked.length(); j = j + 1) {
+        print(walked[j]);
+        print(",");
+    }
+    print(";");
+
+    copy(root + "/a/one.txt", root + "/b/copied.txt");
+    print("copy=");
+    print(readFile(root + "/b/copied.txt"));
+    print(";");
+
+    rename(root + "/b/copied.txt", root + "/b/renamed.txt");
+    print("rename=");
+    print(isFile(root + "/b/renamed.txt"));
+    print(";");
+
+    move(root + "/b/renamed.txt", root + "/moved.txt");
+    print("move=");
+    print(isFile(root + "/moved.txt"));
+    print(isFile(root + "/b/renamed.txt"));
+    print(";");
+
+    print("size=");
+    print(fileSize(root + "/moved.txt"));
+    print(";");
+    print("mtime=");
+    print(year(modifiedTime(root + "/moved.txt")) >= 2020);
+    print(";");
+
+    removeDirectory(root);
+    print("cleanup=");
+    print(exists(root));
+    print("\n");
+}

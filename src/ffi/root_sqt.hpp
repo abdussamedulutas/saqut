@@ -58,6 +58,19 @@ ffi void    writeBytes(string path, byte[] data)    : FS_WRITE_BYTES from fs req
 ffi void    append(string path, string content)     : FS_APPEND      from fs requires fs;
 ffi bool    exists(string path)                     : FS_EXISTS      from fs requires fs;
 ffi void    remove(string path)                     : FS_REMOVE      from fs requires fs;
+ffi void    copy(string from, string to)            : FS_COPY        from fs requires fs;
+ffi void    move(string from, string to)            : FS_MOVE        from fs requires fs;
+ffi void    rename(string from, string to)          : FS_RENAME      from fs requires fs;
+ffi void    createDirectory(string path)            : FS_CREATE_DIRECTORY from fs requires fs;
+ffi void    removeDirectory(string path)            : FS_REMOVE_DIRECTORY from fs requires fs;
+ffi string[] list(string path)                      : FS_LIST        from fs requires fs;
+ffi string[] walk(string path)                      : FS_WALK        from fs requires fs;
+ffi bool    isFile(string path)                     : FS_IS_FILE     from fs requires fs;
+ffi bool    isDirectory(string path)                : FS_IS_DIRECTORY from fs requires fs;
+ffi int     fileSize(string path)                   : FS_FILE_SIZE   from fs requires fs;
+ffi date    modifiedTime(string path)               : FS_MODIFIED_TIME from fs requires fs;
+ffi string  createTempFile()                        : FS_CREATE_TEMP_FILE from fs requires fs;
+ffi string  createTempDirectory()                   : FS_CREATE_TEMP_DIRECTORY from fs requires fs;
 
 // ── sys modülü (--allow-sys — #90) ──────────────────────────────────────────
 // Non-deterministik/dış-durum-okuyan; OS CSPRNG (rand() DEĞİL).

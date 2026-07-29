@@ -101,6 +101,12 @@ add_test(
             "${SAQUT_BINARY}"
 )
 
+add_test(
+    NAME exec_usage_error
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/exec_usage_error_test.sh"
+            "${SAQUT_BINARY}"
+)
+
 # RG-7 (#157): saqut ast/symbols artık run/check/ir ile aynı diagnostic
 # kapısından geçiyor (ast: hiç semantic kontrol yoktu; symbols: literal
 # exit kodu kullanıyordu).

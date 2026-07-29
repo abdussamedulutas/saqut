@@ -33,6 +33,7 @@ struct CliArgs {
     std::string command;
     std::vector<std::string> positional;
     std::string outputFile;
+    bool hadUserPositional = false; // Global fallback'in eklediği source.sqt sayılmaz.
     bool showHelp    = false;
     bool stdinMode   = false;
     bool compact     = false;  // --compact: boşluksuz JSON
@@ -147,6 +148,7 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         }
         if (arg.compare(0, 5, "file:") == 0) {
             args.positional.push_back(arg.substr(5));
+            args.hadUserPositional = true;
             continue;
         }
         if (arg.compare(0, 7, "output:") == 0) {
@@ -171,10 +173,12 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
             }
             args.command = "run";
             args.positional.push_back(arg);
+            args.hadUserPositional = true;
             continue;
         }
 
         args.positional.push_back(arg);
+        args.hadUserPositional = true;
     }
 
     if (args.command.empty()) args.command = "run";

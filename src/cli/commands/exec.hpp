@@ -80,7 +80,7 @@ inline bool startsWithStatement(const std::string& input) {
 }
 
 inline int cmdExec(const CliArgs& args) {
-    if (args.positional.empty()) {
+    if (!args.hadUserPositional || args.positional.empty()) {
         std::cerr << "usage: saqut exec \"<expression>\"\n";
         std::cerr << "example: saqut exec \"1 + 2\"\n";
         return saqut::exit_code::kUsageError;

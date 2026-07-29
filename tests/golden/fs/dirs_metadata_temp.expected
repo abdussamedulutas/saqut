@@ -1,0 +1,1 @@
+tmpfile=1;tmpgone=0;dirs=11;list=a,b,;walk=a,a/one.txt,b,b/two.txt,;copy=one;rename=1;move=10;size=3;mtime=1;cleanup=0

@@ -1,0 +1,5 @@
+import {createDirectory} from fs;
+
+void main() {
+    createDirectory("/tmp/saqut_179_denied");
+}

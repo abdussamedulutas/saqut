@@ -1,0 +1,12 @@
+import {drop} from caps;
+import {isFile} from fs;
+
+void main() {
+    drop("fs");
+    try {
+        print(isFile("/tmp/saqut_179_never_created"));
+    } catch (Error e) {
+        print(e.code);
+    }
+    print("\n");
+}

@@ -17,6 +17,7 @@
 #include <iostream>
 #include <string>
 #include "cli/args.hpp"
+#include "cli/exit_codes.hpp"
 #include "tokenizer/tokenizer.hpp"
 #include "parser/parser.hpp"
 #include "symbol/symbol_table.hpp"
@@ -82,7 +83,7 @@ inline int cmdExec(const CliArgs& args) {
     if (args.positional.empty()) {
         std::cerr << "usage: saqut exec \"<expression>\"\n";
         std::cerr << "example: saqut exec \"1 + 2\"\n";
-        return 1;
+        return saqut::exit_code::kUsageError;
     }
 
     // Kullanıcının girdisini minimal programa sar. Deyimle başlıyorsa (for/while/
@@ -100,16 +101,26 @@ inline int cmdExec(const CliArgs& args) {
     Tokenizer        tokenizer;
     auto             tokens = tokenizer.scan(source, syntheticPath);
 
-    Parser   parser;
-    ASTNode* ast = parser.parse(tokens);
-    if (!ast) {
-        std::cerr << "exec: parse error in expression: " << expr << "\n";
+    // #134: exec, run/check ile AYNI diagnostic kapısından geçmeli. Önceki
+    // kod Parser'ı DiagnosticEngine vermeden (diag_ == nullptr) çağırıyordu;
+    // bu modda Parser hatayı yalnız stderr'e basıp panic-mode kurtarma ile
+    // devam ediyor ve yine de non-null bir AST döndürüyor — çağıran yalnız
+    // `!ast`'i kontrol ettiği için parse hatası sessizce yutuluyor, hatalı
+    // AST derlenip çalıştırılıyor, yanlış stdout + exit 0 üretiyordu
+    // (ADR-038 ihlali). Gerçek DiagnosticEngine verip hasErrors()'ı run.hpp
+    // ile aynı şekilde kontrol ediyoruz.
+    DiagnosticEngine diag;
+    Parser           parser(&diag);
+    ASTNode*         ast = parser.parse(tokens);
+
+    if (!ast || diag.hasErrors()) {
+        diag.printAll(std::cerr);
+        delete ast;
         for (auto* t : tokens) delete t;
-        return 1;
+        return saqut::exit_code::kDataError;
     }
 
-    SymbolTable      symbolTable;
-    DiagnosticEngine diag;
+    SymbolTable symbolTable;
     SymbolCollector(symbolTable, diag, args.allowedCaps).collect(ast);
 
     if (!diag.hasErrors()) {
@@ -121,7 +132,7 @@ inline int cmdExec(const CliArgs& args) {
         diag.printAll(std::cerr);
         delete ast;
         for (auto* t : tokens) delete t;
-        return 1;
+        return saqut::exit_code::kDataError;
     }
 
     IRGenerator irGenerator;
@@ -139,7 +150,7 @@ inline int cmdExec(const CliArgs& args) {
                 std::cerr << "exec: --jit unsupported for expression '" << expr
                           << "' (function '" << reason.functionName
                           << "', opcode: " << reason.opcodeName << ")\n";
-                exitCode = 1;
+                exitCode = saqut::exit_code::kSoftwareError;
             }
         } else {
             Interpreter vm(program);
@@ -149,7 +160,7 @@ inline int cmdExec(const CliArgs& args) {
         }
     } catch (const std::exception& e) {
         std::cerr << "exec: runtime error: " << e.what() << "\n";
-        exitCode = 1;
+        exitCode = saqut::exit_code::kSoftwareError;
     }
 
     delete ast;

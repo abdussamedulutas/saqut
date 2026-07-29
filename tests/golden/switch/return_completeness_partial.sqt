@@ -1,0 +1,16 @@
+// #136 regresyon: default var ama bir dal return etmiyor -> hâlâ E006
+// vermeli (yalnız "default varlığı" yeterli değil, HER dal dönmeli).
+enum Color { Red, Green, Blue }
+
+int codeFor(Color c) {
+    switch (c) {
+        case Color.Red:   print("hit");
+        case Color.Green: return 2;
+        default:          return 0;
+    }
+}
+
+int main() {
+    print(codeFor(Color.Red));
+    return 0;
+}

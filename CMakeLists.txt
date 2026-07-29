@@ -87,6 +87,16 @@ add_test(
             "${SAQUT_BINARY}" "${CMAKE_SOURCE_DIR}"
 )
 
+add_test(
+    NAME cli_ast_output_text
+    COMMAND ${CMAKE_COMMAND}
+        -DBINARY=${SAQUT_BINARY}
+        -DSOURCE=${CMAKE_SOURCE_DIR}/tests/golden/cli/ast_output_text.sqt
+        -DEXPECTED=${CMAKE_SOURCE_DIR}/tests/golden/cli/ast_output_text.ast.expected
+        -DTEMP_DIR=${CMAKE_BINARY_DIR}/ast_output_text_tmp
+        -P "${CMAKE_SOURCE_DIR}/cmake/run_cli_ast_output.cmake"
+)
+
 # #141: saqut ir yalnız gerçek TTY'de renkli; redirect/pipe'ta ANSI CSI yok.
 add_test(
     NAME ir_tty_color

@@ -1,0 +1,9 @@
+Program
+  FunctionDecl (main : int)
+    Block
+      VariableDecl (value : int)
+        BinaryExpression (+)
+     Literal {1} integer
+     Literal {2} integer
+      ReturnStatement
+    Identifier {value}

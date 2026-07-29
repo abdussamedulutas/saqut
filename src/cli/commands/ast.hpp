@@ -99,7 +99,17 @@ inline int cmdAst(const CliArgs& args) {
              << "  }\n"
              << "}\n";
     } else {
-        displayAst->log(0);
+        if (out == &std::cout) {
+            displayAst->log(0);
+        } else {
+            struct CoutRedirect {
+                std::streambuf* previous;
+                explicit CoutRedirect(std::ostream& target)
+                    : previous(std::cout.rdbuf(target.rdbuf())) {}
+                ~CoutRedirect() { std::cout.rdbuf(previous); }
+            } redirect(*out);
+            displayAst->log(0);
+        }
     }
 
     // Kalan uyarılar (W002 optimizasyon uyarıları dahil, hata yok) her

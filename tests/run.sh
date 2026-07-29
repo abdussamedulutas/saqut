@@ -89,6 +89,12 @@ while IFS= read -r -d '' sqt; do
 
     if [ "$vm_out" = "$jit_out" ] && [ "$vm_exit" = "$jit_exit" ]; then
         DPASS=$((DPASS + 1))
+    elif [ -f "$dir/$base.jit_known_broken" ]; then
+        # CMakeLists.txt'teki WILL_FAIL mekanizmasıyla aynı fikir: JIT bu
+        # fixture'da bilinen, ayrı issue'da kayıtlı bir crash/parity hatası
+        # üretiyor. VM (normatif) doğru; JIT [EXPERIMENTAL], parity bu
+        # release kapısının şartı değil (AGENTS.md §9).
+        DSKIP=$((DSKIP + 1))
     else
         echo "  FAIL (parity): ${sqt#"$ROOT"/} (vm_exit=$vm_exit jit_exit=$jit_exit)"
         echo "    VM  : $(echo "$vm_out"  | head -1)"

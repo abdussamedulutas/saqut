@@ -1,0 +1,19 @@
+// #136: default dalı olan VE her dalı return eden switch, workaround'suz
+// (fonksiyon gövdesi sonunda ölü bir return olmadan) derlenmeli.
+enum Color { Red, Green, Blue }
+
+int codeFor(Color c) {
+    switch (c) {
+        case Color.Red:   return 1;
+        case Color.Green: return 2;
+        case Color.Blue:  return 3;
+        default:          return 0;
+    }
+}
+
+int main() {
+    print(codeFor(Color.Red));
+    print(codeFor(Color.Green));
+    print(codeFor(Color.Blue));
+    return 0;
+}

@@ -1,0 +1,8 @@
+// #135: string[int] statik olarak reddedilmeli (E012). Önceden check
+// sıfır hata veriyor, runtime'da "expected array, got different type"
+// ile (o zaman uncatchable/kodsuz) çöküyordu.
+int main() {
+    string probe = "AB";
+    print(probe[0]);
+    return 0;
+}

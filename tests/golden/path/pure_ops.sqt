@@ -1,0 +1,21 @@
+import {join, normalize, dirname, basename, extension, isAbsolute, separator} from path;
+
+void main() {
+    print("sep=[" + separator() + "];");
+    print("abs1=");
+    print(isAbsolute("/tmp/saqut-177-no-such-dir/file.txt"));
+    print(";abs2=");
+    print(isAbsolute("tmp/saqut-177-no-such-dir/file.txt"));
+    print(";join=[" + join("/tmp/saqut-177-no-such-dir", "../ghost.txt") + "]");
+    print(";norm_empty=[" + normalize("") + "]");
+    print(";norm_dot=[" + normalize(".") + "]");
+    print(";norm_complex=[" + normalize("a/./b/../c/") + "]");
+    print(";norm_parent=[" + normalize("../x") + "]");
+    print(";dirname_file=[" + dirname("/tmp/saqut-177-no-such-dir/file.txt") + "]");
+    print(";basename_file=[" + basename("/tmp/saqut-177-no-such-dir/file.txt") + "]");
+    print(";extension_file=[" + extension("/tmp/saqut-177-no-such-dir/file.txt") + "]");
+    print(";dirname_trailing=[" + dirname("a/b/") + "]");
+    print(";basename_trailing=[" + basename("a/b/") + "]");
+    print(";extension_none=[" + extension("README") + "]");
+    print("\n");
+}

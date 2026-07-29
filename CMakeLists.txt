@@ -110,6 +110,15 @@ add_test(
             "${SAQUT_BINARY}"
 )
 
+# #170: parser'daki 25 kapanış-delimiter site'i ((), [], {}) artık E905
+# diagnostic'i basıyor — eskiden sessizce yutulup program "başarıyla" (exit 0)
+# çalıştırılıyordu.
+add_test(
+    NAME parser_closing_delimiter_diagnostic
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/parser_closing_delimiter_diagnostic_test.sh"
+            "${SAQUT_BINARY}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

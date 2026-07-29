@@ -65,12 +65,19 @@
 - **saqut-docs#1 dilim B/C/D**: yukarıdaki üçüne bağımlı, aynı nedenle
   bekliyor.
 
-### LSP/DAP v1 capability matrisi — RG-8, ayrıca BLOCKED
+### LSP/DAP preview matrisi — RG-8
 
-`docs/v0.9-v1.0-yol-haritası.md` §4 bunu açıkça "ürün sahibi kararı,
-ajan varsayamaz" ilan ediyor. Kabul edilmiş bir matris yok. Mevcut
-uygulanmış+tracked-test'li preview alt kümesi (21 LSP + 10 DAP senaryosu)
-#157 issue'sunda kayıtlı; resmi kabul ürün sahibinden bekleniyor.
+0.9.0 için yeni LSP/DAP capability eklenmedi ve tam 1.0 protokol sözleşmesi
+ilan edilmedi. Mevcut tracked preview alt kümesi ayrı matrise bağlandı:
+`docs/v0.9-lsp-dap-preview-matrix.md`.
+
+- LSP: 21 tracked senaryo.
+- DAP: 10 tracked senaryo.
+- Matrix, desteklenen/testlenen preview satırlarını, explicit unsupported
+  yüzeyleri ve advertised-unverified boşlukları ayrı listeler.
+
+Bilinen sınır korunur: Bu release note taslağı editor smoke, tam LSP/DAP v1
+contractı veya yeni protocol capability vaadi değildir.
 
 ## Kapsam dışı (AGENTS.md §9, hatırlatma)
 

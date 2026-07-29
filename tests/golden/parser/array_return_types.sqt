@@ -1,0 +1,53 @@
+struct Point {
+    int x;
+    int y;
+}
+
+int sumFirstTwo(int[] values) {
+    return values[0] + values[1];
+}
+
+int[] makeNumbers(int base) {
+    int[] values = [];
+    values.push(base);
+    values.push(base + 1);
+    return values;
+}
+
+Point[] makePoints() {
+    Point[] points = [];
+    Point p;
+    p.x = 3;
+    p.y = 4;
+    points.push(p);
+    return points;
+}
+
+int[][] makeGrid() {
+    int[][] grid = [];
+    int[] row = [];
+    row.push(7);
+    row.push(8);
+    grid.push(row);
+    return grid;
+}
+
+int main() {
+    int[] numbers = makeNumbers(5);
+    print(numbers[0]);
+    print(numbers[1]);
+    print(sumFirstTwo(numbers));
+
+    Point[] points = makePoints();
+    print(points[0].x);
+    print(points[0].y);
+
+    int[][] grid = makeGrid();
+    print(grid[0][0]);
+    print(grid[0][1]);
+
+    int[] local = [];
+    local.push(9);
+    print(local[0]);
+    return 0;
+}

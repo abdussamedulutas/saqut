@@ -251,14 +251,17 @@ ASTNode* Parser::parseExportDecl() {
     bool isIdentifierReturnType = (ct.type == TokenType::IDENTIFIER);
 
     if (isFunctionReturnType || isIdentifierReturnType) {
-        auto la1 = lookahead(1);
-        auto la2 = lookahead(2);
-        bool isNullable = (la1.type == TokenType::TERNARY);
-        bool isFnDecl = isNullable
-            ? (la2.type == TokenType::IDENTIFIER && lookahead(3).type == TokenType::LPAREN)
-            : (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN);
-
-        if (isFnDecl) {
+        auto isFunctionDeclAfterType = [this](int offsetAfterType) {
+            int off = offsetAfterType;
+            while (lookahead(off).type == TokenType::LBRACKET &&
+                   lookahead(off + 1).type == TokenType::RBRACKET)
+                off += 2;
+            if (lookahead(off).type == TokenType::TERNARY)
+                off += 1;
+            return lookahead(off).type == TokenType::IDENTIFIER &&
+                   lookahead(off + 1).type == TokenType::LPAREN;
+        };
+        if (isFunctionDeclAfterType(1)) {
             auto* node = static_cast<FunctionDeclNode*>(parseFunctionDecl());
             if (node) node->isExported = true;
             return node;
@@ -281,6 +284,16 @@ ASTNode* Parser::parseExportDecl() {
 
 ASTNode* Parser::parseDeclaration() {
     auto ct = currentToken();
+    auto isFunctionDeclAfterType = [this](int offsetAfterType) {
+        int off = offsetAfterType;
+        while (lookahead(off).type == TokenType::LBRACKET &&
+               lookahead(off + 1).type == TokenType::RBRACKET)
+            off += 2;
+        if (lookahead(off).type == TokenType::TERNARY)
+            off += 1;
+        return lookahead(off).type == TokenType::IDENTIFIER &&
+               lookahead(off + 1).type == TokenType::LPAREN;
+    };
 
     if (ct.type == TokenType::KW_IMPORT)
         return parseImportDecl();
@@ -297,17 +310,8 @@ ASTNode* Parser::parseDeclaration() {
         TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE,
         TokenType::KW_AUTO
     })) {
-        auto la1 = lookahead(1);
-        auto la2 = lookahead(2);
-        // int name(  → fonksiyon
-        if (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN)
+        if (isFunctionDeclAfterType(1))
             return parseFunctionDecl();
-        // int? name(  → nullable dönüş tipli fonksiyon (ADR-021)
-        if (la1.type == TokenType::TERNARY) {
-            auto la3 = lookahead(3);
-            if (la2.type == TokenType::IDENTIFIER && la3.type == TokenType::LPAREN)
-                return parseFunctionDecl();
-        }
         return parseVariableDecl();
     }
 
@@ -317,14 +321,8 @@ ASTNode* Parser::parseDeclaration() {
     // Kullanıcı tanımlı tip adı (struct tipi) ile değişken/fonksiyon bildirimi
     if (ct.type == TokenType::IDENTIFIER) {
         auto la1 = lookahead(1);
-        auto la2 = lookahead(2);
-        if (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN)
+        if (isFunctionDeclAfterType(1))
             return parseFunctionDecl();
-        if (la1.type == TokenType::TERNARY) {
-            auto la3 = lookahead(3);
-            if (la2.type == TokenType::IDENTIFIER && la3.type == TokenType::LPAREN)
-                return parseFunctionDecl();
-        }
         if (la1.type == TokenType::IDENTIFIER)
             return parseVariableDecl();
         // "TypeName[]...[] varName" — çok boyutlu struct/enum array bildirimi
@@ -682,6 +680,16 @@ ASTNode* Parser::parseFunctionDecl() {
     fn->loc = currentToken().token->loc;
     fn->returnType = currentToken().token->token;
     nextToken();
+
+    while (currentToken().type == TokenType::LBRACKET) {
+        nextToken();
+        if (currentToken().type == TokenType::RBRACKET)
+            nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : fn->loc,
+                        "E905", "expected ']' in return array type");
+        fn->returnType += "[]";
+    }
 
     // ADR-021: nullable dönüş tipi — int? f()
     if (currentToken().type == TokenType::TERNARY)

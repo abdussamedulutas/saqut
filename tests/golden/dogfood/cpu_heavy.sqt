@@ -1,0 +1,81 @@
+// RG-4 dogfood — CPU-ağırlıklı gerçek program: Eratosthenes kalburu +
+// rekürsif Fibonacci + büyük bir dizinin bubble sort ile sıralanması.
+// VM'in sıcak yolunu (aritmetik, karşılaştırma, döngü, recursion, array
+// push/index) gerçekçi bir iş yüküyle çalıştırır.
+
+int countPrimesUpTo(int n) {
+    int[] isComposite = [];
+    int i = 0;
+    while (i <= n) {
+        isComposite.push(0);
+        i = i + 1;
+    }
+    int count = 0;
+    int p = 2;
+    while (p <= n) {
+        if (isComposite[p] == 0) {
+            count = count + 1;
+            // p*p taşabilir (int32) — `p <= n / p` bölme tabanlı, taşmasız
+            // eşdeğer karşılaştırmayla önce sınır kontrol edilir (klasik
+            // Eratosthenes kalburu optimizasyonu: yalnız p <= sqrt(n) için
+            // işaretleme başlatmak yeterli, daha büyük p'lerin katları
+            // zaten daha küçük asallar tarafından işaretlenmiştir).
+            if (p <= n / p) {
+                int multiple = p * p;
+                while (multiple <= n) {
+                    isComposite[multiple] = 1;
+                    multiple = multiple + p;
+                }
+            }
+        }
+        p = p + 1;
+    }
+    return count;
+}
+
+int fib(int n) {
+    if (n <= 1) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+void fillReverseSorted(int[] arr, int n) {
+    int i = n;
+    while (i > 0) {
+        arr.push(i);
+        i = i - 1;
+    }
+}
+
+void bubbleSort(int[] arr) {
+    int n = arr.length();
+    int i = 0;
+    while (i < n) {
+        int j = 0;
+        while (j < n - i - 1) {
+            if (arr[j] > arr[j + 1]) {
+                int tmp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+    int primeCount = countPrimesUpTo(100000);
+    print("primesUpTo100000="); print(primeCount); print("\n");
+
+    int fibResult = fib(27);
+    print("fib27="); print(fibResult); print("\n");
+
+    int[] arr = [];
+    fillReverseSorted(arr, 800);
+    bubbleSort(arr);
+    print("sortedFirst="); print(arr[0]); print("\n");
+    print("sortedLast="); print(arr[799]); print("\n");
+    print("sortedLength="); print(arr.length()); print("\n");
+
+    return 0;
+}

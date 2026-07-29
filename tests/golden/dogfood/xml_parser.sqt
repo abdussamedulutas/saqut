@@ -1,0 +1,132 @@
+// RG-4 dogfood — gerçek, elle yazılmış recursive-descent XML doğrulayıcı.
+// Açılış/kapanış etiketlerinin eşleştiğini doğrular, elementleri ve
+// öznitelikleri sayar, maksimum iç içelik derinliğini izler.
+// Kapsam: iyi-biçimli basit XML (namespace, CDATA, processing instruction
+// yok) — gerçek bir dogfood parser için yeterli, tam W3C uyumu hedeflenmez.
+
+string src = "";
+int pos = 0;
+int len = 0;
+int elementCount = 0;
+int attributeCount = 0;
+int textNodeCount = 0;
+int maxDepth = 0;
+int mismatchCount = 0;
+
+string peek() {
+    if (pos >= len) { return ""; }
+    return src.charAt(pos);
+}
+
+void advance() {
+    pos = pos + 1;
+}
+
+void skipWs() {
+    while (pos < len) {
+        string c = src.charAt(pos);
+        if (c == " " || c == "\t" || c == "\n" || c == "\r") {
+            pos = pos + 1;
+        } else {
+            return;
+        }
+    }
+}
+
+bool isNameChar(string c) {
+    return c != "" && c != "<" && c != ">" && c != " " && c != "\t" &&
+           c != "\n" && c != "/" && c != "=" && c != "\"";
+}
+
+string readName() {
+    int start = pos;
+    while (pos < len && isNameChar(peek())) { advance(); }
+    return src.substring(start, pos - start);
+}
+
+void parseAttributes() {
+    while (true) {
+        skipWs();
+        string c = peek();
+        if (c == "" || c == ">" || c == "/") { return; }
+        readName(); // öznitelik adı
+        attributeCount = attributeCount + 1;
+        skipWs();
+        if (peek() == "=") {
+            advance();
+            skipWs();
+            string quote = peek();
+            advance(); // açılış tırnağı
+            while (pos < len && peek() != quote) { advance(); }
+            advance(); // kapanış tırnağı
+        }
+    }
+}
+
+void parseElement(int depth) {
+    if (depth > maxDepth) { maxDepth = depth; }
+    expectOpenAngle();
+    string tagName = readName();
+    elementCount = elementCount + 1;
+    parseAttributes();
+    skipWs();
+    if (peek() == "/") {
+        advance(); // self-closing "/"
+        advance(); // ">"
+        return;
+    }
+    advance(); // ">"
+
+    while (true) {
+        skipWs();
+        if (pos >= len) { return; }
+        if (peek() == "<") {
+            if (pos + 1 < len && src.charAt(pos + 1) == "/") {
+                advance(); advance(); // "</"
+                string closeName = readName();
+                if (closeName != tagName) { mismatchCount = mismatchCount + 1; }
+                skipWs();
+                advance(); // ">"
+                return;
+            } else {
+                parseElement(depth + 1);
+            }
+        } else {
+            int start = pos;
+            while (pos < len && peek() != "<") { advance(); }
+            if (pos > start) { textNodeCount = textNodeCount + 1; }
+        }
+    }
+}
+
+void expectOpenAngle() {
+    if (peek() != "<") {
+        print("PARSE ERROR: expected '<' at pos ");
+        print(pos);
+    }
+    advance();
+}
+
+void parseXml(string document) {
+    src = document;
+    pos = 0;
+    len = document.length();
+    elementCount = 0;
+    attributeCount = 0;
+    textNodeCount = 0;
+    maxDepth = 0;
+    mismatchCount = 0;
+    skipWs();
+    parseElement(0);
+}
+
+int main() {
+    string doc = "<library name=\"saQut examples\" version=\"1\"><book id=\"1\" lang=\"en\"><title>Compilers</title><author>Aho</author></book><book id=\"2\"><title>Glass Box</title><tags><tag>vm</tag><tag>ir</tag><tag>gc</tag></tags></book><empty/></library>";
+    parseXml(doc);
+    print("elements="); print(elementCount); print("\n");
+    print("attributes="); print(attributeCount); print("\n");
+    print("textNodes="); print(textNodeCount); print("\n");
+    print("maxDepth="); print(maxDepth); print("\n");
+    print("mismatches="); print(mismatchCount); print("\n");
+    return 0;
+}

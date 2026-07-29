@@ -132,6 +132,7 @@ inline const std::vector<DiagInfo>& diagnosticCatalog() {
         {"E902", DiagLevel::Error,   "Syntax error: expected type name after 'as'"},
         {"E903", DiagLevel::Error,   "Syntax error: expected member name"},
         {"E904", DiagLevel::Error,   "Syntax error: expected variable name"},
+        {"E905", DiagLevel::Error,   "Syntax error: expected closing delimiter"},
     };
     return catalog;
 }

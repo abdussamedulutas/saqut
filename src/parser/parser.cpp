@@ -177,16 +177,26 @@ ASTNode* Parser::parseImportDecl() {
     nextToken();
 
     // virgülle ayrılmış isimler: { add, Vector, ... }
+    // İlerleme garantisi: IDENTIFIER/COMMA olmayan bir token sonsuz döngüye
+    // yol açardı (bkz. #170 — bu, 25 kapanış-delimiter site'inden AYRI,
+    // bağımsız bulunmuş bir hang/DoS hatasıydı) — beklenmeyen token'da hata
+    // basıp döngüden çık.
     while (!currentToken().is({TokenType::RBRACE, TokenType::SVR_VOID})) {
         if (currentToken().type == TokenType::IDENTIFIER) {
             node->importedNames.push_back(currentToken().token->token);
             nextToken();
+        } else {
+            reportError(currentToken().token ? currentToken().token->loc : node->loc,
+                        "E905", "expected identifier or '}' in import list");
+            break;
         }
         if (currentToken().type == TokenType::COMMA) nextToken();
     }
 
     // } bekleniyor
     if (currentToken().type == TokenType::RBRACE) nextToken();
+    else reportError(currentToken().token ? currentToken().token->loc : node->loc,
+                      "E905", "expected '}' to close import list");
 
     // contextual keyword: from
     if (currentToken().type == TokenType::IDENTIFIER &&
@@ -415,6 +425,9 @@ ASTNode* Parser::parseNullDenotation() {
         }
         if (currentToken().type == TokenType::RPAREN)
             nextToken(); // tüket: )
+        else
+            reportError(currentToken().token ? currentToken().token->loc : sc->loc,
+                        "E905", "expected ')' after scope-call arguments");
         return sc;
     }
 
@@ -423,6 +436,9 @@ ASTNode* Parser::parseNullDenotation() {
         ASTNode* expr = parseExpression(0);
         if (currentToken().type == TokenType::RPAREN)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : lastLoc_,
+                        "E905", "expected ')' to close parenthesized expression");
         return expr;
     }
 
@@ -440,6 +456,9 @@ ASTNode* Parser::parseNullDenotation() {
         }
         if (currentToken().type == TokenType::RBRACKET)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : arr->loc,
+                        "E905", "expected ']' to close array literal");
         return arr;
     }
 
@@ -537,6 +556,9 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         }
         if (currentToken().type == TokenType::RPAREN)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : call->loc,
+                        "E905", "expected ')' after call arguments");
         return call;
     }
 
@@ -549,6 +571,9 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         idx->index = parseExpression(0);
         if (currentToken().type == TokenType::RBRACKET)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : idx->loc,
+                        "E905", "expected ']' to close index expression");
         return idx;
     }
 
@@ -622,6 +647,9 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
             }
             if (currentToken().type == TokenType::RPAREN)
                 nextToken(); // tüket: )
+            else
+                reportError(currentToken().token ? currentToken().token->loc : sc->loc,
+                            "E905", "expected ')' after call arguments");
             return sc;
         }
 
@@ -681,6 +709,9 @@ ASTNode* Parser::parseFunctionDecl() {
                 nextToken();
                 if (currentToken().type == TokenType::RBRACKET)
                     nextToken();
+                else
+                    reportError(currentToken().token ? currentToken().token->loc : fn->loc,
+                                "E905", "expected ']' in parameter array type");
                 paramType += "[]";
             }
             // ADR-021: nullable parametre — int? a
@@ -698,6 +729,9 @@ ASTNode* Parser::parseFunctionDecl() {
         }
         if (currentToken().type == TokenType::RPAREN)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : fn->loc,
+                        "E905", "expected ')' after parameter list");
     }
 
     if (currentToken().type == TokenType::LBRACE) {
@@ -722,6 +756,8 @@ ASTNode* Parser::parseFfiDecl() {
     while (currentToken().type == TokenType::LBRACKET) {
         nextToken();
         if (currentToken().type == TokenType::RBRACKET) nextToken();
+        else reportError(currentToken().token ? currentToken().token->loc : fn->loc,
+                          "E905", "expected ']' in return array type");
         fn->returnType += "[]";
     }
     if (currentToken().type == TokenType::TERNARY)
@@ -748,6 +784,8 @@ ASTNode* Parser::parseFfiDecl() {
             while (currentToken().type == TokenType::LBRACKET) {
                 nextToken();
                 if (currentToken().type == TokenType::RBRACKET) nextToken();
+                else reportError(currentToken().token ? currentToken().token->loc : fn->loc,
+                                  "E905", "expected ']' in parameter array type");
                 paramType += "[]";
             }
             if (currentToken().type == TokenType::TERNARY)
@@ -762,6 +800,8 @@ ASTNode* Parser::parseFfiDecl() {
             if (currentToken().type == TokenType::COMMA) nextToken();
         }
         if (currentToken().type == TokenType::RPAREN) nextToken();
+        else reportError(currentToken().token ? currentToken().token->loc : fn->loc,
+                          "E905", "expected ')' after parameter list");
     }
 
     // : <HOST_ID>
@@ -813,6 +853,8 @@ ASTNode* Parser::parseStructDecl() {
             else break;
         }
         if (currentToken().type == TokenType::RBRACE) nextToken();
+        else reportError(currentToken().token ? currentToken().token->loc : st->loc,
+                          "E905", "expected '}' to close struct body");
     }
     if (currentToken().type == TokenType::SEMICOLON) nextToken();
     return st;
@@ -850,6 +892,8 @@ ASTNode* Parser::parseEnumDecl() {
             if (currentToken().type == TokenType::COMMA) nextToken();
         }
         if (currentToken().type == TokenType::RBRACE) nextToken();
+        else reportError(currentToken().token ? currentToken().token->loc : en->loc,
+                          "E905", "expected '}' to close enum body");
     }
     if (currentToken().type == TokenType::SEMICOLON) nextToken();
     return en;
@@ -866,6 +910,9 @@ ASTNode* Parser::parseVariableDecl() {
         nextToken();
         if (currentToken().type == TokenType::RBRACKET)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : vd->loc,
+                        "E905", "expected ']' in variable array type");
         vd->varType += "[]";
     }
 
@@ -891,6 +938,9 @@ ASTNode* Parser::parseVariableDecl() {
             nextToken();
         if (currentToken().type == TokenType::RBRACKET)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : vd->loc,
+                        "E905", "expected ']' after postfix array declarator");
         if (vd->varType.back() != ']') vd->varType += "[]";
     }
 
@@ -922,6 +972,9 @@ ASTNode* Parser::parseVariableDecl() {
                 nextToken();
             if (currentToken().type == TokenType::RBRACKET)
                 nextToken();
+            else
+                reportError(currentToken().token ? currentToken().token->loc : sibling->loc,
+                            "E905", "expected ']' after postfix array declarator");
         }
 
         if (currentToken().type == TokenType::EQUAL) {
@@ -1036,6 +1089,9 @@ ASTNode* Parser::parseBlock() {
 
     if (currentToken().type == TokenType::RBRACE)
         nextToken();
+    else
+        reportError(currentToken().token ? currentToken().token->loc : block->loc,
+                    "E905", "expected '}' to close block");
 
     return block;
 }
@@ -1050,6 +1106,9 @@ ASTNode* Parser::parseIfStatement() {
         ifNode->condition = parseExpression();
         if (currentToken().type == TokenType::RPAREN)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : ifNode->loc,
+                        "E905", "expected ')' after if condition");
     }
 
     ifNode->thenBranch = parseStatement();
@@ -1072,6 +1131,9 @@ ASTNode* Parser::parseWhileStatement() {
         ws->condition = parseExpression();
         if (currentToken().type == TokenType::RPAREN)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : ws->loc,
+                        "E905", "expected ')' after while condition");
     }
 
     ws->body = parseStatement();
@@ -1100,6 +1162,9 @@ ASTNode* Parser::parseForStatement() {
         fs->update = parseExpression();
     if (currentToken().type == TokenType::RPAREN)
         nextToken();
+    else
+        reportError(currentToken().token ? currentToken().token->loc : fs->loc,
+                    "E905", "expected ')' after for clauses");
 
     fs->body = parseStatement();
 
@@ -1120,6 +1185,9 @@ ASTNode* Parser::parseDoWhileStatement() {
             dw->condition = parseExpression();
             if (currentToken().type == TokenType::RPAREN)
                 nextToken();
+            else
+                reportError(currentToken().token ? currentToken().token->loc : dw->loc,
+                            "E905", "expected ')' after do-while condition");
         }
         if (currentToken().type == TokenType::SEMICOLON)
             nextToken();
@@ -1217,6 +1285,9 @@ ASTNode* Parser::parseTryStatement() {
         nextToken(); // tüket: değişken adı
         if (currentToken().type == TokenType::RPAREN)
             nextToken(); // tüket: )
+        else
+            reportError(currentToken().token ? currentToken().token->loc : ts->loc,
+                        "E905", "expected ')' after catch clause");
         ts->handler = parseBlock();
     }
 
@@ -1236,6 +1307,9 @@ ASTNode* Parser::parseSwitchStatement() {
         sw->subject = parseExpression();
         if (currentToken().type == TokenType::RPAREN)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : sw->loc,
+                        "E905", "expected ')' after switch subject");
     }
 
     if (currentToken().type != TokenType::LBRACE)
@@ -1296,6 +1370,9 @@ ASTNode* Parser::parseSwitchStatement() {
 
     if (currentToken().type == TokenType::RBRACE)
         nextToken(); // tüket: }
+    else
+        reportError(currentToken().token ? currentToken().token->loc : sw->loc,
+                    "E905", "expected '}' to close switch body");
 
     return sw;
 }

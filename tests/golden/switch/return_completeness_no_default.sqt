@@ -1,0 +1,16 @@
+// #136 regresyon: default YOK -> girdi uzayının tamamı kapsanmıyor,
+// eksik return hâlâ E006 vermeli.
+enum Color { Red, Green, Blue }
+
+int codeFor(Color c) {
+    switch (c) {
+        case Color.Red:   return 1;
+        case Color.Green: return 2;
+        case Color.Blue:  return 3;
+    }
+}
+
+int main() {
+    print(codeFor(Color.Red));
+    return 0;
+}

@@ -126,6 +126,23 @@ bool TypeChecker::pathAlwaysReturns(ASTNode* stmt) {
             return pathAlwaysReturns(ifn->thenBranch)
                 && pathAlwaysReturns(ifn->elseBranch);
         }
+        case ASTKind::SwitchStatement: {
+            // #136: default dalı olan VE her dal (ADR-027: fallthrough yok)
+            // return/throw ile biten switch, "tüm yollar döner" sayılır.
+            // default yoksa (girdi uzayının tamamı kapsanmıyor) eski
+            // davranış korunur — döner sayılmaz.
+            auto* sw = (SwitchStatementNode*)stmt;
+            bool hasDefault = false;
+            for (auto& c : sw->cases) {
+                if (c.isDefault) hasDefault = true;
+                bool caseReturns = false;
+                for (ASTNode* s : c.body) {
+                    if (pathAlwaysReturns(s)) { caseReturns = true; break; }
+                }
+                if (!caseReturns) return false;
+            }
+            return hasDefault;
+        }
         default:
             return false; // döngü, atama, çağrı vb. → garanti yok
     }

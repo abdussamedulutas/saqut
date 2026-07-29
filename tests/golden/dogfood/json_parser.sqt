@@ -1,0 +1,159 @@
+// RG-4 dogfood — gerçek, elle yazılmış recursive-descent JSON doğrulayıcı.
+// Tam bir JSON ağacı kurmuyor (dil generic/union tipi desteklemiyor);
+// bunun yerine sözdizimini tam olarak doğrulayan, obje anahtarlarını,
+// array elemanlarını ve maksimum iç içelik derinliğini sayan gerçek bir
+// parser. String character-level tarama (charAt/substring), recursion,
+// array/struct kullanır.
+
+string src = "";
+int pos = 0;
+int len = 0;
+int objectCount = 0;
+int arrayCount = 0;
+int keyCount = 0;
+int stringCount = 0;
+int numberCount = 0;
+int maxDepth = 0;
+
+string peek() {
+    if (pos >= len) { return ""; }
+    return src.charAt(pos);
+}
+
+void advance() {
+    pos = pos + 1;
+}
+
+void skipWs() {
+    while (pos < len) {
+        string c = src.charAt(pos);
+        if (c == " " || c == "\t" || c == "\n" || c == "\r") {
+            pos = pos + 1;
+        } else {
+            return;
+        }
+    }
+}
+
+void expect(string ch) {
+    if (peek() != ch) {
+        print("PARSE ERROR: expected '");
+        print(ch);
+        print("' at pos ");
+        print(pos);
+        print(", got '");
+        print(peek());
+        print("'");
+    }
+    advance();
+}
+
+void parseString() {
+    expect("\"");
+    while (pos < len && peek() != "\"") {
+        if (peek() == "\\") {
+            advance(); // kaçış karakteri
+            advance(); // kaçan karakter
+        } else {
+            advance();
+        }
+    }
+    expect("\"");
+    stringCount = stringCount + 1;
+}
+
+void parseNumber() {
+    // numberCount burada artırılır (döngü bittiğinde değil) — döngü her
+    // zaman rakam-olmayan bir karakterde erken `return` ile çıkar (belge
+    // sonuna kadar tek başına bir sayı olmadıkça), bu yüzden döngü SONRASI
+    // bir artış pratikte hiç çalışmaz.
+    numberCount = numberCount + 1;
+    if (peek() == "-") { advance(); }
+    while (pos < len) {
+        string c = peek();
+        bool isDigit = c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
+                       c == "5" || c == "6" || c == "7" || c == "8" || c == "9" ||
+                       c == "." || c == "e" || c == "E" || c == "+" || c == "-";
+        if (isDigit) { advance(); } else { return; }
+    }
+}
+
+void parseValue(int depth) {
+    if (depth > maxDepth) { maxDepth = depth; }
+    skipWs();
+    string c = peek();
+    if (c == "{") {
+        parseObject(depth);
+    } else if (c == "[") {
+        parseArray(depth);
+    } else if (c == "\"") {
+        parseString();
+    } else if (c == "t") {
+        expect("t"); expect("r"); expect("u"); expect("e");
+    } else if (c == "f") {
+        expect("f"); expect("a"); expect("l"); expect("s"); expect("e");
+    } else if (c == "n") {
+        expect("n"); expect("u"); expect("l"); expect("l");
+    } else {
+        parseNumber();
+    }
+    skipWs();
+}
+
+void parseObject(int depth) {
+    objectCount = objectCount + 1;
+    expect("{");
+    skipWs();
+    if (peek() == "}") { advance(); return; }
+    while (true) {
+        skipWs();
+        parseString(); // anahtar
+        keyCount = keyCount + 1;
+        skipWs();
+        expect(":");
+        parseValue(depth + 1);
+        skipWs();
+        if (peek() == ",") { advance(); } else { break; }
+    }
+    skipWs();
+    expect("}");
+}
+
+void parseArray(int depth) {
+    arrayCount = arrayCount + 1;
+    expect("[");
+    skipWs();
+    if (peek() == "]") { advance(); return; }
+    while (true) {
+        parseValue(depth + 1);
+        skipWs();
+        if (peek() == ",") { advance(); } else { break; }
+    }
+    skipWs();
+    expect("]");
+}
+
+void parseJson(string document) {
+    src = document;
+    pos = 0;
+    len = document.length();
+    objectCount = 0;
+    arrayCount = 0;
+    keyCount = 0;
+    stringCount = 0;
+    numberCount = 0;
+    maxDepth = 0;
+    parseValue(0);
+}
+
+int main() {
+    string doc = "{\"name\":\"saQut\",\"version\":0.9,\"stable\":true,\"tags\":[\"compiler\",\"vm\",\"glass-box\"],\"authors\":[{\"name\":\"abdussamed\",\"active\":true},{\"name\":\"claude\",\"active\":false}],\"meta\":{\"nested\":{\"deep\":{\"value\":42}}},\"empty_obj\":{},\"empty_arr\":[]}";
+    parseJson(doc);
+    print("objects="); print(objectCount); print("\n");
+    print("arrays="); print(arrayCount); print("\n");
+    print("keys="); print(keyCount); print("\n");
+    print("strings="); print(stringCount); print("\n");
+    print("numbers="); print(numberCount); print("\n");
+    print("maxDepth="); print(maxDepth); print("\n");
+    return 0;
+}

@@ -101,6 +101,15 @@ add_test(
             "${SAQUT_BINARY}"
 )
 
+# RG-7 (#157): saqut ast/symbols artık run/check/ir ile aynı diagnostic
+# kapısından geçiyor (ast: hiç semantic kontrol yoktu; symbols: literal
+# exit kodu kullanıyordu).
+add_test(
+    NAME ast_symbols_diagnostic_gate
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/ast_symbols_diagnostic_gate_test.sh"
+            "${SAQUT_BINARY}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

@@ -8,6 +8,7 @@
 #include <iostream>
 #include "tools.hpp"
 #include "cli/args.hpp"
+#include "cli/exit_codes.hpp"
 #include "tokenizer/tokenizer.hpp"
 #include "parser/parser.hpp"
 #include "symbol/symbol_table.hpp"
@@ -18,20 +19,22 @@
 inline int cmdSymbols(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
     std::string source   = readSource(args);
-    if (source.empty()) return 1;
+    if (source.empty()) return saqut::exit_code::kUsageError;
 
     Tokenizer tokenizer;
     auto tokens = tokenizer.scan(source, filePath);
 
-    Parser parser;
-    ASTNode* ast = parser.parse(tokens);
+    // RG-7 (#157): #134/ast ile aynı sınıf düzeltme — Parser'a gerçek
+    // DiagnosticEngine verilmezse syntax hatası panic-mode kurtarma ile
+    // yutulur, `!ast` hiç true olmaz.
+    DiagnosticEngine diag;
+    Parser           parser(&diag);
+    ASTNode*         ast = parser.parse(tokens);
 
     SymbolTable table;
-    DiagnosticEngine diag;
-
     if (ast) {
         SymbolCollector(table, diag, args.allowedCaps).collect(ast);
-    } else {
+    } else if (!diag.hasErrors()) {
         diag.report("E000", SourceLocation{}, "failed to build AST");
     }
 
@@ -97,7 +100,7 @@ inline int cmdSymbols(const CliArgs& args) {
 
     delete ast;
     for (auto* t : tokens) delete t;
-    return diag.hasErrors() ? 1 : 0;
+    return diag.hasErrors() ? saqut::exit_code::kDataError : saqut::exit_code::kSuccess;
 }
 
 #endif // SAQUT_CLI_SYMBOLS

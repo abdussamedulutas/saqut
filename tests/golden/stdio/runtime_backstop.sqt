@@ -1,0 +1,7 @@
+import {drop} from caps;
+import {readAll} from stdin;
+
+void main() {
+    drop("sys");
+    print(readAll());
+}

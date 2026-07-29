@@ -15,6 +15,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <iterator>
 #include <random>
 #include <sstream>
 #include <thread>
@@ -189,6 +191,94 @@ static Value sys_args(const std::vector<Value>&, HostContext& ctx) {
     return Value::fromRef(arr);
 }
 
+// ── stdio implementasyonları (#176) ─────────────────────────────────────────
+
+static std::istream& stdin_stream(HostContext& ctx) {
+    if (!ctx.stdinStream)
+        throw std::runtime_error("stdin: input stream unavailable");
+    return *ctx.stdinStream;
+}
+
+static std::ostream& stdout_stream(HostContext& ctx) {
+    if (!ctx.stdoutStream)
+        throw std::runtime_error("stdout: output stream unavailable");
+    return *ctx.stdoutStream;
+}
+
+static std::ostream& stderr_stream(HostContext& ctx) {
+    if (!ctx.stderrStream)
+        throw std::runtime_error("stderr: output stream unavailable");
+    return *ctx.stderrStream;
+}
+
+static Value bytes_to_array(const std::string& bytes, HostContext& ctx) {
+    if (!ctx.heap)
+        throw std::runtime_error("readBytes: heap unavailable");
+    ArrayObject* arr = ctx.heap->allocArray((int)bytes.size());
+    arr->elements.reserve(bytes.size());
+    for (unsigned char b : bytes)
+        arr->elements.push_back(Value::fromInt((int)b));
+    return Value::fromRef(arr);
+}
+
+static std::string array_to_bytes(const Value& value, const char* fnName) {
+    if (value.kind != ValueKind::Ref || !value.ref || value.ref->type != ObjectType::Array)
+        throw std::runtime_error(std::string(fnName) + ": expected byte[]");
+    auto* arr = static_cast<ArrayObject*>(value.ref);
+    std::string out;
+    out.reserve(arr->elements.size());
+    for (const Value& v : arr->elements)
+        out.push_back(static_cast<char>(v.intValue & 0xFF));
+    return out;
+}
+
+static void write_stdout(HostContext& ctx, const std::string& text) {
+    if (ctx.outputSink && *ctx.outputSink) {
+        (*ctx.outputSink)(text);
+    } else {
+        stdout_stream(ctx) << text << std::flush;
+    }
+}
+
+static Value stdin_readLine(const std::vector<Value>&, HostContext& ctx) {
+    std::string line;
+    if (!std::getline(stdin_stream(ctx), line))
+        return Value::null();
+    return Value::fromString(line);
+}
+
+static Value stdin_readAll(const std::vector<Value>&, HostContext& ctx) {
+    std::istream& in = stdin_stream(ctx);
+    return Value::fromString(std::string(std::istreambuf_iterator<char>(in),
+                                         std::istreambuf_iterator<char>()));
+}
+
+static Value stdin_readBytes(const std::vector<Value>&, HostContext& ctx) {
+    std::istream& in = stdin_stream(ctx);
+    return bytes_to_array(std::string(std::istreambuf_iterator<char>(in),
+                                      std::istreambuf_iterator<char>()), ctx);
+}
+
+static Value stdout_write(const std::vector<Value>& a, HostContext& ctx) {
+    write_stdout(ctx, a[0].stringValue);
+    return Value::fromInt(0); // void
+}
+
+static Value stdout_writeBytes(const std::vector<Value>& a, HostContext& ctx) {
+    write_stdout(ctx, array_to_bytes(a[0], "stdout.writeBytes"));
+    return Value::fromInt(0); // void
+}
+
+static Value stderr_write(const std::vector<Value>& a, HostContext& ctx) {
+    stderr_stream(ctx) << a[0].stringValue << std::flush;
+    return Value::fromInt(0); // void
+}
+
+static Value stderr_writeBytes(const std::vector<Value>& a, HostContext& ctx) {
+    stderr_stream(ctx) << array_to_bytes(a[0], "stderr.writeBytes") << std::flush;
+    return Value::fromInt(0); // void
+}
+
 // ── date implementasyonları (#88, ADR-035) ──────────────────────────────────
 // Yalnızca now() capability ister (--allow-sys); geri kalan saf hesap.
 // ⚠️ v1 kısıtı: saQut'ta 64-bit int yok — fromEpochMillis/toEpochMillis
@@ -318,6 +408,13 @@ const std::vector<HostFn>& hostFnTable() {
         { "SYS_ENV",        1, sys_env       },
         { "SYS_SLEEP",      1, sys_sleep     },
         { "SYS_ARGS",       0, sys_args      },
+        { "STDIN_READ_LINE",  0, stdin_readLine  },
+        { "STDIN_READ_ALL",   0, stdin_readAll   },
+        { "STDIN_READ_BYTES", 0, stdin_readBytes },
+        { "STDOUT_WRITE",       1, stdout_write      },
+        { "STDOUT_WRITE_BYTES", 1, stdout_writeBytes },
+        { "STDERR_WRITE",       1, stderr_write      },
+        { "STDERR_WRITE_BYTES", 1, stderr_writeBytes },
         { "DATE_NOW",             0, date_now             },
         { "DATE_FROM_EPOCH_MS",   1, date_fromEpochMillis },
         { "DATE_TO_EPOCH_MS",     1, date_toEpochMillis   },

@@ -19,6 +19,8 @@
 #ifndef SAQUT_FFI_HOST_FUNCTIONS
 #define SAQUT_FFI_HOST_FUNCTIONS
 
+#include <functional>
+#include <iosfwd>
 #include <set>
 #include <string>
 #include <vector>
@@ -34,6 +36,10 @@ struct HostContext {
     std::set<Capability>*           caps        = nullptr;
     const std::vector<std::string>* programArgs = nullptr;
     Heap*                            heap        = nullptr;
+    std::istream*                    stdinStream = nullptr;
+    std::ostream*                    stdoutStream = nullptr;
+    std::ostream*                    stderrStream = nullptr;
+    std::function<void(const std::string&)>* outputSink = nullptr;
 };
 
 // Tek bir host fonksiyon kaydı. Çoğu impl saf (heap/throw gerektirmeyen);

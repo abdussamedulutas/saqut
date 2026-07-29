@@ -119,6 +119,13 @@ add_test(
             "${SAQUT_BINARY}"
 )
 
+# #176: stdin read* --allow-sys ile; stdout/stderr write* ayrı streamlere yazar.
+add_test(
+    NAME stdio_surface
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/stdio_surface_test.sh"
+            "${SAQUT_BINARY}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

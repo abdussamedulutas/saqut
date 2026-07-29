@@ -1,0 +1,5 @@
+import {readLine, readAll, readBytes} from stdin;
+
+void main() {
+    print(readAll());
+}

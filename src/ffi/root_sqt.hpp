@@ -67,6 +67,17 @@ ffi string?  env(string name)                  : SYS_ENV        from sys require
 ffi void     sleep(int millis)                 : SYS_SLEEP      from sys requires sys;
 ffi string[] args()                            : SYS_ARGS       from sys requires sys;
 
+// ── stdin/stdout/stderr modülleri (#176) ────────────────────────────────────
+// stdin dış girdi okur ve --allow-sys ister. stdout/stderr write* mevcut
+// capability'siz print davranışıyla uyumludur; write newline eklemez.
+ffi string? readLine()           : STDIN_READ_LINE  from stdin requires sys;
+ffi string  readAll()            : STDIN_READ_ALL   from stdin requires sys;
+ffi byte[]  readBytes()          : STDIN_READ_BYTES from stdin requires sys;
+ffi void    write(string text)   : STDOUT_WRITE       from stdout;
+ffi void    writeBytes(byte[] data) : STDOUT_WRITE_BYTES from stdout;
+ffi void    write(string text)   : STDERR_WRITE       from stderr;
+ffi void    writeBytes(byte[] data) : STDERR_WRITE_BYTES from stderr;
+
 // ── date modülü (UTC epoch-ms değer tipi — #88, ADR-036) ────────────────────
 // Yalnızca now() capability ister; geri kalan saf hesap (determinizmi bozmaz).
 ffi date    now()                               : DATE_NOW           from date requires sys;

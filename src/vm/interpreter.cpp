@@ -1214,7 +1214,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 for (int s : instr.argSlots)
                     argVals.push_back(frame.slots[s]);
                 try {
-                    HostContext ctx{&caps_, &programArgs_, &heap_};
+                    HostContext ctx{&caps_, &programArgs_, &heap_,
+                                    &std::cin, &std::cout, &std::cerr,
+                                    &outputSink_};
                     Value ret = callHostFn(instr.intValue, argVals, ctx);
                     if (instr.dest >= 0)
                         callStack_.back().slots[instr.dest] = ret;

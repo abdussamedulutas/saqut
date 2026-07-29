@@ -122,6 +122,7 @@ inline const std::vector<DiagInfo>& diagnosticCatalog() {
         {"E009", DiagLevel::Error,   "Array size is not constant / invalid"},
         {"E010", DiagLevel::Error,   "Recursive/cyclic struct definition"},
         {"E011", DiagLevel::Error,   "struct/function declaration inside a function body"},
+        {"E012", DiagLevel::Error,   "Type does not support [index] access"},
         {"W001", DiagLevel::Warning, "Unused variable"},
         {"W002", DiagLevel::Warning, "Division by zero (constant expression)"},
         {"W003", DiagLevel::Warning, "Unreachable (dead) code"},

@@ -926,10 +926,24 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         Type objType = checkExpr(ie->object);
         if (ie->index) checkExpr(ie->index);
         // array eleman tipi
-        if (objType.isArray() && objType.elementType)
+        if (objType.isArray() && objType.elementType) {
             result = *objType.elementType;
-        else
-            result = Type::Int(); // varsayılan (tip çıkarımı tam değil)
+        } else if (objType.isError()) {
+            // Taban ifade zaten hatalı (ör. tanımsız değişken) — o hata
+            // zaten raporlandı, burada ikinci bir tanı üretip kademelendirme
+            // (cascade) yapmıyoruz.
+            result = Type::error();
+        } else {
+            // #135: [int] yalnız array üzerinde tanımlı. Önceden burada
+            // sessizce Type::Int() varsayılıp runtime'a bırakılıyordu —
+            // string[int] gibi indekslenemez erişimler `check` sıfır hata
+            // verip runtime'da "expected array, got different type" ile
+            // çöküyordu. Statik olarak reddet.
+            diag_.report("E012", ie->loc,
+                "'" + objType.toString() + "' does not support [index] access",
+                "only array types support [index] access");
+            result = Type::error();
+        }
         break;
     }
 

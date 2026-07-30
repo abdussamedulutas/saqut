@@ -1,0 +1,21 @@
+// Algoritmik karsilastirma
+// KOTU: string concat ile dongu
+// IYI: push ile doldurma
+
+string concatInLoop(int n) {
+    string s = "";
+    int i = 0;
+    while (i < n) {
+        s = s + "data";
+        i = i + 1;
+    }
+    return s;
+}
+
+int main() {
+    // String concat (kotu)
+    string s = concatInLoop(200); // 200 * 4 = 800 chars
+    print(s.length());
+    print("\n");
+    return 0;
+}

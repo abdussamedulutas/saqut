@@ -1,0 +1,61 @@
+// Struct churn: cok sayida struct create/discard
+// fieldNames shared_ptr metadata'nin yuk altinda dogrulugu
+
+export struct Small {
+    int id;
+    byte tag;
+    string name;
+}
+
+export struct Medium {
+    Small first;
+    Small second;
+    Small third;
+    int[] values;
+}
+
+int main() {
+    int count = 5000;
+    Medium[] items = [];
+    
+    int i = 0;
+    while (i < count) {
+        Medium m;
+        m.first.id = i;
+        m.first.tag = (i & 255) as byte;
+        m.first.name = "item";
+        m.second.id = i + 1000;
+        m.second.tag = ((i + 1) & 255) as byte;
+        m.second.name = "second";
+        m.third.id = i + 2000;
+        m.third.tag = ((i + 2) & 255) as byte;
+        m.third.name = "third";
+        
+        m.values = [];
+        int j = 0;
+        while (j < 10) {
+            m.values.push(i * 10 + j);
+            j = j + 1;
+        }
+        
+        items.push(m);
+        i = i + 1;
+    }
+    
+    // Dogruluk
+    int ok = 0;
+    i = 0;
+    while (i < count) {
+        Medium m = items[i];
+        if (m.first.id == i && m.values[0] == i * 10 && m.values[9] == i * 10 + 9) {
+            ok = ok + 1;
+        }
+        i = i + 1;
+    }
+    
+    print(count);
+    print(",");
+    print(ok);
+    print(": struct churn done\n");
+    return 0;
+}

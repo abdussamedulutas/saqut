@@ -1,0 +1,66 @@
+// Ultimate memory test: 50MB byte[] + 1M int[] + nested structs
+// Packed byte[] = ~50MB. Old Value system = ~4GB.
+
+int main() {
+    // 50MB byte[]
+    int bigSize = 50000000;
+    byte[] big = [];
+    int i = 0;
+    while (i < bigSize) {
+        big.push((i & 255) as byte);
+        i = i + 1;
+    }
+    
+    // 1M int[]
+    int[] nums = [];
+    i = 0;
+    while (i < 1000000) {
+        nums.push(i);
+        i = i + 1;
+    }
+    
+    // verify byte array correctness
+    int byteOk = 0;
+    i = 0;
+    while (i < 1000) {
+        if ((big[i] as int) == (i & 255)) { byteOk = byteOk + 1; }
+        i = i + 1;
+    }
+    
+    // verify int array correctness  
+    int intOk = 0;
+    i = 0;
+    while (i < 1000) {
+        if (nums[i] == i) { intOk = intOk + 1; }
+        i = i + 1;
+    }
+    
+    // long array
+    longint[] longs = [];
+    i = 0;
+    while (i < 100000) {
+        longs.push(i * 1000000);
+        i = i + 1;
+    }
+    
+    int longOk = 0;
+    i = 0;
+    while (i < 100) {
+        if (longs[i] == i * 1000000) { longOk = longOk + 1; }
+        i = i + 1;
+    }
+    
+    print(big.length());
+    print(",");
+    print(nums.length());
+    print(",");
+    print(longs.length());
+    print(",");
+    print(byteOk);
+    print(",");
+    print(intOk);
+    print(",");
+    print(longOk);
+    print(": ultimate mem done\n");
+    return 0;
+}

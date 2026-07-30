@@ -1,0 +1,30 @@
+// Loop invariant benchmark
+// Kotu: sabit ifade her iterasyonda yeniden hesaplanir
+// Iyi: sabit ifade disari alinir
+
+int compute(int x, int y, int z) {
+    return (x * y + z) / (x + y + z + 1);
+}
+
+int main() {
+    int result = 0;
+    int i = 0;
+    int N = 5000;
+    
+    // KOTU: loop-invariant hesaplamalar dongu icinde
+    while (i < N) {
+        int a = 123 * 456;          // SABIT → folding ile disari
+        int b = (N * 1000) / 7;     // N sabit → disari
+        double c = 3.14159 * 2.0;    // SABIT
+        double d = c * c * c;        // SABIT
+        int e = (d + 1.0) as int;    // SABIT
+        
+        // Gercek degisken is
+        result = result + compute(i, a, b) + e;
+        i = i + 1;
+    }
+    
+    print(result);
+    print("\n");
+    return 0;
+}

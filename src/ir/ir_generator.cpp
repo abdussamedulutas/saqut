@@ -12,17 +12,24 @@
 // ============================================================================
 
 #include "ir/ir_generator.hpp"
-#include "tokenizer/token.hpp"
-#include "parser/nodes/program.hpp"
-#include "parser/nodes/declarations.hpp"
-#include "parser/nodes/statements.hpp"
-#include "parser/nodes/expressions.hpp"
+
+#include "builtin/builtin_methods.hpp"
 #include "parser/nodes/binary_expr.hpp"
+#include "parser/nodes/declarations.hpp"
+#include "parser/nodes/expressions.hpp"
 #include "parser/nodes/identifier.hpp"
 #include "parser/nodes/literal.hpp"
-#include "builtin/builtin_methods.hpp"
+#include "parser/nodes/program.hpp"
+#include "parser/nodes/statements.hpp"
+#include "tokenizer/token.hpp"
+
 #include <stdexcept>
 #include <string>
+
+// #206: forward declarations — static helper'lar kullanımdan önce bildirilir
+static ArrayElemKind arrayElemKindFromTypeName(const std::string& t);
+static ArrayElemKind arrayElemKindFromPrim(PrimitiveKind p);
+static ArrayElemKind arrayElemKindFromType(const Type& t);
 
 // Error struct alan sırası (ADR-025): makeError için IR tarafından bilinir
 // 0=line, 1=col, 2=message, 3=trace, 4=code
@@ -35,7 +42,7 @@ static constexpr int ERROR_FIELD_COUNT = 5;
 IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symbolTable) {
     IRProgram program;
     structLayouts_ = symbolTable.structLayouts;
-    enumLayouts_   = symbolTable.enumLayouts;
+    enumLayouts_ = symbolTable.enumLayouts;
 
     // Ön-geçiş (#3 düzeltmesi): TÜM modüllerdeki global değişkenleri ve
     // fonksiyon dönüş türlerini, HERHANGİ bir fonksiyon gövdesi üretilmeden
@@ -76,13 +83,14 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
 
         // Fonksiyonları üret
         for (ASTNode* child : unit.ast->getChildren()) {
-            if (child->kind != ASTKind::FunctionDecl) continue;
+            if (child->kind != ASTKind::FunctionDecl)
+                continue;
             auto* fnDecl = static_cast<FunctionDeclNode*>(child);
             nameToSlot_.clear();
             shadowStack_.clear();
             nextSlot_ = 0;
 
-            IRFunction irFn(fnDecl->name, (int)fnDecl->params.size());
+            IRFunction irFn(fnDecl->name, (int) fnDecl->params.size());
             irFn.moduleId = currentModuleId_;
             program.addFunction(std::move(irFn));
             currentFunction_ = program.findFunction(fnDecl->name);
@@ -118,14 +126,14 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
 
     // 1. Geçiş: struct ve enum layout haritalarını sembol tablosundan al
     structLayouts_ = symbolTable.structLayouts;
-    enumLayouts_   = symbolTable.enumLayouts;
+    enumLayouts_ = symbolTable.enumLayouts;
 
     // 1. Geçiş: modül-düzeyi VariableDecl'leri topla ve kayıt et
     // "Global" değil — bu dosyanın (modülün) kendi değişkenleri.
     std::vector<VariableDeclNode*> globalVars;
     for (ASTNode* child : programNode->getChildren()) {
         if (child->kind == ASTKind::VariableDecl) {
-            auto* vd = (VariableDeclNode*)child;
+            auto* vd = (VariableDeclNode*) child;
             nameToGlobal_[vd->name] = globalCount_++;
             program.globalCount++;
             program.globalNames.push_back(vd->name);
@@ -137,8 +145,9 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
 
     // Dilim 1.5: CALL sonuç türü için dönüş türlerini önceden topla.
     for (ASTNode* child : programNode->getChildren()) {
-        if (child->kind != ASTKind::FunctionDecl) continue;
-        auto* fnDecl = (FunctionDeclNode*)child;
+        if (child->kind != ASTKind::FunctionDecl)
+            continue;
+        auto* fnDecl = (FunctionDeclNode*) child;
         funcReturnKind_[fnDecl->name] = slotTypeFromTypeName(fnDecl->returnType);
     }
 
@@ -149,8 +158,8 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
             shadowStack_.clear();
             nextSlot_ = 0;
 
-            auto* fnDecl = (FunctionDeclNode*)child;
-            IRFunction irFn(fnDecl->name, (int)fnDecl->params.size());
+            auto* fnDecl = (FunctionDeclNode*) child;
+            IRFunction irFn(fnDecl->name, (int) fnDecl->params.size());
             irFn.moduleId = currentModuleId_;
             program.addFunction(std::move(irFn));
             currentFunction_ = program.findFunction(fnDecl->name);
@@ -179,7 +188,7 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
 // ─────────────────────────────────────────────────────────────────────────────
 
 void IRGenerator::generateFunction(ASTNode* functionDeclNode) {
-    auto* fn = (FunctionDeclNode*)functionDeclNode;
+    auto* fn = (FunctionDeclNode*) functionDeclNode;
 
     // Parametreler slot 0, 1, 2, ... sırasıyla alır.
     // Interpreter, CALL sırasında bu slotlara argümanları kopyalar.
@@ -206,9 +215,10 @@ void IRGenerator::generateFunction(ASTNode* functionDeclNode) {
     }
 
     // Faz 5: (sourceLine) → ilk instruction IP indeksi (breakpoint eşlemesi için)
-    for (int i = 0; i < (int)currentFunction_->instructions.size(); ++i) {
+    for (int i = 0; i < (int) currentFunction_->instructions.size(); ++i) {
         int sl = currentFunction_->instructions[i].sourceLine;
-        if (sl > 0 && currentFunction_->lineToFirstIP.find(sl) == currentFunction_->lineToFirstIP.end())
+        if (sl > 0 &&
+            currentFunction_->lineToFirstIP.find(sl) == currentFunction_->lineToFirstIP.end())
             currentFunction_->lineToFirstIP[sl] = i;
     }
 }
@@ -218,13 +228,14 @@ void IRGenerator::generateFunction(ASTNode* functionDeclNode) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void IRGenerator::generateStatement(ASTNode* node) {
-    if (!node) return;
+    if (!node)
+        return;
 
     // Faz 5: tüm emit noktaları için kaynak konum güncelle
-    if (node->loc.isValid()) currentLoc_ = node->loc;
+    if (node->loc.isValid())
+        currentLoc_ = node->loc;
 
     switch (node->kind) {
-
     // ── Blok: içindeki her deyimi sırayla üret ───────────────────────────
     case ASTKind::Block: {
         pushScope();
@@ -237,45 +248,60 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
     // ── Değişken bildirimi: int x = <ifade>  /  Point p; ────────────────
     case ASTKind::VariableDecl: {
-        auto* vd = (VariableDeclNode*)node;
+        auto* vd = (VariableDeclNode*) node;
 
         if (vd->initExpr) {
             int initSlot = generateExpression(vd->initExpr);
 
-            bool targetIsDouble  = (vd->varType == "double");
-            bool targetIsFloat32 = (vd->varType == "float");   // ADR-040: 32-bit
-            bool targetIsLong    = (vd->varType == "longint"); // ADR-040: 64-bit
+            bool targetIsDouble = (vd->varType == "double");
+            bool targetIsFloat32 = (vd->varType == "float"); // ADR-040: 32-bit
+            bool targetIsLong = (vd->varType == "longint"); // ADR-040: 64-bit
             bool targetIsDecimal = (vd->varType == "decimal");
             Type srcType = Type::error();
             if (auto* e = dynamic_cast<ExpressionNode*>(vd->initExpr))
                 srcType = e->resolvedType;
-            bool srcIsInt     = srcType.isPrimitive() &&
-                                (srcType.prim == PrimitiveKind::Int ||
-                                 srcType.prim == PrimitiveKind::Byte);
+            bool srcIsInt = srcType.isPrimitive() && (srcType.prim == PrimitiveKind::Int ||
+                                                      srcType.prim == PrimitiveKind::Byte);
             bool srcIsFloat32 = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Float;
-            bool srcIsDouble  = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Double;
-            bool srcIsFloat   = srcIsFloat32 || srcIsDouble;
+            bool srcIsDouble = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Double;
+            bool srcIsFloat = srcIsFloat32 || srcIsDouble;
 
             if (targetIsDouble && srcIsInt) {
-                int conv = freshSlot(); emitIntToFloat(conv, initSlot); initSlot = conv;
+                int conv = freshSlot();
+                emitIntToFloat(conv, initSlot);
+                initSlot = conv;
             } else if (targetIsDouble && srcIsFloat32) {
-                int conv = freshSlot();                 // float32 → double (kayıpsız)
-                Instruction ins(Opcode::FLOAT32_TO_FLOAT); ins.dest = conv; ins.src = initSlot;
-                currentFunction_->instructions.push_back(std::move(ins)); initSlot = conv;
+                int conv = freshSlot(); // float32 → double (kayıpsız)
+                Instruction ins(Opcode::FLOAT32_TO_FLOAT);
+                ins.dest = conv;
+                ins.src = initSlot;
+                currentFunction_->instructions.push_back(std::move(ins));
+                initSlot = conv;
             } else if (targetIsFloat32 && srcIsInt) {
-                int conv = freshSlot(); emitIntToFloat32(conv, initSlot); initSlot = conv;
+                int conv = freshSlot();
+                emitIntToFloat32(conv, initSlot);
+                initSlot = conv;
             } else if (targetIsLong && srcIsInt) {
-                int conv = freshSlot(); emitIntToLong(conv, initSlot); initSlot = conv;
+                int conv = freshSlot();
+                emitIntToLong(conv, initSlot);
+                initSlot = conv;
             } else if (targetIsDecimal && srcIsInt) {
-                int conv = freshSlot(); emitIntToDecimal(conv, initSlot); initSlot = conv;
+                int conv = freshSlot();
+                emitIntToDecimal(conv, initSlot);
+                initSlot = conv;
             } else if (targetIsDecimal && srcIsFloat) {
-                int conv = freshSlot(); emitFloatToDecimal(conv, initSlot); initSlot = conv;
+                int conv = freshSlot();
+                emitFloatToDecimal(conv, initSlot);
+                initSlot = conv;
             }
 
             // initSlot başka bir değişken tarafından zaten kullanılıyorsa kopyala
             bool slotShared = false;
             for (auto& [n, s] : nameToSlot_)
-                if (s == initSlot) { slotShared = true; break; }
+                if (s == initSlot) {
+                    slotShared = true;
+                    break;
+                }
 
             if (slotShared) {
                 int varSlot = freshSlot();
@@ -293,12 +319,12 @@ void IRGenerator::generateStatement(ASTNode* node) {
             SourceLocation loc = vd->loc;
             emitStructNew(varSlot, vd->varType, fc, loc);
             initNestedStructFields(varSlot, vd->varType, loc);
-        } else if (vd->varType.size() > 2 &&
-                   vd->varType.substr(vd->varType.size() - 2) == "[]") {
+        } else if (vd->varType.size() > 2 && vd->varType.substr(vd->varType.size() - 2) == "[]") {
             // Array değişkeni: init ifadesi yoksa boş dizi (kapasite=0)
             int varSlot = freshSlot();
             registerVariable(vd->name, varSlot);
-            emitArrayNew(varSlot, 0);
+            std::string elemTypeName = vd->varType.substr(0, vd->varType.size() - 2);
+            emitArrayNew(varSlot, 0, arrayElemKindFromTypeName(elemTypeName));
         } else {
             int varSlot = freshSlot();
             registerVariable(vd->name, varSlot);
@@ -315,7 +341,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
     // ── return <ifade> ───────────────────────────────────────────────────
     case ASTKind::ReturnStatement: {
-        auto* rs = (ReturnStatementNode*)node;
+        auto* rs = (ReturnStatementNode*) node;
         int returnSlot = 0; // varsayılan: slot[0] (void fonksiyon / boş return)
 
         if (rs->value) {
@@ -327,7 +353,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
     // ── if (koşul) { ... } [else { ... }] ───────────────────────────────
     case ASTKind::IfStatement: {
-        auto* ifn = (IfStatementNode*)node;
+        auto* ifn = (IfStatementNode*) node;
 
         // Koşulu hesapla
         int condSlot = generateExpression(ifn->condition);
@@ -336,7 +362,8 @@ void IRGenerator::generateStatement(ASTNode* node) {
         int jumpToElse = emitJumpIfFalse(condSlot);
 
         // Then bloğu
-        if (ifn->thenBranch) generateStatement(ifn->thenBranch);
+        if (ifn->thenBranch)
+            generateStatement(ifn->thenBranch);
 
         if (ifn->elseBranch) {
             // Then bitti, else'i atla (then içinde çalışanlar else'e girmemeli)
@@ -355,7 +382,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
     // ── while (koşul) { gövde } ──────────────────────────────────────────
     case ASTKind::WhileStatement: {
-        auto* ws = (WhileStatementNode*)node;
+        auto* ws = (WhileStatementNode*) node;
 
         int loopStart = currentInstrIndex();
         loopContextStack_.push_back({});
@@ -363,7 +390,8 @@ void IRGenerator::generateStatement(ASTNode* node) {
         int condSlot = generateExpression(ws->condition);
         int exitJump = emitJumpIfFalse(condSlot);
 
-        if (ws->body) generateStatement(ws->body);
+        if (ws->body)
+            generateStatement(ws->body);
 
         // continue → LOOP_START (hedef baştan beri biliniyor)
         for (int idx : loopContextStack_.back().continueJumps)
@@ -394,9 +422,10 @@ void IRGenerator::generateStatement(ASTNode* node) {
     //   OUT:
     // ─────────────────────────────────────────────────────────────────────
     case ASTKind::ForStatement: {
-        auto* fs = (ForStatementNode*)node;
+        auto* fs = (ForStatementNode*) node;
 
-        if (fs->init) generateStatement(fs->init);
+        if (fs->init)
+            generateStatement(fs->init);
 
         int loopStart = currentInstrIndex();
         loopContextStack_.push_back({});
@@ -404,18 +433,21 @@ void IRGenerator::generateStatement(ASTNode* node) {
         int condSlot = fs->condition ? generateExpression(fs->condition) : -1;
         int exitJump = (condSlot != -1) ? emitJumpIfFalse(condSlot) : -1;
 
-        if (fs->body) generateStatement(fs->body);
+        if (fs->body)
+            generateStatement(fs->body);
 
         // C_LABEL: güncelleme başlangıcı — continue buraya atlar
         int cLabel = currentInstrIndex();
         for (int idx : loopContextStack_.back().continueJumps)
             currentFunction_->instructions[idx].jumpTarget = cLabel;
 
-        if (fs->update) generateExpression(fs->update);
+        if (fs->update)
+            generateExpression(fs->update);
 
         emitJumpUnconditional(loopStart);
 
-        if (exitJump != -1) patchJump(exitJump); // OUT burası
+        if (exitJump != -1)
+            patchJump(exitJump); // OUT burası
 
         // break → OUT
         int outTarget = currentInstrIndex();
@@ -428,12 +460,13 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
     // ── do { gövde } while (koşul) ───────────────────────────────────────
     case ASTKind::DoWhileStatement: {
-        auto* dw = (DoWhileStatementNode*)node;
+        auto* dw = (DoWhileStatementNode*) node;
 
         int loopStart = currentInstrIndex();
         loopContextStack_.push_back({});
 
-        if (dw->body) generateStatement(dw->body);
+        if (dw->body)
+            generateStatement(dw->body);
 
         // COND_LABEL: koşul değerlendirmesi — continue buraya atlar
         int condLabel = currentInstrIndex();
@@ -442,9 +475,10 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
         int condSlot = generateExpression(dw->condition);
         Instruction jit(Opcode::JIF_TRUE);
-        jit.cond       = condSlot;
+        jit.cond = condSlot;
         jit.jumpTarget = loopStart;
-        jit.sourceLine = currentLoc_.line; jit.sourceCol = currentLoc_.column;
+        jit.sourceLine = currentLoc_.line;
+        jit.sourceCol = currentLoc_.column;
         currentFunction_->instructions.push_back(std::move(jit));
 
         // break → OUT (JIF_TRUE'dan sonraki konum)
@@ -459,7 +493,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
     // ── İfade deyimi: bir ifadeyi değerlendirip sonucu at ────────────────
     // Örnek: print(x) çağrısı, veya x = 5 ataması
     case ASTKind::ExpressionStatement: {
-        auto* es = (ExpressionStatementNode*)node;
+        auto* es = (ExpressionStatementNode*) node;
         if (es->expression) {
             generateExpression(es->expression); // sonucu kullanmıyoruz
         }
@@ -475,7 +509,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
     case ASTKind::ContinueStatement: {
         int jumpIdx = emitJumpUnconditional(-1);
         // Switch bağlamını atla — continue en yakın DÖNGÜYE ait (ADR-027)
-        for (int i = (int)loopContextStack_.size() - 1; i >= 0; --i) {
+        for (int i = (int) loopContextStack_.size() - 1; i >= 0; --i) {
             if (!loopContextStack_[i].isSwitch) {
                 loopContextStack_[i].continueJumps.push_back(jumpIdx);
                 break;
@@ -497,7 +531,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
     //   default: [stmts]; JMP → out
     //   out:
     case ASTKind::SwitchStatement: {
-        auto* sw = (SwitchStatementNode*)node;
+        auto* sw = (SwitchStatementNode*) node;
         int subjectSlot = sw->subject ? generateExpression(sw->subject) : freshSlot();
 
         // Switch bağlamı: break → out'a atlar; continue switch'e ait değil
@@ -507,7 +541,8 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
         for (auto& clause : sw->cases) {
             if (clause.isDefault) {
-                for (auto* s : clause.body) generateStatement(s);
+                for (auto* s : clause.body)
+                    generateStatement(s);
                 outJumps.push_back(emitJumpUnconditional(-1));
                 continue;
             }
@@ -534,7 +569,8 @@ void IRGenerator::generateStatement(ASTNode* node) {
             for (int idx : bodyEntryJumps)
                 currentFunction_->instructions[idx].jumpTarget = bodyStart;
 
-            for (auto* s : clause.body) generateStatement(s);
+            for (auto* s : clause.body)
+                generateStatement(s);
             outJumps.push_back(emitJumpUnconditional(-1));
 
             // next_case: son değerin JIF_FALSE buraya atlar
@@ -556,7 +592,7 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
     // ── try { body } catch (Error e) { handler }  (ADR-025) ────────────
     case ASTKind::TryStatement: {
-        auto* ts = (TryStatementNode*)node;
+        auto* ts = (TryStatementNode*) node;
 
         // Catch değişkeni için slot; VM bu slota Error nesnesini yazar
         int errorSlot = freshSlot();
@@ -565,18 +601,21 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
         // ENTER_TRY: catch hedefi henüz bilinmiyor (-1), sonradan patchlanır
         Instruction enterTry(Opcode::ENTER_TRY);
-        enterTry.dest       = errorSlot;
+        enterTry.dest = errorSlot;
         enterTry.jumpTarget = -1;
-        enterTry.sourceLine = currentLoc_.line; enterTry.sourceCol = currentLoc_.column;
+        enterTry.sourceLine = currentLoc_.line;
+        enterTry.sourceCol = currentLoc_.column;
         currentFunction_->instructions.push_back(std::move(enterTry));
-        int enterTryIdx = (int)currentFunction_->instructions.size() - 1;
+        int enterTryIdx = (int) currentFunction_->instructions.size() - 1;
 
         // Try gövdesi
-        if (ts->body) generateStatement(ts->body);
+        if (ts->body)
+            generateStatement(ts->body);
 
         // Normal çıkış: try frame'ini çıkar
         Instruction leaveTry(Opcode::LEAVE_TRY);
-        leaveTry.sourceLine = currentLoc_.line; leaveTry.sourceCol = currentLoc_.column;
+        leaveTry.sourceLine = currentLoc_.line;
+        leaveTry.sourceCol = currentLoc_.column;
         currentFunction_->instructions.push_back(std::move(leaveTry));
 
         // Catch bloğunu atla (normal akışta)
@@ -587,7 +626,8 @@ void IRGenerator::generateStatement(ASTNode* node) {
         currentFunction_->instructions[enterTryIdx].jumpTarget = catchLabel;
 
         // Catch gövdesi
-        if (ts->handler) generateStatement(ts->handler);
+        if (ts->handler)
+            generateStatement(ts->handler);
 
         // Catch bitti
         patchJump(jumpOverCatch);
@@ -596,12 +636,12 @@ void IRGenerator::generateStatement(ASTNode* node) {
 
     // ── throw <ifade>;  (ADR-025) ────────────────────────────────────────
     case ASTKind::ThrowStatement: {
-        auto* th = (ThrowStatementNode*)node;
+        auto* th = (ThrowStatementNode*) node;
         int valSlot = th->value ? generateExpression(th->value) : freshSlot();
         Instruction ins(Opcode::THROW);
-        ins.src        = valSlot;
+        ins.src = valSlot;
         ins.sourceLine = th->loc.line;
-        ins.sourceCol  = th->loc.column;
+        ins.sourceCol = th->loc.column;
         currentFunction_->instructions.push_back(std::move(ins));
         break;
     }
@@ -616,124 +656,145 @@ void IRGenerator::generateStatement(ASTNode* node) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 int IRGenerator::generateExpression(ASTNode* node) {
-    if (!node) return 0;
+    if (!node)
+        return 0;
 
     // Faz 5: tüm emit noktaları için kaynak konum güncelle
-    if (node->loc.isValid()) currentLoc_ = node->loc;
+    if (node->loc.isValid())
+        currentLoc_ = node->loc;
 
     switch (node->kind) {
-
     // ── Sabit değer: 42, 3.14, true ... ──────────────────────────────────
     case ASTKind::Literal: {
-        auto* lit = (LiteralNode*)node;
+        auto* lit = (LiteralNode*) node;
         int slot = freshSlot();
 
         switch (lit->literalType) {
-            case LiteralType::INTEGER: {
-                bool asDecimal = lit->resolvedType.isPrimitive() &&
-                                 lit->resolvedType.prim == PrimitiveKind::Decimal;
-                bool asDouble  = lit->resolvedType.isPrimitive() &&
-                                 lit->resolvedType.prim == PrimitiveKind::Double;
-                bool asFloat32 = lit->resolvedType.isPrimitive() &&
-                                 lit->resolvedType.prim == PrimitiveKind::Float;
-                bool asLong    = lit->resolvedType.isLongInt();
-                if (asDecimal) {
-                    std::string s = "0";
-                    if (lit->hasDirectValue) s = std::to_string(lit->directIntValue);
-                    else if (lit->parserToken.token) s = lit->parserToken.token->token;
-                    emitLoadDecimal(slot, DecimalValue::fromString(s));
-                } else if (asDouble) {
-                    double val = 0.0;
-                    if (lit->hasDirectValue) val = (double)lit->directIntValue;
-                    else if (lit->parserToken.token) val = std::stod(lit->parserToken.token->token);
-                    emitLoadFloat(slot, val);
-                } else if (asFloat32) {
-                    double val = 0.0;
-                    if (lit->hasDirectValue) val = (double)lit->directIntValue;
-                    else if (lit->parserToken.token) val = std::stod(lit->parserToken.token->token);
-                    emitLoadFloat32(slot, val);
-                } else if (asLong) {
-                    long long val = 0;
-                    if (lit->hasDirectValue) val = lit->directIntValue;
-                    else if (lit->parserToken.token) val = std::stoll(lit->parserToken.token->token);
-                    emitLoadLong(slot, val);
-                } else {
-                    int value = 0;
-                    if (lit->hasDirectValue) value = lit->directIntValue;
-                    else if (lit->parserToken.token) {
-                        // stoll + cast: int32 aralığı dışı literal çökme yerine wrap
-                        // (typechecker normalde bunu longint bağlamına yönlendirir).
-                        try { value = static_cast<int>(std::stoll(lit->parserToken.token->token)); }
-                        catch (...) { value = 0; }
-                    }
-                    emitLoadConst(slot, value);
-                }
-                break;
-            }
-            case LiteralType::BOOLEAN: {
+        case LiteralType::INTEGER: {
+            bool asDecimal =
+                lit->resolvedType.isPrimitive() && lit->resolvedType.prim == PrimitiveKind::Decimal;
+            bool asDouble =
+                lit->resolvedType.isPrimitive() && lit->resolvedType.prim == PrimitiveKind::Double;
+            bool asFloat32 =
+                lit->resolvedType.isPrimitive() && lit->resolvedType.prim == PrimitiveKind::Float;
+            bool asLong = lit->resolvedType.isLongInt();
+            if (asDecimal) {
+                std::string s = "0";
+                if (lit->hasDirectValue)
+                    s = std::to_string(lit->directIntValue);
+                else if (lit->parserToken.token)
+                    s = lit->parserToken.token->token;
+                emitLoadDecimal(slot, DecimalValue::fromString(s));
+            } else if (asDouble) {
+                double val = 0.0;
+                if (lit->hasDirectValue)
+                    val = (double) lit->directIntValue;
+                else if (lit->parserToken.token)
+                    val = std::stod(lit->parserToken.token->token);
+                emitLoadFloat(slot, val);
+            } else if (asFloat32) {
+                double val = 0.0;
+                if (lit->hasDirectValue)
+                    val = (double) lit->directIntValue;
+                else if (lit->parserToken.token)
+                    val = std::stod(lit->parserToken.token->token);
+                emitLoadFloat32(slot, val);
+            } else if (asLong) {
+                long long val = 0;
+                if (lit->hasDirectValue)
+                    val = lit->directIntValue;
+                else if (lit->parserToken.token)
+                    val = parseIntegerLiteral(lit->parserToken.token->token, lit->literalBase);
+                emitLoadLong(slot, val);
+            } else {
                 int value = 0;
                 if (lit->hasDirectValue)
-                    value = lit->directIntValue ? 1 : 0;
-                else
-                    value = (lit->parserToken.token &&
-                             lit->parserToken.token->token == "true") ? 1 : 0;
-                emitLoadConst(slot, value);
-                break;
-            }
-            case LiteralType::STRING: {
-                // StringToken::context tırnak işaretleri olmadan içeriği tutar
-                std::string content;
-                if (auto* st = dynamic_cast<StringToken*>(lit->lexerToken))
-                    content = st->context;
+                    value = lit->directIntValue;
                 else if (lit->parserToken.token) {
-                    // Fallback: token'ın başındaki ve sonundaki " işaretlerini sıyır
-                    std::string raw = lit->parserToken.token->token;
-                    if (raw.size() >= 2 && raw.front() == '"' && raw.back() == '"')
-                        content = raw.substr(1, raw.size() - 2);
-                    else
-                        content = raw;
+                    // stoll + cast: int32 aralığı dışı literal çökme yerine wrap
+                    // (typechecker normalde bunu longint bağlamına yönlendirir).
+                    try {
+                        value = static_cast<int>(
+                            parseIntegerLiteral(lit->parserToken.token->token, lit->literalBase));
+                    } catch (...) {
+                        value = 0;
+                    }
                 }
-                Instruction ins(Opcode::LOAD_STRING);
-                ins.dest        = slot;
-                ins.stringValue = std::move(content);
-                ins.sourceLine  = currentLoc_.line; ins.sourceCol = currentLoc_.column;
-                ins.sourceFile  = currentLoc_.filePath;
+                emitLoadConst(slot, value);
+            }
+            break;
+        }
+        case LiteralType::BOOLEAN: {
+            int value = 0;
+            if (lit->hasDirectValue)
+                value = lit->directIntValue ? 1 : 0;
+            else
+                value = (lit->parserToken.token && lit->parserToken.token->token == "true") ? 1 : 0;
+            emitLoadConst(slot, value);
+            break;
+        }
+        case LiteralType::STRING: {
+            // StringToken::context tırnak işaretleri olmadan içeriği tutar
+            std::string content;
+            if (auto* st = dynamic_cast<StringToken*>(lit->lexerToken))
+                content = st->context;
+            else if (lit->parserToken.token) {
+                // Fallback: token'ın başındaki ve sonundaki " işaretlerini sıyır
+                std::string raw = lit->parserToken.token->token;
+                if (raw.size() >= 2 && raw.front() == '"' && raw.back() == '"')
+                    content = raw.substr(1, raw.size() - 2);
+                else
+                    content = raw;
+            }
+            Instruction ins(Opcode::LOAD_STRING);
+            ins.dest = slot;
+            ins.stringValue = std::move(content);
+            ins.sourceLine = currentLoc_.line;
+            ins.sourceCol = currentLoc_.column;
+            ins.sourceFile = currentLoc_.filePath;
+            currentFunction_->instructions.push_back(std::move(ins));
+            break;
+        }
+        case LiteralType::FLOAT: {
+            bool asDecimal =
+                lit->resolvedType.isPrimitive() && lit->resolvedType.prim == PrimitiveKind::Decimal;
+            // ADR-040: float bağlamı 32-bit single → LOAD_FLOAT32; double → LOAD_FLOAT
+            bool asFloat32 =
+                lit->resolvedType.isPrimitive() && lit->resolvedType.prim == PrimitiveKind::Float;
+            if (asDecimal) {
+                // String'den direkt parse — binary float üzerinden geçmez (ADR-028)
+                std::string s = "0";
+                if (lit->parserToken.token)
+                    s = lit->parserToken.token->token;
+                emitLoadDecimal(slot, DecimalValue::fromString(s));
+            } else {
+                double val = 0.0;
+                if (lit->parserToken.token)
+                    val = std::stod(lit->parserToken.token->token);
+                if (asFloat32)
+                    emitLoadFloat32(slot, val);
+                else
+                    emitLoadFloat(slot, val);
+            }
+            break;
+        }
+        case LiteralType::BOŞ:
+            // null literal → ValueKind::Null (ADR-021)
+            {
+                Instruction ins(Opcode::LOAD_NULL);
+                ins.dest = slot;
+                ins.sourceLine = currentLoc_.line;
+                ins.sourceCol = currentLoc_.column;
                 currentFunction_->instructions.push_back(std::move(ins));
-                break;
             }
-            case LiteralType::FLOAT: {
-                bool asDecimal = lit->resolvedType.isPrimitive() &&
-                                 lit->resolvedType.prim == PrimitiveKind::Decimal;
-                // ADR-040: float bağlamı 32-bit single → LOAD_FLOAT32; double → LOAD_FLOAT
-                bool asFloat32 = lit->resolvedType.isPrimitive() &&
-                                 lit->resolvedType.prim == PrimitiveKind::Float;
-                if (asDecimal) {
-                    // String'den direkt parse — binary float üzerinden geçmez (ADR-028)
-                    std::string s = "0";
-                    if (lit->parserToken.token) s = lit->parserToken.token->token;
-                    emitLoadDecimal(slot, DecimalValue::fromString(s));
-                } else {
-                    double val = 0.0;
-                    if (lit->parserToken.token)
-                        val = std::stod(lit->parserToken.token->token);
-                    if (asFloat32) emitLoadFloat32(slot, val);
-                    else           emitLoadFloat(slot, val);
-                }
-                break;
-            }
-            case LiteralType::BOŞ:
-                // null literal → ValueKind::Null (ADR-021)
-                { Instruction ins(Opcode::LOAD_NULL); ins.dest = slot;
-                  ins.sourceLine = currentLoc_.line; ins.sourceCol = currentLoc_.column;
-                  currentFunction_->instructions.push_back(std::move(ins)); }
-                break;
+            break;
         }
         return slot;
     }
 
     // ── Değişken ismi: n, first, second ... ──────────────────────────────
     case ASTKind::Identifier: {
-        auto* id = (IdentifierNode*)node;
+        auto* id = (IdentifierNode*) node;
         std::string name = id->parserToken.token ? id->parserToken.token->token : "";
 
         if (isGlobal(name)) {
@@ -746,7 +807,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
     // ── İkili ifade: x + y, x = y, x < y ... ────────────────────────────
     case ASTKind::BinaryExpression: {
-        auto* bin = (BinaryExpressionNode*)node;
+        auto* bin = (BinaryExpressionNode*) node;
 
         // Atama operatörleri: x = expr  ve  a[i] = expr
         if (bin->Operator == TokenType::EQUAL) {
@@ -754,7 +815,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
             // a[i] = val → ARRAY_SET
             if (bin->Left && bin->Left->kind == ASTKind::IndexExpression) {
-                auto* idx = (IndexExpressionNode*)bin->Left;
+                auto* idx = (IndexExpressionNode*) bin->Left;
                 int arrSlot = generateExpression(idx->object);
                 int idxSlot = generateExpression(idx->index);
                 emitArraySet(arrSlot, idxSlot, rhsSlot, bin->loc.line, bin->loc.column);
@@ -763,17 +824,18 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
             // p.field = val → FIELD_SET
             if (bin->Left && bin->Left->kind == ASTKind::MemberAccess) {
-                auto* ma = (MemberAccessNode*)bin->Left;
+                auto* ma = (MemberAccessNode*) bin->Left;
                 int objSlot = generateExpression(ma->object);
                 std::string structName;
                 if (auto* exprObj = dynamic_cast<ExpressionNode*>(ma->object))
                     structName = exprObj->resolvedType.structName;
                 int idx2 = getStructFieldIndex(structName, ma->member);
-                if (idx2 >= 0) emitFieldSet(objSlot, idx2, rhsSlot, bin->loc.line, bin->loc.column);
+                if (idx2 >= 0)
+                    emitFieldSet(objSlot, idx2, rhsSlot, bin->loc.line, bin->loc.column);
                 return rhsSlot;
             }
 
-            auto* lhsId = (IdentifierNode*)bin->Left;
+            auto* lhsId = (IdentifierNode*) bin->Left;
             std::string varName = lhsId->parserToken.token->token;
 
             if (isGlobal(varName)) {
@@ -782,42 +844,48 @@ int IRGenerator::generateExpression(ASTNode* node) {
             }
 
             int varSlot = lookupVariable(varName);
-            if (rhsSlot != varSlot) emitLoadSlot(varSlot, rhsSlot);
+            if (rhsSlot != varSlot)
+                emitLoadSlot(varSlot, rhsSlot);
             return varSlot;
         }
 
         // Birleşik atama: += -= *= /= %= &= |= ^= <<= >>=
         // x OP= y  ≡  x = x OP y
-        if (bin->Operator == TokenType::PLUS_EQUAL    ||
-            bin->Operator == TokenType::MINUS_EQUAL   ||
-            bin->Operator == TokenType::STAR_EQUAL    ||
-            bin->Operator == TokenType::SLASH_EQUAL   ||
+        if (bin->Operator == TokenType::PLUS_EQUAL || bin->Operator == TokenType::MINUS_EQUAL ||
+            bin->Operator == TokenType::STAR_EQUAL || bin->Operator == TokenType::SLASH_EQUAL ||
             bin->Operator == TokenType::PERCENT_EQUAL ||
-            bin->Operator == TokenType::AMPERSAND_EQUAL ||
-            bin->Operator == TokenType::PIPE_EQUAL      ||
-            bin->Operator == TokenType::CARET_EQUAL     ||
-            bin->Operator == TokenType::LSHIFT_EQUAL    ||
+            bin->Operator == TokenType::AMPERSAND_EQUAL || bin->Operator == TokenType::PIPE_EQUAL ||
+            bin->Operator == TokenType::CARET_EQUAL || bin->Operator == TokenType::LSHIFT_EQUAL ||
             bin->Operator == TokenType::RSHIFT_EQUAL) {
-
-            auto* lhsId = (IdentifierNode*)bin->Left;
+            auto* lhsId = (IdentifierNode*) bin->Left;
             std::string varName = lhsId->parserToken.token->token;
             int rhsSlot = generateExpression(bin->Right);
 
             Opcode arithOp = Opcode::ADD;
-            if      (bin->Operator == TokenType::MINUS_EQUAL)    arithOp = Opcode::SUB;
-            else if (bin->Operator == TokenType::STAR_EQUAL)     arithOp = Opcode::MUL;
-            else if (bin->Operator == TokenType::SLASH_EQUAL)    arithOp = Opcode::DIV;
-            else if (bin->Operator == TokenType::PERCENT_EQUAL)  arithOp = Opcode::MOD;
-            else if (bin->Operator == TokenType::AMPERSAND_EQUAL) arithOp = Opcode::BAND;
-            else if (bin->Operator == TokenType::PIPE_EQUAL)     arithOp = Opcode::BOR;
-            else if (bin->Operator == TokenType::CARET_EQUAL)    arithOp = Opcode::BXOR;
-            else if (bin->Operator == TokenType::LSHIFT_EQUAL)   arithOp = Opcode::SHL;
-            else if (bin->Operator == TokenType::RSHIFT_EQUAL)   arithOp = Opcode::SHR;
+            if (bin->Operator == TokenType::MINUS_EQUAL)
+                arithOp = Opcode::SUB;
+            else if (bin->Operator == TokenType::STAR_EQUAL)
+                arithOp = Opcode::MUL;
+            else if (bin->Operator == TokenType::SLASH_EQUAL)
+                arithOp = Opcode::DIV;
+            else if (bin->Operator == TokenType::PERCENT_EQUAL)
+                arithOp = Opcode::MOD;
+            else if (bin->Operator == TokenType::AMPERSAND_EQUAL)
+                arithOp = Opcode::BAND;
+            else if (bin->Operator == TokenType::PIPE_EQUAL)
+                arithOp = Opcode::BOR;
+            else if (bin->Operator == TokenType::CARET_EQUAL)
+                arithOp = Opcode::BXOR;
+            else if (bin->Operator == TokenType::LSHIFT_EQUAL)
+                arithOp = Opcode::SHL;
+            else if (bin->Operator == TokenType::RSHIFT_EQUAL)
+                arithOp = Opcode::SHR;
 
             // string += string → STRING_CONCAT (ADR-024)
             if (bin->Operator == TokenType::PLUS_EQUAL) {
                 if (auto* e = dynamic_cast<ExpressionNode*>(bin->Right))
-                    if (e->resolvedType.isString()) arithOp = Opcode::STRING_CONCAT;
+                    if (e->resolvedType.isString())
+                        arithOp = Opcode::STRING_CONCAT;
             }
 
             int resultSlot = freshSlot();
@@ -825,15 +893,14 @@ int IRGenerator::generateExpression(ASTNode* node) {
             if (isGlobal(varName)) {
                 int currentSlot = freshSlot();
                 emitLoadGlobal(currentSlot, getGlobalIndex(varName));
-                emitBinaryOp(arithOp, resultSlot, currentSlot, rhsSlot,
-                             bin->loc.line, bin->loc.column);
+                emitBinaryOp(arithOp, resultSlot, currentSlot, rhsSlot, bin->loc.line,
+                             bin->loc.column);
                 emitStoreGlobal(resultSlot, getGlobalIndex(varName));
                 return resultSlot;
             }
 
             int varSlot = lookupVariable(varName);
-            emitBinaryOp(arithOp, resultSlot, varSlot, rhsSlot,
-                         bin->loc.line, bin->loc.column);
+            emitBinaryOp(arithOp, resultSlot, varSlot, rhsSlot, bin->loc.line, bin->loc.column);
             emitLoadSlot(varSlot, resultSlot);
             return varSlot;
         }
@@ -841,38 +908,47 @@ int IRGenerator::generateExpression(ASTNode* node) {
         // Unary prefix: Left = nullptr (ör: -x, !x)
         if (!bin->Left) {
             int operandSlot = generateExpression(bin->Right);
-            int resultSlot  = freshSlot();
+            int resultSlot = freshSlot();
 
-            bool operandIsDecimal = false, operandIsFloat32 = false,
-                 operandIsDouble = false, operandIsLong = false;
+            bool operandIsDecimal = false, operandIsFloat32 = false, operandIsDouble = false,
+                 operandIsLong = false;
             if (auto* e = dynamic_cast<ExpressionNode*>(bin->Right)) {
                 operandIsDecimal = e->resolvedType.isDecimal();
-                operandIsFloat32 = e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Float;
-                operandIsDouble  = e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Double;
-                operandIsLong    = e->resolvedType.isLongInt();
+                operandIsFloat32 =
+                    e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Float;
+                operandIsDouble =
+                    e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Double;
+                operandIsLong = e->resolvedType.isLongInt();
             }
             auto emitUn = [&](Opcode o) {
-                Instruction ins(o); ins.dest = resultSlot; ins.src = operandSlot;
-                ins.sourceLine = currentLoc_.line; ins.sourceCol = currentLoc_.column;
+                Instruction ins(o);
+                ins.dest = resultSlot;
+                ins.src = operandSlot;
+                ins.sourceLine = currentLoc_.line;
+                ins.sourceCol = currentLoc_.column;
                 currentFunction_->instructions.push_back(std::move(ins));
             };
             if (bin->Operator == TokenType::MINUS) {
-                if (operandIsDecimal)      emitUn(Opcode::DNEG);
-                else if (operandIsFloat32) emitUn(Opcode::F32NEG);
-                else if (operandIsDouble)  emitUn(Opcode::FNEG);
-                else if (operandIsLong)    emitUn(Opcode::LNEG);
+                if (operandIsDecimal)
+                    emitUn(Opcode::DNEG);
+                else if (operandIsFloat32)
+                    emitUn(Opcode::F32NEG);
+                else if (operandIsDouble)
+                    emitUn(Opcode::FNEG);
+                else if (operandIsLong)
+                    emitUn(Opcode::LNEG);
                 else {
                     int zeroSlot = freshSlot();
                     emitLoadConst(zeroSlot, 0);
-                    emitBinaryOp(Opcode::SUB, resultSlot, zeroSlot, operandSlot,
-                                 bin->loc.line, bin->loc.column);
+                    emitBinaryOp(Opcode::SUB, resultSlot, zeroSlot, operandSlot, bin->loc.line,
+                                 bin->loc.column);
                 }
             } else if (bin->Operator == TokenType::BANG) {
                 // !x → (x == 0): sıfırsa 1, değilse 0
                 int zeroSlot = freshSlot();
                 emitLoadConst(zeroSlot, 0);
-                emitBinaryOp(Opcode::EQUAL_EQUAL, resultSlot, operandSlot, zeroSlot,
-                             bin->loc.line, bin->loc.column);
+                emitBinaryOp(Opcode::EQUAL_EQUAL, resultSlot, operandSlot, zeroSlot, bin->loc.line,
+                             bin->loc.column);
             } else if (bin->Operator == TokenType::TILDE) {
                 // ~x — bitsel değil (longint 64-bit)
                 emitUn(operandIsLong ? Opcode::LBNOT : Opcode::BNOT);
@@ -885,71 +961,87 @@ int IRGenerator::generateExpression(ASTNode* node) {
         // Aritmetik operatörler
         const int L = bin->loc.line, C = bin->loc.column;
         switch (bin->Operator) {
-            case TokenType::PLUS:    return generateBinaryArithmetic(Opcode::ADD,           bin->Left, bin->Right, L, C);
-            case TokenType::MINUS:   return generateBinaryArithmetic(Opcode::SUB,           bin->Left, bin->Right, L, C);
-            case TokenType::STAR:    return generateBinaryArithmetic(Opcode::MUL,           bin->Left, bin->Right, L, C);
-            case TokenType::SLASH:   return generateBinaryArithmetic(Opcode::DIV,           bin->Left, bin->Right, L, C);
-            case TokenType::PERCENT: return generateBinaryArithmetic(Opcode::MOD,           bin->Left, bin->Right, L, C);
-            // Karşılaştırma operatörleri
-            case TokenType::LESS:          return generateBinaryArithmetic(Opcode::LESS,          bin->Left, bin->Right, L, C);
-            case TokenType::LESS_EQUAL:    return generateBinaryArithmetic(Opcode::LESS_EQUAL,    bin->Left, bin->Right, L, C);
-            case TokenType::GREATER:       return generateBinaryArithmetic(Opcode::GREATER,       bin->Left, bin->Right, L, C);
-            case TokenType::GREATER_EQUAL: return generateBinaryArithmetic(Opcode::GREATER_EQUAL, bin->Left, bin->Right, L, C);
-            case TokenType::EQUAL_EQUAL:   return generateBinaryArithmetic(Opcode::EQUAL_EQUAL,   bin->Left, bin->Right, L, C);
-            case TokenType::BANG_EQUAL:    return generateBinaryArithmetic(Opcode::NOT_EQUAL,     bin->Left, bin->Right, L, C);
+        case TokenType::PLUS:
+            return generateBinaryArithmetic(Opcode::ADD, bin->Left, bin->Right, L, C);
+        case TokenType::MINUS:
+            return generateBinaryArithmetic(Opcode::SUB, bin->Left, bin->Right, L, C);
+        case TokenType::STAR:
+            return generateBinaryArithmetic(Opcode::MUL, bin->Left, bin->Right, L, C);
+        case TokenType::SLASH:
+            return generateBinaryArithmetic(Opcode::DIV, bin->Left, bin->Right, L, C);
+        case TokenType::PERCENT:
+            return generateBinaryArithmetic(Opcode::MOD, bin->Left, bin->Right, L, C);
+        // Karşılaştırma operatörleri
+        case TokenType::LESS:
+            return generateBinaryArithmetic(Opcode::LESS, bin->Left, bin->Right, L, C);
+        case TokenType::LESS_EQUAL:
+            return generateBinaryArithmetic(Opcode::LESS_EQUAL, bin->Left, bin->Right, L, C);
+        case TokenType::GREATER:
+            return generateBinaryArithmetic(Opcode::GREATER, bin->Left, bin->Right, L, C);
+        case TokenType::GREATER_EQUAL:
+            return generateBinaryArithmetic(Opcode::GREATER_EQUAL, bin->Left, bin->Right, L, C);
+        case TokenType::EQUAL_EQUAL:
+            return generateBinaryArithmetic(Opcode::EQUAL_EQUAL, bin->Left, bin->Right, L, C);
+        case TokenType::BANG_EQUAL:
+            return generateBinaryArithmetic(Opcode::NOT_EQUAL, bin->Left, bin->Right, L, C);
 
-            // Bitsel operatörler
-            case TokenType::AMPERSAND: return generateBinaryArithmetic(Opcode::BAND, bin->Left, bin->Right, L, C);
-            case TokenType::PIPE:      return generateBinaryArithmetic(Opcode::BOR,  bin->Left, bin->Right, L, C);
-            case TokenType::CARET:     return generateBinaryArithmetic(Opcode::BXOR, bin->Left, bin->Right, L, C);
-            case TokenType::LSHIFT:    return generateBinaryArithmetic(Opcode::SHL,  bin->Left, bin->Right, L, C);
-            case TokenType::RSHIFT:    return generateBinaryArithmetic(Opcode::SHR,  bin->Left, bin->Right, L, C);
+        // Bitsel operatörler
+        case TokenType::AMPERSAND:
+            return generateBinaryArithmetic(Opcode::BAND, bin->Left, bin->Right, L, C);
+        case TokenType::PIPE:
+            return generateBinaryArithmetic(Opcode::BOR, bin->Left, bin->Right, L, C);
+        case TokenType::CARET:
+            return generateBinaryArithmetic(Opcode::BXOR, bin->Left, bin->Right, L, C);
+        case TokenType::LSHIFT:
+            return generateBinaryArithmetic(Opcode::SHL, bin->Left, bin->Right, L, C);
+        case TokenType::RSHIFT:
+            return generateBinaryArithmetic(Opcode::SHR, bin->Left, bin->Right, L, C);
 
-            // Mantıksal operatörler: kısa devre dallanmasıyla üretilir (ADR-008).
-            // NOT: sıradan ikili işlem değil — b, a'nın değerine göre atlanabilir.
-            case TokenType::AMPERSAND_AMPERSAND: {
-                int slotA  = generateExpression(bin->Left);
-                int result = freshSlot();
-                emitLoadConst(result, 0);               // varsayılan: false
-                int skipB  = emitJumpIfFalse(slotA);    // a false → b'yi atla
-                int slotB  = generateExpression(bin->Right);
-                emitLoadSlot(result, slotB);            // result = b
-                patchJump(skipB);
-                return result;
-            }
-            case TokenType::PIPE_PIPE: {
-                int slotA  = generateExpression(bin->Left);
-                int result = freshSlot();
-                emitLoadConst(result, 1);               // varsayılan: true
-                int skipB  = emitJumpIfTrue(slotA);     // a true → b'yi atla
-                int slotB  = generateExpression(bin->Right);
-                emitLoadSlot(result, slotB);            // result = b
-                patchJump(skipB);
-                return result;
-            }
+        // Mantıksal operatörler: kısa devre dallanmasıyla üretilir (ADR-008).
+        // NOT: sıradan ikili işlem değil — b, a'nın değerine göre atlanabilir.
+        case TokenType::AMPERSAND_AMPERSAND: {
+            int slotA = generateExpression(bin->Left);
+            int result = freshSlot();
+            emitLoadConst(result, 0); // varsayılan: false
+            int skipB = emitJumpIfFalse(slotA); // a false → b'yi atla
+            int slotB = generateExpression(bin->Right);
+            emitLoadSlot(result, slotB); // result = b
+            patchJump(skipB);
+            return result;
+        }
+        case TokenType::PIPE_PIPE: {
+            int slotA = generateExpression(bin->Left);
+            int result = freshSlot();
+            emitLoadConst(result, 1); // varsayılan: true
+            int skipB = emitJumpIfTrue(slotA); // a true → b'yi atla
+            int slotB = generateExpression(bin->Right);
+            emitLoadSlot(result, slotB); // result = b
+            patchJump(skipB);
+            return result;
+        }
 
-            default: {
-                // Bilinmeyen operatör — boş slot döndür
-                int slot = freshSlot();
-                emitLoadConst(slot, 0);
-                return slot;
-            }
+        default: {
+            // Bilinmeyen operatör — boş slot döndür
+            int slot = freshSlot();
+            emitLoadConst(slot, 0);
+            return slot;
+        }
         }
     }
 
     // ── Fonksiyon çağrısı: fibonacci(n-1), print(x) ... ─────────────────
     case ASTKind::Call: {
-        auto* call = (CallExpressionNode*)node;
+        auto* call = (CallExpressionNode*) node;
 
         // Hangi fonksiyon çağrılıyor? Callee bir Identifier
         std::string fnName;
-        bool        isBuiltin = false;
-        int         ffiHostId = -1;
-        bool        ffiReturnsVoid = false;
+        bool isBuiltin = false;
+        int ffiHostId = -1;
+        bool ffiReturnsVoid = false;
         std::optional<Capability> ffiRequiredCap;
 
         if (call->callee && call->callee->kind == ASTKind::Identifier) {
-            auto* calleeId = (IdentifierNode*)call->callee;
+            auto* calleeId = (IdentifierNode*) call->callee;
             if (calleeId->parserToken.token) {
                 fnName = calleeId->parserToken.token->token;
             }
@@ -959,7 +1051,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             }
             // ADR-034 (#107): FFI host fonksiyonu — sayısal dispatch
             if (calleeId->resolvedSymbol && calleeId->resolvedSymbol->hostFnId >= 0) {
-                ffiHostId      = calleeId->resolvedSymbol->hostFnId;
+                ffiHostId = calleeId->resolvedSymbol->hostFnId;
                 ffiReturnsVoid = calleeId->resolvedSymbol->type.returnType &&
                                  calleeId->resolvedSymbol->type.returnType->isVoid();
                 ffiRequiredCap = calleeId->resolvedSymbol->requiredCap;
@@ -977,35 +1069,35 @@ int IRGenerator::generateExpression(ASTNode* node) {
             int destSlot = ffiReturnsVoid ? -1 : freshSlot();
             Instruction ins(Opcode::CALLHOST);
             ins.functionName = "__ffi__";
-            ins.intValue     = ffiHostId;
-            ins.dest         = destSlot;
-            ins.argSlots     = argSlots;
-            ins.requiredCap  = ffiRequiredCap;
-            ins.sourceLine   = call->loc.line;
-            ins.sourceCol    = call->loc.column;
-            ins.sourceFile   = call->loc.filePath;
+            ins.intValue = ffiHostId;
+            ins.dest = destSlot;
+            ins.argSlots = argSlots;
+            ins.requiredCap = ffiRequiredCap;
+            ins.sourceLine = call->loc.line;
+            ins.sourceCol = call->loc.column;
+            ins.sourceFile = call->loc.filePath;
             currentFunction_->instructions.push_back(std::move(ins));
             return destSlot;
         } else if (isBuiltin) {
             // CALLHOST: host (C++) fonksiyonu çağır (print gibi), dönüş değeri yok
             Instruction ins(Opcode::CALLHOST);
             ins.functionName = fnName;
-            ins.argSlots     = argSlots;
-            ins.sourceLine   = call->loc.line;
-            ins.sourceCol    = call->loc.column;
-            ins.sourceFile   = call->loc.filePath;
+            ins.argSlots = argSlots;
+            ins.sourceLine = call->loc.line;
+            ins.sourceCol = call->loc.column;
+            ins.sourceFile = call->loc.filePath;
             currentFunction_->instructions.push_back(std::move(ins));
             return -1; // Dönüş değeri yok
         } else {
             // CALL: saQut fonksiyonu çağır, sonucu yeni slota yaz
             int destSlot = freshSlot();
             Instruction ins(Opcode::CALL);
-            ins.dest         = destSlot;
+            ins.dest = destSlot;
             ins.functionName = fnName;
-            ins.argSlots     = argSlots;
-            ins.sourceLine   = call->loc.line;
-            ins.sourceCol    = call->loc.column;
-            ins.sourceFile   = call->loc.filePath;
+            ins.argSlots = argSlots;
+            ins.sourceLine = call->loc.line;
+            ins.sourceCol = call->loc.column;
+            ins.sourceFile = call->loc.filePath;
             currentFunction_->instructions.push_back(std::move(ins));
             return destSlot;
         }
@@ -1013,7 +1105,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
     // ── ScopeCall: E::method(args) — built-in metod ─────────────────────
     case ASTKind::ScopeCall: {
-        auto* sc = (ScopeCallNode*)node;
+        auto* sc = (ScopeCallNode*) node;
 
         // Her argümanı hesapla
         std::vector<int> argSlots;
@@ -1027,24 +1119,24 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
         Instruction ins(Opcode::CALLHOST);
         ins.functionName = "__builtin_method__";
-        ins.intValue     = sc->builtinId;
-        ins.argSlots     = std::move(argSlots);
-        ins.dest         = destSlot;
-        ins.sourceLine   = sc->loc.line;
-        ins.sourceCol    = sc->loc.column;
+        ins.intValue = sc->builtinId;
+        ins.argSlots = std::move(argSlots);
+        ins.dest = destSlot;
+        ins.sourceLine = sc->loc.line;
+        ins.sourceCol = sc->loc.column;
         currentFunction_->instructions.push_back(std::move(ins));
         return destSlot;
     }
 
     // ── Postfix: i++, i-- ────────────────────────────────────────────────
     case ASTKind::Postfix: {
-        auto* pf = (PostfixNode*)node;
+        auto* pf = (PostfixNode*) node;
         // Şu anki değeri döndür, sonra artır/azalt
         int operandSlot = generateExpression(pf->operand);
-        int resultSlot  = freshSlot(); // dönüş değeri (artırmadan önceki)
+        int resultSlot = freshSlot(); // dönüş değeri (artırmadan önceki)
         emitLoadSlot(resultSlot, operandSlot);
 
-        int oneSlot  = freshSlot();
+        int oneSlot = freshSlot();
         emitLoadConst(oneSlot, 1);
         int newSlot = freshSlot();
 
@@ -1054,42 +1146,47 @@ int IRGenerator::generateExpression(ASTNode* node) {
             emitBinaryOp(Opcode::SUB, newSlot, operandSlot, oneSlot);
         }
         emitLoadSlot(operandSlot, newSlot); // orijinal değişkeni güncelle
-        return resultSlot;                  // artırmadan önceki değer
+        return resultSlot; // artırmadan önceki değer
     }
 
     // ── Üye erişimi okuma: p.x ───────────────────────────────────────────
     case ASTKind::MemberAccess: {
-        auto* ma = (MemberAccessNode*)node;
+        auto* ma = (MemberAccessNode*) node;
         // Enum üye erişimi: Color.Red → LOAD_INT sabiti
         if (ma->object && ma->object->kind == ASTKind::Identifier) {
-            auto* id = (IdentifierNode*)ma->object;
+            auto* id = (IdentifierNode*) ma->object;
             const std::string& idName = id->parserToken.token ? id->parserToken.token->token : "";
             auto it = enumLayouts_.find(idName);
             if (it != enumLayouts_.end()) {
                 int destSlot = freshSlot();
                 int val = -1;
                 for (auto& p : it->second)
-                    if (p.first == ma->member) { val = p.second; break; }
+                    if (p.first == ma->member) {
+                        val = p.second;
+                        break;
+                    }
                 emitLoadConst(destSlot, val);
                 ma->resolvedType = Type::enumType(idName);
                 return destSlot;
             }
         }
-        int objSlot  = generateExpression(ma->object);
+        int objSlot = generateExpression(ma->object);
         int destSlot = freshSlot();
         // Nesnenin struct adını resolvedType üstünden al (tip denetleyici yazdı)
         std::string structName;
         if (auto* exprObj = dynamic_cast<ExpressionNode*>(ma->object))
             structName = exprObj->resolvedType.structName;
         int idx = getStructFieldIndex(structName, ma->member);
-        if (idx >= 0) emitFieldGet(destSlot, objSlot, idx);
+        if (idx >= 0)
+            emitFieldGet(destSlot, objSlot, idx);
         return destSlot;
     }
     case ASTKind::ArrayLiteral: {
-        auto* al = (ArrayLiteralNode*)node;
+        auto* al = (ArrayLiteralNode*) node;
         int arrSlot = freshSlot();
-        emitArrayNew(arrSlot, (int)al->elements.size());
-        for (int i = 0; i < (int)al->elements.size(); i++) {
+        ArrayElemKind ak = arrayElemKindFromType(al->resolvedType);
+        emitArrayNew(arrSlot, (int) al->elements.size(), ak);
+        for (int i = 0; i < (int) al->elements.size(); i++) {
             int idxSlot = freshSlot();
             emitLoadConst(idxSlot, i);
             int valSlot = generateExpression(al->elements[i]);
@@ -1100,9 +1197,9 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
     // ── Index erişimi okuma: a[i] ─────────────────────────────────────────
     case ASTKind::IndexExpression: {
-        auto* idx = (IndexExpressionNode*)node;
-        int arrSlot  = generateExpression(idx->object);
-        int idxSlot  = generateExpression(idx->index);
+        auto* idx = (IndexExpressionNode*) node;
+        int arrSlot = generateExpression(idx->object);
+        int idxSlot = generateExpression(idx->index);
         int destSlot = freshSlot();
         emitArrayGet(destSlot, arrSlot, idxSlot, idx->loc.line, idx->loc.column);
         return destSlot;
@@ -1110,8 +1207,8 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
     // ── CastExpression: expr as TargetType[?]  (ADR-026) ───────────────────
     case ASTKind::CastExpression: {
-        auto* cast = (CastExpressionNode*)node;
-        int srcSlot  = generateExpression(cast->operand);
+        auto* cast = (CastExpressionNode*) node;
+        int srcSlot = generateExpression(cast->operand);
         int destSlot = freshSlot();
         int nullable = cast->targetNullable ? 1 : 0;
 
@@ -1123,31 +1220,35 @@ int IRGenerator::generateExpression(ASTNode* node) {
         tgtType.nullable = false; // base type
 
         // ADR-040: float32/double ve longint ayrı izlenir.
-        bool srcIsStr     = srcType.isString();
+        bool srcIsStr = srcType.isString();
         bool srcIsFloat32 = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Float;
-        bool srcIsDouble  = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Double;
-        bool srcIsFloat   = srcIsFloat32 || srcIsDouble;
-        bool srcIsInt     = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Int;
-        bool srcIsBool    = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Bool;
+        bool srcIsDouble = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Double;
+        bool srcIsFloat = srcIsFloat32 || srcIsDouble;
+        bool srcIsInt = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Int;
+        bool srcIsBool = srcType.isPrimitive() && srcType.prim == PrimitiveKind::Bool;
         bool srcIsDecimal = srcType.isDecimal();
-        bool srcIsLong    = srcType.isLongInt();
-        bool tgtIsStr     = tgtType.isString();
+        bool srcIsLong = srcType.isLongInt();
+        bool tgtIsStr = tgtType.isString();
         bool tgtIsFloat32 = tgtType.isPrimitive() && tgtType.prim == PrimitiveKind::Float;
-        bool tgtIsDouble  = tgtType.isPrimitive() && tgtType.prim == PrimitiveKind::Double;
-        bool tgtIsFloat   = tgtIsFloat32 || tgtIsDouble;
-        bool tgtIsInt     = tgtType.isPrimitive() && tgtType.prim == PrimitiveKind::Int;
+        bool tgtIsDouble = tgtType.isPrimitive() && tgtType.prim == PrimitiveKind::Double;
+        bool tgtIsFloat = tgtIsFloat32 || tgtIsDouble;
+        bool tgtIsInt = tgtType.isPrimitive() && tgtType.prim == PrimitiveKind::Int;
         bool tgtIsDecimal = tgtType.isDecimal();
-        bool tgtIsLong    = tgtType.isLongInt();
-        bool srcIsByte    = srcType.isByte();
-        bool tgtIsByte    = tgtType.isByte();
+        bool tgtIsLong = tgtType.isLongInt();
+        bool srcIsByte = srcType.isByte();
+        bool tgtIsByte = tgtType.isByte();
 
         // Tek-operandlı çevrim yaz + kimlik (LOAD_SLOT) kısayolu
         auto emitCastConv = [&](Opcode o) {
-            Instruction ins(o); ins.dest = destSlot; ins.src = srcSlot;
+            Instruction ins(o);
+            ins.dest = destSlot;
+            ins.src = srcSlot;
             currentFunction_->instructions.push_back(std::move(ins));
         };
         auto emitIdentity = [&]() {
-            Instruction nop(Opcode::LOAD_SLOT); nop.dest = destSlot; nop.src = srcSlot;
+            Instruction nop(Opcode::LOAD_SLOT);
+            nop.dest = destSlot;
+            nop.src = srcSlot;
             currentFunction_->instructions.push_back(std::move(nop));
         };
 
@@ -1155,52 +1256,70 @@ int IRGenerator::generateExpression(ASTNode* node) {
         bool infallible = false;
         // ── longint dönüşümleri (ADR-040) ──
         if ((srcIsInt || srcIsByte) && tgtIsLong) {
-            emitCastConv(Opcode::INT_TO_LONG); return destSlot;       // kayıpsız genişletme
+            emitCastConv(Opcode::INT_TO_LONG);
+            return destSlot; // kayıpsız genişletme
         } else if (srcIsLong && tgtIsInt) {
-            op = Opcode::LONG_TO_INT_CHECKED;                          // fallible daralma
+            op = Opcode::LONG_TO_INT_CHECKED; // fallible daralma
         } else if (srcIsLong && tgtIsLong) {
-            emitIdentity(); return destSlot;
+            emitIdentity();
+            return destSlot;
         } else if (srcIsLong && tgtIsStr) {
-            op = Opcode::CAST_LONG_TO_STR; infallible = true;
+            op = Opcode::CAST_LONG_TO_STR;
+            infallible = true;
         } else if (srcIsStr && tgtIsLong) {
             op = Opcode::CAST_STR_TO_LONG;
         } else if (srcIsLong && tgtIsFloat) {
             // longint → float/double: int64 double'a genişler (32-bit hedefte truncate)
             emitCastConv(Opcode::INT_TO_FLOAT);
-            if (tgtIsFloat32) { int mid = destSlot; destSlot = freshSlot();
-                Instruction ins(Opcode::FLOAT_TO_FLOAT32); ins.dest = destSlot; ins.src = mid;
-                currentFunction_->instructions.push_back(std::move(ins)); }
+            if (tgtIsFloat32) {
+                int mid = destSlot;
+                destSlot = freshSlot();
+                Instruction ins(Opcode::FLOAT_TO_FLOAT32);
+                ins.dest = destSlot;
+                ins.src = mid;
+                currentFunction_->instructions.push_back(std::move(ins));
+            }
             return destSlot;
         } else if (srcIsFloat && tgtIsLong) {
             op = Opcode::CAST_FLOAT_TO_LONG_CHECKED; // float→int64 (64-bit trunc)
         }
         // ── float32 ↔ double ──
         else if (srcIsFloat32 && tgtIsDouble) {
-            emitCastConv(Opcode::FLOAT32_TO_FLOAT); return destSlot;   // kayıpsız
+            emitCastConv(Opcode::FLOAT32_TO_FLOAT);
+            return destSlot; // kayıpsız
         } else if (srcIsDouble && tgtIsFloat32) {
-            emitCastConv(Opcode::FLOAT_TO_FLOAT32); return destSlot;   // veri kaybı (E003 uyardı)
+            emitCastConv(Opcode::FLOAT_TO_FLOAT32);
+            return destSlot; // veri kaybı (E003 uyardı)
         }
         // ── byte dönüşümleri (#86) ──
         else if (srcIsInt && tgtIsByte) {
             op = Opcode::CAST_INT_TO_BYTE_CHECKED;
         } else if ((srcIsByte && tgtIsInt) || (srcIsByte && tgtIsByte)) {
-            emitIdentity(); return destSlot;
+            emitIdentity();
+            return destSlot;
         } else if (srcIsByte && tgtIsStr) {
-            op = Opcode::CAST_INT_TO_STR; infallible = true;
+            op = Opcode::CAST_INT_TO_STR;
+            infallible = true;
         }
         // ── float/double dönüşümleri ──
         else if (srcIsInt && tgtIsFloat32) {
-            emitCastConv(Opcode::INT_TO_FLOAT32); return destSlot;
+            emitCastConv(Opcode::INT_TO_FLOAT32);
+            return destSlot;
         } else if (srcIsInt && tgtIsDouble) {
-            op = Opcode::INT_TO_FLOAT; infallible = true;
+            op = Opcode::INT_TO_FLOAT;
+            infallible = true;
         } else if (srcIsInt && tgtIsDecimal) {
-            op = Opcode::INT_TO_DECIMAL; infallible = true;
+            op = Opcode::INT_TO_DECIMAL;
+            infallible = true;
         } else if (srcIsFloat && tgtIsDecimal) {
-            op = Opcode::FLOAT_TO_DECIMAL; infallible = true;
+            op = Opcode::FLOAT_TO_DECIMAL;
+            infallible = true;
         } else if (srcIsDecimal && tgtIsStr) {
-            op = Opcode::CAST_DECIMAL_TO_STR; infallible = true;
+            op = Opcode::CAST_DECIMAL_TO_STR;
+            infallible = true;
         } else if (srcIsDecimal && tgtIsFloat) {
-            op = Opcode::CAST_DECIMAL_TO_FLOAT; infallible = true;
+            op = Opcode::CAST_DECIMAL_TO_FLOAT;
+            infallible = true;
         } else if (srcIsDecimal && tgtIsInt) {
             op = Opcode::CAST_DECIMAL_TO_INT;
         } else if (srcIsStr && tgtIsDecimal) {
@@ -1208,13 +1327,17 @@ int IRGenerator::generateExpression(ASTNode* node) {
         } else if (srcIsFloat && tgtIsInt) {
             op = Opcode::CAST_FLOAT_TO_INT_CHECKED;
         } else if (srcIsInt && tgtIsStr) {
-            op = Opcode::CAST_INT_TO_STR; infallible = true;
+            op = Opcode::CAST_INT_TO_STR;
+            infallible = true;
         } else if (srcIsFloat32 && tgtIsStr) {
-            op = Opcode::CAST_FLOAT32_TO_STR; infallible = true;
+            op = Opcode::CAST_FLOAT32_TO_STR;
+            infallible = true;
         } else if (srcIsFloat && tgtIsStr) {
-            op = Opcode::CAST_FLOAT_TO_STR; infallible = true;
+            op = Opcode::CAST_FLOAT_TO_STR;
+            infallible = true;
         } else if (srcIsBool && tgtIsStr) {
-            op = Opcode::CAST_BOOL_TO_STR; infallible = true;
+            op = Opcode::CAST_BOOL_TO_STR;
+            infallible = true;
         } else if (srcIsStr && tgtIsInt) {
             op = Opcode::CAST_STR_TO_INT;
         } else if (srcIsStr && tgtIsFloat32) {
@@ -1225,13 +1348,13 @@ int IRGenerator::generateExpression(ASTNode* node) {
             // Aynı tip→aynı tip (int→int gibi): kimlik dönüşümü
             Instruction nop(Opcode::LOAD_SLOT);
             nop.dest = destSlot;
-            nop.src  = srcSlot;
+            nop.src = srcSlot;
             currentFunction_->instructions.push_back(std::move(nop));
             return destSlot;
         }
         Instruction ins(op);
         ins.dest = destSlot;
-        ins.src  = srcSlot;
+        ins.src = srcSlot;
         ins.left = infallible ? -1 : nullable; // -1=bayraksız; 0=throw; 1=null
         currentFunction_->instructions.push_back(std::move(ins));
         return destSlot;
@@ -1249,32 +1372,32 @@ int IRGenerator::generateExpression(ASTNode* node) {
 
 int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTNode* rightNode,
                                           int line, int col) {
-    int leftSlot  = generateExpression(leftNode);
+    int leftSlot = generateExpression(leftNode);
     int rightSlot = generateExpression(rightNode);
-    int destSlot  = freshSlot();
+    int destSlot = freshSlot();
 
     // Tip tespiti — resolvedType üstünden (tip denetleyici tarafından yazıldı).
     // ADR-040: float32 (32-bit) ile double (64-bit) ve longint (64-bit int)
     // ayrı izlenir.
     bool leftIsDecimal = false, rightIsDecimal = false;
-    bool leftIsFloat32 = false, rightIsFloat32 = false;   // 32-bit single
-    bool leftIsDouble  = false, rightIsDouble  = false;   // 64-bit double
-    bool leftIsLong    = false, rightIsLong    = false;   // 64-bit int
-    bool leftIsString  = false, rightIsString  = false;
-    auto classify = [](ASTNode* n, bool& isDec, bool& isF32, bool& isDbl,
-                       bool& isLong, bool& isStr) {
+    bool leftIsFloat32 = false, rightIsFloat32 = false; // 32-bit single
+    bool leftIsDouble = false, rightIsDouble = false; // 64-bit double
+    bool leftIsLong = false, rightIsLong = false; // 64-bit int
+    bool leftIsString = false, rightIsString = false;
+    auto classify = [](ASTNode* n, bool& isDec, bool& isF32, bool& isDbl, bool& isLong,
+                       bool& isStr) {
         if (auto* e = dynamic_cast<ExpressionNode*>(n)) {
-            isDec  = e->resolvedType.isDecimal();
-            isF32  = e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Float;
-            isDbl  = e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Double;
+            isDec = e->resolvedType.isDecimal();
+            isF32 = e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Float;
+            isDbl = e->resolvedType.isPrimitive() && e->resolvedType.prim == PrimitiveKind::Double;
             isLong = e->resolvedType.isLongInt();
-            isStr  = e->resolvedType.isString();
+            isStr = e->resolvedType.isString();
         }
     };
-    classify(leftNode,  leftIsDecimal,  leftIsFloat32,  leftIsDouble,  leftIsLong,  leftIsString);
+    classify(leftNode, leftIsDecimal, leftIsFloat32, leftIsDouble, leftIsLong, leftIsString);
     classify(rightNode, rightIsDecimal, rightIsFloat32, rightIsDouble, rightIsLong, rightIsString);
 
-    bool leftIsFloat  = leftIsFloat32  || leftIsDouble;
+    bool leftIsFloat = leftIsFloat32 || leftIsDouble;
     bool rightIsFloat = rightIsFloat32 || rightIsDouble;
 
     // String birleştirme (ADR-024): + → STRING_CONCAT
@@ -1286,21 +1409,34 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
     // Decimal aritmetik (ADR-028): en az bir operand decimal ise decimal path
     if (leftIsDecimal || rightIsDecimal) {
         if (!leftIsDecimal && leftIsFloat) {
-            int conv = freshSlot(); emitFloatToDecimal(conv, leftSlot); leftSlot = conv;
+            int conv = freshSlot();
+            emitFloatToDecimal(conv, leftSlot);
+            leftSlot = conv;
         } else if (!leftIsDecimal) {
-            int conv = freshSlot(); emitIntToDecimal(conv, leftSlot); leftSlot = conv;
+            int conv = freshSlot();
+            emitIntToDecimal(conv, leftSlot);
+            leftSlot = conv;
         }
         if (!rightIsDecimal && rightIsFloat) {
-            int conv = freshSlot(); emitFloatToDecimal(conv, rightSlot); rightSlot = conv;
+            int conv = freshSlot();
+            emitFloatToDecimal(conv, rightSlot);
+            rightSlot = conv;
         } else if (!rightIsDecimal) {
-            int conv = freshSlot(); emitIntToDecimal(conv, rightSlot); rightSlot = conv;
+            int conv = freshSlot();
+            emitIntToDecimal(conv, rightSlot);
+            rightSlot = conv;
         }
         Opcode decOp = opcode;
-        if      (opcode == Opcode::ADD) decOp = Opcode::DADD;
-        else if (opcode == Opcode::SUB) decOp = Opcode::DSUB;
-        else if (opcode == Opcode::MUL) decOp = Opcode::DMUL;
-        else if (opcode == Opcode::DIV) decOp = Opcode::DDIV;
-        else if (opcode == Opcode::MOD) decOp = Opcode::DMOD;
+        if (opcode == Opcode::ADD)
+            decOp = Opcode::DADD;
+        else if (opcode == Opcode::SUB)
+            decOp = Opcode::DSUB;
+        else if (opcode == Opcode::MUL)
+            decOp = Opcode::DMUL;
+        else if (opcode == Opcode::DIV)
+            decOp = Opcode::DDIV;
+        else if (opcode == Opcode::MOD)
+            decOp = Opcode::DMOD;
         emitBinaryOp(decOp, destSlot, leftSlot, rightSlot, line, col);
         return destSlot;
     }
@@ -1308,21 +1444,50 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
     // ADR-040: longint aritmetik — herhangi bir operand longint (float/decimal
     // yok, typechecker garanti ediyor). int operand INT_TO_LONG ile genişletilir.
     if (leftIsLong || rightIsLong) {
-        if (!leftIsLong)  { int conv = freshSlot(); emitIntToLong(conv, leftSlot);  leftSlot  = conv; }
-        if (!rightIsLong) { int conv = freshSlot(); emitIntToLong(conv, rightSlot); rightSlot = conv; }
+        if (!leftIsLong) {
+            int conv = freshSlot();
+            emitIntToLong(conv, leftSlot);
+            leftSlot = conv;
+        }
+        if (!rightIsLong) {
+            int conv = freshSlot();
+            emitIntToLong(conv, rightSlot);
+            rightSlot = conv;
+        }
         Opcode lop = opcode;
         switch (opcode) {
-            case Opcode::ADD:  lop = Opcode::LADD;  break;
-            case Opcode::SUB:  lop = Opcode::LSUB;  break;
-            case Opcode::MUL:  lop = Opcode::LMUL;  break;
-            case Opcode::DIV:  lop = Opcode::LDIV;  break;
-            case Opcode::MOD:  lop = Opcode::LMOD;  break;
-            case Opcode::BAND: lop = Opcode::LBAND; break;
-            case Opcode::BOR:  lop = Opcode::LBOR;  break;
-            case Opcode::BXOR: lop = Opcode::LBXOR; break;
-            case Opcode::SHL:  lop = Opcode::LSHL;  break;
-            case Opcode::SHR:  lop = Opcode::LSHR;  break;
-            default: break;
+        case Opcode::ADD:
+            lop = Opcode::LADD;
+            break;
+        case Opcode::SUB:
+            lop = Opcode::LSUB;
+            break;
+        case Opcode::MUL:
+            lop = Opcode::LMUL;
+            break;
+        case Opcode::DIV:
+            lop = Opcode::LDIV;
+            break;
+        case Opcode::MOD:
+            lop = Opcode::LMOD;
+            break;
+        case Opcode::BAND:
+            lop = Opcode::LBAND;
+            break;
+        case Opcode::BOR:
+            lop = Opcode::LBOR;
+            break;
+        case Opcode::BXOR:
+            lop = Opcode::LBXOR;
+            break;
+        case Opcode::SHL:
+            lop = Opcode::LSHL;
+            break;
+        case Opcode::SHR:
+            lop = Opcode::LSHR;
+            break;
+        default:
+            break;
         }
         emitBinaryOp(lop, destSlot, leftSlot, rightSlot, line, col);
         return destSlot;
@@ -1335,37 +1500,51 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
         // Tek-operandlı (src→dest) çevrim instruction'ı ekle
         auto emitConv = [&](Opcode op, int dest, int src) {
             Instruction ins(op);
-            ins.dest = dest; ins.src = src;
-            ins.sourceLine = line; ins.sourceCol = col;
+            ins.dest = dest;
+            ins.src = src;
+            ins.sourceLine = line;
+            ins.sourceCol = col;
             currentFunction_->instructions.push_back(std::move(ins));
         };
         auto toFloatTarget = [&](int slot, bool isF32, bool isDbl) -> int {
             if (resultIsDouble) {
-                if (isDbl) return slot;                    // zaten double
+                if (isDbl)
+                    return slot; // zaten double
                 int conv = freshSlot();
-                if (isF32) emitConv(Opcode::FLOAT32_TO_FLOAT, conv, slot);
-                else       emitIntToFloat(conv, slot);     // int → double
+                if (isF32)
+                    emitConv(Opcode::FLOAT32_TO_FLOAT, conv, slot);
+                else
+                    emitIntToFloat(conv, slot); // int → double
                 return conv;
             } else {
-                if (isF32) return slot;                    // zaten float32
+                if (isF32)
+                    return slot; // zaten float32
                 int conv = freshSlot();
-                emitIntToFloat32(conv, slot);              // int → float32
+                emitIntToFloat32(conv, slot); // int → float32
                 return conv;
             }
         };
-        leftSlot  = toFloatTarget(leftSlot,  leftIsFloat32,  leftIsDouble);
+        leftSlot = toFloatTarget(leftSlot, leftIsFloat32, leftIsDouble);
         rightSlot = toFloatTarget(rightSlot, rightIsFloat32, rightIsDouble);
         Opcode floatOp = opcode;
         if (resultIsDouble) {
-            if      (opcode == Opcode::ADD) floatOp = Opcode::FADD;
-            else if (opcode == Opcode::SUB) floatOp = Opcode::FSUB;
-            else if (opcode == Opcode::MUL) floatOp = Opcode::FMUL;
-            else if (opcode == Opcode::DIV) floatOp = Opcode::FDIV;
+            if (opcode == Opcode::ADD)
+                floatOp = Opcode::FADD;
+            else if (opcode == Opcode::SUB)
+                floatOp = Opcode::FSUB;
+            else if (opcode == Opcode::MUL)
+                floatOp = Opcode::FMUL;
+            else if (opcode == Opcode::DIV)
+                floatOp = Opcode::FDIV;
         } else {
-            if      (opcode == Opcode::ADD) floatOp = Opcode::F32ADD;
-            else if (opcode == Opcode::SUB) floatOp = Opcode::F32SUB;
-            else if (opcode == Opcode::MUL) floatOp = Opcode::F32MUL;
-            else if (opcode == Opcode::DIV) floatOp = Opcode::F32DIV;
+            if (opcode == Opcode::ADD)
+                floatOp = Opcode::F32ADD;
+            else if (opcode == Opcode::SUB)
+                floatOp = Opcode::F32SUB;
+            else if (opcode == Opcode::MUL)
+                floatOp = Opcode::F32MUL;
+            else if (opcode == Opcode::DIV)
+                floatOp = Opcode::F32DIV;
         }
         emitBinaryOp(floatOp, destSlot, leftSlot, rightSlot, line, col);
     } else {
@@ -1381,7 +1560,7 @@ int IRGenerator::generateBinaryArithmetic(Opcode opcode, ASTNode* leftNode, ASTN
 int IRGenerator::freshSlot() {
     int s = nextSlot_++;
     // Faz 5: slotNames vektörünü büyüt
-    if (currentFunction_ && s >= (int)currentFunction_->slotNames.size())
+    if (currentFunction_ && s >= (int) currentFunction_->slotNames.size())
         currentFunction_->slotNames.resize(s + 1);
     return s;
 }
@@ -1400,7 +1579,7 @@ void IRGenerator::registerVariable(const std::string& name, int slot) {
     nameToSlot_[name] = slot;
     // Faz 5: slot → isim eşlemesi (DAP/debug için)
     if (currentFunction_) {
-        if (slot >= (int)currentFunction_->slotNames.size())
+        if (slot >= (int) currentFunction_->slotNames.size())
             currentFunction_->slotNames.resize(slot + 1);
         currentFunction_->slotNames[slot] = name;
     }
@@ -1411,7 +1590,8 @@ void IRGenerator::pushScope() {
 }
 
 void IRGenerator::popScope() {
-    if (shadowStack_.empty()) return;
+    if (shadowStack_.empty())
+        return;
     auto record = std::move(shadowStack_.back());
     shadowStack_.pop_back();
     // Geriye doğru uygula: aynı isim birden fazla kez bu blokta bildirilmişse
@@ -1440,95 +1620,144 @@ int IRGenerator::lookupVariable(const std::string& name) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 SlotType IRGenerator::slotTypeFromTypeName(const std::string& t) const {
-    if (t == "double")                             return SlotType::Float;   // 64-bit
-    if (t == "float")                              return SlotType::Float32; // ADR-040: 32-bit
-    if (t == "longint")                            return SlotType::LongInt; // ADR-040: 64-bit
-    if (t == "decimal")                            return SlotType::Decimal;
-    if (t == "string")                             return SlotType::Str;
-    if (t == "date")                               return SlotType::Date;
-    if (t == "int" || t == "bool" || t == "byte")  return SlotType::Int;
+    if (t == "double")
+        return SlotType::Float; // 64-bit
+    if (t == "float")
+        return SlotType::Float32; // ADR-040: 32-bit
+    if (t == "longint")
+        return SlotType::LongInt; // ADR-040: 64-bit
+    if (t == "decimal")
+        return SlotType::Decimal;
+    if (t == "string")
+        return SlotType::Str;
+    if (t == "date")
+        return SlotType::Date;
+    if (t == "int" || t == "bool" || t == "byte")
+        return SlotType::Int;
     // Array (`int[]`) veya bilinen struct → referans.
-    if (t.size() > 2 && t.substr(t.size() - 2) == "[]") return SlotType::Ref;
-    if (structLayouts_.count(t))                   return SlotType::Ref;
+    if (t.size() > 2 && t.substr(t.size() - 2) == "[]")
+        return SlotType::Ref;
+    if (structLayouts_.count(t))
+        return SlotType::Ref;
     // enum → int değeri; void/bilinmeyen → Int (nötr varsayılan).
     return SlotType::Int;
 }
 
 void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
-    if (fn->slotCount <= 0) { fn->slotTypes.clear(); return; }
+    if (fn->slotCount <= 0) {
+        fn->slotTypes.clear();
+        return;
+    }
     fn->slotTypes.assign(static_cast<size_t>(fn->slotCount), SlotType::Int);
 
     // 1. Parametre slot'ları (0..paramCount-1) — bildirilen tipten.
-    for (size_t i = 0; i < decl->params.size() &&
-                       i < static_cast<size_t>(fn->slotCount); ++i)
+    for (size_t i = 0; i < decl->params.size() && i < static_cast<size_t>(fn->slotCount); ++i)
         fn->slotTypes[i] = slotTypeFromTypeName(decl->params[i]->varType);
 
     // 2. Üreten opcode'dan türet. Slot türü sabit olduğundan (ADR-020) tek
     // yön yeterli, ama LOAD_SLOT propagasyonu geriye-atlamalarda gecikebilir
     // → küçük bir fixpoint (tavan 8) güvenli ve ucuz.
     auto kindOf = [&](int slot) -> SlotType {
-        return (slot >= 0 && slot < fn->slotCount)
-                   ? fn->slotTypes[static_cast<size_t>(slot)] : SlotType::Int;
+        return (slot >= 0 && slot < fn->slotCount) ? fn->slotTypes[static_cast<size_t>(slot)] :
+                                                     SlotType::Int;
     };
     bool changed = true;
     for (int guard = 0; changed && guard < 8; ++guard) {
         changed = false;
         for (const Instruction& ins : fn->instructions) {
-            if (ins.dest < 0 || ins.dest >= fn->slotCount) continue;
+            if (ins.dest < 0 || ins.dest >= fn->slotCount)
+                continue;
             SlotType cur = fn->slotTypes[static_cast<size_t>(ins.dest)];
-            SlotType nk  = cur;
+            SlotType nk = cur;
             switch (ins.opcode) {
-                case Opcode::LOAD_FLOAT:
-                case Opcode::FADD: case Opcode::FSUB: case Opcode::FMUL:
-                case Opcode::FDIV: case Opcode::FNEG:
-                case Opcode::INT_TO_FLOAT:
-                case Opcode::FLOAT32_TO_FLOAT:
-                    nk = SlotType::Float; break;
-                // ADR-040: float32 (32-bit) üreten op'lar
-                case Opcode::LOAD_FLOAT32:
-                case Opcode::F32ADD: case Opcode::F32SUB: case Opcode::F32MUL:
-                case Opcode::F32DIV: case Opcode::F32NEG:
-                case Opcode::INT_TO_FLOAT32: case Opcode::FLOAT_TO_FLOAT32:
-                case Opcode::CAST_STR_TO_FLOAT32:
-                    nk = SlotType::Float32; break;
-                // ADR-040: longint (64-bit) üreten op'lar
-                case Opcode::LOAD_LONG:
-                case Opcode::LADD: case Opcode::LSUB: case Opcode::LMUL:
-                case Opcode::LDIV: case Opcode::LMOD: case Opcode::LNEG:
-                case Opcode::LBAND: case Opcode::LBOR: case Opcode::LBXOR:
-                case Opcode::LSHL: case Opcode::LSHR: case Opcode::LBNOT:
-                case Opcode::INT_TO_LONG: case Opcode::CAST_STR_TO_LONG:
-                case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
-                    nk = SlotType::LongInt; break;
-                case Opcode::STRUCT_NEW: case Opcode::ARRAY_NEW:
-                    nk = SlotType::Ref; break;
-                case Opcode::LOAD_STRING: case Opcode::STRING_CONCAT:
-                case Opcode::CAST_INT_TO_STR: case Opcode::CAST_FLOAT_TO_STR:
-                case Opcode::CAST_FLOAT32_TO_STR: case Opcode::CAST_LONG_TO_STR:
-                case Opcode::CAST_BOOL_TO_STR: case Opcode::CAST_DECIMAL_TO_STR:
-                    nk = SlotType::Str; break;
-                case Opcode::CAST_STR_TO_FLOAT: case Opcode::CAST_DECIMAL_TO_FLOAT:
-                    nk = SlotType::Float; break;
-                // CAST_STR_TO_INT / CAST_FLOAT_TO_INT_CHECKED /
-                // CAST_INT_TO_BYTE_CHECKED / CAST_DECIMAL_TO_INT → Int (default).
-                case Opcode::LOAD_DECIMAL:
-                case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
-                case Opcode::DDIV: case Opcode::DMOD: case Opcode::DNEG:
-                case Opcode::INT_TO_DECIMAL: case Opcode::FLOAT_TO_DECIMAL:
-                case Opcode::CAST_STR_TO_DECIMAL:
-                    nk = SlotType::Decimal; break;
-                case Opcode::LOAD_SLOT:
-                    nk = kindOf(ins.src); break;
-                case Opcode::CALL: {
-                    auto it = funcReturnKind_.find(ins.functionName);
-                    if (it != funcReturnKind_.end()) nk = it->second;
-                    break;
-                }
-                // FIELD_GET/ARRAY_GET/LOAD_GLOBAL: sonuç türü opcode'dan
-                // belli değil (eleman/alan türü gerekir). Dilim 1.5 JIT'i bu
-                // opcode'ları zaten reddediyor; `--types` için Int kalır.
-                // TODO(Dilim 2/3): bu opcode'lara sonuç-türü alanı ekle.
-                default: break;  // Int-üreten opcode'lar: varsayılan Int
+            case Opcode::LOAD_FLOAT:
+            case Opcode::FADD:
+            case Opcode::FSUB:
+            case Opcode::FMUL:
+            case Opcode::FDIV:
+            case Opcode::FNEG:
+            case Opcode::INT_TO_FLOAT:
+            case Opcode::FLOAT32_TO_FLOAT:
+                nk = SlotType::Float;
+                break;
+            // ADR-040: float32 (32-bit) üreten op'lar
+            case Opcode::LOAD_FLOAT32:
+            case Opcode::F32ADD:
+            case Opcode::F32SUB:
+            case Opcode::F32MUL:
+            case Opcode::F32DIV:
+            case Opcode::F32NEG:
+            case Opcode::INT_TO_FLOAT32:
+            case Opcode::FLOAT_TO_FLOAT32:
+            case Opcode::CAST_STR_TO_FLOAT32:
+                nk = SlotType::Float32;
+                break;
+            // ADR-040: longint (64-bit) üreten op'lar
+            case Opcode::LOAD_LONG:
+            case Opcode::LADD:
+            case Opcode::LSUB:
+            case Opcode::LMUL:
+            case Opcode::LDIV:
+            case Opcode::LMOD:
+            case Opcode::LNEG:
+            case Opcode::LBAND:
+            case Opcode::LBOR:
+            case Opcode::LBXOR:
+            case Opcode::LSHL:
+            case Opcode::LSHR:
+            case Opcode::LBNOT:
+            case Opcode::INT_TO_LONG:
+            case Opcode::CAST_STR_TO_LONG:
+            case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
+                nk = SlotType::LongInt;
+                break;
+            case Opcode::STRUCT_NEW:
+            case Opcode::ARRAY_NEW:
+                nk = SlotType::Ref;
+                break;
+            case Opcode::LOAD_STRING:
+            case Opcode::STRING_CONCAT:
+            case Opcode::CAST_INT_TO_STR:
+            case Opcode::CAST_FLOAT_TO_STR:
+            case Opcode::CAST_FLOAT32_TO_STR:
+            case Opcode::CAST_LONG_TO_STR:
+            case Opcode::CAST_BOOL_TO_STR:
+            case Opcode::CAST_DECIMAL_TO_STR:
+                nk = SlotType::Str;
+                break;
+            case Opcode::CAST_STR_TO_FLOAT:
+            case Opcode::CAST_DECIMAL_TO_FLOAT:
+                nk = SlotType::Float;
+                break;
+            // CAST_STR_TO_INT / CAST_FLOAT_TO_INT_CHECKED /
+            // CAST_INT_TO_BYTE_CHECKED / CAST_DECIMAL_TO_INT → Int (default).
+            case Opcode::LOAD_DECIMAL:
+            case Opcode::DADD:
+            case Opcode::DSUB:
+            case Opcode::DMUL:
+            case Opcode::DDIV:
+            case Opcode::DMOD:
+            case Opcode::DNEG:
+            case Opcode::INT_TO_DECIMAL:
+            case Opcode::FLOAT_TO_DECIMAL:
+            case Opcode::CAST_STR_TO_DECIMAL:
+                nk = SlotType::Decimal;
+                break;
+            case Opcode::LOAD_SLOT:
+                nk = kindOf(ins.src);
+                break;
+            case Opcode::CALL: {
+                auto it = funcReturnKind_.find(ins.functionName);
+                if (it != funcReturnKind_.end())
+                    nk = it->second;
+                break;
+            }
+            // FIELD_GET/ARRAY_GET/LOAD_GLOBAL: sonuç türü opcode'dan
+            // belli değil (eleman/alan türü gerekir). Dilim 1.5 JIT'i bu
+            // opcode'ları zaten reddediyor; `--types` için Int kalır.
+            // TODO(Dilim 2/3): bu opcode'lara sonuç-türü alanı ekle.
+            default:
+                break; // Int-üreten opcode'lar: varsayılan Int
             }
             if (nk != cur) {
                 fn->slotTypes[static_cast<size_t>(ins.dest)] = nk;
@@ -1542,176 +1771,164 @@ void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
 // Talimat yazma yardımcıları
 // ─────────────────────────────────────────────────────────────────────────────
 
-void IRGenerator::emitLoadConst(int destSlot, int value,
-                                const SourceLocation& loc) {
+void IRGenerator::emitLoadConst(int destSlot, int value, const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_CONST);
-    ins.dest       = destSlot;
-    ins.intValue   = value;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.intValue = value;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitLoadSlot(int destSlot, int srcSlot,
-                                const SourceLocation& loc) {
+void IRGenerator::emitLoadSlot(int destSlot, int srcSlot, const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_SLOT);
-    ins.dest       = destSlot;
-    ins.src        = srcSlot;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.src = srcSlot;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitLoadGlobal(int destSlot, int globalIndex,
-                                  const SourceLocation& loc) {
+void IRGenerator::emitLoadGlobal(int destSlot, int globalIndex, const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_GLOBAL);
-    ins.dest       = destSlot;
-    ins.intValue   = globalIndex;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.intValue = globalIndex;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitStoreGlobal(int srcSlot, int globalIndex,
-                                   const SourceLocation& loc) {
+void IRGenerator::emitStoreGlobal(int srcSlot, int globalIndex, const SourceLocation& loc) {
     Instruction ins(Opcode::STORE_GLOBAL);
-    ins.src        = srcSlot;
-    ins.intValue   = globalIndex;
-    auto el        = effectiveLoc(loc);
+    ins.src = srcSlot;
+    ins.intValue = globalIndex;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitLoadFloat(int destSlot, double value,
-                                 const SourceLocation& loc) {
+void IRGenerator::emitLoadFloat(int destSlot, double value, const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_FLOAT);
-    ins.dest       = destSlot;
+    ins.dest = destSlot;
     ins.floatValue = value;
-    auto el        = effectiveLoc(loc);
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitIntToFloat(int destSlot, int srcSlot,
-                                  const SourceLocation& loc) {
+void IRGenerator::emitIntToFloat(int destSlot, int srcSlot, const SourceLocation& loc) {
     Instruction ins(Opcode::INT_TO_FLOAT);
-    ins.dest       = destSlot;
-    ins.src        = srcSlot;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.src = srcSlot;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
 // ADR-040: float32 sabit yükle
-void IRGenerator::emitLoadFloat32(int destSlot, double value,
-                                   const SourceLocation& loc) {
+void IRGenerator::emitLoadFloat32(int destSlot, double value, const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_FLOAT32);
-    ins.dest       = destSlot;
+    ins.dest = destSlot;
     ins.floatValue = value;
-    auto el        = effectiveLoc(loc);
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
 // ADR-040: longint (64-bit) sabit yükle
-void IRGenerator::emitLoadLong(int destSlot, long long value,
-                                const SourceLocation& loc) {
+void IRGenerator::emitLoadLong(int destSlot, long long value, const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_LONG);
-    ins.dest       = destSlot;
+    ins.dest = destSlot;
     ins.int64Value = value;
-    auto el        = effectiveLoc(loc);
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
 // ADR-040: int → float32 çevrimi
-void IRGenerator::emitIntToFloat32(int destSlot, int srcSlot,
-                                    const SourceLocation& loc) {
+void IRGenerator::emitIntToFloat32(int destSlot, int srcSlot, const SourceLocation& loc) {
     Instruction ins(Opcode::INT_TO_FLOAT32);
-    ins.dest       = destSlot;
-    ins.src        = srcSlot;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.src = srcSlot;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
 // ADR-040: int → longint çevrimi (kayıpsız genişletme)
-void IRGenerator::emitIntToLong(int destSlot, int srcSlot,
-                                 const SourceLocation& loc) {
+void IRGenerator::emitIntToLong(int destSlot, int srcSlot, const SourceLocation& loc) {
     Instruction ins(Opcode::INT_TO_LONG);
-    ins.dest       = destSlot;
-    ins.src        = srcSlot;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.src = srcSlot;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
 void IRGenerator::emitLoadDecimal(int destSlot, const DecimalValue& value,
-                                   const SourceLocation& loc) {
+                                  const SourceLocation& loc) {
     Instruction ins(Opcode::LOAD_DECIMAL);
-    ins.dest         = destSlot;
+    ins.dest = destSlot;
     ins.decimalValue = value;
-    auto el          = effectiveLoc(loc);
-    ins.sourceLine   = el.line;
-    ins.sourceCol    = el.column;
-    ins.sourceFile   = el.filePath;
+    auto el = effectiveLoc(loc);
+    ins.sourceLine = el.line;
+    ins.sourceCol = el.column;
+    ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitIntToDecimal(int destSlot, int srcSlot,
-                                    const SourceLocation& loc) {
+void IRGenerator::emitIntToDecimal(int destSlot, int srcSlot, const SourceLocation& loc) {
     Instruction ins(Opcode::INT_TO_DECIMAL);
-    ins.dest       = destSlot;
-    ins.src        = srcSlot;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.src = srcSlot;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitFloatToDecimal(int destSlot, int srcSlot,
-                                      const SourceLocation& loc) {
+void IRGenerator::emitFloatToDecimal(int destSlot, int srcSlot, const SourceLocation& loc) {
     Instruction ins(Opcode::FLOAT_TO_DECIMAL);
-    ins.dest       = destSlot;
-    ins.src        = srcSlot;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.src = srcSlot;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitStructNew(int destSlot, const std::string& structType,
-                                 int fieldCount, const SourceLocation& loc) {
+void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int fieldCount,
+                                const SourceLocation& loc) {
     Instruction ins(Opcode::STRUCT_NEW);
-    ins.dest         = destSlot;
-    ins.intValue     = fieldCount;
+    ins.dest = destSlot;
+    ins.intValue = fieldCount;
     ins.functionName = structType;
-    auto el          = effectiveLoc(loc);
-    ins.sourceLine   = el.line;
-    ins.sourceCol    = el.column;
-    ins.sourceFile   = el.filePath;
+    auto el = effectiveLoc(loc);
+    ins.sourceLine = el.line;
+    ins.sourceCol = el.column;
+    ins.sourceFile = el.filePath;
     // Alan adlarını struct layout'tan al — toJson/dump'ta kullanılır
     auto it = structLayouts_.find(structType);
     if (it != structLayouts_.end())
@@ -1720,104 +1937,143 @@ void IRGenerator::emitStructNew(int destSlot, const std::string& structType,
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx,
-                                const SourceLocation& loc) {
+void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx, const SourceLocation& loc) {
     Instruction ins(Opcode::FIELD_GET);
-    ins.dest       = destSlot;
-    ins.src        = objSlot;
-    ins.intValue   = fieldIdx;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.src = objSlot;
+    ins.intValue = fieldIdx;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitFieldSet(int objSlot, int fieldIdx, int valSlot,
-                               int line, int col) {
+void IRGenerator::emitFieldSet(int objSlot, int fieldIdx, int valSlot, int line, int col) {
     Instruction ins(Opcode::FIELD_SET);
-    ins.dest       = objSlot;
-    ins.intValue   = fieldIdx;
-    ins.right      = valSlot;
+    ins.dest = objSlot;
+    ins.intValue = fieldIdx;
+    ins.right = valSlot;
     ins.sourceLine = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.line : line;
-    ins.sourceCol  = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
+    ins.sourceCol = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitArrayNew(int destSlot, int capacity,
-                                const SourceLocation& loc) {
+void IRGenerator::emitArrayNew(int destSlot, int capacity, ArrayElemKind k,
+                               const SourceLocation& loc) {
     Instruction ins(Opcode::ARRAY_NEW);
-    ins.dest       = destSlot;
-    ins.intValue   = capacity;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.intValue = capacity;
+    ins.arrayElemKind = k;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitArrayGet(int destSlot, int arrSlot, int idxSlot,
-                               int line, int col) {
+// #206: tip-adı string'inden ArrayElemKind çıkar (ör. "byte" → Byte)
+static ArrayElemKind arrayElemKindFromTypeName(const std::string& t) {
+    if (t == "byte")     return ArrayElemKind::Byte;
+    if (t == "int" || t == "bool" || t == "char")
+                         return ArrayElemKind::Int;
+    if (t == "longint" || t == "date")
+                         return ArrayElemKind::LongInt;
+    if (t == "float")    return ArrayElemKind::Float32;
+    if (t == "double")   return ArrayElemKind::Float64;
+    if (t == "decimal")  return ArrayElemKind::Decimal;
+    // string, struct, enum, array → Ref
+    return ArrayElemKind::Ref;
+}
+
+// #206: Type::PrimitiveKind'den ArrayElemKind çıkar
+static ArrayElemKind arrayElemKindFromPrim(PrimitiveKind p) {
+    switch (p) {
+        case PrimitiveKind::Byte:    return ArrayElemKind::Byte;
+        case PrimitiveKind::Int:
+        case PrimitiveKind::Bool:
+        case PrimitiveKind::Char:    return ArrayElemKind::Int;
+        case PrimitiveKind::LongInt:
+        case PrimitiveKind::Date:    return ArrayElemKind::LongInt;
+        case PrimitiveKind::Float:   return ArrayElemKind::Float32;
+        case PrimitiveKind::Double:  return ArrayElemKind::Float64;
+        case PrimitiveKind::Decimal: return ArrayElemKind::Decimal;
+        default:                     return ArrayElemKind::Ref;
+    }
+}
+
+// #206: Type'tan ArrayElemKind çıkar (elementType alanına bakar)
+static ArrayElemKind arrayElemKindFromType(const Type& t) {
+    if (!t.isArray() || !t.elementType) return ArrayElemKind::Ref;
+    return arrayElemKindFromPrim(t.elementType->prim);
+}
+
+void IRGenerator::emitArrayGet(int destSlot, int arrSlot, int idxSlot, int line, int col) {
     Instruction ins(Opcode::ARRAY_GET);
-    ins.dest       = destSlot;
-    ins.left       = arrSlot;
-    ins.right      = idxSlot;
+    ins.dest = destSlot;
+    ins.left = arrSlot;
+    ins.right = idxSlot;
     ins.sourceLine = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.line : line;
-    ins.sourceCol  = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
+    ins.sourceCol = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitArraySet(int arrSlot, int idxSlot, int valSlot,
-                               int line, int col) {
+void IRGenerator::emitArraySet(int arrSlot, int idxSlot, int valSlot, int line, int col) {
     Instruction ins(Opcode::ARRAY_SET);
-    ins.dest       = arrSlot;
-    ins.left       = idxSlot;
-    ins.right      = valSlot;
+    ins.dest = arrSlot;
+    ins.left = idxSlot;
+    ins.right = valSlot;
     ins.sourceLine = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.line : line;
-    ins.sourceCol  = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
+    ins.sourceCol = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitArrayLen(int destSlot, int arrSlot,
-                                const SourceLocation& loc) {
+void IRGenerator::emitArrayLen(int destSlot, int arrSlot, const SourceLocation& loc) {
     Instruction ins(Opcode::ARRAY_LEN);
-    ins.dest       = destSlot;
-    ins.src        = arrSlot;
-    auto el        = effectiveLoc(loc);
+    ins.dest = destSlot;
+    ins.src = arrSlot;
+    auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
-    ins.sourceCol  = el.column;
+    ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
 void IRGenerator::initNestedStructFields(int destSlot, const std::string& structType,
-                                          const SourceLocation& loc) {
+                                         const SourceLocation& loc) {
     auto it = structLayouts_.find(structType);
-    if (it == structLayouts_.end()) return;
-    for (int i = 0; i < (int)it->second.size(); i++) {
+    if (it == structLayouts_.end())
+        return;
+    for (int i = 0; i < (int) it->second.size(); i++) {
         const auto& [fieldName, fieldType] = it->second[i];
-        if (!fieldType.isStruct() || fieldType.structName.empty()) continue;
-        if (!structLayouts_.count(fieldType.structName)) continue;
+        if (!fieldType.isStruct() || fieldType.structName.empty())
+            continue;
+        if (!structLayouts_.count(fieldType.structName))
+            continue;
         int innerSlot = freshSlot();
-        int innerFc   = getStructFieldCount(fieldType.structName);
+        int innerFc = getStructFieldCount(fieldType.structName);
         emitStructNew(innerSlot, fieldType.structName, innerFc, loc);
         initNestedStructFields(innerSlot, fieldType.structName, loc); // özyineleme
         emitFieldSet(destSlot, i, innerSlot, loc.line, loc.column);
     }
 }
 
-int IRGenerator::getStructFieldIndex(const std::string& structType, const std::string& fieldName) const {
+int IRGenerator::getStructFieldIndex(const std::string& structType,
+                                     const std::string& fieldName) const {
     auto it = structLayouts_.find(structType);
-    if (it == structLayouts_.end()) return -1;
-    for (int i = 0; i < (int)it->second.size(); i++)
-        if (it->second[i].first == fieldName) return i;
+    if (it == structLayouts_.end())
+        return -1;
+    for (int i = 0; i < (int) it->second.size(); i++)
+        if (it->second[i].first == fieldName)
+            return i;
     return -1;
 }
 
 int IRGenerator::getStructFieldCount(const std::string& structType) const {
     auto it = structLayouts_.find(structType);
-    if (it == structLayouts_.end()) return 0;
-    return (int)it->second.size();
+    if (it == structLayouts_.end())
+        return 0;
+    return (int) it->second.size();
 }
 
 bool IRGenerator::isGlobal(const std::string& name) const {
@@ -1829,22 +2085,22 @@ int IRGenerator::getGlobalIndex(const std::string& name) const {
     return (it != nameToGlobal_.end()) ? it->second : -1;
 }
 
-void IRGenerator::emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot,
-                               int line, int col) {
+void IRGenerator::emitBinaryOp(Opcode op, int destSlot, int leftSlot, int rightSlot, int line,
+                               int col) {
     Instruction ins(op);
-    ins.dest       = destSlot;
-    ins.left       = leftSlot;
-    ins.right      = rightSlot;
+    ins.dest = destSlot;
+    ins.left = leftSlot;
+    ins.right = rightSlot;
     ins.sourceLine = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.line : line;
-    ins.sourceCol  = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
+    ins.sourceCol = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
 void IRGenerator::emitReturn(int srcSlot, int line, int col) {
     Instruction ins(Opcode::RETURN);
-    ins.src        = srcSlot;
+    ins.src = srcSlot;
     ins.sourceLine = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.line : line;
-    ins.sourceCol  = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
+    ins.sourceCol = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1852,23 +2108,23 @@ int IRGenerator::emitJumpUnconditional(int targetInstrIndex) {
     Instruction ins(Opcode::JMP);
     ins.jumpTarget = targetInstrIndex;
     currentFunction_->instructions.push_back(std::move(ins));
-    return (int)currentFunction_->instructions.size() - 1;
+    return (int) currentFunction_->instructions.size() - 1;
 }
 
 int IRGenerator::emitJumpIfFalse(int condSlot) {
     Instruction ins(Opcode::JIF_FALSE);
-    ins.cond       = condSlot;
+    ins.cond = condSlot;
     ins.jumpTarget = -1; // henüz bilinmiyor — patchJump() bekliyor
     currentFunction_->instructions.push_back(std::move(ins));
-    return (int)currentFunction_->instructions.size() - 1;
+    return (int) currentFunction_->instructions.size() - 1;
 }
 
 int IRGenerator::emitJumpIfTrue(int condSlot) {
     Instruction ins(Opcode::JIF_TRUE);
-    ins.cond       = condSlot;
+    ins.cond = condSlot;
     ins.jumpTarget = -1;
     currentFunction_->instructions.push_back(std::move(ins));
-    return (int)currentFunction_->instructions.size() - 1;
+    return (int) currentFunction_->instructions.size() - 1;
 }
 
 void IRGenerator::patchJump(int instrIndex) {
@@ -1877,5 +2133,5 @@ void IRGenerator::patchJump(int instrIndex) {
 }
 
 int IRGenerator::currentInstrIndex() const {
-    return (int)currentFunction_->instructions.size();
+    return (int) currentFunction_->instructions.size();
 }

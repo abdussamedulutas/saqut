@@ -1,0 +1,5 @@
+/home/saqut/Masaüstü/saqutcompiler/build-rel/CMakeFiles/mir_core.dir
+/home/saqut/Masaüstü/saqutcompiler/build-rel/CMakeFiles/saqut.dir
+/home/saqut/Masaüstü/saqutcompiler/build-rel/CMakeFiles/test.dir
+/home/saqut/Masaüstü/saqutcompiler/build-rel/CMakeFiles/edit_cache.dir
+/home/saqut/Masaüstü/saqutcompiler/build-rel/CMakeFiles/rebuild_cache.dir

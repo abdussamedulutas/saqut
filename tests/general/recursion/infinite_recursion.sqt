@@ -1,0 +1,8 @@
+int boom(int n) {
+    return 1 + boom(n + 1);
+}
+
+int main() {
+    print(boom(0));
+    return 0;
+}

@@ -244,10 +244,19 @@ void IRFunction::dump() const {
                       << " " << IrColor::SoftGri() << "(float32)" << IrColor::Reset() << cs(ins.src);
             break;
 
-        case Opcode::FLOAT32_TO_FLOAT:
-            std::cout << cs(ins.dest) << " " << IrColor::SoftGri() << "=" << IrColor::Reset()
-                      << " " << IrColor::SoftGri() << "(float)" << IrColor::Reset() << cs(ins.src);
-            break;
+        } else if (ins.opcode == Opcode::ARRAY_NEW) {
+            std::cout << cs(ins.dest) << " " << Color::SoftGri << "=" << Color::Reset
+                      << " " << Color::SoftGri << "array<" << Color::Reset;
+            switch (ins.arrayElemKind) {
+                case ArrayElemKind::Ref:     std::cout << "ref";     break;
+                case ArrayElemKind::Byte:    std::cout << "byte";    break;
+                case ArrayElemKind::Int:     std::cout << "int";     break;
+                case ArrayElemKind::LongInt: std::cout << "long";    break;
+                case ArrayElemKind::Float32: std::cout << "f32";     break;
+                case ArrayElemKind::Float64: std::cout << "f64";     break;
+                case ArrayElemKind::Decimal: std::cout << "dec";     break;
+            }
+            std::cout << Color::SoftGri << ">[" << Color::Reset << ci(ins.intValue) << Color::SoftGri << "]" << Color::Reset;
 
         case Opcode::FLOAT32_TO_INT:
             // Fallible daralma (bkz. CAST_FLOAT_TO_INT_CHECKED); left: 0=throw, 1=null.

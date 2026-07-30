@@ -1,0 +1,58 @@
+// Xorshift128 PRNG Doğrulama Programı
+// Amaç: saQut derleyicisini byte shifting, float32, array, switch ile test etmek
+// Algoritma: Xorshift128 — 4 elemanlı int[] state, byte shifting/xor çekirdek
+// Çıktı modları (switch ile seçilir):
+//   0 = ham int (signed 32-bit)
+//   1 = byte (düşük 8 bit)
+//   2 = float32 normalize [0,1)
+
+int[] s;
+
+void init() {
+    s = [12345, 67890, 13579, 24680];
+}
+
+int next() {
+    int t = s[3];
+    t = t ^ (t << 11);
+    t = t ^ (t >> 8);
+    s[3] = s[2];
+    s[2] = s[1];
+    s[1] = s[0];
+    int x = t ^ s[0] ^ (s[0] >> 19);
+    s[0] = x;
+    return x + s[1];
+}
+
+int main() {
+    init();
+
+    int mode = 0;
+    int iter = 0;
+    while (iter < 6) {
+        int val = next();
+
+        switch (mode) {
+            case 0:
+                print(val);
+                break;
+            case 1:
+                int masked = val & 255;
+                print(masked as byte);
+                break;
+            case 2:
+                float fval = (val as float) / 4294967296.0;
+                print(fval);
+                break;
+        }
+        print("\n");
+
+        iter = iter + 1;
+        mode = mode + 1;
+        if (mode > 2) {
+            mode = 0;
+        }
+    }
+
+    return 0;
+}

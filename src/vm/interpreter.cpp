@@ -830,7 +830,17 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         // ── Struct (ADR-020: referans semantiği) ──────────────────────────
         case Opcode::STRUCT_NEW: {
             StructObject* obj = heap_.allocStruct(instr.intValue);
-            obj->fieldNames   = instr.fieldNames;
+            {
+                auto names = std::make_shared<std::vector<std::string>>(instr.fieldNames);
+                auto& reg = structFieldNamesRegistry_;
+                auto it = reg.find(instr.functionName);
+                if (it != reg.end()) {
+                    obj->fieldNames = it->second;
+                } else {
+                    reg[instr.functionName] = names;
+                    obj->fieldNames = names;
+                }
+            }
             callStack_.back().slots[instr.dest] = Value::fromRef(obj);
             break;
         }
@@ -857,10 +867,20 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         }
 
-        // ── Array (ADR-020: referans semantiği) ───────────────────────────
+        // ── Array (ADR-020: referans semantiği, #206: packed type-tagged) ──
         case Opcode::ARRAY_NEW: {
-            ArrayObject* arr = heap_.allocArray(instr.intValue);
-            arr->elements.resize(instr.intValue, Value::fromInt(0));
+            ArrayObject* arr = heap_.allocArray(instr.intValue, instr.arrayElemKind);
+            // Elemanları varsayılan değerle doldur (constructor reserve kullanır,
+            // resize yapmaz — #206: slice/push builtin'leri push_back ile çalışır)
+            switch (instr.arrayElemKind) {
+                case ArrayElemKind::Ref:     arr->elements.resize(instr.intValue, Value::fromInt(0)); break;
+                case ArrayElemKind::Byte:    arr->bytes.resize(instr.intValue, 0);  break;
+                case ArrayElemKind::Int:     arr->ints.resize(instr.intValue, 0);   break;
+                case ArrayElemKind::LongInt: arr->longs.resize(instr.intValue, 0);  break;
+                case ArrayElemKind::Float32: arr->f32s.resize(instr.intValue, 0.0f); break;
+                case ArrayElemKind::Float64: arr->f64s.resize(instr.intValue, 0.0);  break;
+                case ArrayElemKind::Decimal: arr->decimals.resize(instr.intValue);   break;
+            }
             frame.slots[instr.dest] = Value::fromRef(arr);
             break;
         }
@@ -871,14 +891,34 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             }
             auto* arr = (ArrayObject*)arrVal.ref;
             int idx = frame.slots[instr.right].intValue;
-            if (idx < 0 || idx >= (int)arr->elements.size()) {
+            // #206: elemKind'a göre doğru buffer'ın size'ını kontrol et
+            int len = 0;
+            switch (arr->elemKind) {
+                case ArrayElemKind::Ref:     len = (int)arr->elements.size(); break;
+                case ArrayElemKind::Byte:    len = (int)arr->bytes.size();    break;
+                case ArrayElemKind::Int:     len = (int)arr->ints.size();     break;
+                case ArrayElemKind::LongInt: len = (int)arr->longs.size();    break;
+                case ArrayElemKind::Float32: len = (int)arr->f32s.size();     break;
+                case ArrayElemKind::Float64: len = (int)arr->f64s.size();     break;
+                case ArrayElemKind::Decimal: len = (int)arr->decimals.size(); break;
+            }
+            if (idx < 0 || idx >= len) {
                 pendingThrow_ = makeErrorValue(
                     "array index out of bounds (index=" + std::to_string(idx) +
-                    ", length=" + std::to_string(arr->elements.size()) + ")", "E_OOB",
+                    ", length=" + std::to_string(len) + ")", "E_OOB",
                     instr.sourceLine, instr.sourceCol);
                 break;
             }
-            frame.slots[instr.dest] = arr->elements[idx];
+            // #206: elemKind'a göre doğru buffer'dan oku
+            switch (arr->elemKind) {
+                case ArrayElemKind::Ref:     frame.slots[instr.dest] = arr->elements[idx]; break;
+                case ArrayElemKind::Byte:    frame.slots[instr.dest] = Value::fromInt(arr->bytes[idx]); break;
+                case ArrayElemKind::Int:     frame.slots[instr.dest] = Value::fromInt(arr->ints[idx]); break;
+                case ArrayElemKind::LongInt: frame.slots[instr.dest] = Value::fromLongInt(arr->longs[idx]); break;
+                case ArrayElemKind::Float32: frame.slots[instr.dest] = Value::fromFloat32(arr->f32s[idx]); break;
+                case ArrayElemKind::Float64: frame.slots[instr.dest] = Value::fromFloat(arr->f64s[idx]); break;
+                case ArrayElemKind::Decimal: frame.slots[instr.dest] = Value::fromDecimal(arr->decimals[idx]); break;
+            }
             break;
         }
         case Opcode::ARRAY_SET: {
@@ -888,14 +928,35 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             }
             auto* arr = (ArrayObject*)arrVal.ref;
             int idx = frame.slots[instr.left].intValue;
-            if (idx < 0 || idx >= (int)arr->elements.size()) {
+            // #206: elemKind'a göre doğru buffer'ın size'ını kontrol et
+            int len = 0;
+            switch (arr->elemKind) {
+                case ArrayElemKind::Ref:     len = (int)arr->elements.size(); break;
+                case ArrayElemKind::Byte:    len = (int)arr->bytes.size();    break;
+                case ArrayElemKind::Int:     len = (int)arr->ints.size();     break;
+                case ArrayElemKind::LongInt: len = (int)arr->longs.size();    break;
+                case ArrayElemKind::Float32: len = (int)arr->f32s.size();     break;
+                case ArrayElemKind::Float64: len = (int)arr->f64s.size();     break;
+                case ArrayElemKind::Decimal: len = (int)arr->decimals.size(); break;
+            }
+            if (idx < 0 || idx >= len) {
                 pendingThrow_ = makeErrorValue(
                     "array index out of bounds (index=" + std::to_string(idx) +
-                    ", length=" + std::to_string(arr->elements.size()) + ")", "E_OOB",
+                    ", length=" + std::to_string(len) + ")", "E_OOB",
                     instr.sourceLine, instr.sourceCol);
                 break;
             }
-            arr->elements[idx] = frame.slots[instr.right];
+            // #206: elemKind'a göre doğru buffer'a yaz
+            const Value& val = frame.slots[instr.right];
+            switch (arr->elemKind) {
+                case ArrayElemKind::Ref:     arr->elements[idx] = val; break;
+                case ArrayElemKind::Byte:    arr->bytes[idx] = (uint8_t)val.intValue; break;
+                case ArrayElemKind::Int:     arr->ints[idx] = val.intValue; break;
+                case ArrayElemKind::LongInt: arr->longs[idx] = val.asI64(); break;
+                case ArrayElemKind::Float32: arr->f32s[idx] = (float)val.asDouble(); break;
+                case ArrayElemKind::Float64: arr->f64s[idx] = val.asDouble(); break;
+                case ArrayElemKind::Decimal: arr->decimals[idx] = val.decimalValue; break;
+            }
             break;
         }
         case Opcode::ARRAY_LEN: {
@@ -903,7 +964,18 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             if (arrVal.kind != ValueKind::Ref || !arrVal.ref)
                 throw std::runtime_error("not an array");
             auto* arr = (ArrayObject*)arrVal.ref;
-            frame.slots[instr.dest] = Value::fromInt((int)arr->elements.size());
+            // #206: elemKind'a göre doğru buffer'ın size'ını döndür
+            int len = 0;
+            switch (arr->elemKind) {
+                case ArrayElemKind::Ref:     len = (int)arr->elements.size(); break;
+                case ArrayElemKind::Byte:    len = (int)arr->bytes.size();    break;
+                case ArrayElemKind::Int:     len = (int)arr->ints.size();     break;
+                case ArrayElemKind::LongInt: len = (int)arr->longs.size();    break;
+                case ArrayElemKind::Float32: len = (int)arr->f32s.size();     break;
+                case ArrayElemKind::Float64: len = (int)arr->f64s.size();     break;
+                case ArrayElemKind::Decimal: len = (int)arr->decimals.size(); break;
+            }
+            frame.slots[instr.dest] = Value::fromInt(len);
             break;
         }
 
@@ -1332,7 +1404,35 @@ void Interpreter::executeHostFunction(const std::string&       name,
 //
 // Her handler: args[0] = receiver, args[1..] = diğer argümanlar.
 
-// Yardımcı: Value'dan ArrayObject* al
+// #206: array boyutunu elemKind'a gore dondur
+static int arraySize(ArrayObject* arr) {
+    switch (arr->elemKind) {
+        case ArrayElemKind::Ref:     return (int)arr->elements.size();
+        case ArrayElemKind::Byte:    return (int)arr->bytes.size();
+        case ArrayElemKind::Int:     return (int)arr->ints.size();
+        case ArrayElemKind::LongInt: return (int)arr->longs.size();
+        case ArrayElemKind::Float32: return (int)arr->f32s.size();
+        case ArrayElemKind::Float64: return (int)arr->f64s.size();
+        case ArrayElemKind::Decimal: return (int)arr->decimals.size();
+    }
+    return 0;
+}
+
+// #206: array'den eleman degerini elemKind'a gore oku
+static Value arrayGetValue(ArrayObject* arr, int idx) {
+    switch (arr->elemKind) {
+        case ArrayElemKind::Ref:     return arr->elements[idx];
+        case ArrayElemKind::Byte:    return Value::fromInt(arr->bytes[idx]);
+        case ArrayElemKind::Int:     return Value::fromInt(arr->ints[idx]);
+        case ArrayElemKind::LongInt: return Value::fromLongInt(arr->longs[idx]);
+        case ArrayElemKind::Float32: return Value::fromFloat32(arr->f32s[idx]);
+        case ArrayElemKind::Float64: return Value::fromFloat(arr->f64s[idx]);
+        case ArrayElemKind::Decimal: return Value::fromDecimal(arr->decimals[idx]);
+    }
+    return Value::fromInt(0);
+}
+
+// Yardimci: Value'dan ArrayObject* al
 static ArrayObject* asArray(const Value& v, const char* ctx) {
     if (v.kind != ValueKind::Ref || !v.ref || v.ref->type != ObjectType::Array)
         throw std::runtime_error(std::string(ctx) + " — expected array");
@@ -1361,10 +1461,11 @@ static bool valueEqual(const Value& a, const Value& b) {
 static std::string valueToJsonStr(const Value& v);
 static std::string structToJson(StructObject* obj) {
     std::string s = "{";
+    const auto& names = obj->fieldNames ? *obj->fieldNames : std::vector<std::string>();
     for (size_t i = 0; i < obj->fields.size(); ++i) {
         if (i) s += ",";
-        std::string key = (i < obj->fieldNames.size())
-                          ? obj->fieldNames[i]
+        std::string key = (i < names.size())
+                          ? names[i]
                           : ("field" + std::to_string(i));
         s += "\"" + key + "\":" + valueToJsonStr(obj->fields[i]);
     }
@@ -1397,12 +1498,32 @@ static std::string valueToJsonStr(const Value& v) {
             if (!v.ref) return "null";
             if (v.ref->type == ObjectType::Struct)
                 return structToJson(static_cast<StructObject*>(v.ref));
-            // Array içi JSON
+            // Array içi JSON (#206: elemKind'a göre doğru buffer'dan oku)
             auto* arr = static_cast<ArrayObject*>(v.ref);
             std::string s = "[";
-            for (size_t i = 0; i < arr->elements.size(); ++i) {
+            size_t arrLen = 0;
+            switch (arr->elemKind) {
+                case ArrayElemKind::Ref:     arrLen = arr->elements.size(); break;
+                case ArrayElemKind::Byte:    arrLen = arr->bytes.size();    break;
+                case ArrayElemKind::Int:     arrLen = arr->ints.size();     break;
+                case ArrayElemKind::LongInt: arrLen = arr->longs.size();    break;
+                case ArrayElemKind::Float32: arrLen = arr->f32s.size();     break;
+                case ArrayElemKind::Float64: arrLen = arr->f64s.size();     break;
+                case ArrayElemKind::Decimal: arrLen = arr->decimals.size(); break;
+            }
+            for (size_t i = 0; i < arrLen; ++i) {
                 if (i) s += ",";
-                s += valueToJsonStr(arr->elements[i]);
+                Value tmp;
+                switch (arr->elemKind) {
+                    case ArrayElemKind::Ref:     tmp = arr->elements[i]; break;
+                    case ArrayElemKind::Byte:    tmp = Value::fromInt(arr->bytes[i]); break;
+                    case ArrayElemKind::Int:     tmp = Value::fromInt(arr->ints[i]); break;
+                    case ArrayElemKind::LongInt: tmp = Value::fromLongInt(arr->longs[i]); break;
+                    case ArrayElemKind::Float32: tmp = Value::fromFloat32(arr->f32s[i]); break;
+                    case ArrayElemKind::Float64: tmp = Value::fromFloat(arr->f64s[i]); break;
+                    case ArrayElemKind::Decimal: tmp = Value::fromDecimal(arr->decimals[i]); break;
+                }
+                s += valueToJsonStr(tmp);
             }
             s += "]";
             return s;
@@ -1422,22 +1543,65 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
     // 0: E::length(E[]) -> int
     switch (runtimeId) {
     case 0: {
-        auto* arr = asArray(args[0], "length");
-        return Value::fromInt((int)arr->elements.size());
+        return Value::fromInt(arraySize(asArray(args[0], "length")));
     }
     // 1: E::push(E[], E) -> int   (indeks döner)
     case 1: {
         auto* arr = asArray(args[0], "push");
-        arr->elements.push_back(args[1]);
-        return Value::fromInt((int)arr->elements.size() - 1);
+        switch (arr->elemKind) {
+            case ArrayElemKind::Ref:
+                arr->elements.push_back(args[1]);
+                return Value::fromInt((int)arr->elements.size() - 1);
+            case ArrayElemKind::Byte:
+                arr->bytes.push_back((uint8_t)args[1].intValue);
+                return Value::fromInt((int)arr->bytes.size() - 1);
+            case ArrayElemKind::Int:
+                arr->ints.push_back(args[1].intValue);
+                return Value::fromInt((int)arr->ints.size() - 1);
+            case ArrayElemKind::LongInt:
+                arr->longs.push_back(args[1].asI64());
+                return Value::fromInt((int)arr->longs.size() - 1);
+            case ArrayElemKind::Float32:
+                arr->f32s.push_back((float)args[1].asDouble());
+                return Value::fromInt((int)arr->f32s.size() - 1);
+            case ArrayElemKind::Float64:
+                arr->f64s.push_back(args[1].asDouble());
+                return Value::fromInt((int)arr->f64s.size() - 1);
+            case ArrayElemKind::Decimal:
+                arr->decimals.push_back(args[1].decimalValue);
+                return Value::fromInt((int)arr->decimals.size() - 1);
+        }
+        return Value::fromInt(arraySize(arr) - 1);
     }
     // 2: E::pop(E[]) -> E
     case 2: {
         auto* arr = asArray(args[0], "pop");
-        if (arr->elements.empty())
+        if (arraySize(arr) == 0)
             throw std::runtime_error("pop on empty array");
-        Value v = arr->elements.back();
-        arr->elements.pop_back();
+        Value v;
+        switch (arr->elemKind) {
+            case ArrayElemKind::Ref: {
+                v = arr->elements.back(); arr->elements.pop_back(); break;
+            }
+            case ArrayElemKind::Byte: {
+                v = Value::fromInt(arr->bytes.back()); arr->bytes.pop_back(); break;
+            }
+            case ArrayElemKind::Int: {
+                v = Value::fromInt(arr->ints.back()); arr->ints.pop_back(); break;
+            }
+            case ArrayElemKind::LongInt: {
+                v = Value::fromLongInt(arr->longs.back()); arr->longs.pop_back(); break;
+            }
+            case ArrayElemKind::Float32: {
+                v = Value::fromFloat32(arr->f32s.back()); arr->f32s.pop_back(); break;
+            }
+            case ArrayElemKind::Float64: {
+                v = Value::fromFloat(arr->f64s.back()); arr->f64s.pop_back(); break;
+            }
+            case ArrayElemKind::Decimal: {
+                v = Value::fromDecimal(arr->decimals.back()); arr->decimals.pop_back(); break;
+            }
+        }
         return v;
     }
     // 3: E::insert(E[], int, E) -> int
@@ -1446,9 +1610,26 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
         if (args[1].kind != ValueKind::Int)
             throw std::runtime_error("insert — index must be int");
         int idx = args[1].intValue;
-        if (idx < 0 || idx > (int)arr->elements.size())
+        int sz = arraySize(arr);
+        if (idx < 0 || idx > sz)
             throw std::runtime_error("insert — index out of bounds");
-        arr->elements.insert(arr->elements.begin() + idx, args[2]);
+        const Value& val = args[2];
+        switch (arr->elemKind) {
+            case ArrayElemKind::Ref:
+                arr->elements.insert(arr->elements.begin() + idx, val); break;
+            case ArrayElemKind::Byte:
+                arr->bytes.insert(arr->bytes.begin() + idx, (uint8_t)val.intValue); break;
+            case ArrayElemKind::Int:
+                arr->ints.insert(arr->ints.begin() + idx, val.intValue); break;
+            case ArrayElemKind::LongInt:
+                arr->longs.insert(arr->longs.begin() + idx, val.asI64()); break;
+            case ArrayElemKind::Float32:
+                arr->f32s.insert(arr->f32s.begin() + idx, (float)val.asDouble()); break;
+            case ArrayElemKind::Float64:
+                arr->f64s.insert(arr->f64s.begin() + idx, val.asDouble()); break;
+            case ArrayElemKind::Decimal:
+                arr->decimals.insert(arr->decimals.begin() + idx, val.decimalValue); break;
+        }
         return Value::fromInt(idx);
     }
     // 4: E::remove(E[], int) -> E
@@ -1457,57 +1638,126 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
         if (args[1].kind != ValueKind::Int)
             throw std::runtime_error("remove — index must be int");
         int idx = args[1].intValue;
-        if (idx < 0 || idx >= (int)arr->elements.size())
+        int sz = arraySize(arr);
+        if (idx < 0 || idx >= sz)
             throw std::runtime_error("remove — index out of bounds");
-        Value v = arr->elements[idx];
-        arr->elements.erase(arr->elements.begin() + idx);
+        Value v;
+        switch (arr->elemKind) {
+            case ArrayElemKind::Ref: {
+                v = arr->elements[idx]; arr->elements.erase(arr->elements.begin() + idx); break;
+            }
+            case ArrayElemKind::Byte: {
+                v = Value::fromInt(arr->bytes[idx]); arr->bytes.erase(arr->bytes.begin() + idx); break;
+            }
+            case ArrayElemKind::Int: {
+                v = Value::fromInt(arr->ints[idx]); arr->ints.erase(arr->ints.begin() + idx); break;
+            }
+            case ArrayElemKind::LongInt: {
+                v = Value::fromLongInt(arr->longs[idx]); arr->longs.erase(arr->longs.begin() + idx); break;
+            }
+            case ArrayElemKind::Float32: {
+                v = Value::fromFloat32(arr->f32s[idx]); arr->f32s.erase(arr->f32s.begin() + idx); break;
+            }
+            case ArrayElemKind::Float64: {
+                v = Value::fromFloat(arr->f64s[idx]); arr->f64s.erase(arr->f64s.begin() + idx); break;
+            }
+            case ArrayElemKind::Decimal: {
+                v = Value::fromDecimal(arr->decimals[idx]); arr->decimals.erase(arr->decimals.begin() + idx); break;
+            }
+        }
         return v;
     }
     // 5: E::slice(E[], int, int) -> E[]   (yeni array)
     case 5: {
         auto* arr = asArray(args[0], "slice");
         int from = (args[1].kind == ValueKind::Int) ? args[1].intValue : 0;
-        int to   = (args[2].kind == ValueKind::Int) ? args[2].intValue : (int)arr->elements.size();
+        int to   = (args[2].kind == ValueKind::Int) ? args[2].intValue : arraySize(arr);
         if (from < 0) from = 0;
-        if (to > (int)arr->elements.size()) to = (int)arr->elements.size();
-        auto* dst = heap.allocArray(to - from);
-        for (int i = from; i < to; ++i)
-            dst->elements.push_back(arr->elements[i]);
+        if (to > arraySize(arr)) to = arraySize(arr);
+        auto* dst = heap.allocArray(to - from, arr->elemKind);
+        for (int i = from; i < to; ++i) {
+            switch (arr->elemKind) {
+                case ArrayElemKind::Ref:     dst->elements.push_back(arr->elements[i]); break;
+                case ArrayElemKind::Byte:    dst->bytes.push_back(arr->bytes[i]); break;
+                case ArrayElemKind::Int:     dst->ints.push_back(arr->ints[i]); break;
+                case ArrayElemKind::LongInt: dst->longs.push_back(arr->longs[i]); break;
+                case ArrayElemKind::Float32: dst->f32s.push_back(arr->f32s[i]); break;
+                case ArrayElemKind::Float64: dst->f64s.push_back(arr->f64s[i]); break;
+                case ArrayElemKind::Decimal: dst->decimals.push_back(arr->decimals[i]); break;
+            }
+        }
         return Value::fromRef(dst);
     }
     // 6: E::reverse(E[]) -> E[]   (yerinde; aynı referansı döner)
     case 6: {
         auto* arr = asArray(args[0], "reverse");
-        std::reverse(arr->elements.begin(), arr->elements.end());
+        switch (arr->elemKind) {
+            case ArrayElemKind::Ref:     std::reverse(arr->elements.begin(), arr->elements.end()); break;
+            case ArrayElemKind::Byte:    std::reverse(arr->bytes.begin(), arr->bytes.end()); break;
+            case ArrayElemKind::Int:     std::reverse(arr->ints.begin(), arr->ints.end()); break;
+            case ArrayElemKind::LongInt: std::reverse(arr->longs.begin(), arr->longs.end()); break;
+            case ArrayElemKind::Float32: std::reverse(arr->f32s.begin(), arr->f32s.end()); break;
+            case ArrayElemKind::Float64: std::reverse(arr->f64s.begin(), arr->f64s.end()); break;
+            case ArrayElemKind::Decimal: std::reverse(arr->decimals.begin(), arr->decimals.end()); break;
+        }
         return args[0]; // aynı referans
     }
     // 7: E::concat(E[], E[]) -> E[]   (yeni array)
     case 7: {
         auto* a = asArray(args[0], "concat");
         auto* b = asArray(args[1], "concat");
-        auto* dst = heap.allocArray((int)(a->elements.size() + b->elements.size()));
-        for (auto& v : a->elements) dst->elements.push_back(v);
-        for (auto& v : b->elements) dst->elements.push_back(v);
+        ArrayElemKind ek = a->elemKind;
+        if (b->elemKind != ek)
+            throw std::runtime_error("concat: element kind mismatch");
+        int total = arraySize(a) + arraySize(b);
+        auto* dst = heap.allocArray(total, ek);
+        auto copyElem = [&](ArrayObject* src, int idx) {
+            switch (ek) {
+                case ArrayElemKind::Ref:     dst->elements.push_back(src->elements[idx]); break;
+                case ArrayElemKind::Byte:    dst->bytes.push_back(src->bytes[idx]); break;
+                case ArrayElemKind::Int:     dst->ints.push_back(src->ints[idx]); break;
+                case ArrayElemKind::LongInt: dst->longs.push_back(src->longs[idx]); break;
+                case ArrayElemKind::Float32: dst->f32s.push_back(src->f32s[idx]); break;
+                case ArrayElemKind::Float64: dst->f64s.push_back(src->f64s[idx]); break;
+                case ArrayElemKind::Decimal: dst->decimals.push_back(src->decimals[idx]); break;
+            }
+        };
+        for (int i = 0; i < arraySize(a); ++i) copyElem(a, i);
+        for (int i = 0; i < arraySize(b); ++i) copyElem(b, i);
         return Value::fromRef(dst);
     }
     // 8: E::contains(E[], E) -> bool
     case 8: {
         auto* arr = asArray(args[0], "contains");
-        for (auto& v : arr->elements)
+        int n = arraySize(arr);
+        for (int i = 0; i < n; ++i) {
+            Value v = arrayGetValue(arr, i);
             if (valueEqual(v, args[1])) return Value::fromInt(1);
+        }
         return Value::fromInt(0);
     }
     // 9: E::indexOf(E[], E) -> int?
     case 9: {
         auto* arr = asArray(args[0], "indexOf");
-        for (int i = 0; i < (int)arr->elements.size(); ++i)
-            if (valueEqual(arr->elements[i], args[1])) return Value::fromInt(i);
+        int n = arraySize(arr);
+        for (int i = 0; i < n; ++i) {
+            Value v = arrayGetValue(arr, i);
+            if (valueEqual(v, args[1])) return Value::fromInt(i);
+        }
         return Value::null();
     }
     // 10: E::clear(E[]) -> void
     case 10: {
         auto* arr = asArray(args[0], "clear");
-        arr->elements.clear();
+        switch (arr->elemKind) {
+            case ArrayElemKind::Ref:     arr->elements.clear(); break;
+            case ArrayElemKind::Byte:    arr->bytes.clear();    break;
+            case ArrayElemKind::Int:     arr->ints.clear();     break;
+            case ArrayElemKind::LongInt: arr->longs.clear();    break;
+            case ArrayElemKind::Float32: arr->f32s.clear();     break;
+            case ArrayElemKind::Float64: arr->f64s.clear();     break;
+            case ArrayElemKind::Decimal: arr->decimals.clear(); break;
+        }
         return Value::fromInt(0); // void — caller dest=-1 olduğundan kullanılmaz
     }
 
@@ -1664,10 +1914,11 @@ Value Interpreter::dispatchBuiltinMethod(int                       runtimeId,
             args[0].ref->type == ObjectType::Struct) {
             auto* obj = static_cast<StructObject*>(args[0].ref);
             std::string s = "struct{";
+            const auto& names = obj->fieldNames ? *obj->fieldNames : std::vector<std::string>();
             for (size_t i = 0; i < obj->fields.size(); ++i) {
                 if (i) s += ", ";
-                std::string key = (i < obj->fieldNames.size())
-                                  ? obj->fieldNames[i]
+                std::string key = (i < names.size())
+                                  ? names[i]
                                   : ("field" + std::to_string(i));
                 s += key + "=" + obj->fields[i].toString();
             }

@@ -1,11 +1,34 @@
 # SQ-090-IR-BASELINE — Validation Report
 
-**Revision:** Amendment 02  
-**Validation date:** 2026-07-26  
-**Rol:** İzole Hafif Muhalif Testçi  
-**Task ID:** SQ-090-IR-BASELINE  
-**Hedef sürüm:** 0.9.0  
+**Revision:** Amendment 03 — Evidence-Completeness Revalidation
+**Validation date:** 2026-07-26
+**Rol:** İzole Hafif Muhalif Testçi (yeni, bağımsız oturum)
+**Task ID:** SQ-090-IR-BASELINE
+**Hedef sürüm:** 0.9.0
 **Mod:** VALIDATION-ONLY
+
+---
+
+## 0. Supersession — önceki deneme neden geçersiz
+
+Bu dosyanın önceki içeriği (Amendment 02 sonrası ilk ölçüm denemesi) Başmimar
+Günlüğü #003'te (GitHub #101,
+https://github.com/saqutlang/saqut/issues/101#issuecomment-5083670628)
+**provisional** ilan edilmiş ve kabul edilmemiştir; gerekçe:
+
+1. IRB-1/2/4/5/6/7/8/9 çağrılarının çoğunda exact `.cmd` kaydı yoktu.
+2. IRB-5–9'un birçok çağrısında raw `.exit` kaydı yoktu.
+3. Başlangıç beş-yol status/hash kaydı vardı, zorunlu bitiş karşılaştırması
+   yoktu.
+4. IRB-3, `E_SYMBOL_NOT_IMPORTED` ile semantic kapıda durmuştu; bu, "aynı
+   adın çakışması doğru çözüldü" iddiasıyla aynı şey değildir ve önceki
+   raporda bu ayrım gizlenmişti.
+
+Önceki denemenin ham `evidence/` dosyaları (kök seviyesinde) **silinmedi,
+üzerine yazılmadı**; bu revalidasyonun tüm yeni kanıtı
+`tasks/SQ-090-IR-BASELINE/evidence/revalidation-01/` altında, sıfırdan
+yeniden ölçülerek üretildi (R.1–R.11). Önceki denemenin `.stdout`/`.stderr`
+değerleri bu raporda hiçbir yerde referans gösterilmemiş veya kopyalanmamıştır.
 
 ---
 
@@ -13,240 +36,348 @@
 
 | Alan | Değer |
 |---|---|
-| HEAD | `7f871b75e917725dcdf46111fab88fb3be5663f2` |
+| HEAD | `eabc01ae44c04c211edae90ca69a6e10c4b95a97` |
 | Branch | `0.9.0` |
-| Binary path | `/tmp/saqut-sq090-ir-baseline-187801/build/saqut` |
+| Binary path | `/tmp/saqut-sq090-ir-baseline-NdIQWO/build/saqut` |
 | Binary boyut | 5,498,984 bytes |
-| Binary SHA-256 | `98c0acdedfb9eddac2c96c8b15aeadc37e977c725746c8bf8bd5a989580ee5a2` |
-| Build türü | Release (out-of-tree, fresh build) |
-| Build exit | 0 (configure: 0, build: 0) |
-| Derleyici | g++ 16.1.1 20260625 |
-| CMake | 4.3.4 |
+| Build türü | Release (out-of-tree, fresh build, `$WORK` = mktemp) |
+| Configure exit | 0 |
+| Build exit | 0 |
 
-Tüm ayrıntılar: `tasks/SQ-090-IR-BASELINE/evidence/00-provenance.md`
+Tüm ayrıntılar (tam HEAD hash, `git status --short` tam çıktısı, beş-yol diff
+stat/hash, 4 aktif kaynak dosyanın SHA-256'sı, toolchain sürümleri):
+`evidence/revalidation-01/00-provenance.md`, `01-configure.*`, `02-build.*`,
+`03-binary-provenance.txt`.
+
+Not: repository dirty idi (root `AGENTS.md`, `CLAUDE.md`, çeşitli `docs/`
+ve `src/cli/commands/{run,check,ir}.hpp`, `src/cli/exit_codes.hpp` gibi
+görevle ilgili aktif kaynak değişiklikleri dahil). Contract §1 gereği bu
+fresh-clone yerine mevcut çalışma ağacından build edildi; dirty durum görevle
+ilgisiz sayılmadı, tam `git status --short` çıktısı `00-provenance.md`'de
+kayıtlıdır.
+
+### Fixture doğrulama (§3)
+
+`examples/merhaba.sqt`, `examples/fibonacci.sqt`,
+`tests/golden/numeric/widths.sqt` (+ SHA-256) tam içerikleriyle
+`evidence/revalidation-01/04-syntax-verification.md`'ye alıntılandı.
+Doğrulanan temel form: `int main() { ... }` — dönüş tipi önce, `func`/`:`
+biçimi kullanılmıyor, gövde `{}` bloğu.
 
 ---
 
-## 2. Dondurulmuş Test Matrisi
+## 2. Dondurulmuş Test Matrisi ve Sonuçlar
 
 | ID | Fixture | Contract maddesi | Sonuç |
 |---|---|---|---|
 | IRB-1 | `examples/fibonacci.sqt` | Determinizm — üç tekrar byte-identical | **GÖZLENDİ** |
-| IRB-2 | `examples/fibonacci.sqt` | Dump instr count == profile instr count | **GÖZLENDİ** |
-| IRB-3 | `$WORK/fixtures/irb3/` (4 dosya) | Çapraz-modül aynı adlı fonksiyon | **GÖZLENDİ** |
-| IRB-4 | `$WORK/fixtures/irb4/main.sqt` | Void fallthrough | **GÖZLENDİ** |
-| IRB-5 control | `$WORK/fixtures/irb5/control.sqt` | LOAD_CONST operand görünür | **GÖZLENDİ** |
-| IRB-5 long | `$WORK/fixtures/irb5/long_load.sqt` | LOAD_LONG operand görünür | **GÖZLENMEDİ** |
-| IRB-5 float | `$WORK/fixtures/irb5/float_load.sqt` | LOAD_FLOAT32 operand görünür | **GÖZLENMEDİ** |
-| IRB-5 cap | `$WORK/fixtures/irb5/cap.sqt` | requiredCap görünür | **GÖZLENMEDİ** |
-| IRB-6 | `$WORK/fixtures/irb6/globals.sqt` | Main'siz global initializer | **GÖZLENDİ** |
-| IRB-7 | `$WORK/fixtures/irb5/cap.sqt` | `--capabilities` modu | **GÖZLENDİ** |
-| IRB-8 | `examples/fibonacci.sqt` | ANSI (redirect) | **GÖZLENDİ** |
-| IRB-9 | CTest | `ir_opt` golden testler | **GÖZLENDİ** |
+| IRB-2 | `examples/fibonacci.sqt` | Dump instr count == profile `ir-gen`/`instr` sayısı | **GÖZLENDİ** |
+| IRB-3.1–3 | `$WORK/fixtures/irb3/single-main.sqt` | Pozitif kontrol temiz geçer | **GÖZLENDİ** (ön koşul) |
+| IRB-3.2–3 (semantic gate) | `$WORK/fixtures/irb3/main.sqt` | `check` reddediyor mu | **GÖZLENDİ** — reddedildi, exit≠0 |
+| IRB-3.2–3 (diagnostic kategorisi, R.9) | aynı | Same-name collision mi, başka name-resolution mu | **GÖZLENDİ** — `E_SYMBOL_NOT_IMPORTED`, same-name-collision **DEĞİL** |
+| IRB-3.4 | `main.sqt` ir/run | (semantic kapıda durdu, adım 4'e ulaşılmadı) | Semantic kapı exit 65 ile durduğu için contract gereği ir/run adımları yürütülmedi; bu ayrı bir IRB sonucu değildir |
+| IRB-4 (runtime) | `$WORK/fixtures/irb4/main.sqt` | Void fallthrough — runtime davranışı ve başarılı çıktı | **GÖZLENDİ** — `run` exit 0, stdout `"onceafter"` |
+| IRB-4 (dump) | `$WORK/fixtures/irb4/main.sqt` | Void fallthrough — son instr gerçek `RETURN` mi | **GÖZLENMEDİ** — son instr `RETURN` değil (CALLHOST) |
+| IRB-5 control (LOAD_CONST) | `$WORK/fixtures/irb5/loadconst.sqt` | Sabit değer dump'ta görünür mü | **GÖZLENDİ** — `42` görünür |
+| IRB-5 LOAD_LONG | `$WORK/fixtures/irb5/loadlong.sqt` | Sabit değer dump'ta görünür mü | **GÖZLENMEDİ** — operand alanı tamamen boş |
+| IRB-5 LOAD_FLOAT32 | `$WORK/fixtures/irb5/loadfloat32.sqt` | Sabit değer dump'ta görünür mü | **GÖZLENMEDİ** — operand alanı tamamen boş |
+| IRB-5 requiredCap | `$WORK/fixtures/irb5/cap.sqt` | `[cap: ...]` benzeri işaret instr satırında görünür mü | **GÖZLENMEDİ** — instr satırında capability işareti yok |
+| IRB-6a | `$WORK/fixtures/irb6/globals.sqt` | GLOBALS bölümü var mı | **GÖZLENDİ** — `GLOBALS (1)` başlığı dump'ta mevcut |
+| IRB-6b | `$WORK/fixtures/irb6/globals.sqt` | `counter` adı dump'ta görünüyor mu | **GÖZLENDİ** — `global[0] = counter` satırı mevcut |
+| IRB-6c | `$WORK/fixtures/irb6/globals.sqt` | `counter`'ı `7` ile bağlayan STORE_GLOBAL/eşdeğer instruction | **GÖZLENMEDİ** — dump'ta `counter=7` ilişkisini kuran instruction yok |
+| IRB-7 | `$WORK/fixtures/irb5/cap.sqt` | `--capabilities` özet mi basıyor, instr dump kayboluyor mu | **GÖZLENDİ** — `--capabilities` yalnız `capabilities: fs` özetini basıyor (1 satır), normal dump (9 satır) kayboluyor; exit her ikisinde de 0 |
+| IRB-8 | `examples/fibonacci.sqt` (redirect) | stdout/stderr'de CSI (`1b5b`) var mı | **GÖZLENDİ** — stdout'ta 411 CSI dizisi, stderr'de 0 |
+| IRB-9 | tracked golden `ir_opt` testleri | tam 2 test var mı, ikisi de geçiyor mu | **GÖZLENDİ** — tam 2 test bulundu (`golden_opt_dce_ir_opt`, `golden_opt_folding_ir_opt`), anchored regex ile ikisi de Passed |
+
+Hiçbir madde `BLOCKED` değildir; manifest'te `files_present=false` satırı
+yoktur (bkz. §5).
 
 ---
 
-## 3. Exact Komutlar (komut başına evidence referansı)
-
-### IRB-1
-```bash
-"$SAQUT" ir "$REPO_ROOT/examples/fibonacci.sqt"  # üç kez
-```
-Evidence: `IRB-1-run{1,2,3}.{stdout,stderr,exit}`
-
-### IRB-2
-```bash
-"$SAQUT" ir "$REPO_ROOT/examples/fibonacci.sqt"
-"$SAQUT" run --profile "$REPO_ROOT/examples/fibonacci.sqt"
-```
-Evidence: `IRB-2-dump-raw.{stdout,stderr,exit}`, `IRB-2-dump-clean.stdout`, `IRB-2-instruction-lines.txt`, `IRB-2-profile.{stdout,stderr,exit}`
-
-### IRB-3
-```bash
-cd "$WORK/fixtures/irb3" && "$SAQUT" check single-main.sqt
-cd "$WORK/fixtures/irb3" && "$SAQUT" ir single-main.sqt
-cd "$WORK/fixtures/irb3" && "$SAQUT" run single-main.sqt
-cd "$WORK/fixtures/irb3" && "$SAQUT" check main.sqt
-```
-Evidence: `IRB-3-pos-{1,2,3}.{stdout,stderr,exit}`, `IRB-3-pos-{1,2,3}-cmd.md`, `IRB-3-main-check.{stdout,stderr,exit}`, `IRB-3-main-check-cmd.md`
-
-### IRB-4
-```bash
-"$SAQUT" check "$WORK/fixtures/irb4/main.sqt"
-"$SAQUT" ir "$WORK/fixtures/irb4/main.sqt"
-"$SAQUT" run "$WORK/fixtures/irb4/main.sqt"
-```
-Evidence: `IRB-4-check.{stdout,stderr,exit}`, `IRB-4-ir-raw.{stdout,stderr,exit}`, `IRB-4-run.{stdout,stderr,exit}`, `IRB-4-instruction-lines.txt`
-
-### IRB-5
-```bash
-"$SAQUT" check "$WORK/fixtures/irb5/control.sqt" && "$SAQUT" ir ...
-"$SAQUT" check "$WORK/fixtures/irb5/long_load.sqt" && "$SAQUT" ir ...
-"$SAQUT" check "$WORK/fixtures/irb5/float_load.sqt" && "$SAQUT" ir ...
-"$SAQUT" check --allow-fs "$WORK/fixtures/irb5/cap.sqt" && "$SAQUT" ir --allow-fs ...
-```
-Evidence: `IRB-5-ctrl-*`, `IRB-5-long-*`, `IRB-5-float-*`, `IRB-5-cap-*` içindeki `.{stdout,stderr,exit}` ve `-clean.stdout`
-
-### IRB-6
-```bash
-"$SAQUT" ir "$WORK/fixtures/irb6/globals.sqt"
-"$SAQUT" run "$WORK/fixtures/irb6/globals.sqt"
-```
-Evidence: `IRB-6-ir-raw.{stdout,stderr,exit}`, `IRB-6-run.{stdout,stderr,exit}`
-
-### IRB-7
-```bash
-"$SAQUT" ir --allow-fs "$WORK/fixtures/irb5/cap.sqt"
-"$SAQUT" ir --allow-fs --capabilities "$WORK/fixtures/irb5/cap.sqt"
-```
-Evidence: `IRB-7-ir-normal.{stdout,stderr}`, `IRB-7-ir-capabilities.{stdout,stderr}`
-
-### IRB-8
-```bash
-"$SAQUT" ir "$REPO_ROOT/examples/fibonacci.sqt" > "$EVIDENCE_DIR/irb8-stdout.raw" 2>"$EVIDENCE_DIR/irb8-stderr.raw"
-```
-Evidence: `irb8-stdout.raw`, `irb8-stderr.raw`, `irb8-stdout.hex`, `irb8-stderr.hex`
-
-### IRB-9
-```bash
-ctest --test-dir "$WORK/build" -N
-ctest --test-dir "$WORK/build" -R '^golden_opt_dce_ir_opt$' --output-on-failure
-ctest --test-dir "$WORK/build" -R '^golden_opt_folding_ir_opt$' --output-on-failure
-```
-Evidence: `irb9-inventory.{stdout,stderr}`, `irb9-test1.{stdout,stderr}`, `irb9-test2.{stdout,stderr}`
-
----
-
-## 4. Her Vaka İçin Expected / Actual / Exit
+## 3. Ham bulgu ayrıntıları
 
 ### IRB-1 — Determinizm
-| | Run 1 | Run 2 | Run 3 |
-|---|---|---|---|
-| Exit | 0 | 0 | 0 |
-| stdout SHA-256 | `572d3d08...` | `572d3d08...` | `572d3d08...` |
-| stderr SHA-256 | `e3b0c442...` | `e3b0c442...` | `e3b0c442...` |
 
-**Sonuç: GÖZLENDİ** — Üç çalıştırma byte-identical sonuç üretti.
+Üç ardışık `saqut ir examples/fibonacci.sqt` çalıştırması: stdout SHA-256 üçünde
+`572d3d08...67fb48b`, stderr SHA-256 üçünde `e3b0c442...b7852b855` (boş
+stderr). **GÖZLENDİ — bu binary/ortam ve bu exact kaynak için üç çalıştırma
+byte-identical sonuç üretti.** Genel determinizm iddiası yapılmamıştır.
 
 ### IRB-2 — Instruction sayısı
-| Ölçüm | Değer |
-|---|---|
-| Dump instruction satırı sayısı | 32 |
-| Profile `ir-gen` instr sayısı | 32 |
-| Eşitlik | ✅ birebir eşit |
 
-**Sonuç: GÖZLENDİ** — 32 == 32.
+`saqut ir examples/fibonacci.sqt` dump'ında §4 regex yöntemiyle eşleşen
+satır sayısı: **32**. `saqut run --profile examples/fibonacci.sqt`
+çıktısındaki `ir-gen` satırı: `ir-gen  32 instr  0.026 ms`. İki sayı eşit →
+**GÖZLENDİ**.
 
 ### IRB-3 — Çapraz-modül aynı adlı fonksiyon
-**Pozitif kontrol (single-main.sqt):** `check` exit 0, `ir` exit 0, `run` exit 0, stdout `6` (5+1).
-**Asıl senaryo (main.sqt):** `check` exit 65, diagnostic `E_SYMBOL_NOT_IMPORTED`:
-```
-/tmp/.../fixtures/irb3/b.sqt:6:12: error [E_SYMBOL_NOT_IMPORTED]: 'shared' is from another module and must be imported explicitly
-```
-`shared` çakışması semantic kapıda diagnostic üretti.
 
-**Sonuç: GÖZLENDİ** — Semantic kapıda diagnostic üretildi.
+Pozitif kontrol (`single-main.sqt`, yalnız `a.sqt` import edilir): `check`,
+`ir`, `run` üçü de exit 0; `run` stdout `6` (doğru: `shared(5)=5+1=6`).
+**GÖZLENDİ — ön koşul temiz.**
+
+`main.sqt` (`a.sqt` ve `b.sqt` her ikisi de `shared` tanımlar, `main.sqt`
+`fromA`/`fromB` import eder) üzerinde `check main.sqt`: **exit 65**,
+diagnostic:
+
+```json
+{
+  "code": "E_SYMBOL_NOT_IMPORTED",
+  "level": "error",
+  "location": {"file": ".../b.sqt", "line": 6, "column": 12},
+  "message": "'shared' is from another module and must be imported explicitly"
+}
+```
+
+Contract §3.3 gereği IRB-3 burada durur (reddedildi, exit≠0).
+
+**R.9 — iki ayrı soru, ayrı cevap:**
+
+1. *Semantic kapı IR üretimini engelledi mi?* Evet — `check` exit 65 ile
+   reddetti, IR/run adımına ulaşılmadı.
+2. *Diagnostic gerçekten "aynı ad çakışması" mı açıkladı, yoksa başka bir
+   name-resolution davranışı mı?* **Başka bir name-resolution davranışı** —
+   `E_SYMBOL_NOT_IMPORTED`, `b.sqt` içindeki `shared` fonksiyonunun
+   `fromB()` gövdesinden **import edilmeden** çağrılmasına işaret ediyor
+   (mesaj: "'shared' is from another module and must be imported
+   explicitly"). Bu, iki modülün aynı adı tanımlamasının bir "çakışma"
+   diagnostic'i değildir; `b.sqt` kendi tanımladığı `shared`'ı kendi
+   içinde çağırırken bile modül-dışı-isim kuralına takılıyor gibi
+   görünüyor. "Semantic kapıda reddedildi, dolayısıyla çakışma doğru ele
+   alınıyor" çıkarımı **yapılmamıştır** — bu ayrı, gizlenmemiş bir bulgu
+   olarak kaydedilmiştir. Kesin kök neden (`b.sqt`'nin kendi
+   fonksiyonunu çağırma bağlamı vs. isim çözümleme sırası) bu görevin
+   kapsamı dışındadır; yalnız gözlenen diagnostic metni ve kategorisi
+   raporlanmıştır.
 
 ### IRB-4 — Void fallthrough
-| Ölçüm | Değer |
-|---|---|
-| `check` exit | 0 |
-| `sideEffect` son instruction | `CALLHOST print(s0)` (RETURN değil) |
-| `run` exit | 0 |
-| `run` stdout | `onceafter` |
 
-**Sonuç: GÖZLENDİ** — Void fonksiyon `sideEffect`'in son instruction'ı RETURN değildir; fallthrough mevcuttur.
+İki ayrı olgu:
+
+**Olgu 1 — Runtime davranışı:** `run main.sqt` exit 0, stdout `"onceafter"`
+(satır sonu ayracı olmadan birleşik), stderr boş. Program void fonksiyonun
+sonuna düşerek normal tamamlandı. → **GÖZLENDİ** — void fallthrough davranışı
+çalışıyor ve başarılı çıktı üretiyor.
+
+**Olgu 2 — Instruction dump'ta RETURN:** `sideEffect()` gövdesinin IR dump'ı:
+
+```
+NAME=sideEffect PARAMS=0 SLOTS=1
+    0  LOAD_STRING     s0 = "once"
+    1  CALLHOST        print(s0)
+```
+
+Son instruction `CALLHOST print(s0)`'dır; **gerçek bir `RETURN` (veya
+eşdeğeri) değildir**. → **GÖZLENMEDİ** (hipotezin tersi: son instr RETURN
+değil).
+
+"RETURN eklenmeli" gibi bir öneri yapılmamıştır — yalnız mevcut davranış
+kaydedilmiştir.
 
 ### IRB-5 — Görünmeyen executable operandlar
 
-| Alt madde | check exit | IR exit | Operand görünür? | Gözlem |
-|---|---|---|---|---|
-| Control (LOAD_CONST) | 0 | 0 | **Evet** `s0 = 42` | LOAD_CONST operand olarak `42` görünür |
-| LOAD_LONG (longint) | 0 | 0 | **Hayır** | `LOAD_LONG` var ama `4200000000` sabiti görünmez |
-| LOAD_FLOAT32 (float) | 0 | 0 | **Hayır** | `LOAD_FLOAT32` var ama `1.5` sabiti görünmez |
-| Capability (requiredCap) | 0 | 0 | **Hayır** | `CALLHOST __ffi__(s0)` dump'ta `[cap: ...]` eki görünmez |
+**Kontrol grubu (LOAD_CONST):** `saqut ir loadconst.sqt` dump'ında
+`0  LOAD_CONST      s0 = 42` — değer görünür. **GÖZLENDİ.**
 
-**Kontrol grubu: GÖZLENDİ** — LOAD_CONST operandı görünür.
-**LOAD_LONG: GÖZLENMEDİ** — `4200000000` sabit değeri dump satırında görünmez.
-**LOAD_FLOAT32: GÖZLENMEDİ** — `1.5` sabit değeri dump satırında görünmez.
-**requiredCap: GÖZLENMEDİ** — capability bilgisi dump'ta görünmez.
+**LOAD_LONG:** `check loadlong.sqt` exit 0 (widths.sqt kanıtı doğrulandığı
+gibi `longint` kabul edildi). `ir` dump'ı:
 
-(Hiçbir gözlem düzeltilmez; ham veridir.)
+```
+NAME=main PARAMS=0 SLOTS=2
+    0  LOAD_LONG
+    1  CALLHOST        print(s0)
+```
+
+Satırda **ne hedef slot ne de `4200000000` sabiti görünür** — opcode adından
+sonra tamamen boş. → **GÖZLENMEDİ** (hipotezin tersi: operand görünmüyor;
+beklenenden de eksik — hedef slot bile yok).
+
+**LOAD_FLOAT32:** `check loadfloat32.sqt` exit 0. `ir` dump'ı:
+
+```
+NAME=main PARAMS=0 SLOTS=2
+    0  LOAD_FLOAT32
+    1  CALLHOST        print(s0)
+```
+
+Aynı durum: hedef slot ve `1.5` sabiti satırda yok. → **GÖZLENMEDİ**.
+
+**requiredCap:** `check --allow-fs cap.sqt` exit 0, diagnostic yok.
+`ir --allow-fs cap.sqt` dump'ı:
+
+```
+NAME=main PARAMS=0 SLOTS=3
+    0  LOAD_STRING     s0 = "/tmp/saqut-ir-baseline-never-created"
+    1  CALLHOST        __ffi__(s0)
+    2  LOAD_CONST      s2 = 0
+    3  RETURN          return s2
+```
+
+`CALLHOST __ffi__(s0)` satırında capability bilgisine dair bir ek
+(`[cap: ...]` veya eşdeğeri) **yoktur**. → **GÖZLENMEDİ**.
 
 ### IRB-6 — Main'siz global initializer
-| Ölçüm | Değer |
-|---|---|
-| `ir` exit | 0 |
-| GLOBALS bölümü | Var: `GLOBALS (1)`, `global[0] = counter` |
-| STORE_GLOBAL instruction | Yok (fonksiyon gövdesi olmadığı için) |
-| `run` exit | 70 |
-| `run` stderr | `runtime error: 'main' function not found` |
 
-**Sonuç: GÖZLENDİ** — GLOBALS bölümü mevcut, `counter` adı görünüyor. `run` davranışı raw veridir (beklenti değil).
+Üç ayrı bulgu:
+
+**1. GLOBALS bölümü:** `ir globals.sqt` dump'ında `GLOBALS (1)` başlığı
+ve bölüm yapısı mevcut. → **GÖZLENDİ**.
+
+**2. `counter` adı:** Aynı dump'ta `global[0] = counter` satırı ile
+değişken adı görünüyor. → **GÖZLENDİ**.
+
+**3. `counter`'ı `7` ile bağlayan instruction:** `STORE_GLOBAL` (veya
+eşdeğeri) instruction **dump'ta hiçbir yerde yok** — fonksiyon gövdesi
+bile yok (yalnız `GLOBALS` bölümü var, `main` olmadığı için instruction
+listesi boş). Sabit değer `7` ile `counter` arasında görünür bir
+instruction-level bağlantı gözlenmedi. → **GÖZLENMEDİ**.
+
+```
+GLOBALS (1)
+global[0] = counter
+
+END
+```
+
+`run globals.sqt`: exit 70, stderr `runtime error: 'main' function not
+found`. Bu ham veridir, kabul kriteri değildir (SQ-090-RUN-ENTRYPOINT
+kapsamı).
 
 ### IRB-7 — Capabilities modu
-| Ölçüm | Değer |
-|---|---|
-| `--allow-fs` (normal) exit | 0, tam instruction dump |
-| `--allow-fs --capabilities` exit | 0, yalnız `capabilities: fs` |
-| Instruction dump kaybolur mu? | Evet, `--capabilities` modunda kaybolur |
-| Exit code aynı mı? | Evet, her ikisi de 0 |
 
-**Sonuç: GÖZLENDİ** — `--capabilities` modu özet satır basar, instruction dump'ı kaybolur.
+`ir --allow-fs cap.sqt` (normal, madde 1): stdout 9 satır — tam instruction
+dump'ı basılıyor (yukarıdaki IRB-5 requiredCap dump'ıyla aynı).
 
-### IRB-8 — ANSI
-| Kanal | `1b5b` (ESC+[) sayısı |
-|---|---|
-| stdout (redirect) | 411 |
-| stderr (redirect) | 0 |
+`ir --allow-fs --capabilities cap.sqt` (madde 2): stdout **1 satır**:
+`capabilities: fs`. Instruction dump'ı bu modda **kayboluyor**.
 
-**Sonuç: GÖZLENDİ** — Yönlendirilmiş dosyada stdout'ta 411, stderr'de 0 ANSI CSI dizisi tespit edildi.
+Exit her iki modda da 0. Normal dump'ta (madde 1) instruction-seviyesi
+capability bilgisi zaten görünmüyordu (IRB-5 requiredCap bulgusu). →
+**GÖZLENDİ** — `--capabilities` yalnız özet basıyor, normal dump'ı
+bastırıyor.
+
+### IRB-8 — ANSI ve yönlendirme
+
+`saqut ir examples/fibonacci.sqt > irb8-stdout.raw 2> irb8-stderr.raw`.
+Hex-dize (`1b5b`) sayımı: **stdout'ta 411**, **stderr'de 0**. → **GÖZLENDİ**
+— dosyaya yönlendirilmiş stdout ham baytlarında CSI dizileri var (terminal
+olmayan hedefe rağmen renklendirme baytları yazılıyor); stderr'de yok.
+Terminal görünümü hakkında bir çıkarım yapılmamıştır.
 
 ### IRB-9 — Mevcut tracked IR testleri
-| Test | Anchored regex | Exit | Sonuç |
-|---|---|---|---|
-| `golden_opt_dce_ir_opt` | `^golden_opt_dce_ir_opt$` | 0 | Passed |
-| `golden_opt_folding_ir_opt` | `^golden_opt_folding_ir_opt$` | 0 | Passed |
 
-**Sonuç: GÖZLENDİ** — İki `ir_opt` golden testi envanterde bulundu ve her ikisi de passed.
-
----
-
-## 5. DoD Durumu
-
-Bu görev **VALİDATION-ONLY baseline**'dır. Hiçbir DoD yükseltmesi yapılmaz. Mevcut durum:
-
-- `Tasarlandı` / `Uygulandı` / `Test Edildi` / `Release Edildi` — hiçbiri ilerletilmemiştir.
-- Bu rapor yalnızca ölçüm sonuçlarını ham kanıtla kaydeder.
-- `Test Edildi` yalnız SQ-090-IR-FINAL-FORM-AUDIT'in kendi kabul kriterleri karşılanırsa ayrı bir kararla değerlendirilir.
+`ctest --test-dir "$WORK/build" -N` envanterinde `ir_opt` içeren tam **2**
+test bulundu: `golden_opt_dce_ir_opt` (Test #125), `golden_opt_folding_ir_opt`
+(Test #126). Anchored regex `^(golden_opt_dce_ir_opt|golden_opt_folding_ir_opt)$`
+ile ikisi de **Passed** (0.01 sec her biri, `100% tests passed, 0 tests
+failed out of 2`). → **GÖZLENDİ**. "Tüm golden testler geçti" gibi bir
+genelleme yapılmamıştır; yalnız bu iki test için hüküm verilmiştir.
 
 ---
 
-## 6. Kanıtlanmayanlar (BLOCKED yok)
+## 4. Çalıştırılan komutlar
 
-Bu görevde **BLOCKED** madde bulunmamaktadır. Tüm IRB maddeleri ölçülebilmiştir:
+Tam, quoting korunmuş komut listesi her `<case>.cmd` dosyasında ve
+`evidence/revalidation-01/manifest.tsv`'de (29 satır, başlık dahil) kayıtlıdır.
+Her satırda `cwd`, `argv`, dört dosyanın yolu ve `files_present=true`
+bulunur; hiçbir satırda `files_present=false` yoktur.
 
-- **GÖZLENDİ:** IRB-1, IRB-2, IRB-3, IRB-4, IRB-5 (control), IRB-6, IRB-7, IRB-8, IRB-9
-- **GÖZLENMEDİ:** IRB-5 (LOAD_LONG operand görünmez), IRB-5 (LOAD_FLOAT32 operand görünmez), IRB-5 (requiredCap dump'ta görünmez)
-
----
-
-## 7. Riskler ve Regresyon Yüzeyi
-
-1. **ANSI count (411) in stdout:** Yönlendirilmiş dosyada 411 ANSI CSI dizisi bulunmuştur. Bu sayı, instruction sayısına (32) göre yüksektir — her instruction satırı başına birden fazla ANSI kaçış dizisi olabilir. Bu, dump formatının okunabilirlik için renklendirme kullandığını ancak pipe/grep/redirect gibi araçlarla kullanımı zorlaştırdığını gösterir. Ham veridir, öneri değildir.
-
-2. **LOAD_LONG / LOAD_FLOAT32 operand görünmez:** Bu iki opcode'un dump satırında sabit değer içermemesi, IR dump'ının teşhis amaçlı kullanımını sınırlayabilir. `LOAD_CONST` ise sabiti gösterir — bu farkın kasıtlı olup olmadığı bu görevin kapsamı dışındadır.
-
-3. **IRB-3 diagnostic:** `shared` fonksiyonunun aynı modül `b.sqt` içinde `fromB()` tarafından çağrılması `E_SYMBOL_NOT_IMPORTED` hatası üretmiştir. Bu, çapraz-modül görünürlük/izolasyon mekanizmasının beklenenden farklı çalıştığını gösterebilir. Başmimar değerlendirmesi önerilir.
-
-4. **IRB-4 void fallthrough:** `sideEffect` fonksiyonu void olmasına rağmen (ve hiçbir `return` instruction'ı bulunmamasına rağmen) `check` hatasız geçer ve `run` başarıyla çalışır. Bu ya kasıtlı bir tasarımdır ya da non-void return-path doğrulamasının yalnız non-void fonksiyonlar için çalıştığını gösterir.
-
-5. **Capability IR annotation yok:** `CALLHOST __ffi__(s0)` dump satırında `[cap: ...]` veya benzeri bir capability eki bulunmamaktadır. Capability bilgisi yalnız `--capabilities` modunda özet olarak görünür.
-
-6. **Stale binary riski yok:** Fresh out-of-tree build kullanılmıştır. Binary boyut/hash kaydedilmiştir.
+Ana adımlar: `cmake -S ... -B $WORK/build -DCMAKE_BUILD_TYPE=Release`,
+`cmake --build $WORK/build -j`, ardından IRB-1..9 için yukarıda listelenen
+`$SAQUT check|ir|run [flags] <fixture>` çağrıları ve iki `ctest
+--test-dir $WORK/build` çağrısı.
 
 ---
 
-## 8. Sonraki Yetkili Rol
+## 5. Kanıt bütünlüğü doğrulaması (R.6–R.8)
 
-Bulgular ürün sahibine/ağır mimara döner. Özellikle IRB-3'teki `E_SYMBOL_NOT_IMPORTED` diagnostic'inin beklenen davranış olup olmadığı ve IRB-5'teki LOAD_LONG/LOAD_FLOAT32 operand görünürlüğü eksikliğinin bir tasarım kararı mı yoksa eksiklik mi olduğu değerlendirilmelidir.
+- Başlangıç beş-yol (`src/ CMakeLists.txt cmake/ tests/ examples/`)
+  `status --short` ve `diff HEAD | sha256sum`:
+  `evidence/revalidation-01/start-five-path-status.txt`,
+  `start-five-path-diff-sha256.txt`.
+- Bitiş (aynı beş yol, aynı yöntem):
+  `end-five-path-status.txt`, `end-five-path-diff-sha256.txt`.
+- Başlangıç ve bitiş **byte-identical** (`diff` çıktısı boş, iki sha256
+  eşleşti) — tester bu beş yolda hiçbir dosya oluşturmadı/silmedi/
+  değiştirmedi.
+- `manifest.tsv`'de `files_present=false` olan satır **yok**.
+
+Sonuç: **görev bütünü BLOCKED değildir** (R.8 tetiklenmedi).
+
+---
+
+## 6. PASS/FAIL/BLOCKED disiplini
+
+Bu görev VALIDATION-ONLY baseline'dır; contract gereği yalnız `GÖZLENDİ /
+GÖZLENMEDİ / BLOCKED` sınıflandırması kullanılmıştır — PASS/FAIL veya DoD
+yükseltme dili kullanılmamıştır. Yukarıdaki §2 tablosu nihai sınıflandırmadır.
+
+---
+
+## 7. Test edilmeyen iddialar
+
+- IRB-3.4 (main.sqt için `ir`/`run`/`--profile` çıktıları) — semantic kapıda
+  durulduğu için contract §3 gereği çalıştırılmadı.
+- 98 opcode'un tamamı için operand görünürlüğü — contract kapsamı yalnız
+  3 temsilî sınıf + 1 kontrol grubudur (§0 kesin yasak).
+- `run` ile eksik-main davranışının kabul kriteri olarak değerlendirilmesi —
+  SQ-090-RUN-ENTRYPOINT kapsamındadır, bu görevde yalnız ham veri olarak
+  kaydedildi.
+- Terminal (TTY) görünümünde ANSI davranışı — yalnız dosyaya yönlendirilmiş
+  ham baytlar ölçüldü.
+
+---
+
+## 8. Regression testi
+
+Bu görev validation-only baseline'dır; contract gereği yeni tracked
+regression testi eklenmedi. Tüm fixture'lar `$WORK/fixtures/` altında kaldı
+(repository'ye commit edilmedi).
+
+---
+
+## 9. Başmimarın yeniden değerlendirmesi gereken semantik bulgular
+
+1. **IRB-5 (LOAD_LONG, LOAD_FLOAT32, requiredCap):** Üç ayrı executable
+   operand sınıfı da dump'ta görünmüyor — yalnız beklenen sabit değer değil,
+   LOAD_LONG/LOAD_FLOAT32'de hedef slot bile eksik. Bu, IR dump'ının
+   debug-inceleme aracı olarak bu üç instruction sınıfı için ciddi ölçüde
+   eksik olduğunu gösteriyor.
+2. **IRB-3 diagnostic kategorisi:** `E_SYMBOL_NOT_IMPORTED`, iki modülün
+   aynı `shared` adını tanımlamasından değil, `b.sqt`'nin kendi
+   `shared`'ını içeriden çağırırken modül-dışı-isim kuralına takılmasından
+   kaynaklanıyor gibi görünüyor. Bu, "aynı ad çakışması doğru ele
+   alınıyor" varsayımının kanıtlanmadığı, ayrı bir isim çözümleme
+   davranışı olabilir; kök neden analizi bu görevin kapsamı dışındadır.
+3. **IRB-6:** `GLOBALS` bölümü yalnız isim listeliyor; initializer değerini
+   (`7`) bir instruction'a bağlayan görünür bir kanıt IR dump'ında yok.
+
+---
+
+## AGENTS.md §10 — Zorunlu çalışma sonu raporu
+
+1. **Rol ve görev kimliği:** İzole Hafif Muhalif Testçi, SQ-090-IR-BASELINE
+   (Amendment 03 revalidasyonu).
+2. **İncelenen kanıt:** AGENTS.md, knowledge-base/ (10 dosya), v1.0 kapsam
+   bildirgesi, ADR-042, yol haritası, issue disposition kaydı, bu görevin
+   `validation-contract.md`'si (Amendment 03), `examples/merhaba.sqt`,
+   `examples/fibonacci.sqt`, `tests/golden/numeric/widths.sqt`. Production
+   C++ kaynağı okunmadı; coder/mimar reasoning'i veya implementation report
+   okunmadı; önceki validation-report/evidence oracle olarak kullanılmadı.
+3. **Yapılan değişiklik veya karar:** Yalnız ölçüm; davranış değişikliği
+   yapılmadı. `tasks/SQ-090-IR-BASELINE/validation-report.md` bu revalidasyon
+   ile güncellendi; `tasks/SQ-090-IR-BASELINE/evidence/revalidation-01/`
+   altına 137 ek kanıt dosyası + manifest.tsv = revalidation-01 altında toplam 138 dosya eklendi.
+4. **Çalıştırılan komutlar:** §4'te özetlendi; tam liste `manifest.tsv` ve
+   her `<case>.cmd` dosyasında.
+5. **DoD durumu:** DoD durumu değişmedi. Bu rapor yalnız SQ-090-IR-BASELINE ölçüm kanıtını sunar; SQ-090-IR-FINAL-FORM-AUDIT için aşama yükseltmez.
+6. **Kanıtlanmayanlar:** §7'de listelendi (IRB-3.4, 98 opcode'un tamamı,
+   eksik-main kabul kriteri, TTY görünümü). Hiçbir madde BLOCKED değildir;
+   §7 kapsam dışı bırakılan/koşullu olarak yürütülmeyen maddelerdir.
+7. **Riskler ve regresyon yüzeyi:** LOAD_LONG/LOAD_FLOAT32/requiredCap IR
+   dump görünürlüğü eksikliği debug/tooling güvenilirliğini etkiler; IRB-3
+   diagnostic kategorisi modül isim çözümlemesinde beklenmeyen bir kural
+   olabilir (§9 madde 2). Bu görev bu bulguları düzeltmedi, yalnız kaydetti.
+8. **Sonraki yetkili rol:** Bulgular ürün sahibine/Şüpheci Başmimar'a
+   döner (Başmimar Günlüğü / GitHub #101 üzerinden revalidasyonun kabul
+   edilip edilmediği kararı).

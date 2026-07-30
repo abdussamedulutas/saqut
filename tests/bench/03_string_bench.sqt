@@ -1,0 +1,39 @@
+// String concat vs array push (gercekci)
+// Concat: her adimda yeni string allocation
+// Push: amortized O(1) push
+
+export string[] pool;
+
+string concatBuild(int n) {
+    string s = "";
+    int i = 0;
+    while (i < n) {
+        s = s + "abcdefgh";
+        i = i + 1;
+    }
+    return s;
+}
+
+string[] pushBuild(int n) {
+    pool.clear();
+    int i = 0;
+    while (i < n) {
+        pool.push("abcdefgh");
+        i = i + 1;
+    }
+    return pool;
+}
+
+int main() {
+    // Concat ile
+    string c = concatBuild(2000);
+    print(c.length());
+    print("\n");
+    
+    // Push ile
+    string[] arr = pushBuild(2000);
+    print(arr.length());
+    print("\n");
+    
+    return 0;
+}

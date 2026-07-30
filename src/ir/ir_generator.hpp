@@ -27,6 +27,7 @@
 #include <utility>
 #include "ir/ir_program.hpp"
 #include "symbol/symbol_table.hpp"
+#include "core/array_elem_kind.hpp"
 #include "core/type.hpp"
 #include "core/location.hpp"
 #include "parser/ast_node.hpp"
@@ -99,7 +100,8 @@ private:
                       const SourceLocation& loc = {});
     void emitFieldSet(int objSlot, int fieldIdx, int valSlot,
                       int line = 0, int col = 0);
-    void emitArrayNew(int destSlot, int capacity,
+    // #206: arrayElemKind parametresi eklendi — packed primitive array'ler için
+    void emitArrayNew(int destSlot, int capacity, ArrayElemKind k,
                       const SourceLocation& loc = {});
     void emitArrayGet(int destSlot, int arrSlot, int idxSlot,
                       int line = 0, int col = 0);

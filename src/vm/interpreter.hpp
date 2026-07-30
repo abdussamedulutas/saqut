@@ -130,6 +130,9 @@ private:
     // sessizce 0 dönüyordu).
     std::vector<Value>     globalSlots_;
     Heap                   heap_;
+    // #206: struct alan adları tip başına bir kez, paylaşımlı metadata
+    std::unordered_map<std::string, std::shared_ptr<std::vector<std::string>>>
+                           structFieldNamesRegistry_;
     std::vector<TryFrame>  tryStack_;
     std::optional<Value>   pendingThrow_;
     BenchVMTrace*          vmTrace_ = nullptr;  // profil hook (bench modunda non-null)

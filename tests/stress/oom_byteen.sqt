@@ -1,0 +1,28 @@
+// Hafiza siniri testi: mumkun oldugunca buyuk byte[] array
+// VM'in sigabilecegi maksimum boyutu dener.
+
+int main() {
+    int size = 5000000;  // 5MB packed byte[] = ~5MB, eski sistemde ~400MB
+    byte[] big = [];
+    int i = 0;
+    while (i < size) {
+        big.push((i & 255) as byte);
+        i = i + 1;
+    }
+    print(big.length());
+    print(": oom byte done\n");
+    
+    // Data dogrulugu
+    int ok = 0;
+    i = 0;
+    while (i < 1000) {
+        if ((big[i] as int) == (i & 255)) {
+            ok = ok + 1;
+        }
+        i = i + 1;
+    }
+    print(ok);
+    print("/1000 ok\n");
+    
+    return 0;
+}

@@ -15,9 +15,11 @@
 #ifndef SAQUT_VM_OBJECT
 #define SAQUT_VM_OBJECT
 
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "core/array_elem_kind.hpp"
 #include "core/decimal.hpp"  // DecimalObject (JIT decimal kutulama, ADR-037)
 
 // ADR-022: Taşımasız, stop-the-world, deterministik mark-sweep GC.
@@ -46,24 +48,56 @@ struct Object {
     virtual ~Object() = default;
 };
 
-// ── ArrayObject ──────────────────────────────────────────────────────────────
+// ── ArrayObject (ADR-020: referans semantiği, #206: packed type-tagged array) ──
+//
+// Eleman tipi elemKind ile belirtilir. Sadece ilgili buffer kullanılır;
+// diğerleri boştur.
+//   Ref:      elements (vector<Value>)
+//   Byte:     bytes    (vector<uint8_t>)
+//   Int:      ints     (vector<int32_t>)
+//   LongInt:  longs    (vector<int64_t>)
+//   Float32:  f32s     (vector<float>)
+//   Float64:  f64s     (vector<double>)
+//   Decimal:  decimals (vector<DecimalValue>)
 
 struct ArrayObject : Object {
-    std::vector<Value> elements;
+    ArrayElemKind elemKind = ArrayElemKind::Ref;
+    std::vector<Value>        elements;   // elemKind == Ref
+    std::vector<uint8_t>      bytes;      // elemKind == Byte
+    std::vector<int32_t>      ints;       // elemKind == Int
+    std::vector<int64_t>      longs;      // elemKind == LongInt
+    std::vector<float>        f32s;       // elemKind == Float32
+    std::vector<double>       f64s;       // elemKind == Float64
+    std::vector<DecimalValue> decimals;   // elemKind == Decimal
 
-    explicit ArrayObject(int capacity = 0) {
+    explicit ArrayObject(int capacity = 0, ArrayElemKind k = ArrayElemKind::Ref) : elemKind(k) {
         type = ObjectType::Array;
-        if (capacity > 0) elements.reserve(capacity);
+        // reserve kullan — resize DEĞİL. #206: slice/push builtin'leri push_back
+        // ile eleman ekler; resize ön-doldurma yaparsa boyut iki katına çıkar.
+        if (capacity <= 0) return;
+        switch (elemKind) {
+            case ArrayElemKind::Ref:     elements.reserve(capacity); break;
+            case ArrayElemKind::Byte:    bytes.reserve(capacity);    break;
+            case ArrayElemKind::Int:     ints.reserve(capacity);     break;
+            case ArrayElemKind::LongInt: longs.reserve(capacity);    break;
+            case ArrayElemKind::Float32: f32s.reserve(capacity);     break;
+            case ArrayElemKind::Float64: f64s.reserve(capacity);     break;
+            case ArrayElemKind::Decimal: decimals.reserve(capacity); break;
+        }
     }
 
     void markChildren() override;
 };
 
-// ── StructObject ─────────────────────────────────────────────────────────────
+// ── StructObject (ADR-037, #206) ─────────────────────────────────────────────
+//
+// fieldNames tip başına bir kez tutulur (shared_ptr). Tüm örnekler aynı
+// metadata'yı paylaşır. Registry: Interpreter (veya Heap) tip-adı → names
+// eşlemesini tutar.
 
 struct StructObject : Object {
-    std::vector<Value>       fields;
-    std::vector<std::string> fieldNames; // IR üretiminde doldurulur; toJson/dump için
+    std::vector<Value>                        fields;
+    std::shared_ptr<std::vector<std::string>> fieldNames; // paylaşımlı metadata
 
     explicit StructObject(int fieldCount = 0) {
         type = ObjectType::Struct;
@@ -130,8 +164,8 @@ struct Heap {
     int       gcRuns     = 0;   // toplam sweep sayısı (istatistik)
     long long freedTotal = 0;   // toplam serbest bırakılan nesne (istatistik)
 
-    ArrayObject* allocArray(int capacity = 0) {
-        auto* obj = new ArrayObject(capacity);
+    ArrayObject* allocArray(int capacity = 0, ArrayElemKind k = ArrayElemKind::Ref) {
+        auto* obj = new ArrayObject(capacity, k);
         obj->next = head;
         head      = obj;
         ++allocCount;

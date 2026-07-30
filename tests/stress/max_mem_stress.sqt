@@ -1,0 +1,80 @@
+// Maksimum bellek stresi
+// 10MB byte[] + 100K temp array + struct churn kombinasyonu
+
+export struct Record {
+    byte[] data;
+    int id;
+    float score;
+}
+
+int main() {
+    // 1. Buyuk byte[] (10MB packed = 10MB, eski sistemde 800MB)
+    int bigSize = 10000000;
+    byte[] big = [];
+    int i = 0;
+    while (i < bigSize) {
+        big.push((i & 255) as byte);
+        i = i + 1;
+    }
+    
+    // 2. Buyuk int[]
+    int[] nums = [];
+    i = 0;
+    while (i < 500000) {
+        nums.push(i);
+        i = i + 1;
+    }
+    
+    // 3. Struct'lari olustur
+    Record[] recs = [];
+    i = 0;
+    while (i < 1000) {
+        Record r;
+        r.id = i;
+        r.score = (i * 3 / 2) as float;
+        r.data = [];
+        int j = 0;
+        while (j < 100) {
+            r.data.push((j & 255) as byte);
+            j = j + 1;
+        }
+        recs.push(r);
+        i = i + 1;
+    }
+    
+    // 4. Dogruluk
+    int ok = 0;
+    i = 0;
+    while (i < 1000) {
+        Record r = recs[i];
+        if (r.id == i && r.data.length() == 100 && (r.data[0] as int) == 0) {
+            ok = ok + 1;
+        }
+        i = i + 1;
+    }
+    
+    // 5. Buyuk array slices
+    byte[] half = big.slice(0, bigSize / 2);
+    byte[] quarter = big.slice(bigSize / 4, bigSize / 2);
+    
+    int cs = 0;
+    i = 0;
+    while (i < 1000) {
+        cs = cs ^ (half[i] as int);
+        i = i + 1;
+    }
+    
+    print(big.length());
+    print(",");
+    print(nums.length());
+    print(",");
+    print(ok);
+    print(",");
+    print(half.length());
+    print(",");
+    print(quarter.length());
+    print(",");
+    print(cs);
+    print(": max mem stress done\n");
+    return 0;
+}

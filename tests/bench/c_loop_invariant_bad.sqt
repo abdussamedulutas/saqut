@@ -1,0 +1,18 @@
+// KOTU: sabit ifadeler dongu icinde
+int main() {
+    int r = 0;
+    int i = 0;
+    while (i < 50000) {
+        int a = 12345 * 67890;
+        int b = 98765 / 43;
+        int c = (a + b) * (a - b);
+        double d = 3.14159 * 2.71828;
+        double e = d * d * d;
+        int f = (e + 1.0) as int;
+        r = r + (i * f) % 256;
+        i = i + 1;
+    }
+    print(r);
+    print("\n");
+    return 0;
+}

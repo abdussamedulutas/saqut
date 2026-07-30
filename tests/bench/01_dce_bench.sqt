@@ -1,0 +1,56 @@
+// DCE benchmark: %90 dead code vs %10 live code
+// Agresif dead code: sonucu kullanilmayan milyonlarca islem
+
+int expensiveOp(int x) {
+    int r = x;
+    int i = 0;
+    while (i < 100) {
+        r = r * 7 + 13;
+        if (r > 1000000) { r = r - 999999; }
+        i = i + 1;
+    }
+    return r;
+}
+
+int main() {
+    int result = 0;
+    int i = 0;
+    int N = 2000;
+    
+    while (i < N) {
+        // AZICIK live code (result'a etki eden)
+        result = result + expensiveOp(i & 15);
+        
+        // COK dead code (sonucu kullanilmayan)
+        int d1 = expensiveOp(i * 3);
+        int d2 = expensiveOp(i * 7);
+        int d3 = expensiveOp(i * 11);
+        int d4 = expensiveOp(i * 13);
+        int d5 = expensiveOp(i * 17);
+        int d6 = expensiveOp(i * 19);
+        int d7 = expensiveOp(i * 23);
+        int d8 = expensiveOp(i * 27);
+        int d9 = expensiveOp(i * 31);
+        int d10 = expensiveOp(i * 37);
+        d1 = d2; d2 = d3; d3 = d4; d4 = d5; d5 = d6; d6 = d7; d7 = d8;
+        
+        // Dead conditional
+        if (d1 > 0) {
+            int x = expensiveOp(d1);
+            int y = expensiveOp(x);
+        }
+        
+        // Dead loop
+        int j = 0;
+        while (j < 10) {
+            int z = expensiveOp(d10 + j);
+            j = j + 1;
+        }
+        
+        i = i + 1;
+    }
+    
+    print(result);
+    print("\n");
+    return 0;
+}

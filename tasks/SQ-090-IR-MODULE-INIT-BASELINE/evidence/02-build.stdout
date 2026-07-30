@@ -1,18 +1,18 @@
 [  2%] Building C object CMakeFiles/mir_core.dir/src/mir/vendor/mir.c.o
-/tmp/sq090-module-init-worktree/src/mir/vendor/mir.c: 'MIR_scan_string' işlevinde:
-/tmp/sq090-module-init-worktree/src/mir/vendor/mir.c:6318:16: warning: değişken 'module' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
+/home/saqut/Masaüstü/saqutcompiler/src/mir/vendor/mir.c: 'MIR_scan_string' işlevinde:
+/home/saqut/Masaüstü/saqutcompiler/src/mir/vendor/mir.c:6318:16: warning: değişken 'module' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
  6318 |   MIR_module_t module = NULL;
       |                ^~~~~~
-/tmp/sq090-module-init-worktree/src/mir/vendor/mir.c:6319:20: warning: değişken 'func' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
+/home/saqut/Masaüstü/saqutcompiler/src/mir/vendor/mir.c:6319:20: warning: değişken 'func' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
  6319 |   MIR_item_t item, func = NULL;
       |                    ^~~~
-/tmp/sq090-module-init-worktree/src/mir/vendor/mir.c:6320:19: warning: değişken 'insn_code' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
+/home/saqut/Masaüstü/saqutcompiler/src/mir/vendor/mir.c:6320:19: warning: değişken 'insn_code' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
  6320 |   MIR_insn_code_t insn_code = MIR_INSN_BOUND; /* for removing uninitialized warning */
       |                   ^~~~~~~~~
-/tmp/sq090-module-init-worktree/src/mir/vendor/mir.c:6322:20: warning: değişken 'data_type' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
+/home/saqut/Masaüstü/saqutcompiler/src/mir/vendor/mir.c:6322:20: warning: değişken 'data_type' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
  6322 |   MIR_type_t type, data_type = MIR_T_BOUND;
       |                    ^~~~~~~~~
-/tmp/sq090-module-init-worktree/src/mir/vendor/mir.c:6328:15: warning: değişken 'in' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
+/home/saqut/Masaüstü/saqutcompiler/src/mir/vendor/mir.c:6328:15: warning: değişken 'in' 'longjmp' ya da 'vfork' tarafından taşırılmış olabilir [-Wclobbered]
  6328 |   insn_name_t in, el;
       |               ^~
 [  5%] Building C object CMakeFiles/mir_core.dir/src/mir/vendor/mir-gen.c.o
@@ -44,11 +44,11 @@
 [ 79%] Building CXX object CMakeFiles/saqut.dir/src/parser/parser.cpp.o
 [ 82%] Building CXX object CMakeFiles/saqut.dir/src/semantic/structural_validator.cpp.o
 [ 85%] Building CXX object CMakeFiles/saqut.dir/src/semantic/type_checker.cpp.o
-/tmp/sq090-module-init-worktree/src/semantic/type_checker.cpp: In member function 'Type TypeChecker::checkExpr(ASTNode*, const Type&)':
-/tmp/sq090-module-init-worktree/src/semantic/type_checker.cpp:1158:14: warning: unused variable 'srcIsNumeric' [-Wunused-variable]
+/home/saqut/Masaüstü/saqutcompiler/src/semantic/type_checker.cpp: In member function 'Type TypeChecker::checkExpr(ASTNode*, const Type&)':
+/home/saqut/Masaüstü/saqutcompiler/src/semantic/type_checker.cpp:1158:14: warning: unused variable 'srcIsNumeric' [-Wunused-variable]
  1158 |         bool srcIsNumeric = srcType.isPrimitive() && !srcIsBool;
       |              ^~~~~~~~~~~~
-/tmp/sq090-module-init-worktree/src/semantic/type_checker.cpp:1159:14: warning: unused variable 'tgtIsNumeric' [-Wunused-variable]
+/home/saqut/Masaüstü/saqutcompiler/src/semantic/type_checker.cpp:1159:14: warning: unused variable 'tgtIsNumeric' [-Wunused-variable]
  1159 |         bool tgtIsNumeric = targetBase.isPrimitive() && !tgtIsBool;
       |              ^~~~~~~~~~~~
 [ 88%] Building CXX object CMakeFiles/saqut.dir/src/symbol/symbol_collector.cpp.o

@@ -1,0 +1,54 @@
+// Combined: iyi yazilmis vs kotu yazilmis algoritma
+
+// IYI: constant folding + loop invariant + minimal allocation
+int wellWritten(int N) {
+    int total = 0;
+    int i = 0;
+    int magic = 42 * 10000 + 7777;
+    int divisor = N / 100 + 1;
+    while (i < N) {
+        total = total + (i * magic) / divisor + (i + 1) * (i + 2);
+        i = i + 1;
+    }
+    return total;
+}
+
+// KOTU: constant tekrar hesaplama + gereksiz alloc + dead code
+int poorlyWritten(int N) {
+    int total = 0;
+    int i = 0;
+    while (i < N) {
+        // Tekrar tekrar hesaplanan sabitler
+        int a = 42 * 10000 + 7777;
+        int b = N / 100 + 1;
+        int c = a * 2 + b * 3;
+        double d = 3.14 * 2.71;
+        double e = d * d;
+        int f = (e + 1.0) as int;
+        
+        // Dead code
+        int dead1 = a * b / c;
+        int dead2 = c * c * c;
+        
+        // Gereksiz temp array (her iterasyonda yeni)
+        int[] tmp = [];
+        tmp.push(i);
+        tmp.push(a);
+        tmp.push(b);
+        // tmp kullanilmadi
+        
+        total = total + (i * a) / b + (i + 1) * (i + 2) + f;
+        i = i + 1;
+    }
+    return total;
+}
+
+int main() {
+    int a = wellWritten(5000);
+    int b = poorlyWritten(5000);
+    print(a);
+    print("\n");
+    print(b);
+    print("\n");
+    return 0;
+}

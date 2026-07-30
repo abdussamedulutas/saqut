@@ -1,0 +1,51 @@
+// Matrix multiply benchmark - CPU intensive
+// Iyi: loop invariant cikarilmis
+// Kotu: her sey ic ice
+
+int main() {
+    int N = 40;
+    int[] A = [];
+    int[] B = [];
+    int[] C = [];
+    
+    int i = 0;
+    while (i < N * N) {
+        A.push((i * 7 + 13) & 255);
+        B.push((i * 11 + 5) & 255);
+        C.push(0);
+        i = i + 1;
+    }
+    
+    // Naive matrix multiply (NxN)
+    i = 0;
+    while (i < N) {
+        int j = 0;
+        while (j < N) {
+            int sum = 0;
+            int k = 0;
+            while (k < N) {
+                // row-major access
+                int aIdx = i * N + k;
+                int bIdx = k * N + j;
+                sum = sum + A[aIdx] * B[bIdx];
+                k = k + 1;
+            }
+            C[i * N + j] = sum;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    
+    // Checksum
+    int cs = 0;
+    i = 0;
+    while (i < N * N) {
+        cs = cs ^ C[i];
+        i = i + 1;
+    }
+    print(N);
+    print(",");
+    print(cs);
+    print("\n");
+    return 0;
+}

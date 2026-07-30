@@ -1,0 +1,6 @@
+import {runCryptoStress} from "crypto_lib.sqt";
+
+int main() {
+    runCryptoStress(2097152, 10);
+    return 0;
+}

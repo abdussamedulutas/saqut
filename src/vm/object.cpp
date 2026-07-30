@@ -66,6 +66,8 @@ int Heap::sweep() {
 // ── ArrayObject::markChildren ────────────────────────────────────────────────
 
 void ArrayObject::markChildren() {
+    // #206: primitive array (Byte/Int/LongInt/Float32/Float64/Decimal) → çocuk yok, O(1)
+    if (elemKind != ArrayElemKind::Ref) return;
     for (const Value& v : elements)
         if (v.kind == ValueKind::Ref)
             markObject(v.ref);

@@ -1,0 +1,11 @@
+int main() {
+    string s = "";
+    int i = 0;
+    while (i < 2000) {
+        s = s + "hello";
+        i = i + 1;
+    }
+    print(s.length());
+    print("\n");
+    return 0;
+}

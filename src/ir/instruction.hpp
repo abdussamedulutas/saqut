@@ -32,6 +32,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "core/array_elem_kind.hpp"
 #include "core/decimal.hpp"
 #include "core/capability.hpp"
 
@@ -375,6 +376,10 @@ struct Instruction {
 
     // STRUCT_NEW için alan adları (sırasıyla) — toJson/dump'ta kullanılır
     std::vector<std::string> fieldNames;
+
+    // #206: ARRAY_NEW için packed eleman tipi. Sadece ARRAY_NEW'de anlamlı;
+    // diğer opcode'larda ArrayElemKind::Ref kullanılır (ignored).
+    ArrayElemKind arrayElemKind = ArrayElemKind::Ref;
 
     // ADR-039: GET-tarafı opcode'ların sonuç/eleman türü — FIELD_GET / ARRAY_GET /
     // LOAD_GLOBAL dest tipi, ARRAY_NEW eleman tipi. IR'de kaybolan tip bilgisini

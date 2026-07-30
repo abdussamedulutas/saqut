@@ -118,10 +118,10 @@ static Value fs_readBytes(const std::vector<Value>& a, HostContext& ctx) {
     ss << f.rdbuf();
     std::string bytes = ss.str();
 
-    ArrayObject* arr = ctx.heap->allocArray((int)bytes.size());
-    arr->elements.reserve(bytes.size());
-    for (unsigned char b : bytes)
-        arr->elements.push_back(Value::fromInt((int)b));
+    ArrayObject* arr = ctx.heap->allocArray((int)bytes.size(), ArrayElemKind::Byte);
+    arr->bytes.resize(bytes.size());
+    for (size_t i = 0; i < bytes.size(); ++i)
+        arr->bytes[i] = (uint8_t)bytes[i];
     return Value::fromRef(arr);
 }
 
@@ -132,8 +132,12 @@ static Value fs_writeBytes(const std::vector<Value>& a, HostContext&) {
     std::ofstream f(a[0].stringValue, std::ios::out | std::ios::binary | std::ios::trunc);
     if (!f.is_open())
         throw std::runtime_error("cannot open file '" + a[0].stringValue + "' for writing");
-    for (const Value& v : arr->elements)
-        f.put(static_cast<char>(v.intValue & 0xFF));
+    if (arr->elemKind == ArrayElemKind::Byte) {
+        f.write(reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size());
+    } else {
+        for (const Value& v : arr->elements)
+            f.put(static_cast<char>(v.intValue & 0xFF));
+    }
     return Value::fromInt(0); // void
 }
 

@@ -1,0 +1,2 @@
+stdout CSI(1b5b) count: 411
+stderr CSI(1b5b) count: 0

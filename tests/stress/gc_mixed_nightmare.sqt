@@ -1,0 +1,53 @@
+// Kabus testi: her sey ayni anda
+// byte[], int[], struct, push, pop, slice, concat, clear
+
+export struct Item {
+    int[] values;
+    byte[] tags;
+    string label;
+}
+
+int main() {
+    int errors = 0;
+    int round = 0;
+    
+    while (round < 500) {
+        Item[] items = [];
+        
+        int j = 0;
+        while (j < 20) {
+            Item it;
+            it.values = [];
+            it.tags = [];
+            int k = 0;
+            while (k < 10) {
+                it.values.push(round * 1000 + j * 10 + k);
+                it.tags.push(((round + j + k) & 255) as byte);
+                k = k + 1;
+            }
+            it.label = "item";
+            items.push(it);
+            j = j + 1;
+        }
+        
+        // Her Item'de slice + reverse
+        j = 0;
+        while (j < items.length()) {
+            Item it = items[j];
+            int[] half = it.values.slice(0, 5);
+            half.reverse();
+            if (half[0] != it.values[4]) {
+                errors = errors + 1;
+            }
+            byte[] tagsReversed = it.tags.slice(0, 5);
+            tagsReversed.reverse();
+            j = j + 1;
+        }
+        
+        round = round + 1;
+    }
+    
+    print(errors);
+    print(": gc mixed nightmare errors\n");
+    return errors;
+}

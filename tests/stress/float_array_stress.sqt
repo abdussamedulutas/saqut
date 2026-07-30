@@ -1,0 +1,41 @@
+// Float/double array stress testi
+
+int main() {
+    float[] floats = [];
+    double[] doubles = [];
+    
+    int i = 0;
+    while (i < 1000) {
+        floats.push((i * 3.0 / 2.0) as float);
+        doubles.push(i * 3.14159);
+        i = i + 1;
+    }
+    
+    int fok = 0;
+    i = 0;
+    while (i < 1000) {
+        float expected = (i * 3.0 / 2.0) as float;
+        if (floats[i] == expected) {
+            fok = fok + 1;
+        }
+        i = i + 1;
+    }
+    
+    int dok = 0;
+    i = 0;
+    while (i < 1000) {
+        if (doubles[i] == i * 3.14159) {
+            dok = dok + 1;
+        }
+        i = i + 1;
+    }
+    
+    print(floats.length());
+    print(",");
+    print(fok);
+    print(",");
+    print(dok);
+    print(": float/double done\n");
+    
+    return 0;
+}

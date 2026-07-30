@@ -1,0 +1,18 @@
+// IYI: O(n) buyuk N=5000 ile
+int main() {
+    int[] a = [];
+    int i = 0;
+    while (i < 5000) {
+        a.push(i);
+        i = i + 1;
+    }
+    int cs = 0;
+    i = 0;
+    while (i < a.length()) {
+        cs = cs + a[i];
+        i = i + 1;
+    }
+    print(cs);
+    print("\n");
+    return 0;
+}

@@ -1,0 +1,37 @@
+// Buyuk byte[] allocate/discard patterni
+
+int main() {
+    int round = 0;
+    while (round < 100) {
+        int size = 1000 + round * 100;
+        byte[] a = [];
+        int i = 0;
+        while (i < size) {
+            a.push((i & 255) as byte);
+            i = i + 1;
+        }
+        
+        byte[] b = [];
+        i = 0;
+        while (i < size / 2) {
+            b.push(a[i]);
+            i = i + 1;
+        }
+        
+        byte[] c = a.slice(0, size / 4);
+        byte[] d = b.slice(0, size / 4);
+        
+        int cs = 0;
+        i = 0;
+        while (i < c.length()) {
+            cs = cs ^ (c[i] as int);
+            i = i + 1;
+        }
+        
+        round = round + 1;
+    }
+    
+    print(round);
+    print(": gc large array churn done\n");
+    return 0;
+}

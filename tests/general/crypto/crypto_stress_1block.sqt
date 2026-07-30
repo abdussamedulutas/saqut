@@ -1,0 +1,23 @@
+// Doğruluk testi (sanity): tek 16 byte'lık blok, encrypt→decrypt roundtrip.
+import {genPlaintext, roundKeysToy, encryptBlock, decryptBlock, arraysEqual} from "crypto_lib.sqt";
+
+int main() {
+    int rounds = 10;
+    byte[] key = [];
+    genPlaintext(16, key);
+    byte[] roundKeys = [];
+    roundKeysToy(key, rounds, roundKeys);
+    byte[] plaintext = [];
+    genPlaintext(16, plaintext);
+
+    byte[] ciphertext = [];
+    encryptBlock(plaintext, roundKeys, rounds, ciphertext);
+    byte[] decrypted = [];
+    decryptBlock(ciphertext, roundKeys, rounds, decrypted);
+
+    print(plaintext.length());
+    print(ciphertext.length());
+    print(arraysEqual(plaintext, decrypted));
+    print(arraysEqual(plaintext, ciphertext));
+    return 0;
+}

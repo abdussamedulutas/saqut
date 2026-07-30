@@ -15,14 +15,15 @@
 // ============================================================================
 
 #include "parser/parser.hpp"
-#include "parser/nodes/program.hpp"
+
 #include "parser/nodes/binary_expr.hpp"
-#include "parser/nodes/literal.hpp"
-#include "parser/nodes/identifier.hpp"
-#include "parser/nodes/expressions.hpp"
-#include "parser/nodes/statements.hpp"
 #include "parser/nodes/declarations.hpp"
 #include "parser/nodes/error_node.hpp"
+#include "parser/nodes/expressions.hpp"
+#include "parser/nodes/identifier.hpp"
+#include "parser/nodes/literal.hpp"
+#include "parser/nodes/program.hpp"
+#include "parser/nodes/statements.hpp"
 
 // --------------------------------------------------------------------------
 // parseToken: Ham Token'ı ParserToken'a dönüştür.
@@ -49,7 +50,7 @@ ParserToken Parser::parseToken(Token* token) {
 }
 
 ParserToken Parser::getToken(int offset) {
-    if ((int)tokens.size() - 1 < current + offset) {
+    if ((int) tokens.size() - 1 < current + offset) {
         ParserToken pt;
         pt.type = TokenType::SVR_VOID;
         return pt;
@@ -58,8 +59,9 @@ ParserToken Parser::getToken(int offset) {
 }
 
 void Parser::nextToken() {
-    if (currentToken().token) lastLoc_ = currentToken().token->loc;
-    if ((int)tokens.size() >= current + 1)
+    if (currentToken().token)
+        lastLoc_ = currentToken().token->loc;
+    if ((int) tokens.size() >= current + 1)
         current++;
 }
 
@@ -72,7 +74,7 @@ ParserToken Parser::currentToken() {
 }
 
 ASTNode* Parser::parse(TokenList toks) {
-    tokens  = toks;
+    tokens = toks;
     current = 0;
     return parseProgram();
 }
@@ -82,7 +84,7 @@ ASTNode* Parser::parse(TokenList toks) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void Parser::reportError(const SourceLocation& loc, const std::string& code,
-                          const std::string& message) {
+                         const std::string& message) {
     if (diag_) {
         diag_->report(code, loc, message);
     } else {
@@ -95,39 +97,39 @@ void Parser::reportError(const SourceLocation& loc, const std::string& code,
 // normal şekilde devam edebilsin diye.
 static bool isStatementStartToken(TokenType t) {
     switch (t) {
-        case TokenType::KW_IF:
-        case TokenType::KW_WHILE:
-        case TokenType::KW_FOR:
-        case TokenType::KW_DO:
-        case TokenType::KW_RETURN:
-        case TokenType::KW_BREAK:
-        case TokenType::KW_CONTINUE:
-        case TokenType::KW_TRY:
-        case TokenType::KW_THROW:
-        case TokenType::KW_SWITCH:
-        case TokenType::KW_STRUCT:
-        case TokenType::KW_ENUM:
-        case TokenType::KW_IMPORT:
-        case TokenType::KW_EXPORT:
-        case TokenType::KW_VOID:
-        case TokenType::KW_INT:
-        case TokenType::KW_FLOAT_TYPE:
-        case TokenType::KW_DOUBLE:
-        case TokenType::KW_DECIMAL:
-        case TokenType::KW_BYTE:
-        case TokenType::KW_DATE:
-        case TokenType::KW_BOOL:
-        case TokenType::KW_CHAR:
-        case TokenType::KW_STRING_TYPE:
-        case TokenType::KW_AUTO:
-            return true;
-        default:
-            return false;
+    case TokenType::KW_IF:
+    case TokenType::KW_WHILE:
+    case TokenType::KW_FOR:
+    case TokenType::KW_DO:
+    case TokenType::KW_RETURN:
+    case TokenType::KW_BREAK:
+    case TokenType::KW_CONTINUE:
+    case TokenType::KW_TRY:
+    case TokenType::KW_THROW:
+    case TokenType::KW_SWITCH:
+    case TokenType::KW_STRUCT:
+    case TokenType::KW_ENUM:
+    case TokenType::KW_IMPORT:
+    case TokenType::KW_EXPORT:
+    case TokenType::KW_VOID:
+    case TokenType::KW_INT:
+    case TokenType::KW_FLOAT_TYPE:
+    case TokenType::KW_DOUBLE:
+    case TokenType::KW_DECIMAL:
+    case TokenType::KW_BYTE:
+    case TokenType::KW_DATE:
+    case TokenType::KW_BOOL:
+    case TokenType::KW_CHAR:
+    case TokenType::KW_STRING_TYPE:
+    case TokenType::KW_AUTO:
+        return true;
+    default:
+        return false;
     }
 }
 
 ASTNode* Parser::synchronizeAndMakeError(const SourceLocation& loc, const std::string& code,
-                                          const std::string& message) {
+                                         const std::string& message) {
     reportError(loc, code, message);
 
     // İlerleme garantisi: en az bir token tüket (aksi halde çağıran döngüde
@@ -136,8 +138,7 @@ ASTNode* Parser::synchronizeAndMakeError(const SourceLocation& loc, const std::s
         nextToken();
 
     while (currentToken().type != TokenType::SEMICOLON &&
-           currentToken().type != TokenType::RBRACE &&
-           currentToken().type != TokenType::SVR_VOID &&
+           currentToken().type != TokenType::RBRACE && currentToken().type != TokenType::SVR_VOID &&
            !isStatementStartToken(currentToken().type)) {
         nextToken();
     }
@@ -145,8 +146,8 @@ ASTNode* Parser::synchronizeAndMakeError(const SourceLocation& loc, const std::s
         nextToken(); // sınırlayıcı ';' tüketilir; '}' ve statement-başlangıcı tüketilmez
 
     ErrorNode* err = new ErrorNode();
-    err->loc     = loc;
-    err->code    = code;
+    err->loc = loc;
+    err->code = code;
     err->message = message;
     return err;
 }
@@ -173,7 +174,8 @@ ASTNode* Parser::parseImportDecl() {
     nextToken(); // 'import' tüket
 
     // { bekleniyor
-    if (currentToken().type != TokenType::LBRACE) return node;
+    if (currentToken().type != TokenType::LBRACE)
+        return node;
     nextToken();
 
     // virgülle ayrılmış isimler: { add, Vector, ... }
@@ -190,17 +192,16 @@ ASTNode* Parser::parseImportDecl() {
                         "E905", "expected identifier or '}' in import list");
             break;
         }
-        if (currentToken().type == TokenType::COMMA) nextToken();
+        if (currentToken().type == TokenType::COMMA)
+            nextToken();
     }
 
     // } bekleniyor
-    if (currentToken().type == TokenType::RBRACE) nextToken();
-    else reportError(currentToken().token ? currentToken().token->loc : node->loc,
-                      "E905", "expected '}' to close import list");
+    if (currentToken().type == TokenType::RBRACE)
+        nextToken();
 
     // contextual keyword: from
-    if (currentToken().type == TokenType::IDENTIFIER &&
-        currentToken().token->token == "from") {
+    if (currentToken().type == TokenType::IDENTIFIER && currentToken().token->token == "from") {
         nextToken();
     }
 
@@ -208,17 +209,18 @@ ASTNode* Parser::parseImportDecl() {
     // çözümlenen modül adı.
     if (currentToken().type == TokenType::STRING) {
         auto* st = static_cast<StringToken*>(currentToken().token);
-        node->sourcePath   = st->context;
+        node->sourcePath = st->context;
         node->isModuleName = false; // dosya
         nextToken();
     } else if (currentToken().type == TokenType::IDENTIFIER && currentToken().token) {
-        node->sourcePath   = currentToken().token->token;
-        node->isModuleName = true;  // gömülü/çözümlenen modül
+        node->sourcePath = currentToken().token->token;
+        node->isModuleName = true; // gömülü/çözümlenen modül
         nextToken();
     }
 
     // ;
-    if (currentToken().type == TokenType::SEMICOLON) nextToken();
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
 
     return node;
 }
@@ -230,23 +232,24 @@ ASTNode* Parser::parseExportDecl() {
 
     if (ct.type == TokenType::KW_STRUCT) {
         auto* node = static_cast<StructDeclNode*>(parseStructDecl());
-        if (node) node->isExported = true;
+        if (node)
+            node->isExported = true;
         return node;
     }
 
     if (ct.type == TokenType::KW_ENUM) {
         auto* node = static_cast<EnumDeclNode*>(parseEnumDecl());
-        if (node) node->isExported = true;
+        if (node)
+            node->isExported = true;
         return node;
     }
 
     // Dönüş tipli fonksiyon: export void/int/... name( ...
     // veya struct dönüş tipli: export TypeName name(
-    bool isFunctionReturnType = ct.is({
-        TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
-        TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE
-    });
+    bool isFunctionReturnType =
+        ct.is({TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+               TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
+               TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE});
 
     bool isIdentifierReturnType = (ct.type == TokenType::IDENTIFIER);
 
@@ -254,13 +257,29 @@ ASTNode* Parser::parseExportDecl() {
         auto la1 = lookahead(1);
         auto la2 = lookahead(2);
         bool isNullable = (la1.type == TokenType::TERNARY);
-        bool isFnDecl = isNullable
-            ? (la2.type == TokenType::IDENTIFIER && lookahead(3).type == TokenType::LPAREN)
-            : (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN);
+        bool isFnDecl =
+            isNullable ?
+                (la2.type == TokenType::IDENTIFIER && lookahead(3).type == TokenType::LPAREN) :
+                (la1.type == TokenType::IDENTIFIER && la2.type == TokenType::LPAREN);
+
+        if (!isFnDecl && la1.type == TokenType::LBRACKET) {
+            int off = 1;
+            while (lookahead(off).type == TokenType::LBRACKET &&
+                   lookahead(off + 1).type == TokenType::RBRACKET)
+                off += 2;
+            if (lookahead(off).type == TokenType::IDENTIFIER &&
+                lookahead(off + 1).type == TokenType::LPAREN)
+                isFnDecl = true;
+            else if (lookahead(off).type == TokenType::TERNARY &&
+                     lookahead(off + 1).type == TokenType::IDENTIFIER &&
+                     lookahead(off + 2).type == TokenType::LPAREN)
+                isFnDecl = true;
+        }
 
         if (isFnDecl) {
             auto* node = static_cast<FunctionDeclNode*>(parseFunctionDecl());
-            if (node) node->isExported = true;
+            if (node)
+                node->isExported = true;
             return node;
         }
     }
@@ -291,12 +310,10 @@ ASTNode* Parser::parseDeclaration() {
     if (ct.type == TokenType::KW_FFI)
         return parseFfiDecl();
 
-    if (ct.is({
-        TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
-        TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE,
-        TokenType::KW_AUTO
-    })) {
+    if (ct.is({TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+               TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
+               TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE,
+               TokenType::KW_AUTO})) {
         auto la1 = lookahead(1);
         auto la2 = lookahead(2);
         // int name(  → fonksiyon
@@ -306,6 +323,19 @@ ASTNode* Parser::parseDeclaration() {
         if (la1.type == TokenType::TERNARY) {
             auto la3 = lookahead(3);
             if (la2.type == TokenType::IDENTIFIER && la3.type == TokenType::LPAREN)
+                return parseFunctionDecl();
+        }
+        if (la1.type == TokenType::LBRACKET) {
+            int off = 1;
+            while (lookahead(off).type == TokenType::LBRACKET &&
+                   lookahead(off + 1).type == TokenType::RBRACKET)
+                off += 2;
+            if (lookahead(off).type == TokenType::IDENTIFIER &&
+                lookahead(off + 1).type == TokenType::LPAREN)
+                return parseFunctionDecl();
+            if (lookahead(off).type == TokenType::TERNARY &&
+                lookahead(off + 1).type == TokenType::IDENTIFIER &&
+                lookahead(off + 2).type == TokenType::LPAREN)
                 return parseFunctionDecl();
         }
         return parseVariableDecl();
@@ -333,6 +363,13 @@ ASTNode* Parser::parseDeclaration() {
             while (lookahead(off).type == TokenType::LBRACKET &&
                    lookahead(off + 1).type == TokenType::RBRACKET)
                 off += 2;
+            if (lookahead(off).type == TokenType::IDENTIFIER &&
+                lookahead(off + 1).type == TokenType::LPAREN)
+                return parseFunctionDecl();
+            if (lookahead(off).type == TokenType::TERNARY &&
+                lookahead(off + 1).type == TokenType::IDENTIFIER &&
+                lookahead(off + 2).type == TokenType::LPAREN)
+                return parseFunctionDecl();
             if (lookahead(off).type == TokenType::IDENTIFIER)
                 return parseVariableDecl();
         }
@@ -350,14 +387,13 @@ ASTNode* Parser::parseExpression(uint16_t precedence) {
         return nullptr;
 
     ASTNode* left = parseNullDenotation();
-    if (!left) return nullptr;
+    if (!left)
+        return nullptr;
 
     while (true) {
         auto next = currentToken();
-        if (next.type == TokenType::RPAREN ||
-            next.type == TokenType::SEMICOLON ||
-            next.type == TokenType::RBRACE ||
-            next.type == TokenType::COMMA)
+        if (next.type == TokenType::RPAREN || next.type == TokenType::SEMICOLON ||
+            next.type == TokenType::RBRACE || next.type == TokenType::COMMA)
             break;
 
         if (precedence < next.getPowerOperator()) {
@@ -374,17 +410,14 @@ ASTNode* Parser::parseExpression(uint16_t precedence) {
 // ADR-033 (#85): `struct::toJson(p)` ad alanı çağrısı için KW_STRUCT da sol
 // tarafta geçerli ("array" zaten IDENTIFIER olarak eşleşir).
 static bool isScopeCallPattern(const ParserToken& ct, const ParserToken& la1,
-                                const ParserToken& la2, const ParserToken& la3)
-{
-    bool leftIsType = ct.is({
-        TokenType::KW_INT, TokenType::KW_FLOAT_TYPE, TokenType::KW_DOUBLE,
-        TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE, TokenType::KW_BOOL,
-        TokenType::KW_CHAR, TokenType::KW_STRING_TYPE, TokenType::KW_STRUCT
-    }) || ct.type == TokenType::IDENTIFIER;
-    return leftIsType
-        && la1.type == TokenType::COLON_COLON
-        && la2.type == TokenType::IDENTIFIER
-        && la3.type == TokenType::LPAREN;
+                               const ParserToken& la2, const ParserToken& la3) {
+    bool leftIsType =
+        ct.is({TokenType::KW_INT, TokenType::KW_FLOAT_TYPE, TokenType::KW_DOUBLE,
+               TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE, TokenType::KW_BOOL,
+               TokenType::KW_CHAR, TokenType::KW_STRING_TYPE, TokenType::KW_STRUCT}) ||
+        ct.type == TokenType::IDENTIFIER;
+    return leftIsType && la1.type == TokenType::COLON_COLON && la2.type == TokenType::IDENTIFIER &&
+           la3.type == TokenType::LPAREN;
 }
 
 ASTNode* Parser::parseNullDenotation() {
@@ -462,32 +495,30 @@ ASTNode* Parser::parseNullDenotation() {
         return arr;
     }
 
-    if (ct.is({
-        TokenType::PLUS_PLUS, TokenType::MINUS_MINUS,
-        TokenType::PLUS, TokenType::MINUS,
-        TokenType::BANG, TokenType::TILDE
-    })) {
+    if (ct.is({TokenType::PLUS_PLUS, TokenType::MINUS_MINUS, TokenType::PLUS, TokenType::MINUS,
+               TokenType::BANG, TokenType::TILDE})) {
         nextToken();
         ASTNode* right = parseExpression(ct.getPowerOperator());
         BinaryExpressionNode* bin = new BinaryExpressionNode();
-        bin->loc    = ct.token ? ct.token->loc : SourceLocation{};
-        bin->Right    = right;
-        bin->Left     = nullptr;
+        bin->loc = ct.token ? ct.token->loc : SourceLocation{};
+        bin->Right = right;
+        bin->Left = nullptr;
         bin->Operator = ct.type;
-        if (right) right->parent = bin;
+        if (right)
+            right->parent = bin;
         return bin;
     }
 
     if (ct.type == TokenType::NUMBER) {
         nextToken();
         LiteralNode* lit = new LiteralNode();
-        lit->loc       = ct.token ? ct.token->loc : SourceLocation{};
-        lit->lexerToken  = ct.token;
+        lit->loc = ct.token ? ct.token->loc : SourceLocation{};
+        lit->lexerToken = ct.token;
         lit->parserToken = ct;
         if (auto* nt = dynamic_cast<NumberToken*>(ct.token)) {
-            lit->literalBase  = nt->base;
+            lit->literalBase = nt->base;
             lit->isFloatValue = nt->isFloat;
-            lit->literalType  = nt->isFloat ? LiteralType::FLOAT : LiteralType::INTEGER;
+            lit->literalType = nt->isFloat ? LiteralType::FLOAT : LiteralType::INTEGER;
         }
         return lit;
     }
@@ -496,8 +527,8 @@ ASTNode* Parser::parseNullDenotation() {
         nextToken();
         LiteralNode* lit = new LiteralNode();
         lit->literalType = LiteralType::STRING;
-        lit->loc       = ct.token ? ct.token->loc : SourceLocation{};
-        lit->lexerToken  = ct.token;
+        lit->loc = ct.token ? ct.token->loc : SourceLocation{};
+        lit->lexerToken = ct.token;
         lit->parserToken = ct;
         return lit;
     }
@@ -509,8 +540,8 @@ ASTNode* Parser::parseNullDenotation() {
             lit->literalType = LiteralType::BOOLEAN;
         else
             lit->literalType = LiteralType::BOŞ;
-        lit->loc       = ct.token ? ct.token->loc : SourceLocation{};
-        lit->lexerToken  = ct.token;
+        lit->loc = ct.token ? ct.token->loc : SourceLocation{};
+        lit->lexerToken = ct.token;
         lit->parserToken = ct;
         return lit;
     }
@@ -518,9 +549,9 @@ ASTNode* Parser::parseNullDenotation() {
     if (ct.type == TokenType::IDENTIFIER) {
         nextToken();
         IdentifierNode* id = new IdentifierNode();
-        id->loc          = ct.token ? ct.token->loc : SourceLocation{};
-        id->lexerToken     = ct.token;
-        id->parserToken    = ct;
+        id->loc = ct.token ? ct.token->loc : SourceLocation{};
+        id->lexerToken = ct.token;
+        id->parserToken = ct;
         return id;
     }
 
@@ -533,8 +564,8 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     if (ct.is({TokenType::PLUS_PLUS, TokenType::MINUS_MINUS})) {
         nextToken();
         PostfixNode* pf = new PostfixNode();
-        pf->loc     = ct.token ? ct.token->loc : SourceLocation{};
-        pf->operand  = left;
+        pf->loc = ct.token ? ct.token->loc : SourceLocation{};
+        pf->operand = left;
         pf->Operator = ct.type;
         left->parent = pf;
         return pf;
@@ -543,7 +574,7 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     if (ct.type == TokenType::LPAREN) {
         nextToken();
         CallExpressionNode* call = new CallExpressionNode();
-        call->loc    = ct.token ? ct.token->loc : SourceLocation{};
+        call->loc = ct.token ? ct.token->loc : SourceLocation{};
         call->callee = left;
         left->parent = call;
 
@@ -565,7 +596,7 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     if (ct.type == TokenType::LBRACKET) {
         nextToken();
         IndexExpressionNode* idx = new IndexExpressionNode();
-        idx->loc     = ct.token ? ct.token->loc : SourceLocation{};
+        idx->loc = ct.token ? ct.token->loc : SourceLocation{};
         idx->object = left;
         left->parent = idx;
         idx->index = parseExpression(0);
@@ -581,16 +612,16 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     if (ct.type == TokenType::KW_AS) {
         nextToken(); // tüket: as
         CastExpressionNode* cast = new CastExpressionNode();
-        cast->loc     = ct.token ? ct.token->loc : SourceLocation{};
+        cast->loc = ct.token ? ct.token->loc : SourceLocation{};
         cast->operand = left;
-        if (left) left->parent = cast;
+        if (left)
+            left->parent = cast;
 
         // Hedef tip adını oku: int / float / bool / string / IDENTIFIER
         auto typeTok = currentToken();
-        if (typeTok.is({TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-                        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL,
-                        TokenType::KW_BYTE, TokenType::KW_DATE, TokenType::KW_BOOL,
-                        TokenType::KW_STRING_TYPE})) {
+        if (typeTok.is({TokenType::KW_INT, TokenType::KW_FLOAT_TYPE, TokenType::KW_DOUBLE,
+                        TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
+                        TokenType::KW_BOOL, TokenType::KW_STRING_TYPE})) {
             // tip adını string olarak al
             cast->targetTypeName = typeTok.token ? typeTok.token->token : "";
             nextToken();
@@ -615,9 +646,8 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         nextToken();
 
         if (currentToken().type != TokenType::IDENTIFIER) {
-            reportError(currentToken().token ? currentToken().token->loc : lastLoc_,
-                        "E903", std::string("expected member name after '") +
-                                (arrow ? "->" : ".") + "'");
+            reportError(currentToken().token ? currentToken().token->loc : lastLoc_, "E903",
+                        std::string("expected member name after '") + (arrow ? "->" : ".") + "'");
             return left;
         }
 
@@ -631,9 +661,9 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         // birebir aynı CALLHOST'a düşer.
         if (!arrow && currentToken().type == TokenType::LPAREN) {
             ScopeCallNode* sc = new ScopeCallNode();
-            sc->loc        = ct.token ? ct.token->loc : SourceLocation{};
+            sc->loc = ct.token ? ct.token->loc : SourceLocation{};
             sc->methodName = memberName;
-            sc->dotCall    = true;
+            sc->dotCall = true;
             sc->arguments.push_back(left);
             left->parent = sc;
 
@@ -654,10 +684,10 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         }
 
         MemberAccessNode* ma = new MemberAccessNode();
-        ma->loc     = ct.token ? ct.token->loc : SourceLocation{};
+        ma->loc = ct.token ? ct.token->loc : SourceLocation{};
         ma->object = left;
         ma->member = memberName;
-        ma->arrow  = arrow;
+        ma->arrow = arrow;
         left->parent = ma;
         return ma;
     }
@@ -668,12 +698,14 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
     ASTNode* right = parseExpression(prec);
 
     BinaryExpressionNode* bin = new BinaryExpressionNode();
-    bin->loc      = ct.token ? ct.token->loc : SourceLocation{};
-    bin->Left     = left;
-    bin->Right    = right;
+    bin->loc = ct.token ? ct.token->loc : SourceLocation{};
+    bin->Left = left;
+    bin->Right = right;
     bin->Operator = ct.type;
-    if (left)  left->parent  = bin;
-    if (right) right->parent = bin;
+    if (left)
+        left->parent = bin;
+    if (right)
+        right->parent = bin;
     return bin;
 }
 
@@ -683,9 +715,18 @@ ASTNode* Parser::parseFunctionDecl() {
     fn->returnType = currentToken().token->token;
     nextToken();
 
+    while (currentToken().type == TokenType::LBRACKET) {
+        nextToken();
+        if (currentToken().type == TokenType::RBRACKET)
+            nextToken();
+        fn->returnType += "[]";
+    }
+
     // ADR-021: nullable dönüş tipi — int? f()
-    if (currentToken().type == TokenType::TERNARY)
-        { nextToken(); fn->returnType += "?"; }
+    if (currentToken().type == TokenType::TERNARY) {
+        nextToken();
+        fn->returnType += "?";
+    }
 
     fn->name = currentToken().token->token;
     nextToken();
@@ -695,13 +736,14 @@ ASTNode* Parser::parseFunctionDecl() {
         while (currentToken().type != TokenType::RPAREN &&
                currentToken().type != TokenType::SVR_VOID) {
             auto typeTok = currentToken();
-            bool isTypeKw = typeTok.is({
-                TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-                TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
-                TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE,
-                TokenType::KW_AUTO
-            }) || typeTok.type == TokenType::IDENTIFIER;
-            if (!isTypeKw || !typeTok.token) break;
+            bool isTypeKw =
+                typeTok.is({TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+                            TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE,
+                            TokenType::KW_DATE, TokenType::KW_BOOL, TokenType::KW_CHAR,
+                            TokenType::KW_STRING_TYPE, TokenType::KW_AUTO}) ||
+                typeTok.type == TokenType::IDENTIFIER;
+            if (!isTypeKw || !typeTok.token)
+                break;
             std::string paramType = typeTok.token->token;
             nextToken();
             // int[][] a — tip sonrasında [] boyutları
@@ -715,9 +757,12 @@ ASTNode* Parser::parseFunctionDecl() {
                 paramType += "[]";
             }
             // ADR-021: nullable parametre — int? a
-            if (currentToken().type == TokenType::TERNARY)
-                { nextToken(); paramType += "?"; }
-            if (currentToken().type != TokenType::IDENTIFIER || !currentToken().token) break;
+            if (currentToken().type == TokenType::TERNARY) {
+                nextToken();
+                paramType += "?";
+            }
+            if (currentToken().type != TokenType::IDENTIFIER || !currentToken().token)
+                break;
             VariableDeclNode* param = new VariableDeclNode();
             param->loc = currentToken().token->loc;
             param->varType = paramType;
@@ -755,13 +800,14 @@ ASTNode* Parser::parseFfiDecl() {
     nextToken();
     while (currentToken().type == TokenType::LBRACKET) {
         nextToken();
-        if (currentToken().type == TokenType::RBRACKET) nextToken();
-        else reportError(currentToken().token ? currentToken().token->loc : fn->loc,
-                          "E905", "expected ']' in return array type");
+        if (currentToken().type == TokenType::RBRACKET)
+            nextToken();
         fn->returnType += "[]";
     }
-    if (currentToken().type == TokenType::TERNARY)
-        { nextToken(); fn->returnType += "?"; }
+    if (currentToken().type == TokenType::TERNARY) {
+        nextToken();
+        fn->returnType += "?";
+    }
 
     // ad
     fn->name = currentToken().token ? currentToken().token->token : "";
@@ -773,35 +819,39 @@ ASTNode* Parser::parseFfiDecl() {
         while (currentToken().type != TokenType::RPAREN &&
                currentToken().type != TokenType::SVR_VOID) {
             auto typeTok = currentToken();
-            bool isTypeKw = typeTok.is({
-                TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-                TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
-                TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE
-            }) || typeTok.type == TokenType::IDENTIFIER;
-            if (!isTypeKw || !typeTok.token) break;
+            bool isTypeKw =
+                typeTok.is({TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+                            TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE,
+                            TokenType::KW_DATE, TokenType::KW_BOOL, TokenType::KW_CHAR,
+                            TokenType::KW_STRING_TYPE}) ||
+                typeTok.type == TokenType::IDENTIFIER;
+            if (!isTypeKw || !typeTok.token)
+                break;
             std::string paramType = typeTok.token->token;
             nextToken();
             while (currentToken().type == TokenType::LBRACKET) {
                 nextToken();
-                if (currentToken().type == TokenType::RBRACKET) nextToken();
-                else reportError(currentToken().token ? currentToken().token->loc : fn->loc,
-                                  "E905", "expected ']' in parameter array type");
+                if (currentToken().type == TokenType::RBRACKET)
+                    nextToken();
                 paramType += "[]";
             }
-            if (currentToken().type == TokenType::TERNARY)
-                { nextToken(); paramType += "?"; }
-            if (currentToken().type != TokenType::IDENTIFIER || !currentToken().token) break;
+            if (currentToken().type == TokenType::TERNARY) {
+                nextToken();
+                paramType += "?";
+            }
+            if (currentToken().type != TokenType::IDENTIFIER || !currentToken().token)
+                break;
             VariableDeclNode* param = new VariableDeclNode();
             param->loc = currentToken().token->loc;
             param->varType = paramType;
             param->name = currentToken().token->token;
             nextToken();
             fn->params.push_back(param);
-            if (currentToken().type == TokenType::COMMA) nextToken();
+            if (currentToken().type == TokenType::COMMA)
+                nextToken();
         }
-        if (currentToken().type == TokenType::RPAREN) nextToken();
-        else reportError(currentToken().token ? currentToken().token->loc : fn->loc,
-                          "E905", "expected ')' after parameter list");
+        if (currentToken().type == TokenType::RPAREN)
+            nextToken();
     }
 
     // : <HOST_ID>
@@ -814,8 +864,7 @@ ASTNode* Parser::parseFfiDecl() {
     }
 
     // from <mod>   (contextual keyword 'from', tırnaksız modül adı)
-    if (currentToken().type == TokenType::IDENTIFIER &&
-        currentToken().token->token == "from") {
+    if (currentToken().type == TokenType::IDENTIFIER && currentToken().token->token == "from") {
         nextToken();
         if (currentToken().type == TokenType::IDENTIFIER && currentToken().token) {
             fn->moduleName = currentToken().token->token;
@@ -824,8 +873,7 @@ ASTNode* Parser::parseFfiDecl() {
     }
 
     // [requires <cap>]  (contextual keyword)
-    if (currentToken().type == TokenType::IDENTIFIER &&
-        currentToken().token->token == "requires") {
+    if (currentToken().type == TokenType::IDENTIFIER && currentToken().token->token == "requires") {
         nextToken();
         if (currentToken().type == TokenType::IDENTIFIER && currentToken().token) {
             fn->requiresCap = currentToken().token->token;
@@ -833,7 +881,8 @@ ASTNode* Parser::parseFfiDecl() {
         }
     }
 
-    if (currentToken().type == TokenType::SEMICOLON) nextToken();
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
     return fn;
 }
 
@@ -847,16 +896,19 @@ ASTNode* Parser::parseStructDecl() {
     }
     if (currentToken().type == TokenType::LBRACE) {
         nextToken();
-        while (currentToken().type != TokenType::RBRACE && currentToken().type != TokenType::SVR_VOID) {
+        while (currentToken().type != TokenType::RBRACE &&
+               currentToken().type != TokenType::SVR_VOID) {
             ASTNode* field = parseDeclaration();
-            if (field) st->addChild(field);
-            else break;
+            if (field)
+                st->addChild(field);
+            else
+                break;
         }
-        if (currentToken().type == TokenType::RBRACE) nextToken();
-        else reportError(currentToken().token ? currentToken().token->loc : st->loc,
-                          "E905", "expected '}' to close struct body");
+        if (currentToken().type == TokenType::RBRACE)
+            nextToken();
     }
-    if (currentToken().type == TokenType::SEMICOLON) nextToken();
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
     return st;
 }
 
@@ -873,7 +925,8 @@ ASTNode* Parser::parseEnumDecl() {
         int nextVal = 0;
         while (currentToken().type != TokenType::RBRACE &&
                currentToken().type != TokenType::SVR_VOID) {
-            if (currentToken().type != TokenType::IDENTIFIER) break;
+            if (currentToken().type != TokenType::IDENTIFIER)
+                break;
             EnumMember m;
             m.name = currentToken().token->token;
             nextToken();
@@ -889,13 +942,14 @@ ASTNode* Parser::parseEnumDecl() {
                 m.value = nextVal++;
             }
             en->members.push_back(m);
-            if (currentToken().type == TokenType::COMMA) nextToken();
+            if (currentToken().type == TokenType::COMMA)
+                nextToken();
         }
-        if (currentToken().type == TokenType::RBRACE) nextToken();
-        else reportError(currentToken().token ? currentToken().token->loc : en->loc,
-                          "E905", "expected '}' to close enum body");
+        if (currentToken().type == TokenType::RBRACE)
+            nextToken();
     }
-    if (currentToken().type == TokenType::SEMICOLON) nextToken();
+    if (currentToken().type == TokenType::SEMICOLON)
+        nextToken();
     return en;
 }
 
@@ -917,12 +971,14 @@ ASTNode* Parser::parseVariableDecl() {
     }
 
     // ADR-021: nullable soneki — int? x
-    if (currentToken().type == TokenType::TERNARY)
-        { nextToken(); vd->varType += "?"; }
+    if (currentToken().type == TokenType::TERNARY) {
+        nextToken();
+        vd->varType += "?";
+    }
 
     if (currentToken().type != TokenType::IDENTIFIER) {
-        reportError(currentToken().token ? currentToken().token->loc : vd->loc,
-                    "E904", "expected variable name");
+        reportError(currentToken().token ? currentToken().token->loc : vd->loc, "E904",
+                    "expected variable name");
         return vd;
     }
 
@@ -938,10 +994,8 @@ ASTNode* Parser::parseVariableDecl() {
             nextToken();
         if (currentToken().type == TokenType::RBRACKET)
             nextToken();
-        else
-            reportError(currentToken().token ? currentToken().token->loc : vd->loc,
-                        "E905", "expected ']' after postfix array declarator");
-        if (vd->varType.back() != ']') vd->varType += "[]";
+        if (vd->varType.back() != ']')
+            vd->varType += "[]";
     }
 
     if (currentToken().type == TokenType::EQUAL) {
@@ -953,8 +1007,8 @@ ASTNode* Parser::parseVariableDecl() {
         nextToken();
 
         if (currentToken().type != TokenType::IDENTIFIER) {
-            reportError(currentToken().token ? currentToken().token->loc : vd->loc,
-                        "E904", "expected variable name after ','");
+            reportError(currentToken().token ? currentToken().token->loc : vd->loc, "E904",
+                        "expected variable name after ','");
             break;
         }
 
@@ -1027,11 +1081,9 @@ ASTNode* Parser::parseStatement() {
     if (ct.type == TokenType::KW_SWITCH)
         return parseSwitchStatement();
 
-    if (ct.is({
-        TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
-        TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
-        TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE
-    })) {
+    if (ct.is({TokenType::KW_VOID, TokenType::KW_INT, TokenType::KW_FLOAT_TYPE,
+               TokenType::KW_DOUBLE, TokenType::KW_DECIMAL, TokenType::KW_BYTE, TokenType::KW_DATE,
+               TokenType::KW_BOOL, TokenType::KW_CHAR, TokenType::KW_STRING_TYPE})) {
         if (lookahead(1).type == TokenType::COLON_COLON) {
             return parseExpressionStatement();
         }
@@ -1078,8 +1130,7 @@ ASTNode* Parser::parseBlock() {
     if (currentToken().type == TokenType::LBRACE)
         nextToken();
 
-    while (currentToken().type != TokenType::RBRACE &&
-           currentToken().type != TokenType::SVR_VOID) {
+    while (currentToken().type != TokenType::RBRACE && currentToken().type != TokenType::SVR_VOID) {
         ASTNode* stmt = parseStatement();
         if (stmt)
             block->addChild(stmt);
@@ -1201,8 +1252,7 @@ ASTNode* Parser::parseReturnStatement() {
     rs->loc = currentToken().token->loc;
     nextToken();
 
-    if (currentToken().type != TokenType::SEMICOLON &&
-        currentToken().type != TokenType::RBRACE) {
+    if (currentToken().type != TokenType::SEMICOLON && currentToken().type != TokenType::RBRACE) {
         rs->value = parseExpression();
     }
 
@@ -1250,11 +1300,11 @@ ASTNode* Parser::parseExpressionStatement() {
         // panic-mode recovery ile bilinen bir sınıra kadar atlanır.
         std::string tokText = ct.token ? ct.token->token : "<eof>";
         return synchronizeAndMakeError(loc, "E901",
-            "unexpected token '" + tokText + "' — expected a statement");
+                                       "unexpected token '" + tokText + "' — expected a statement");
     }
 
     ExpressionStatementNode* es = new ExpressionStatementNode();
-    es->loc        = loc;
+    es->loc = loc;
     es->expression = expr;
     if (currentToken().type == TokenType::SEMICOLON)
         nextToken();
@@ -1316,9 +1366,7 @@ ASTNode* Parser::parseSwitchStatement() {
         return sw;
     nextToken(); // tüket: {
 
-    while (currentToken().type != TokenType::RBRACE &&
-           currentToken().type != TokenType::SVR_VOID) {
-
+    while (currentToken().type != TokenType::RBRACE && currentToken().type != TokenType::SVR_VOID) {
         auto ct = currentToken();
 
         if (ct.type == TokenType::KW_CASE) {
@@ -1341,8 +1389,10 @@ ASTNode* Parser::parseSwitchStatement() {
                    currentToken().type != TokenType::RBRACE &&
                    currentToken().type != TokenType::SVR_VOID) {
                 ASTNode* stmt = parseStatement();
-                if (stmt) clause.body.push_back(stmt);
-                else break;
+                if (stmt)
+                    clause.body.push_back(stmt);
+                else
+                    break;
             }
             // Açık break varsa zaten tüketildi (parseStatement → parseBreakStatement)
             sw->cases.push_back(std::move(clause));
@@ -1358,8 +1408,10 @@ ASTNode* Parser::parseSwitchStatement() {
                    currentToken().type != TokenType::RBRACE &&
                    currentToken().type != TokenType::SVR_VOID) {
                 ASTNode* stmt = parseStatement();
-                if (stmt) clause.body.push_back(stmt);
-                else break;
+                if (stmt)
+                    clause.body.push_back(stmt);
+                else
+                    break;
             }
             sw->cases.push_back(std::move(clause));
         } else {

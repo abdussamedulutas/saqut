@@ -88,8 +88,9 @@ std::string DapHandler::valueToString(const Value& v, int depth) const {
                 size_t shown = std::min(s->fields.size(), (size_t)6);
                 for (size_t i = 0; i < shown; ++i) {
                     if (i) out += ", ";
-                    std::string fname = (i < s->fieldNames.size() && !s->fieldNames[i].empty())
-                        ? s->fieldNames[i] : std::to_string(i);
+                    const auto& fn = s->fieldNames ? *s->fieldNames : std::vector<std::string>();
+                    std::string fname = (i < fn.size() && !fn[i].empty())
+                        ? fn[i] : std::to_string(i);
                     out += fname + ": " + valueToString(s->fields[i], depth + 1);
                 }
                 if (s->fields.size() > shown) out += ", …";
@@ -98,12 +99,32 @@ std::string DapHandler::valueToString(const Value& v, int depth) const {
             auto* a = static_cast<ArrayObject*>(v.ref);
             if (depth > 0) return "[…]";
             std::string out = "[";
-            size_t shown = std::min(a->elements.size(), (size_t)8);
+            int aLen = 0;
+            switch (a->elemKind) {
+                case ArrayElemKind::Ref:     aLen = (int)a->elements.size(); break;
+                case ArrayElemKind::Byte:    aLen = (int)a->bytes.size();    break;
+                case ArrayElemKind::Int:     aLen = (int)a->ints.size();     break;
+                case ArrayElemKind::LongInt: aLen = (int)a->longs.size();    break;
+                case ArrayElemKind::Float32: aLen = (int)a->f32s.size();     break;
+                case ArrayElemKind::Float64: aLen = (int)a->f64s.size();     break;
+                case ArrayElemKind::Decimal: aLen = (int)a->decimals.size(); break;
+            }
+            size_t shown = std::min((size_t)aLen, (size_t)8);
             for (size_t i = 0; i < shown; ++i) {
                 if (i) out += ", ";
-                out += valueToString(a->elements[i], depth + 1);
+                Value tmp;
+                switch (a->elemKind) {
+                    case ArrayElemKind::Ref:     tmp = a->elements[i]; break;
+                    case ArrayElemKind::Byte:    tmp = Value::fromInt(a->bytes[i]); break;
+                    case ArrayElemKind::Int:     tmp = Value::fromInt(a->ints[i]); break;
+                    case ArrayElemKind::LongInt: tmp = Value::fromLongInt(a->longs[i]); break;
+                    case ArrayElemKind::Float32: tmp = Value::fromFloat32(a->f32s[i]); break;
+                    case ArrayElemKind::Float64: tmp = Value::fromFloat(a->f64s[i]); break;
+                    case ArrayElemKind::Decimal: tmp = Value::fromDecimal(a->decimals[i]); break;
+                }
+                out += valueToString(tmp, depth + 1);
             }
-            if (a->elements.size() > shown) out += ", …";
+            if ((size_t)aLen > shown) out += ", …";
             return out + "]";
         }
     }
@@ -140,8 +161,9 @@ nlohmann::json DapHandler::buildChildVariables(const Value& v) {
         auto* s = static_cast<StructObject*>(v.ref);
         for (size_t i = 0; i < s->fields.size(); ++i) {
             const Value& fv = s->fields[i];
-            std::string fname = (i < s->fieldNames.size() && !s->fieldNames[i].empty())
-                ? s->fieldNames[i] : "field[" + std::to_string(i) + "]";
+            const auto& fn = s->fieldNames ? *s->fieldNames : std::vector<std::string>();
+            std::string fname = (i < fn.size() && !fn[i].empty())
+                ? fn[i] : "field[" + std::to_string(i) + "]";
             vars.push_back({
                 {"name",               fname},
                 {"value",              valueToString(fv)},
@@ -151,8 +173,27 @@ nlohmann::json DapHandler::buildChildVariables(const Value& v) {
         }
     } else if (v.ref->type == ObjectType::Array) {
         auto* a = static_cast<ArrayObject*>(v.ref);
-        for (size_t i = 0; i < a->elements.size(); ++i) {
-            const Value& ev = a->elements[i];
+        int aLen = 0;
+        switch (a->elemKind) {
+            case ArrayElemKind::Ref:     aLen = (int)a->elements.size(); break;
+            case ArrayElemKind::Byte:    aLen = (int)a->bytes.size();    break;
+            case ArrayElemKind::Int:     aLen = (int)a->ints.size();     break;
+            case ArrayElemKind::LongInt: aLen = (int)a->longs.size();    break;
+            case ArrayElemKind::Float32: aLen = (int)a->f32s.size();     break;
+            case ArrayElemKind::Float64: aLen = (int)a->f64s.size();     break;
+            case ArrayElemKind::Decimal: aLen = (int)a->decimals.size(); break;
+        }
+        for (int i = 0; i < aLen; ++i) {
+            Value ev;
+            switch (a->elemKind) {
+                case ArrayElemKind::Ref:     ev = a->elements[i]; break;
+                case ArrayElemKind::Byte:    ev = Value::fromInt(a->bytes[i]); break;
+                case ArrayElemKind::Int:     ev = Value::fromInt(a->ints[i]); break;
+                case ArrayElemKind::LongInt: ev = Value::fromLongInt(a->longs[i]); break;
+                case ArrayElemKind::Float32: ev = Value::fromFloat32(a->f32s[i]); break;
+                case ArrayElemKind::Float64: ev = Value::fromFloat(a->f64s[i]); break;
+                case ArrayElemKind::Decimal: ev = Value::fromDecimal(a->decimals[i]); break;
+            }
             vars.push_back({
                 {"name",               "[" + std::to_string(i) + "]"},
                 {"value",              valueToString(ev)},
@@ -673,8 +714,11 @@ bool DapHandler::resolveExpression(const std::string& expr, int frameId,
                 out.ref->type != ObjectType::Struct) return false;
             auto* s = static_cast<StructObject*>(out.ref);
             bool hit = false;
-            for (size_t f = 0; f < s->fieldNames.size() && f < s->fields.size(); ++f) {
-                if (s->fieldNames[f] == field) { out = s->fields[f]; hit = true; break; }
+            if (s->fieldNames) {
+                auto& fn = *s->fieldNames;
+                for (size_t f = 0; f < fn.size() && f < s->fields.size(); ++f) {
+                    if (fn[f] == field) { out = s->fields[f]; hit = true; break; }
+                }
             }
             if (!hit) return false;
         } else if (expr[i] == '[') {

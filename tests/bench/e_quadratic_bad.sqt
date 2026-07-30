@@ -1,0 +1,24 @@
+// KOTU: O(n^2) - her push'ta slice alıp reverse
+int main() {
+    int[] a = [];
+    int i = 0;
+    while (i < 2000) {
+        a.push(i);
+        // Her push'ta array'in tamamini reverse et (O(n^2))
+        // Degil, daha kotusu: her push'ta copy + reverse
+        int N = a.length();
+        int[] rev = a.slice(0, N);
+        rev.reverse();
+        a = rev;
+        i = i + 1;
+    }
+    int cs = 0;
+    i = 0;
+    while (i < a.length()) {
+        cs = cs + a[i];
+        i = i + 1;
+    }
+    print(cs);
+    print("\n");
+    return 0;
+}

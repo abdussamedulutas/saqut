@@ -1,0 +1,84 @@
+// UB/tanimisiz davranis avi
+
+int main() {
+    int errors = 0;
+    
+    // Test 1: Bos array length
+    byte[] empty = [];
+    if (empty.length() != 0) { errors = errors + 1; }
+    
+    // Test 2: Bos array push/pop
+    empty.push(42 as byte);
+    empty.push(43 as byte);
+    if (empty.length() != 2) { errors = errors + 1; }
+    
+    int v = empty.pop() as int;
+    if (v != 43) { errors = errors + 1; }
+    v = empty.pop() as int;
+    if (v != 42) { errors = errors + 1; }
+    
+    // Test 3: byte[] concat
+    byte[] ba = [1, 2, 3];
+    byte[] bb = [4, 5, 6];
+    byte[] bc = ba.concat(bb);
+    if (bc.length() != 6) { errors = errors + 1; }
+    if ((bc[0] as int) != 1 || (bc[5] as int) != 6) { errors = errors + 1; }
+    
+    // Test 4: int[] slice reverse
+    int[] ia = [10, 20, 30, 40, 50];
+    int[] ib = ia.slice(1, 4);
+    if (ib.length() != 3) { errors = errors + 1; }
+    ib.reverse();
+    if (ib[0] != 40 || ib[2] != 20) { errors = errors + 1; }
+    
+    // Test 5: int[] insert/remove
+    int[] ic = [1, 2, 3, 4, 5];
+    ic.insert(0, 0);
+    ic.insert(6, 6);
+    if (ic.length() != 7) { errors = errors + 1; }
+    int r1 = ic.remove(0);
+    int r2 = ic.remove(5);
+    if (r1 != 0 || r2 != 6) { errors = errors + 1; }
+    if (ic.length() != 5) { errors = errors + 1; }
+    
+    // Test 6: contains/indexOf
+    int[] id = [5, 10, 15, 20, 25];
+    if (id.contains(5) != 1) { errors = errors + 1; }
+    if (id.contains(99) != 0) { errors = errors + 1; }
+    if (id.indexOf(5) != 0) { errors = errors + 1; }
+    if (id.indexOf(25) != 4) { errors = errors + 1; }
+    
+    // Test 7: float push/pop
+    float[] fa = [];
+    fa.push(1.5);
+    fa.push(2.5);
+    fa.push(3.5);
+    float fp = fa.pop();
+    if (fp != 3.5) { errors = errors + 1; }
+    
+    // Test 8: slice + push (crypto pattern)
+    byte[] src = [];
+    int i = 0;
+    while (i < 256) {
+        src.push((i & 255) as byte);
+        i = i + 1;
+    }
+    byte[] sub = src.slice(128, 192);
+    byte[] dst = [];
+    i = 0;
+    while (i < 64) {
+        dst.push(sub[i]);
+        i = i + 1;
+    }
+    if (dst.length() != 64) { errors = errors + 1; }
+    if ((dst[0] as int) != 128 || (dst[63] as int) != 191) { errors = errors + 1; }
+    
+    // Test 9: float contains
+    float[] fc = [1.0, 2.0, 3.0];
+    if (fc.contains(2.0) != 1) { errors = errors + 1; }
+    if (fc.contains(99.0) != 0) { errors = errors + 1; }
+    
+    print(errors);
+    print(": errors found\n");
+    return errors;
+}

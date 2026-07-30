@@ -1,0 +1,37 @@
+// Constant folding benchmark: 50K iterasyon
+// Kotu: her turda sabit ifadeleri yeniden hesapla
+// Iyi: onceden hesaplanmis sabitler kullan
+
+int main() {
+    int result = 0;
+    int i = 0;
+    int N = 100000;
+    
+    while (i < N) {
+        // Fold edilebilir karmaşık sabit ifadeler
+        int a = 123456 * 789012;
+        int b = 987654 / 321;
+        int c = a + b - 55555;
+        int d = c * 12345 / 6789;
+        int e = d + c - a + b;
+        int f = e * 77777 / 11111;
+        int g = f + e + d + c + b + a;
+        
+        // Fold edilebilir mantıksal ifadeler
+        int h = g & 65535;
+        int k = (h << 8) | (h >> 8);
+        int m = k ^ 0xAAAAAAAA;
+        
+        // Float sabitler
+        double p = 3.14159265358979 * 2.71828182845904;
+        double q = p * p / 1.23456789;
+        int r = (q + p) as int;
+        
+        result = result + r + (i & 255);
+        i = i + 1;
+    }
+    
+    print(result);
+    print("\n");
+    return 0;
+}

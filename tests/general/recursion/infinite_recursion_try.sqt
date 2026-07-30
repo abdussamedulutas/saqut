@@ -1,0 +1,13 @@
+int boom(int n) {
+    return 1 + boom(n + 1);
+}
+
+int main() {
+    try {
+        print(boom(0));
+    } catch (Error e) {
+        print("caught:" + e.code);
+    }
+    print("survived");
+    return 0;
+}

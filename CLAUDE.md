@@ -22,6 +22,11 @@ Claude ile her yeni oturumda:
 
 - `0.8.0` yayınlanmış baseline'dır.
 - Aktif hedefler `0.9.0` ve `1.0.0`'dır.
+- Derleyiciyi stabil hale getirmek tek başına sürüm numarası atlama gerekçesi
+  değildir. Yeni milestone, kullanıcı tarafından gözlenen yeni/iyileşmiş ürün
+  davranışı ve bunun kanıt programlarıyla gerekçelendirilir.
+- `0.9.0` sessiz stabilizasyon release'i değildir; ürün sahibinin dili gerçek
+  CLI/veri-işleme akışlarında daha hareketli kullanabildiği preview olmalıdır.
 - v1.0 production-ready vaat değil, Feedback MVP'dir.
 - VM stabil referanstır; JIT `[EXPERIMENTAL]`dır.
 - AOT ve public concurrency v1 dışıdır.

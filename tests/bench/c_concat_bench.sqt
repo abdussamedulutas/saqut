@@ -1,0 +1,20 @@
+// String concat vs manual character push
+// Bu benchmark string concat'in maliyetini gosterir
+
+int main() {
+    int result = 0;
+    
+    // Concat ile cok sayida kucuk string birlestirme
+    string s = "";
+    int i = 0;
+    int N = 500;
+    while (i < N) {
+        s = s + "ab";
+        result = result + s.length();
+        i = i + 1;
+    }
+    
+    print(result);
+    print("\n");
+    return 0;
+}

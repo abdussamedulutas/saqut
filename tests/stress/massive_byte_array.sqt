@@ -1,0 +1,30 @@
+// Cok buyuk tek bir byte[] array
+// Bellek tahsisini ve dogrulugunu test eder.
+// int[] ile ayni boyut karsilastirmasi.
+
+int main() {
+    int size = 100000;  // 100KB
+    byte[] big = [];
+    int i = 0;
+    while (i < size) {
+        big.push((i & 255) as byte);
+        i = i + 1;
+    }
+    
+    // Dogruluk kontrolu
+    int errors = 0;
+    i = 0;
+    while (i < size) {
+        int expected = i & 255;
+        if ((big[i] as int) != expected) {
+            errors = errors + 1;
+        }
+        i = i + 1;
+    }
+    
+    print(big.length());
+    print(",");
+    print(errors);
+    print(": massive byte array done\n");
+    return 0;
+}

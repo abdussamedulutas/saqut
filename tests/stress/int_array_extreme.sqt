@@ -1,0 +1,86 @@
+// int[] array extreme testi
+// Push/pop/insert/remove/slice/reverse/concat/clear
+// Hepsinin packed Int array'de dogru calistigini test eder.
+
+int main() {
+    int[] a = [];
+    
+    // Push
+    int i = 0;
+    while (i < 500) {
+        a.push(i * 10);
+        i = i + 1;
+    }
+    print(a.length());
+    print(": push done\n");
+    
+    // Insert
+    a.insert(0, -1);
+    a.insert(250, 999);
+    print(a[0]);
+    print(",");
+    print(a[250]);
+    print(",");
+    print(a[501]);
+    print(": insert done\n");
+    
+    // Remove
+    int v1 = a.remove(0);
+    int v2 = a.remove(249);
+    print(v1);
+    print(",");
+    print(v2);
+    print(",");
+    print(a.length());
+    print(": remove done\n");
+    
+    // Reverse
+    int[] b = a.slice(0, 10);
+    b.reverse();
+    print(b[0]);
+    print(",");
+    print(b[9]);
+    print(": reverse done\n");
+    
+    // Concat
+    int[] x = [1, 2, 3];
+    int[] y = [4, 5, 6];
+    int[] z = x.concat(y);
+    print(z.length());
+    print(",");
+    print(z[0]);
+    print(",");
+    print(z[5]);
+    print(": concat done\n");
+    
+    // Contains + indexOf
+    print(z.contains(4));
+    print(",");
+    print(z.contains(99));
+    print(",");
+    print(z.indexOf(4));
+    print(": contains/indexOf done\n");
+    
+    // Clear
+    z.clear();
+    print(z.length());
+    print(": clear done\n");
+    
+    // Pop
+    int[] stack = [];
+    i = 0;
+    while (i < 100) {
+        stack.push(i);
+        i = i + 1;
+    }
+    int sum = 0;
+    while (stack.length() > 0) {
+        sum = sum + stack.pop();
+    }
+    print(sum);
+    print(",");
+    print(stack.length());
+    print(": pop done\n");
+    
+    return 0;
+}

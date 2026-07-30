@@ -1,0 +1,66 @@
+// Struct fieldNames shared_ptr stress testi
+// Cok sayida struct olusturup alan adlarina erisim yapar.
+// shared_ptr metadata'nin dogru calistigini dogrular.
+
+export struct Point {
+    int x;
+    int y;
+    int z;
+}
+
+export struct Line {
+    Point start;
+    Point end;
+}
+
+export struct Polygon {
+    Line[] edges;
+    string label;
+}
+
+int main() {
+    int count = 10000;
+    Point[] points = [];
+    
+    int i = 0;
+    while (i < count) {
+        Point p;
+        p.x = i;
+        p.y = i + 1;
+        p.z = i + 2;
+        points.push(p);
+        i = i + 1;
+    }
+    
+    // Dogruluk
+    int ok = 0;
+    i = 0;
+    while (i < count) {
+        Point p = points[i];
+        if (p.x == i && p.y == i + 1 && p.z == i + 2) {
+            ok = ok + 1;
+        }
+        i = i + 1;
+    }
+    
+    print(count);
+    print(",");
+    print(ok);
+    print(": struct field stress done\n");
+    
+    // nested struct
+    Line line;
+    line.start.x = 1;
+    line.start.y = 2;
+    line.start.z = 3;
+    line.end.x = 4;
+    line.end.y = 5;
+    line.end.z = 6;
+    
+    print(line.start.x);
+    print(",");
+    print(line.end.z);
+    print(": nested struct access done\n");
+    
+    return 0;
+}

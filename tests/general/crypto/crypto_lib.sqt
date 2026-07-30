@@ -1,0 +1,313 @@
+// AES-128 TAKLİDİ bir S-box blok şifre prototipi.
+//
+// GERÇEK AES DEĞİL — MixColumns yerine basit, tersinir bir toy-diffusion,
+// key schedule yerine SBOX+round-sabit tabanlı toy bir genişletme kullanır.
+// GÜVENLİK AMAÇLI KULLANILMAMALI. Amaç saQut'un byte[]/array kopya
+// davranışını ve GC baskısını gerçekçi, S-box lookup ağırlıklı bir iş
+// yüküyle "sert sürüşe" çıkarmak (bkz. #193'ün XML/string testdrive'ı).
+//
+// NOT (issue #199): S-box tabloları decimal literal ile yazıldı — bu build'de
+// hex literal (0x..) sessizce 0'a derleniyor, workaround olarak decimal
+// kullanıldı.
+//
+// NOT (issue #168): Bütün yardımcı fonksiyonlar `byte[]` DÖNDÜRMEK yerine
+// bir `out` byte[] parametresini `push` ile dolduruyor (void fonksiyon +
+// out-parametre). Array dönüş tipli fonksiyon bildirimi bu build'de parse
+// hatası veriyor (E901) — array referans tipi olduğu için out-parametre
+// workaround'u çalışıyor.
+
+export byte[] SBOX = [
+    99, 124, 119, 123, 242, 107, 111, 197, 48, 1, 103, 43, 254, 215, 171, 118,
+    202, 130, 201, 125, 250, 89, 71, 240, 173, 212, 162, 175, 156, 164, 114, 192,
+    183, 253, 147, 38, 54, 63, 247, 204, 52, 165, 229, 241, 113, 216, 49, 21,
+    4, 199, 35, 195, 24, 150, 5, 154, 7, 18, 128, 226, 235, 39, 178, 117,
+    9, 131, 44, 26, 27, 110, 90, 160, 82, 59, 214, 179, 41, 227, 47, 132,
+    83, 209, 0, 237, 32, 252, 177, 91, 106, 203, 190, 57, 74, 76, 88, 207,
+    208, 239, 170, 251, 67, 77, 51, 133, 69, 249, 2, 127, 80, 60, 159, 168,
+    81, 163, 64, 143, 146, 157, 56, 245, 188, 182, 218, 33, 16, 255, 243, 210,
+    205, 12, 19, 236, 95, 151, 68, 23, 196, 167, 126, 61, 100, 93, 25, 115,
+    96, 129, 79, 220, 34, 42, 144, 136, 70, 238, 184, 20, 222, 94, 11, 219,
+    224, 50, 58, 10, 73, 6, 36, 92, 194, 211, 172, 98, 145, 149, 228, 121,
+    231, 200, 55, 109, 141, 213, 78, 169, 108, 86, 244, 234, 101, 122, 174, 8,
+    186, 120, 37, 46, 28, 166, 180, 198, 232, 221, 116, 31, 75, 189, 139, 138,
+    112, 62, 181, 102, 72, 3, 246, 14, 97, 53, 87, 185, 134, 193, 29, 158,
+    225, 248, 152, 17, 105, 217, 142, 148, 155, 30, 135, 233, 206, 85, 40, 223,
+    140, 161, 137, 13, 191, 230, 66, 104, 65, 153, 45, 15, 176, 84, 187, 22
+];
+
+export byte[] INV_SBOX = [
+    82, 9, 106, 213, 48, 54, 165, 56, 191, 64, 163, 158, 129, 243, 215, 251,
+    124, 227, 57, 130, 155, 47, 255, 135, 52, 142, 67, 68, 196, 222, 233, 203,
+    84, 123, 148, 50, 166, 194, 35, 61, 238, 76, 149, 11, 66, 250, 195, 78,
+    8, 46, 161, 102, 40, 217, 36, 178, 118, 91, 162, 73, 109, 139, 209, 37,
+    114, 248, 246, 100, 134, 104, 152, 22, 212, 164, 92, 204, 93, 101, 182, 146,
+    108, 112, 72, 80, 253, 237, 185, 218, 94, 21, 70, 87, 167, 141, 157, 132,
+    144, 216, 171, 0, 140, 188, 211, 10, 247, 228, 88, 5, 184, 179, 69, 6,
+    208, 44, 30, 143, 202, 63, 15, 2, 193, 175, 189, 3, 1, 19, 138, 107,
+    58, 145, 17, 65, 79, 103, 220, 234, 151, 242, 207, 206, 240, 180, 230, 115,
+    150, 172, 116, 34, 231, 173, 53, 133, 226, 249, 55, 232, 28, 117, 223, 110,
+    71, 241, 26, 113, 29, 41, 197, 137, 111, 183, 98, 14, 170, 24, 190, 27,
+    252, 86, 62, 75, 198, 210, 121, 32, 154, 219, 192, 254, 120, 205, 90, 244,
+    31, 221, 168, 51, 136, 7, 199, 49, 177, 18, 16, 89, 39, 128, 236, 95,
+    96, 81, 127, 169, 25, 181, 74, 13, 45, 229, 122, 159, 147, 201, 156, 239,
+    160, 224, 59, 77, 174, 42, 245, 176, 200, 235, 187, 60, 131, 83, 153, 97,
+    23, 43, 4, 126, 186, 119, 214, 38, 225, 105, 20, 99, 85, 33, 12, 125
+];
+
+// Basit LCG tabanlı deterministik PRNG (glibc rand() sabitleri) — kripto
+// amaçlı DEĞİL, yalnızca tekrarlanabilir stres verisi üretmek için.
+int rngState = 123456789;
+
+byte nextByte() {
+    rngState = rngState * 1103515245 + 12345;
+    int v = rngState & 255;
+    return v as byte;
+}
+
+// out'a n adet pseudo-random byte push eder.
+export void genPlaintext(int n, byte[] out) {
+    int i = 0;
+    while (i < n) {
+        out.push(nextByte());
+        i = i + 1;
+    }
+}
+
+export void xorBytes(byte[] a, byte[] b, byte[] out) {
+    int i = 0;
+    while (i < a.length()) {
+        int v = (a[i] as int) ^ (b[i] as int);
+        out.push(v as byte);
+        i = i + 1;
+    }
+}
+
+export void subBytes(byte[] block, byte[] box, byte[] out) {
+    int i = 0;
+    while (i < block.length()) {
+        int idx = block[i] as int;
+        out.push(box[idx]);
+        i = i + 1;
+    }
+}
+
+// 4x4 state (row-major), satır r sola r kadar dairesel kaydırma.
+// Gerçek AES ShiftRows'un taklidi, birebir aynı değil.
+export void shiftRows(byte[] block, byte[] out) {
+    int r = 0;
+    while (r < 4) {
+        int c = 0;
+        while (c < 4) {
+            int srcCol = (c + r) % 4;
+            out.push(block[r * 4 + srcCol]);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+}
+
+export void invShiftRows(byte[] block, byte[] out) {
+    int r = 0;
+    while (r < 4) {
+        int c = 0;
+        while (c < 4) {
+            int srcCol = (c - r + 4) % 4;
+            out.push(block[r * 4 + srcCol]);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+}
+
+// Toy diffusion (GERÇEK MixColumns DEĞİL, GF(2^8) çarpımı yok).
+// Sütun başına: m0=b1, m1=b2, m2=b3, m3=b0^b1^b2^b3 — tersinir
+// permütasyon+parite kombinasyonu.
+export void mixToy(byte[] block, byte[] out) {
+    int col = 0;
+    while (col < 4) {
+        int base = col * 4;
+        int b0 = block[base] as int;
+        int b1 = block[base + 1] as int;
+        int b2 = block[base + 2] as int;
+        int b3 = block[base + 3] as int;
+        out.push(b1 as byte);
+        out.push(b2 as byte);
+        out.push(b3 as byte);
+        out.push((b0 ^ b1 ^ b2 ^ b3) as byte);
+        col = col + 1;
+    }
+}
+
+export void invMixToy(byte[] block, byte[] out) {
+    int col = 0;
+    while (col < 4) {
+        int base = col * 4;
+        int m0 = block[base] as int;
+        int m1 = block[base + 1] as int;
+        int m2 = block[base + 2] as int;
+        int m3 = block[base + 3] as int;
+        int b0 = m3 ^ m0 ^ m1 ^ m2;
+        out.push(b0 as byte);
+        out.push(m0 as byte);
+        out.push(m1 as byte);
+        out.push(m2 as byte);
+        col = col + 1;
+    }
+}
+
+// Toy key schedule: gerçek AES key expansion DEĞİL. Her round key önceki
+// round key'in SBOX'tan geçirilmiş hali + basit bir round sabitiyle
+// XOR'lanarak üretilir. `out`, düz (flat) byte[] — uzunluk 16*(rounds+1).
+export void roundKeysToy(byte[] key16, int rounds, byte[] out) {
+    int i = 0;
+    while (i < 16) {
+        out.push(key16[i]);
+        i = i + 1;
+    }
+    int r = 1;
+    while (r <= rounds) {
+        int baseIdx = (r - 1) * 16;
+        byte[] prevKey = out.slice(baseIdx, baseIdx + 16);
+        byte[] subbed = [];
+        subBytes(prevKey, SBOX, subbed);
+        int j = 0;
+        while (j < 16) {
+            int v = subbed[j] as int;
+            if (j == 0) {
+                v = v ^ r;
+            }
+            out.push(v as byte);
+            j = j + 1;
+        }
+        r = r + 1;
+    }
+}
+
+export void encryptBlock(byte[] block16, byte[] roundKeys, int rounds, byte[] out) {
+    byte[] state = [];
+    xorBytes(block16, roundKeys.slice(0, 16), state);
+    int r = 1;
+    while (r <= rounds) {
+        byte[] subbed = [];
+        subBytes(state, SBOX, subbed);
+        byte[] shifted = [];
+        shiftRows(subbed, shifted);
+        byte[] mixed = shifted;
+        if (r < rounds) {
+            mixed = [];
+            mixToy(shifted, mixed);
+        }
+        int base = r * 16;
+        byte[] rk = roundKeys.slice(base, base + 16);
+        byte[] next = [];
+        xorBytes(mixed, rk, next);
+        state = next;
+        r = r + 1;
+    }
+    int i = 0;
+    while (i < state.length()) {
+        out.push(state[i]);
+        i = i + 1;
+    }
+}
+
+export void decryptBlock(byte[] block16, byte[] roundKeys, int rounds, byte[] out) {
+    int base = rounds * 16;
+    byte[] rk = roundKeys.slice(base, base + 16);
+    byte[] state = [];
+    xorBytes(block16, rk, state);
+    int r = rounds;
+    while (r >= 1) {
+        byte[] unmixed = state;
+        if (r < rounds) {
+            unmixed = [];
+            invMixToy(state, unmixed);
+        }
+        byte[] unshifted = [];
+        invShiftRows(unmixed, unshifted);
+        byte[] subbed = [];
+        subBytes(unshifted, INV_SBOX, subbed);
+        base = (r - 1) * 16;
+        rk = roundKeys.slice(base, base + 16);
+        byte[] next = [];
+        xorBytes(subbed, rk, next);
+        state = next;
+        r = r - 1;
+    }
+    int i = 0;
+    while (i < state.length()) {
+        out.push(state[i]);
+        i = i + 1;
+    }
+}
+
+export bool arraysEqual(byte[] a, byte[] b) {
+    if (a.length() != b.length()) {
+        return false;
+    }
+    int i = 0;
+    while (i < a.length()) {
+        if (a[i] != b[i]) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+// totalBytes'lık pseudo-random plaintext üretir, 16 byte'lık bloklar halinde
+// şifreler/çözer, roundtrip doğruluğunu ve bir XOR checksum'ı basar.
+// Boyut arttıkça array push/slice/GC baskısını gözlemlemek için tasarlandı.
+export void runCryptoStress(int totalBytes, int rounds) {
+    byte[] key = [];
+    genPlaintext(16, key);
+    byte[] roundKeys = [];
+    roundKeysToy(key, rounds, roundKeys);
+    byte[] plaintext = [];
+    genPlaintext(totalBytes, plaintext);
+
+    int numBlocks = totalBytes / 16;
+    byte[] ciphertext = [];
+    int i = 0;
+    while (i < numBlocks) {
+        byte[] block = plaintext.slice(i * 16, i * 16 + 16);
+        byte[] enc = [];
+        encryptBlock(block, roundKeys, rounds, enc);
+        int j = 0;
+        while (j < 16) {
+            ciphertext.push(enc[j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    byte[] decrypted = [];
+    i = 0;
+    while (i < numBlocks) {
+        byte[] block = ciphertext.slice(i * 16, i * 16 + 16);
+        byte[] dec = [];
+        decryptBlock(block, roundKeys, rounds, dec);
+        int j = 0;
+        while (j < 16) {
+            decrypted.push(dec[j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    int checksum = 0;
+    i = 0;
+    while (i < ciphertext.length()) {
+        checksum = checksum ^ (ciphertext[i] as int);
+        i = i + 1;
+    }
+
+    print(plaintext.length());
+    print(",");
+    print(ciphertext.length());
+    print(",");
+    print(arraysEqual(plaintext, decrypted));
+    print(",");
+    print(checksum);
+    print("\n");
+}

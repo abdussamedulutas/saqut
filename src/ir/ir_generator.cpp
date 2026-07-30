@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include "ir/ir_generator.hpp"
+#include "ir/ir_cfg.hpp"
 
 #include "builtin/builtin_methods.hpp"
 #include "parser/nodes/binary_expr.hpp"
@@ -1929,11 +1930,14 @@ void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
     ins.sourceFile = el.filePath;
-    // Alan adlarını struct layout'tan al — toJson/dump'ta kullanılır
+    // Alan adlarını struct layout'tan al — 218: IRFunction metadata'ya taşı
     auto it = structLayouts_.find(structType);
-    if (it != structLayouts_.end())
+    if (it != structLayouts_.end()) {
+        std::vector<std::string> names;
         for (const auto& kv : it->second)
-            ins.fieldNames.push_back(kv.first);
+            names.push_back(kv.first);
+        currentFunction_->structFieldNames[structType] = std::move(names);
+    }
     currentFunction_->instructions.push_back(std::move(ins));
 }
 

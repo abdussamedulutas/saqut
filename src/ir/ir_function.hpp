@@ -21,7 +21,10 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_map>
 #include "ir/instruction.hpp"
+#include "ir/ir_cfg.hpp"
+#include "core/capability.hpp"
 #include "core/module_registry.hpp"
 
 // SlotType tanımı instruction.hpp'ye taşındı (Instruction::valueType için gerekli,
@@ -41,6 +44,12 @@ struct IRFunction {
     std::vector<SlotType>    slotTypes;
     // Faz 5: (sourceLine) → ilk instruction IP indeksi (breakpoint eşlemesi için)
     std::unordered_map<int, int> lineToFirstIP;
+    CFG cfg;
+
+    // #218: struct alan adları (Instruction'dan tasındı)
+    std::unordered_map<std::string, std::vector<std::string>> structFieldNames;
+    // #218: capability gereksinimleri (Instruction'dan tasındı)
+    std::unordered_map<int, Capability> capRequirements;
 
     IRFunction(std::string name, int paramCount)
         : name(std::move(name)), paramCount(paramCount), slotCount(0) {}

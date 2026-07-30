@@ -1274,12 +1274,19 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             } else if (instr.functionName == "__ffi__") {
                 // ADR-034 (#107): sayısal host id ile FFI dispatch
                 // ADR-035 (#76): runtime capability backstop (A+B modelinin B'si)
-                if (instr.requiredCap && caps_.find(*instr.requiredCap) == caps_.end()) {
-                    pendingThrow_ = makeErrorValue(
-                        std::string("requires --allow-") + capabilityName(*instr.requiredCap) +
+                {
+                    // #218: requiredCap IRFunction metadata'dan alınır
+                    const auto& fn = *callStack_.back().function;
+                    auto capIt = fn.capRequirements.find((int)(&instr - fn.instructions.data()));
+                    std::optional<Capability> requiredCap = (capIt != fn.capRequirements.end())
+                        ? std::optional<Capability>(capIt->second) : std::nullopt;
+                    if (requiredCap && caps_.find(*requiredCap) == caps_.end()) {
+                        pendingThrow_ = makeErrorValue(
+                            std::string("requires --allow-") + capabilityName(*requiredCap) +
                             " capability",
                         "E_CAP_MISSING", instr.sourceLine, instr.sourceCol);
-                    break;
+                        break;
+                    }
                 }
                 std::vector<Value> argVals;
                 argVals.reserve(instr.argSlots.size());

@@ -18,8 +18,10 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <iomanip>
 #include "ir/instruction.hpp"
 #include "ir/ir_color.hpp"   // TTY-aware renk — redirect'te ANSI yok (#141 deseni)
+#include "ir/ir_dump.hpp"    // ortak operand renderer'ı (literal değerler, #218)
 
 struct BasicBlock {
     int id = -1;
@@ -61,11 +63,12 @@ struct BasicBlock {
             if (&ins == &instructions.back()) os << IrColor::SoftGri() << "* " << IrColor::Reset();
             else os << "  ";
             // CALLHOST (builtin metod + __ffi__) dış dünya çağrısı → kırmızı;
-            // diğer opcode'lar turuncu.
+            // diğer opcode'lar turuncu. Operandlar (literal değerler dahil)
+            // ortak renderer'dan — CFG paleti (ir_dump.hpp, #218).
             const char* opColor = (ins.opcode == Opcode::CALLHOST)
                 ? IrColor::Kirmizi() : IrColor::SoftTuruncu();
-            os << opColor << opcodeName(ins.opcode) << IrColor::Reset();
-            if (ins.dest >= 0) os << " " << IrColor::SoftMavi() << "s" << ins.dest << IrColor::Reset();
+            os << opColor << std::left << std::setw(16) << opcodeName(ins.opcode) << IrColor::Reset();
+            os << IrDump::operands(ins, IrDump::kCfgPalette);
             os << "\n";
         }
         return os.str();

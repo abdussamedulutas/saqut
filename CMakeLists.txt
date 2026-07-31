@@ -119,6 +119,15 @@ add_test(
             "${SAQUT_BINARY}"
 )
 
+# #144 (SQ-100-CHECK-JSONL): saqut check stdout canonical JSONL —
+# check.header → check.diagnostic* → check.end; sıra deterministik,
+# exit 0/65 (kDataError).
+add_test(
+    NAME check_jsonl
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/check_jsonl_test.sh"
+            "${SAQUT_BINARY}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

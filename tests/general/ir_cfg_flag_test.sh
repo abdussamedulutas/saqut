@@ -17,9 +17,9 @@ set +e
 status=$?
 set -e
 [ "$status" -eq 0 ] || { echo "FAIL: ir --cfg exit 0 olmali, gercek $status" >&2; cat "$err" >&2; exit 1; }
-grep -q "===== fibonacci (" "$out"  || { echo "FAIL: fibonacci başlığı yok" >&2; exit 1; }
-grep -q "===== fibonacciIterative (" "$out" || { echo "FAIL: fibonacciIterative başlığı yok" >&2; exit 1; }
-grep -q "===== main (" "$out" || { echo "FAIL: main başlığı yok" >&2; exit 1; }
+grep -q "^fibonacci$" "$out"  || { echo "FAIL: fibonacci adı yok" >&2; exit 1; }
+grep -q "^fibonacciIterative$" "$out" || { echo "FAIL: fibonacciIterative adı yok" >&2; exit 1; }
+grep -q "^main$" "$out" || { echo "FAIL: main adı yok" >&2; exit 1; }
 
 # 2) Fall-through kenar: init bloğu (düz talimatla biter) koşul bloğuna
 #    akmalı — eksik kenar hatası burada yakalanır.
@@ -46,8 +46,8 @@ status=$?
 set -e
 [ "$status" -eq 0 ] || { echo "FAIL: bayraksız ir exit 0 olmali" >&2; exit 1; }
 grep -q "LOAD_CONST" "$out" || { echo "FAIL: flat IR LOAD_CONST içermiyor" >&2; exit 1; }
-if grep -q "===== fibonacci (" "$out"; then
-    echo "FAIL: bayraksız ir CFG başlığı basmamali" >&2
+if grep -q "^fibonacci$" "$out"; then
+    echo "FAIL: bayraksız ir fonksiyon adı basmamali (CFG modu kapalı)" >&2
     exit 1
 fi
 

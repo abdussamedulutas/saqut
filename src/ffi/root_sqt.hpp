@@ -21,7 +21,7 @@
 // Gömülü root.sqt kaynağı. Bir kez parse edilir (ModuleLoader önbelleği).
 inline const char* kEmbeddedRootSqt = R"SQT(
 // ── core modülü (import gerektirmez, her zaman mevcut) ─────────────────────
-ffi string version() : CORE_VERSION from core;   // derleyici sürümü (0.8.0)
+ffi string version() : CORE_VERSION from core;   // derleyici sürümü (0.9.2)
 
 // ── math modülü (saf hesap, capability'siz — #89) ──────────────────────────
 // Overload yok → int/ondalık ayrımı isimle (abs/absf). ADR-040: ondalık

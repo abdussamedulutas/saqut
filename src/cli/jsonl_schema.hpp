@@ -14,6 +14,9 @@ namespace saqut::jsonl {
 // check komutu (SQ-100-CHECK-JSONL, #144)
 constexpr int kCheckJsonlSchemaVersion = 1;
 
+// symbols komutu (SQ-100-SYMBOLS-JSONL, #145)
+constexpr int kSymbolsJsonlSchemaVersion = 1;
+
 }  // namespace saqut::jsonl
 
 #endif  // SAQUT_CLI_JSONL_SCHEMA

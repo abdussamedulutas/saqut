@@ -1,5 +1,14 @@
 // ============================================================================
-// saQut CLI — symbols komutu (sembol tablosu — JSON çıktı, Faz 2)
+// saQut CLI — symbols komutu (sembol tablosu — Faz 2)
+//
+// Varsayılan: insan-okur düz metin (KORUNUR).
+// #145 (SQ-100-SYMBOLS-JSONL): makine yüzeyi açıkça --jsonl ile seçilir.
+//   İlk kayıt  : {"record":"symbols.header","schemaVersion":1}
+//   Ara kayıt  : satır başına bir symbol veya diagnostic kaydı (deterministik)
+//   Son kayıt  : {"record":"symbols.end","errors":N,"warnings":M,"symbolCount":K}
+//   Eski `--json` tek-büyük-JSON preview KALDIRILDI (flag → usage error 64).
+//   `--compact` JSONL'de anlamsız → sessizce yutulmaz (usage error 64).
+//   Error-tolerant davranış ve nonzero exit korunur (65 = veri hatası).
 // ============================================================================
 
 #ifndef SAQUT_CLI_SYMBOLS
@@ -9,6 +18,7 @@
 #include "tools.hpp"
 #include "cli/args.hpp"
 #include "cli/exit_codes.hpp"
+#include "cli/jsonl_schema.hpp"
 #include "tokenizer/tokenizer.hpp"
 #include "parser/parser.hpp"
 #include "symbol/symbol_table.hpp"
@@ -20,6 +30,17 @@ inline int cmdSymbols(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
     std::string source   = readSource(args);
     if (source.empty()) return saqut::exit_code::kUsageError;
+
+    // #145: eski --json preview kaldırıldı — makine yüzeyi yalnız --jsonl.
+    if (args.jsonOutput) {
+        std::cerr << "error: --json is removed for symbols; use --jsonl for machine output\n";
+        return saqut::exit_code::kUsageError;
+    }
+    // --compact JSONL'de anlamsız → sessizce yutulmaz.
+    if (args.compact && args.jsonlOutput) {
+        std::cerr << "error: --compact is meaningless with --jsonl\n";
+        return saqut::exit_code::kUsageError;
+    }
 
     Tokenizer tokenizer;
     auto tokens = tokenizer.scan(source, filePath);
@@ -38,39 +59,55 @@ inline int cmdSymbols(const CliArgs& args) {
         diag.report("E000", SourceLocation{}, "failed to build AST");
     }
 
-    if (args.jsonOutput) {
-        // ── JSON çıktı ──────────────────────────────────────────────────────
-        nlohmann::json out;
-        out["file"] = filePath;
+    if (args.jsonlOutput) {
+        // ── JSONL çıktı (SQ-100-SYMBOLS-JSONL) ─────────────────────────────
+        std::cout << "{\"record\":\"symbols.header\",\"schemaVersion\":"
+                  << saqut::jsonl::kSymbolsJsonlSchemaVersion << "}\n";
 
-        nlohmann::json symArray = nlohmann::json::array();
+        int symbolCount = 0;
         for (Symbol* s : table.allSymbols()) {
             if (s->isBuiltin) continue;
+            ++symbolCount;
 
             nlohmann::json refs = nlohmann::json::array();
             for (const SourceLocation& r : s->references)
                 refs.push_back(r.toJsonObj());
 
-            symArray.push_back({
-                {"name",           s->name},
-                {"kind",           symbolKindName(s->kind)},
-                {"type",           s->type.toString()},
-                {"typeDetail",     s->type.toJsonObj()},
-                {"sourceModule",   s->moduleId == 0 ? "__builtin__"
-                                                    : s->moduleId < 0  ? "<main>"
-                                                    : "<module:" + std::to_string(s->moduleId) + ">"},
-                {"definition",     s->definitionLoc.toJsonObj()},
-                {"referenceCount", static_cast<int>(s->references.size())},
-                {"references",     refs},
-                {"isBuiltin",      s->isBuiltin}
-            });
+            nlohmann::json rec;
+            rec["record"]        = "symbols.symbol";
+            rec["name"]          = s->name;
+            rec["kind"]          = symbolKindName(s->kind);
+            rec["type"]          = s->type.toString();
+            rec["typeDetail"]    = s->type.toJsonObj();
+            rec["sourceModule"]  = s->moduleId == 0 ? "__builtin__"
+                                : s->moduleId < 0  ? "<main>"
+                                : "<module:" + std::to_string(s->moduleId) + ">";
+            rec["definition"]    = s->definitionLoc.toJsonObj();
+            rec["referenceCount"] = static_cast<int>(s->references.size());
+            rec["references"]    = refs;
+            std::cout << rec.dump() << "\n";
         }
-        out["symbols"]     = symArray;
-        out["diagnostics"] = diag.toJsonObj();
 
-        std::cout << (args.compact ? out.dump() : out.dump(2)) << "\n";
+        // Tanılar ekleme sırasıyla — deterministik; exact konum taşır.
+        for (const auto& d : diag.all()) {
+            nlohmann::json rec;
+            rec["record"]  = "symbols.diagnostic";
+            rec["level"]   = diagLevelName(d.level);
+            rec["code"]    = d.code;
+            rec["file"]    = d.loc.filePath;
+            rec["line"]    = d.loc.line;
+            rec["column"]  = d.loc.column;
+            rec["offset"]  = d.loc.offset;
+            rec["message"] = d.message;
+            if (!d.hint.empty()) rec["hint"] = d.hint;
+            std::cout << rec.dump() << "\n";
+        }
+
+        std::cout << "{\"record\":\"symbols.end\",\"errors\":" << diag.errorCount()
+                  << ",\"warnings\":" << diag.warningCount()
+                  << ",\"symbolCount\":" << symbolCount << "}\n";
     } else {
-        // ── Düz metin çıktı ─────────────────────────────────────────────────
+        // ── Düz metin çıktı (varsayılan, KORUNUR) ───────────────────────────
         for (Symbol* s : table.allSymbols()) {
             if (s->isBuiltin) continue;
 

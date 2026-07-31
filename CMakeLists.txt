@@ -128,6 +128,15 @@ add_test(
             "${SAQUT_BINARY}"
 )
 
+# #145 (SQ-100-SYMBOLS-JSONL): symbols varsayılan metin çıktısını korur;
+# --jsonl makine yüzeyi (header → symbol/diagnostic* → end), eski --json
+# preview kaldırıldı, --compact --jsonl ile anlamsız → exit 64.
+add_test(
+    NAME symbols_jsonl
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/symbols_jsonl_test.sh"
+            "${SAQUT_BINARY}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

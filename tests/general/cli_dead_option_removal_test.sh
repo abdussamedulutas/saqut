@@ -52,6 +52,35 @@ set -e
 test "$actual" -eq 0
 test -s "$out"
 
+# N4 (#145 SQ-100-SYMBOLS-JSONL): symbols --json preview kaldirildi —
+# kullanim hatasi (64) dondurur; makine yuzeyi --jsonl'dir.
+set +e
+"$binary" symbols --json "$f" >"$out" 2>"$err"
+actual=$?
+set -e
+if [ "$actual" -ne 64 ]; then
+    echo "FAIL: 'symbols --json' beklenen exit 64, gercek $actual" >&2
+    exit 1
+fi
+if [ -s "$out" ]; then
+    echo "FAIL: 'symbols --json' stdout bos olmali, gercek: $(cat "$out")" >&2
+    exit 1
+fi
+if ! grep -qi "jsonl" "$err"; then
+    echo "FAIL: 'symbols --json' stderr --jsonl yonlendirmesi icermiyor: $(cat "$err")" >&2
+    exit 1
+fi
+
+# N5 (#145): --compact JSONL'de anlamsiz — sessizce yutulmaz (exit 64).
+set +e
+"$binary" symbols --jsonl --compact "$f" >"$out" 2>"$err"
+actual=$?
+set -e
+if [ "$actual" -ne 64 ]; then
+    echo "FAIL: 'symbols --jsonl --compact' beklenen exit 64, gercek $actual" >&2
+    exit 1
+fi
+
 # P1 (K-20): --output korunuyor. NOT: --output + varsayilan (JSON olmayan)
 # ast modu ayrica saqutlang/saqut#160'ta kayitli, bu task'in kapsami disinda
 # bagimsiz bir bug (displayAst->log() std::cout'a hardcode, --output
@@ -78,7 +107,7 @@ run_live() {
     fi
 }
 run_live symbols --compact
-run_live symbols --json
+run_live symbols --jsonl
 run_live run --optimized
 run_live run --jit
 run_live run --profile

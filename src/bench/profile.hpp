@@ -5,14 +5,20 @@
 // Normal derleme/çalışma pipeline'ına sıfır etkisi vardır.
 //
 // TASARIM KURALI (kullanıcı isteği):
-//   VM çalışırken hesap/karşılaştırma YOK.
-//   Bunun yerine iki paralel büyüyen vektör:
-//     traceOpcodes[i]  = i. dispatch'teki opcode
-//     traceTicks[i]    = i. dispatch'teki zaman damgası
-//   VM bittikten sonra analyzeVMTrace() ile istatistikler türetilir.
+//   VM çalışırken hesap/karşılaştırma YOK — yalnız kaydet, sonra türet.
+//
+//   Eski gerçekleme bunu "her talimatta rdtsc + iki push_back" ile yapıyordu.
+//   Ölçüm (aşağıda, BenchVMTrace) bunun talimat başına ~8.1 ns'ye ve
+//   cpu_heavy.sqt'te %13 VM yavaşlamasına mal olduğunu gösterdi — yani
+//   profiler ölçtüğü şeyi kayda değer biçimde değiştiriyordu.
+//
+//   Bugünkü tasarım sayımı süreden ayırır: dağılım her talimatta sabit
+//   histogramla (kayıpsız), süre ise seyrek örneklemeyle (istatistiksel)
+//   toplanır. Ayrıntı ve ölçüm tablosu BenchVMTrace başlığında.
 //
 // DONANIM ZAMANLAMA:
-//   x86/x86_64: __rdtsc() — ~2-3 saat döngüsü, nanosaniyeden hızlı.
+//   x86/x86_64: __rdtsc() — serializing değil ama ucuz da değil; ölçümde
+//     çağrı + iki push_back birlikte ~8.1 ns tuttu (bkz. BenchVMTrace).
 //   Diğerleri: std::chrono::steady_clock.
 //   analyzeVMTrace() içinde tek seferlik TSC kalibrasyon yapılır.
 // ============================================================================
@@ -24,6 +30,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -43,17 +50,46 @@ static constexpr bool kUseTSC = false;
 #endif
 
 // ── VM Execution Trace ───────────────────────────────────────────────────────
-// VM çalışırken: sadece push — hesap yok.
+// VM çalışırken: sadece sayaç artışı + seyrek örnekleme — hesap yok.
 // VM bittikten sonra: analyzeVMTrace() ile istatistik türet.
 //
-// İki ayrı vektör (cache-locality için tek struct yerine):
-//   traceOpcodes — 1 byte/talimat
-//   traceTicks   — 8 byte/talimat
-// 8M talimat → 8MB + 64MB = ~72MB, kullanıcının beklediği değer.
+// ÖLÇÜLMÜŞ MALİYET (50M iterasyon, -O2, bu makine):
+//   rdtsc + 2×push_back (eski tasarım) : 407 ms  (~8.1 ns/talimat)
+//   yalnız opcode push_back            :  35 ms  (~0.7 ns/talimat)
+//   histogram ++hist[op]               :  18 ms  (~0.36 ns/talimat)
+// Yani maliyetin ~%91'i RDTSC'ydi. cpu_heavy.sqt üzerinde bu, VM süresini
+// 6.27 s → 7.09 s'ye çıkarıyordu (%13 overhead) ve profil raporundaki VM
+// süresini gerçek koşudan sistematik olarak saptırıyordu.
+//
+// YENİ TASARIM — sayım kayıpsız, süre örneklenmiş:
+//   - HER talimatta: ++counts[op]  → opcode DAĞILIMI tam doğru kalır.
+//   - Her kSampleStride talimatta bir: ardışık iki tick alınıp o talimatın
+//     süresi örneklenir. analyzeVMTrace süre istatistiğini (ort/min/max) bu
+//     örneklemden türetir.
+// Süre artık istatistiksel bir tahmindir; rapor bunu örneklem sayısıyla
+// birlikte basar (kanıtsız kesinlik iddiası yok — AGENTS.md §5).
+//
+// Bellek: eski tasarım 8M talimatta ~72MB tutuyordu; yeni tasarım sabit
+// 256×8B histogram + örneklem başına 9B. Stride 1024'te 8M talimat → ~70KB.
 
 struct BenchVMTrace {
-    std::vector<uint8_t>  traceOpcodes;
-    std::vector<uint64_t> traceTicks;
+    // Örnekleme iki fazlıdır; sabit tek stride her iki ucu da idare edemez:
+    //   - Kısa koşu (birkaç yüz talimat): stride 1024 olsaydı HİÇ örneklem
+    //     toplanmaz, bütün süre sütunları "—" olurdu.
+    //   - Uzun koşu (milyonlarca talimat): her talimatı örneklemek eski
+    //     tasarımın %13 overhead'ini geri getirirdi.
+    // Çözüm: ilk kWarmSamples talimat tam örneklenir (küçük programlar için
+    // yeterli veri), sonrasında kSampleStride'a seyreltilir (uzun koşularda
+    // maliyet talimat başına ~8.1/1024 ≈ 0.008 ns'ye iner).
+    static constexpr uint32_t kWarmSamples  = 4096;
+    static constexpr uint32_t kSampleStride = 1024;
+
+    // Opcode DAĞILIMI — her talimatta artar, kayıpsız.
+    uint64_t counts[256] = {};
+
+    // Süre ÖRNEKLEMİ — yalnız her kSampleStride talimatta bir doldurulur.
+    std::vector<uint8_t>  sampleOpcodes;
+    std::vector<uint64_t> sampleDurations;
 
     // Lightweight sayaçlar — VM döngüsündeki null-check aynı yerde artar
     uint64_t vmLoopIter     = 0;  // toplam dispatch iterasyonu
@@ -62,24 +98,61 @@ struct BenchVMTrace {
     uint64_t vmBuiltinCalls = 0;  // CALLHOST + __builtin_method__
 
     void reserve(size_t hint) {
-        traceOpcodes.reserve(hint);
-        traceTicks.reserve(hint);
+        size_t samples = std::min<size_t>(hint, kWarmSamples)
+                       + hint / kSampleStride + 16;
+        sampleOpcodes.reserve(samples);
+        sampleDurations.reserve(samples);
     }
 
-    // VM döngüsünden çağrılır — hesap yok, sadece kaydet
+    // VM döngüsünden çağrılır — hesap yok, sadece kaydet.
+    //
+    // Örnekleme iki adımlıdır: pendingSample_ set edildiğinde BİR SONRAKİ
+    // çağrı farkı kapatır. Böylece ölçülen süre "örneklenen talimatın dispatch
+    // başlangıcından bir sonrakine kadar geçen zaman" olur — eski tasarımdaki
+    // tick[i+1]-tick[i] semantiğiyle birebir aynı.
     inline void pushDispatch(uint8_t op) {
-        traceTicks.push_back(benchTick());
-        traceOpcodes.push_back(op);
+        ++counts[op];
         ++vmLoopIter;
+
+        if (pendingSample_) [[unlikely]] {
+            pendingSample_ = false;
+            sampleOpcodes.push_back(pendingOp_);
+            sampleDurations.push_back(benchTick() - pendingTick_);
+        }
+
+        // Isınma fazında her talimat, sonrasında her kSampleStride'da bir.
+        const bool warm = vmLoopIter <= kWarmSamples;
+        if (warm || ++sinceSample_ >= kSampleStride) [[unlikely]] {
+            sinceSample_   = 0;
+            pendingOp_     = op;
+            pendingSample_ = true;
+            pendingTick_   = benchTick();
+        }
     }
+
+private:
+    uint64_t pendingTick_   = 0;
+    uint32_t sinceSample_   = 0;
+    uint8_t  pendingOp_     = 0;
+    bool     pendingSample_ = false;
 };
 
 // ── Per-Opcode Analiz Sonucu ─────────────────────────────────────────────────
 struct OpcodeStats {
-    uint64_t count     = 0;
-    uint64_t totalTick = 0;
-    uint64_t minTick   = UINT64_MAX;
-    uint64_t maxTick   = 0;
+    uint64_t count       = 0;  // kayıpsız — her çalışmada artan histogram
+    uint64_t sampleCount = 0;  // süre örneklemi sayısı (0 ise süre bilinmiyor)
+    uint64_t totalTick   = 0;  // yalnız örneklenen çalışmaların toplamı
+    uint64_t minTick     = UINT64_MAX;
+    uint64_t maxTick     = 0;
+
+    // Örneklenen çalışmaların ortalama tick'i. Örneklem yoksa 0 döner —
+    // çağıran taraf sampleCount'a bakıp "—" basmalıdır.
+    uint64_t avgTick() const {
+        return sampleCount ? totalTick / sampleCount : 0;
+    }
+    // count × ortalama: bu opcode'un toplam VM süresine tahmini katkısı.
+    // Örneklem yoksa 0 (bilinmiyor).
+    uint64_t estimatedTotalTick() const { return avgTick() * count; }
 };
 
 // ── Token İstatistikleri ─────────────────────────────────────────────────────
@@ -171,36 +244,33 @@ struct BenchProfile {
     // ── VM trace analizi ──────────────────────────────────────────────────────
     // VM bittikten sonra çağrılır.
     // Parametre: opcode int → isim fonksiyonu (instruction.hpp'den opcodeName())
+    // Sayım histogramdan (kayıpsız), süre örneklemden (istatistiksel) türetilir.
+    // İki kaynak ayrıdır: bir opcode çalışmış ama hiç örneklenmemiş olabilir —
+    // o durumda count > 0, sampleCount == 0 ve süre alanları raporda "—" basılır.
+    // Örneklenmemiş süreyi sıfır veya tahmin olarak göstermek kanıtsız sayı
+    // üretmek olurdu (AGENTS.md §5).
     void analyzeVMTrace(const char* (*nameFunc)(int)) {
-        auto& oc = vmTrace.traceOpcodes;
-        auto& tc = vmTrace.traceTicks;
-        size_t N = oc.size();
-        if (N == 0) return;
+        OpcodeStats tmp[256];
 
-        // Her opcode için geçici stats map (uint8_t key, sabit boyutlu dizi daha iyi
-        // ama unordered_map portable ve yeterince hızlı analiz aşamasında)
-        std::unordered_map<uint8_t, OpcodeStats> tmp;
-        tmp.reserve(64);  // max ~60 opcode
+        for (int op = 0; op < 256; op++)
+            tmp[op].count = vmTrace.counts[op];
 
-        // Instruction i'nin süresi = tick[i+1] - tick[i]
-        // Son instruction'ın süresi bilinmiyor — sadece count artar
-        for (size_t i = 0; i + 1 < N; i++) {
-            uint8_t  op  = oc[i];
-            uint64_t dur = tc[i + 1] - tc[i];
-            auto& s = tmp[op];
-            s.count++;
+        const auto& so = vmTrace.sampleOpcodes;
+        const auto& sd = vmTrace.sampleDurations;
+        for (size_t i = 0; i < so.size() && i < sd.size(); i++) {
+            auto& s = tmp[so[i]];
+            uint64_t dur = sd[i];
             s.totalTick += dur;
+            s.sampleCount++;
             if (dur < s.minTick) s.minTick = dur;
             if (dur > s.maxTick) s.maxTick = dur;
         }
-        // Son talimat
-        if (N > 0) tmp[oc[N - 1]].count++;
 
-        // İsimlere çevir
         opcodeResult.clear();
-        for (auto& [op, s] : tmp) {
-            std::string name = nameFunc ? nameFunc((int)op) : std::to_string(op);
-            opcodeResult[name] = s;
+        for (int op = 0; op < 256; op++) {
+            if (tmp[op].count == 0) continue;
+            std::string name = nameFunc ? nameFunc(op) : std::to_string(op);
+            opcodeResult[name] = tmp[op];
         }
     }
 };
@@ -496,14 +566,24 @@ inline void printBenchProfile(const BenchProfile& p,
     std::cout << "│\n";
 
     // ── Sembol ─────────────────────────────────────────────────────────────
+    // symUs ve tcUs AYRI aşamalardır; timing tablosu (bench.hpp) da onları
+    // ayrı satırlarda raporlar. Toplanırlarsa aynı koşu iki farklı sembol
+    // süresi gösterir ve "en yavaş aşama" sıralaması bozulur.
     auto& s = p.sym;
-    std::cout << "├─ [Sembol Toplama]  " << fmtN(symUs + tcUs) << " µs\n";
+    std::cout << "├─ [Sembol Toplama]  " << fmtN(symUs) << " µs\n";
     std::cout << "│  Geçiş sayısı   : " << s.passes << "\n";
     std::cout << "│  Toplam sembol  : " << fmtN(s.total) << "\n";
     std::cout << "│  Fonksiyon: " << fmtN(s.functions)
               << "   Değişken: " << fmtN(s.variables)
               << "   Parametre: " << fmtN(s.parameters)
               << "   Struct: " << fmtN(s.structs) << "\n";
+    std::cout << "│\n";
+
+    // ── Tip denetimi ───────────────────────────────────────────────────────
+    // Tip denetimi + yapısal doğrulama (bench.hpp aşama 4). Daha önce bu süre
+    // "Sembol Toplama" satırına gömülüydü ve aşama hiç görünmüyordu.
+    std::cout << "├─ [Tip Denetimi]  " << fmtN(tcUs) << " µs\n";
+    std::cout << "│  Tip denetimi + yapısal doğrulama\n";
     std::cout << "│\n";
 
     // ── IR ─────────────────────────────────────────────────────────────────
@@ -524,10 +604,11 @@ inline void printBenchProfile(const BenchProfile& p,
         std::cout << "│  FFI (CALLHOST)   : " << fmtN(vm.vmFfiCalls) << "\n";
         std::cout << "│  Builtin metod    : " << fmtN(vm.vmBuiltinCalls) << "\n";
         std::cout << "│  Heap tahsis      : " << fmtN(p.vmHeapAllocCount) << " nesne\n";
-        std::cout << "│  Trace boyutu     : "
-                  << fmtN(vm.traceOpcodes.size())
-                  << " kayıt (~"
-                  << fmtN((vm.traceOpcodes.size() * 9) / 1024)
+        std::cout << "│  Süre örneklemi   : "
+                  << fmtN(vm.sampleOpcodes.size())
+                  << " örnek (her "
+                  << BenchVMTrace::kSampleStride << " talimatta 1, ~"
+                  << fmtN((vm.sampleOpcodes.size() * 9) / 1024)
                   << " KB)\n";
         std::cout << "│\n";
     }
@@ -544,41 +625,75 @@ inline void printBenchProfile(const BenchProfile& p,
                 return a.second.count > b.second.count;
             });
 
-        // Toplam tick (% hesabı için)
-        uint64_t totalTick = 0;
-        for (auto& [_, s] : sorted) totalTick += s.totalTick;
+        // %Süre payı: örneklenen toplam DEĞİL, count × örneklem-ortalaması.
+        // Örneklem seyrek olduğu için ham totalTick'ler opcode'lar arasında
+        // farklı örneklem sayılarına dayanır; doğrudan oranlanırsa çok
+        // çalışan ama az örneklenen opcode sistematik olarak küçük görünür.
+        uint64_t grandTotal = 0;
+        for (auto& [_, s] : sorted) grandTotal += s.estimatedTotalTick();
 
-        const int W1 = 22, W2 = 12, W3 = 10, W4 = 10, W5 = 10, W6 = 7;
+        // NOT: std::setw BAYT sayar, görünen karakteri değil. "Çalışma",
+        // "%Süre", "Örneklem" gibi başlıklar UTF-8'de çok baytlıdır (ç,ş,ü,Ö
+        // her biri 2 bayt) — setw'e ham verilirse sütun kayar. Genişliği
+        // fazladan bayt kadar artırarak telafi ediyoruz.
+        auto utf8Pad = [](const std::string& s, int visibleWidth) {
+            int extra = 0;
+            for (unsigned char c : s)
+                if ((c & 0xC0) == 0x80) ++extra;  // devam baytı = görünmez
+            return visibleWidth + extra;
+        };
+        const int W1 = 22, W2 = 12, W3 = 10, W4 = 10, W5 = 10, W6 = 8, W7 = 10;
         std::cout << std::left  << std::setw(W1) << "Opcode"
-                  << std::right << std::setw(W2) << "Çalışma"
+                  << std::right << std::setw(utf8Pad("Çalışma", W2))  << "Çalışma"
                   << std::right << std::setw(W3) << "Ort(ns)"
                   << std::right << std::setw(W4) << "Min(ns)"
                   << std::right << std::setw(W5) << "Max(ns)"
-                  << std::right << std::setw(W6) << "%Süre"
+                  << std::right << std::setw(utf8Pad("%Süre", W6))    << "%Süre"
+                  << std::right << std::setw(utf8Pad("Örneklem", W7)) << "Örneklem"
                   << "\n";
-        std::string sep(W1 + W2 + W3 + W4 + W5 + W6, '-');
+        std::string sep(W1 + W2 + W3 + W4 + W5 + W6 + W7, '-');
         std::cout << sep << "\n";
 
-        for (auto& [name, s] : sorted) {
+        for (const auto& [name, s] : sorted) {
             if (s.count == 0) continue;
-            uint64_t avgNs = s.count > 1 ?
-                p.ticksToNs(s.totalTick / s.count) : 0;
-            uint64_t minNs = (s.minTick != UINT64_MAX) ?
-                p.ticksToNs(s.minTick) : 0;
-            uint64_t maxNs = p.ticksToNs(s.maxTick);
-            double   pct   = totalTick > 0 ?
-                100.0 * s.totalTick / totalTick : 0.0;
 
             std::cout << std::left  << std::setw(W1) << name
-                      << std::right << std::setw(W2) << fmtN(s.count)
-                      << std::right << std::setw(W3) << avgNs
-                      << std::right << std::setw(W4) << minNs
-                      << std::right << std::setw(W5) << maxNs
-                      << std::right << std::setw(W6-1)
-                      << std::fixed << std::setprecision(1) << pct << "%"
-                      << "\n";
+                      << std::right << std::setw(W2) << fmtN(s.count);
+
+            if (s.sampleCount == 0) {
+                // Çalıştı ama hiç örneklenmedi — süre BİLİNMİYOR.
+                // Sıfır basmak "0 ns sürdü" yanılgısı yaratırdı.
+                // "—" U+2014, UTF-8'de 3 bayt → setw telafisi gerekir.
+                const char* dash = "—";
+                std::cout << std::right << std::setw(utf8Pad(dash, W3)) << dash
+                          << std::right << std::setw(utf8Pad(dash, W4)) << dash
+                          << std::right << std::setw(utf8Pad(dash, W5)) << dash
+                          << std::right << std::setw(utf8Pad(dash, W6)) << dash
+                          << std::right << std::setw(W7) << 0;
+            } else {
+                uint64_t avgNs = p.ticksToNs(s.avgTick());
+                uint64_t minNs = (s.minTick != UINT64_MAX) ?
+                    p.ticksToNs(s.minTick) : 0;
+                uint64_t maxNs = p.ticksToNs(s.maxTick);
+                double   pct   = grandTotal > 0 ?
+                    100.0 * s.estimatedTotalTick() / grandTotal : 0.0;
+
+                std::ostringstream pctBuf;
+                pctBuf << std::fixed << std::setprecision(1) << pct << "%";
+
+                std::cout << std::right << std::setw(W3) << avgNs
+                          << std::right << std::setw(W4) << minNs
+                          << std::right << std::setw(W5) << maxNs
+                          << std::right << std::setw(W6) << pctBuf.str()
+                          << std::right << std::setw(W7) << fmtN(s.sampleCount);
+            }
+            std::cout << "\n";
         }
         std::cout << "\n";
+        std::cout << "  Not: Çalışma sayıları tam sayımdır. Süre sütunları her "
+                  << BenchVMTrace::kSampleStride << " talimatta bir alınan\n"
+                  << "  örneklemden türetilmiş tahminlerdir; \"—\" o opcode'un "
+                  << "hiç örneklenmediğini gösterir.\n\n";
     } else if (compileOnly) {
         std::cout << "└─ (VM atlandı — opcode profili yok)\n\n";
     }

@@ -267,7 +267,9 @@ static bool runPipeline(
     if (!compileOnly) {
         Interpreter vm(program);
         if (profile) {
-            // Profil modunda trace rezervasyonu + aktif et
+            // Profil modunda örneklem rezervasyonu + trace'i aktif et.
+            // reserve() içeride kSampleStride'a böler — burada verilen sayı
+            // beklenen TALİMAT sayısıdır, örneklem sayısı değil.
             size_t estimatedInstr = profile->ir.totalInstr * 100; // çalışma sayısı tahmini
             if (estimatedInstr < 1'000'000)  estimatedInstr = 1'000'000;
             if (estimatedInstr > 50'000'000) estimatedInstr = 50'000'000; // 50M üst sınır

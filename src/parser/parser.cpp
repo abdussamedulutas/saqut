@@ -906,6 +906,9 @@ ASTNode* Parser::parseStructDecl() {
         }
         if (currentToken().type == TokenType::RBRACE)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : st->loc,
+                        "E905", "expected '}' to close struct body");
     }
     if (currentToken().type == TokenType::SEMICOLON)
         nextToken();
@@ -947,6 +950,9 @@ ASTNode* Parser::parseEnumDecl() {
         }
         if (currentToken().type == TokenType::RBRACE)
             nextToken();
+        else
+            reportError(currentToken().token ? currentToken().token->loc : en->loc,
+                        "E905", "expected '}' to close enum body");
     }
     if (currentToken().type == TokenType::SEMICOLON)
         nextToken();

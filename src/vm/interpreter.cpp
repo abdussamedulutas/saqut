@@ -874,6 +874,20 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                     }
                 }
             }
+            // ADR-021 zero-init: nullable alanlar (`T? f`) null başlar.
+            // allocStruct alanları varsayılan Value{} ile doldurur; o da
+            // ValueKind::Int (0). `int f` için doğru, `T? f` için değil —
+            // maske olmadan `s.f == null` sessizce false dönerdi.
+            {
+                const auto& fn = *callStack_.back().function;
+                auto nit = fn.structFieldNullable.find(instr.functionName);
+                if (nit != fn.structFieldNullable.end()) {
+                    const auto& mask = nit->second;
+                    size_t n = std::min(mask.size(), obj->fields.size());
+                    for (size_t fi = 0; fi < n; fi++)
+                        if (mask[fi]) obj->fields[fi] = Value::null();
+                }
+            }
             callStack_.back().slots[instr.dest] = Value::fromRef(obj);
             break;
         }

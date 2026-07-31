@@ -1,0 +1,45 @@
+// ADR-021 zero-init: tipi `T?` olan ve açık başlangıç değeri verilmeyen her şey
+// null başlar. Hata SINIFI: nullable slot Value{} (= Int 0) kalırsa `x == null`
+// sessizce false döner. Yerel değişken, struct alanı ve özyinelemeli struct
+// pozisyonları ayrı ayrı ölçülür (bir bağlamda çalışması diğerini kanıtlamaz).
+
+struct Inner { int v; }
+struct Holder {
+    int     count;      // non-nullable: 0 başlamalı
+    int?    maybeInt;   // nullable: null başlamalı
+    string? maybeStr;
+    Inner?  maybeObj;
+    Inner   inner;      // non-nullable iç struct: örneklenmeli
+}
+struct Node { int val; Node? next; }
+
+void main() {
+    // 1) Yerel nullable değişkenler — atamasız
+    int?    a;
+    string? s;
+    print(a == null);
+    print(s == null);
+
+    // 2) Açık atama hâlâ çalışıyor
+    int? given = 5;
+    print(given == null);
+
+    // 3) Struct alanları
+    Holder h;
+    print(h.maybeInt == null);
+    print(h.maybeStr == null);
+    print(h.maybeObj == null);
+    print(h.count);              // non-nullable → 0
+    h.inner.v = 7;
+    print(h.inner.v);            // non-nullable iç struct örneklendi → 7
+
+    // 4) Özyinelemeli struct — nullable alan zinciri sonlandırır.
+    //    Bu program eskiden IR üretiminde sonsuz özyinelemeyle çökerdi.
+    Node n1;
+    n1.val = 1;
+    print(n1.next == null);
+    Node n2;
+    n2.val = 2;
+    n1.next = n2;
+    print(n1.next != null);
+}

@@ -48,6 +48,11 @@ struct IRFunction {
 
     // #218: struct alan adları (Instruction'dan tasındı)
     std::unordered_map<std::string, std::vector<std::string>> structFieldNames;
+    // ADR-021 zero-init: struct tipi → hangi alanların nullable (`T?`) olduğu.
+    // structFieldNames ile aynı sırada, alan başına bir bayrak. STRUCT_NEW
+    // sırasında VM bu maskeyi okuyup nullable alanları Int(0) yerine null ile
+    // başlatır — aksi halde `s.f == null` sessizce false döner.
+    std::unordered_map<std::string, std::vector<bool>> structFieldNullable;
     // #218: capability gereksinimleri (Instruction'dan tasındı)
     std::unordered_map<int, Capability> capRequirements;
 

@@ -94,6 +94,8 @@ private:
                         const SourceLocation& loc = {});
     void emitStoreGlobal(int srcSlot, int globalIndex,
                          const SourceLocation& loc = {});
+    // ADR-021 zero-init: `T?` slot'u Int(0) değil null başlar.
+    void emitLoadNull(int destSlot, const SourceLocation& loc = {});
     void emitStructNew(int destSlot, const std::string& structType,
                        int fieldCount, const SourceLocation& loc = {});
     void emitFieldGet(int destSlot, int objSlot, int fieldIdx,
@@ -181,8 +183,13 @@ private:
 
     // VarDecl anında struct-tipli alanları özyinelemeli olarak tahsis edip bağlar.
     // (ADR-020 nested struct kuralı: iç struct'lar STRUCT_NEW zinciriyle oluşturulur)
+    // Nullable alanlar (`T? x`) null kalır — örneklenmez; özyinelemeli
+    // struct'lar (`struct Node { Node? next; }`) bu sayede sonlanır.
+    // activeChain iç kullanım: ziyaret edilen struct zinciri (döngü savunması);
+    // dış çağrılar nullptr geçer.
     void initNestedStructFields(int destSlot, const std::string& structType,
-                                const SourceLocation& loc);
+                                const SourceLocation& loc,
+                                std::vector<std::string>* activeChain = nullptr);
 
     bool isGlobal(const std::string& name) const;
     int  getGlobalIndex(const std::string& name) const;

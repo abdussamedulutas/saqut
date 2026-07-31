@@ -332,6 +332,17 @@ void IRGenerator::generateStatement(ASTNode* node) {
         } else {
             int varSlot = freshSlot();
             registerVariable(vd->name, varSlot);
+            // ADR-021 zero-init: tipi `T?` olan ve açık başlangıç değeri
+            // verilmeyen değişken null başlar.
+            //
+            //     int? a;                 // a == null  → true
+            //     if (a == null) { ... }  // çalışır
+            //
+            // Aksi halde slot varsayılan Value{} (= Int 0) kalır ve `a == null`
+            // sessizce false döner — nullable sözleşmesinin sessiz ihlali.
+            // varType nullable'ı sonundaki '?' ile taşır (AST: "int?").
+            if (!vd->varType.empty() && vd->varType.back() == '?')
+                emitLoadNull(varSlot, vd->loc);
         }
 
         // Sibling VariableDecl'ler: int a, b; → children'da diğer VariableDecl'ler
@@ -1936,6 +1947,18 @@ void IRGenerator::emitFloatToDecimal(int destSlot, int srcSlot, const SourceLoca
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
+// ADR-021: nullable slot'un zero-init değeri. `T?` tipli bir şeye açık değer
+// verilmediğinde slot Value{} (= Int 0) kalmamalı, LOAD_NULL ile null olmalı.
+void IRGenerator::emitLoadNull(int destSlot, const SourceLocation& loc) {
+    Instruction ins(Opcode::LOAD_NULL);
+    ins.dest = destSlot;
+    auto el = effectiveLoc(loc);
+    ins.sourceLine = el.line;
+    ins.sourceCol = el.column;
+    ins.sourceFile = el.filePath;
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
 void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int fieldCount,
                                 const SourceLocation& loc) {
     Instruction ins(Opcode::STRUCT_NEW);
@@ -1950,9 +1973,16 @@ void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int
     auto it = structLayouts_.find(structType);
     if (it != structLayouts_.end()) {
         std::vector<std::string> names;
-        for (const auto& kv : it->second)
+        std::vector<bool>        nullableMask;
+        for (const auto& kv : it->second) {
             names.push_back(kv.first);
-        currentFunction_->structFieldNames[structType] = std::move(names);
+            // ADR-021: `T? alan` zero-init'te null başlamalı. Bu bilgi burada
+            // yakalanmazsa IR→VM sınırında silinir ve VM bütün alanları
+            // Value{} (= Int 0) ile doldurur.
+            nullableMask.push_back(kv.second.nullable);
+        }
+        currentFunction_->structFieldNames[structType]    = std::move(names);
+        currentFunction_->structFieldNullable[structType] = std::move(nullableMask);
     }
     currentFunction_->instructions.push_back(std::move(ins));
 }
@@ -2059,23 +2089,60 @@ void IRGenerator::emitArrayLen(int destSlot, int arrSlot, const SourceLocation& 
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
+// Zero-init'te iç struct alanlarını örnekler.
+//
+// NULLABLE ALAN → null (örneklenmez):
+//   `T? alan` "bu alan olmayabilir" demektir (ADR-021); zero-init'in doğru
+//   başlangıç değeri boş bir T örneği değil, null'dır. Bu aynı zamanda
+//   ÖZYİNELEMELİ struct'ları mümkün kılar:
+//
+//       struct Node { int val; Node? next; }
+//       Node n;                    // next = null → zincir burada biter
+//
+//   Eskiden nullable alan da koşulsuz örnekleniyordu; her `next` yeni bir
+//   `Node` doğuruyor, o da kendi `next`'ini doğuruyordu → sonsuz özyineleme,
+//   stack tükenmesi, SIGSEGV (`saqut ir` ve `saqut run` exit 139). `check`
+//   aşaması bunu kabul ediyordu, yani hata yalnız IR üretiminde patlıyordu.
+//
+// NON-NULLABLE İÇ STRUCT → örneklenir (davranış değişmedi):
+//   `Inner inner;` alanı null olamaz, zero-init onu üretmek zorundadır.
+//   Bu yol kendi kendine sonlanır: non-nullable bir alan kendi tipini
+//   doğrudan ya da dolaylı içeremez (aksi halde sonsuz boyutlu bir değer
+//   olurdu) — o yüzden ayrıca derinlik sayacı gerekmez. Yine de yanlış bir
+//   layout'a karşı savunma olarak ziyaret zinciri takip edilir.
 void IRGenerator::initNestedStructFields(int destSlot, const std::string& structType,
-                                         const SourceLocation& loc) {
+                                         const SourceLocation& loc,
+                                         std::vector<std::string>* activeChain) {
     auto it = structLayouts_.find(structType);
     if (it == structLayouts_.end())
         return;
+
+    // Savunma: non-nullable bir döngü (A içinde B, B içinde A) semantic
+    // katmanda reddedilmeli. Buraya kadar geldiyse IR'ı çökertmek yerine
+    // zinciri kes — sessiz yanlış değer değil, eksik init; ve derleyici
+    // ayakta kalır.
+    std::vector<std::string> localChain;
+    if (!activeChain) activeChain = &localChain;
+    for (const auto& seen : *activeChain)
+        if (seen == structType) return;
+    activeChain->push_back(structType);
+
     for (int i = 0; i < (int) it->second.size(); i++) {
         const auto& [fieldName, fieldType] = it->second[i];
         if (!fieldType.isStruct() || fieldType.structName.empty())
+            continue;
+        if (fieldType.nullable)     // `T? alan` → null kalır, örneklenmez
             continue;
         if (!structLayouts_.count(fieldType.structName))
             continue;
         int innerSlot = freshSlot();
         int innerFc = getStructFieldCount(fieldType.structName);
         emitStructNew(innerSlot, fieldType.structName, innerFc, loc);
-        initNestedStructFields(innerSlot, fieldType.structName, loc); // özyineleme
+        initNestedStructFields(innerSlot, fieldType.structName, loc, activeChain);
         emitFieldSet(destSlot, i, innerSlot, loc.line, loc.column);
     }
+
+    activeChain->pop_back();
 }
 
 int IRGenerator::getStructFieldIndex(const std::string& structType,

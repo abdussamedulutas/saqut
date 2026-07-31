@@ -77,18 +77,23 @@ CFG buildCFG(const std::vector<Instruction>& instructions) {
         cfg.blocks.push_back(std::move(block));
     }
 
-    // Edge'leri kur
+    // Edge'leri kur. jumpTarget anlamı: buildCFG girdisinde TALİMAT İNDEKSİ,
+    // çözümlendikten sonra BLOCK ID (block.jumpTarget). linearize() blok ID'yi
+    // talimat indeksine geri çevirir; dump() "->BB_N" doğru blok ID basar.
+    // (#218; düzeltme: --cfg görüntüleyici öncesi anlam karışıklığı kapatıldı)
+    auto resolveTarget = [&cfg](BasicBlock& block, int instrIdx) {
+        for (auto& target : cfg.blocks) {
+            if (target.startIndex == instrIdx) {
+                block.successors.push_back(target.id);
+                target.predecessors.push_back(block.id);
+                block.jumpTarget = target.id;
+                return;
+            }
+        }
+    };
     for (auto& block : cfg.blocks) {
         if (block.terminator == Opcode::JMP) {
-            int idx = block.jumpTarget;
-            // idx instruction index, block ID bul
-            for (auto& target : cfg.blocks) {
-                if (target.startIndex == idx) {
-                    block.successors.push_back(target.id);
-                    target.predecessors.push_back(block.id);
-                    break;
-                }
-            }
+            resolveTarget(block, block.jumpTarget);
         } else if (block.terminator == Opcode::JIF_FALSE ||
                    block.terminator == Opcode::JIF_TRUE) {
             // Fall-through successor
@@ -97,13 +102,14 @@ CFG buildCFG(const std::vector<Instruction>& instructions) {
                 cfg.blocks[block.id + 1].predecessors.push_back(block.id);
             }
             // Jump successor
-            int idx = block.jumpTarget;
-            for (auto& target : cfg.blocks) {
-                if (target.startIndex == idx) {
-                    block.successors.push_back(target.id);
-                    target.predecessors.push_back(block.id);
-                    break;
-                }
+            resolveTarget(block, block.jumpTarget);
+        } else if (block.terminator != Opcode::RETURN &&
+                   block.terminator != Opcode::THROW) {
+            // Implicit fall-through: sıradan talimatla biten blok (ör. init
+            // bloğu) sonraki bloğa akar — eksik kenar hatası kapatıldı.
+            if (block.id + 1 < (int)cfg.blocks.size()) {
+                block.successors.push_back(block.id + 1);
+                cfg.blocks[block.id + 1].predecessors.push_back(block.id);
             }
         }
     }

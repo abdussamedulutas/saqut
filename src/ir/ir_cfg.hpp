@@ -74,19 +74,20 @@ struct CFG {
     std::vector<Instruction> linearize() const {
         std::vector<Instruction> result;
         // Blokları sırayla dolaş, instruction'ları ekle
-        // Jump target'ları block ID → instruction index'e çevir
+        // Jump target'ları BLOCK ID → instruction index'e çevir.
+        // KAYNAK block.jumpTarget'tır (buildCFG'de çözümlenmiş blok ID);
+        // instruction'ın kendi jumpTarget'ı orijinal TALİMAT İNDEKSİNİ taşır
+        // ve flat listedeki sıra korunduğundan DOKUNULMADAN kalmalıdır.
         for (const auto& block : blocks) {
             for (const auto& ins : block.instructions)
                 result.push_back(ins);
 
-            // Blok sonundaki jump'ın target'ını block ID'den index'e çevir
             if (!result.empty()) {
                 Instruction& last = result.back();
-                if ((last.opcode == Opcode::JMP || 
+                if ((last.opcode == Opcode::JMP ||
                      last.opcode == Opcode::JIF_FALSE ||
-                     last.opcode == Opcode::JIF_TRUE) && last.jumpTarget >= 0) {
-                    // last.jumpTarget şu an block ID
-                    int targetBlock = last.jumpTarget;
+                     last.opcode == Opcode::JIF_TRUE) && block.jumpTarget >= 0) {
+                    int targetBlock = block.jumpTarget;
                     if (targetBlock >= 0 && targetBlock < (int)blocks.size()) {
                         int targetIndex = 0;
                         for (int b = 0; b < targetBlock; ++b)

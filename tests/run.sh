@@ -9,9 +9,13 @@ FLAGS=(-std=c++20 -Wall -Wextra -I"$ROOT/src")
 SAQUT="$ROOT/build/saqut"
 
 # ── Birim testler ─────────────────────────────────────────────────────────────
-for t in test_type test_diagnostic test_opcode test_value_rep_contract; do
+for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg; do
     echo "=== $t ==="
-    "$CXX" "${FLAGS[@]}" "$ROOT/tests/$t.cpp" -o "/tmp/saqut_$t"
+    # test_cfg buildCFG gerçeklemesini (ir_cfg.cpp) da derler — hata sınıfı
+    # testi için implementasyon gerekli (#218).
+    extra=""
+    [ "$t" = "test_cfg" ] && extra="$ROOT/src/ir/ir_cfg.cpp"
+    "$CXX" "${FLAGS[@]}" "$ROOT/tests/$t.cpp" $extra -o "/tmp/saqut_$t"
     "/tmp/saqut_$t"
 done
 

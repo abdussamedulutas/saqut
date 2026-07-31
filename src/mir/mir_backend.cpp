@@ -314,93 +314,32 @@ bool isSupportedCallhost(const Instruction& instr) {
 }
 
 bool opcodeSupported(const Instruction& instr) {
+    // Temel destek OPCODE_LIST spec tablosundan türetilir (opcodeJitBaseSupported,
+    // #132). Talimata bağlı ek koşullar — nullable hedef (instr.left==1 →
+    // başarısızlıkta null; null'un register temsili JIT'te ayrı tasarım turu,
+    // yalnızca non-nullable hedef desteklenir: başarısızlık = uncaught throw,
+    // VM ile aynı), print-only CALLHOST, void RETURN — burada uygulanır.
+    if (!opcodeJitBaseSupported(instr.opcode))
+        return false;
     switch (instr.opcode) {
-        case Opcode::LOAD_CONST:
-        case Opcode::LOAD_SLOT:
-        // Dilim 3: string skaler (kutulu — pointer register'da taşınır, ADR-037)
-        case Opcode::LOAD_STRING:
-        case Opcode::STRING_CONCAT:
-        // Dilim 3: cast (skaler). Nullable hedef (instr.left==1 → başarısızlıkta null)
-        // JIT'te desteklenmez — null'un register temsili ayrı tasarım turu. Yalnızca
-        // non-nullable hedef (başarısızlık = uncaught throw, VM ile aynı).
-        case Opcode::CAST_INT_TO_STR:
-        case Opcode::CAST_FLOAT_TO_STR:
-        case Opcode::CAST_BOOL_TO_STR:
-            return true;
+        // Fallible cast'ler — nullable hedef → reddet
         case Opcode::CAST_STR_TO_INT:
         case Opcode::CAST_STR_TO_FLOAT:
         case Opcode::CAST_FLOAT_TO_INT_CHECKED:
         case Opcode::CAST_INT_TO_BYTE_CHECKED:
-        // ADR-040 fallible cast'ler — nullable hedef JIT'te desteklenmez
         case Opcode::CAST_STR_TO_LONG:
         case Opcode::CAST_STR_TO_FLOAT32:
         case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
         case Opcode::LONG_TO_INT_CHECKED:
-            return instr.left != 1;  // nullable hedef → reddet
-        // Dilim 3: decimal (kutulu — pointer register'da, aritmetik runtime call)
-        case Opcode::LOAD_DECIMAL:
-        case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
-        case Opcode::DDIV: case Opcode::DMOD: case Opcode::DNEG:
-        case Opcode::INT_TO_DECIMAL: case Opcode::FLOAT_TO_DECIMAL:
-        case Opcode::CAST_DECIMAL_TO_STR: case Opcode::CAST_DECIMAL_TO_FLOAT:
-            return true;
         case Opcode::CAST_DECIMAL_TO_INT:
         case Opcode::CAST_STR_TO_DECIMAL:
-            return instr.left != 1;  // nullable hedef → reddet
-        case Opcode::ADD:
-        case Opcode::SUB:
-        case Opcode::MUL:
-        case Opcode::DIV:
-        case Opcode::MOD:
-        case Opcode::BAND:
-        case Opcode::BOR:
-        case Opcode::BXOR:
-        case Opcode::SHL:
-        case Opcode::SHR:
-        case Opcode::BNOT:
-        // Dilim 1.5: float skaler
-        case Opcode::LOAD_FLOAT:
-        case Opcode::FADD:
-        case Opcode::FSUB:
-        case Opcode::FMUL:
-        case Opcode::FDIV:
-        case Opcode::FNEG:
-        case Opcode::INT_TO_FLOAT:
-        case Opcode::FLOAT_TO_INT:
-        // ADR-040: longint (64-bit) aritmetik — EXT32'siz native MIR op
-        case Opcode::LOAD_LONG:
-        case Opcode::LADD: case Opcode::LSUB: case Opcode::LMUL:
-        case Opcode::LDIV: case Opcode::LMOD: case Opcode::LNEG:
-        case Opcode::LBAND: case Opcode::LBOR: case Opcode::LBXOR:
-        case Opcode::LSHL: case Opcode::LSHR: case Opcode::LBNOT:
-        case Opcode::INT_TO_LONG:
-        // ADR-040: float32 (32-bit single) aritmetik — native MIR_T_F op
-        case Opcode::LOAD_FLOAT32:
-        case Opcode::F32ADD: case Opcode::F32SUB: case Opcode::F32MUL:
-        case Opcode::F32DIV: case Opcode::F32NEG:
-        case Opcode::INT_TO_FLOAT32: case Opcode::FLOAT32_TO_INT:
-        case Opcode::FLOAT_TO_FLOAT32: case Opcode::FLOAT32_TO_FLOAT:
-        // ADR-040: hatasız longint/float32 string cast'leri
-        case Opcode::CAST_LONG_TO_STR:
-        case Opcode::CAST_FLOAT32_TO_STR:
-        // Karşılaştırmalar — operand türüne göre int/float varyantı codegen'de seçilir
-        case Opcode::LESS:
-        case Opcode::LESS_EQUAL:
-        case Opcode::GREATER:
-        case Opcode::GREATER_EQUAL:
-        case Opcode::EQUAL_EQUAL:
-        case Opcode::NOT_EQUAL:
-        case Opcode::JMP:
-        case Opcode::JIF_FALSE:
-        case Opcode::JIF_TRUE:
-        case Opcode::CALL:
-            return true;
+            return instr.left != 1;
         case Opcode::RETURN:
             return instr.src >= 0;  // void RETURN (src=-1) bu dilimde yok
         case Opcode::CALLHOST:
             return isSupportedCallhost(instr);
         default:
-            return false;
+            return true;
     }
 }
 

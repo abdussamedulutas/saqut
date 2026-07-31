@@ -9,7 +9,7 @@ FLAGS=(-std=c++20 -Wall -Wextra -I"$ROOT/src")
 SAQUT="$ROOT/build/saqut"
 
 # ── Birim testler ─────────────────────────────────────────────────────────────
-for t in test_type test_diagnostic; do
+for t in test_type test_diagnostic test_opcode; do
     echo "=== $t ==="
     "$CXX" "${FLAGS[@]}" "$ROOT/tests/$t.cpp" -o "/tmp/saqut_$t"
     "/tmp/saqut_$t"

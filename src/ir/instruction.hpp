@@ -61,269 +61,205 @@ inline const char* slotTypeName(SlotType t) {
 }
 
 // ----------------------------------------------------------------------------
-// Opcode — Sanal Makinenin Anlayacağı İşlem Kodları
+// OPCODE_LIST — Opcode spec tablosu (TEK KAYNAK, #132)
+//
+// Her opcode tam olarak tek satırda tanımlanır:
+//   X(ISIM, ARITE, BACKENDS)
+//     ISIM     : kanonik opcode adı (enum değeri; sıralama pozisyoneldir,
+//                eklerken listenin SONUNA değil doğru gruba ekle)
+//     ARITE    : talimatın anlamlı operand alanı sayısı. Kural:
+//                  - slot operandları (dest/src/left/right/cond) ve sabitler
+//                    (intValue/int64Value/floatValue/decimalValue/stringValue)
+//                    teker teker sayılır
+//                  - callee (functionName + argSlots) tek operand sayılır
+//                  - fallible cast'lerde nullable-modu bayrağı (left) bir
+//                    operand sayılır
+//                  - ARRAY_NEW'de arrayElemKind (packed eleman tipi) bir
+//                    operand sayılır
+//                  - IR-metadata (valueType, fieldNames, source*, requiredCap)
+//                    SAYILMAZ
+//     BACKENDS : destekleyen backend bayrakları (OP_VM | OP_JIT). VM
+//                normatif backend'dir ve TÜM opcode'ları çalıştırır; JIT
+//                [EXPERIMENTAL] — tablodaki OP_JIT yalnızca "temel" desteği
+//                gösterir, talimata bağlı ek koşullar
+//                (mir_backend.cpp::opcodeSupported'da) ayrıca uygulanır.
+//
+// Yeni opcode eklemek = bu listeye bir satır eklemek. enum, opcodeName(),
+// opcodeArity(), opcodeBackends() ve JIT temel destek filtresi buradan
+// türetilir — başka yerde elle senkron switch kalmadı.
 // ----------------------------------------------------------------------------
-enum class Opcode {
 
-    // --- Değer yükleme ---
-    LOAD_CONST,    // slots[dest] = intValue (tam sayı sabitini slota yükle)
-                   //   Örnek: LOAD_CONST dest=3 val=10  →  slot[3] = 10
-
-    LOAD_STRING,   // slots[dest] = stringValue (metin sabitini slota yükle)
-    LOAD_NULL,     // slots[dest] = null  (ADR-021: ValueKind::Null)
-                   //   Örnek: LOAD_STRING dest=2 val="Merhaba"  →  slot[2] = "Merhaba"
-
-    LOAD_SLOT,     // slots[dest] = slots[src]
-                   //   Bir slotun değerini başka bir slota kopyalar.
-                   //   Atama işlemlerinde (x = y) kullanılır.
-
-    // --- Aritmetik (tümü: slots[dest] = slots[left] OP slots[right]) ---
-    ADD,
-    SUB,
-    MUL,
-    DIV,           // UYARI: sıfıra bölme → runtime_error fırlatılır
-    MOD,
-
-    // --- Bitsel (tümü: slots[dest] = slots[left] OP slots[right]) ---
-    BAND,          // slots[left] & slots[right]
-    BOR,           // slots[left] | slots[right]
-    BXOR,          // slots[left] ^ slots[right]
-    SHL,           // slots[left] << slots[right]
-    SHR,           // slots[left] >> slots[right]
-    BNOT,          // ~slots[src]  → slots[dest]  (tekli operatör; src kullanır, left/right değil)
-
-    // --- Karşılaştırma (sonuç: 1 = doğru, 0 = yanlış) ---
-    LESS,          // slots[left] <  slots[right]
-    LESS_EQUAL,    // slots[left] <= slots[right]
-    GREATER,       // slots[left] >  slots[right]
-    GREATER_EQUAL, // slots[left] >= slots[right]
-    EQUAL_EQUAL,   // slots[left] == slots[right]
-    NOT_EQUAL,     // slots[left] != slots[right]
-
-    // --- Kontrol akışı ---
-    JMP,           // Koşulsuz atlama: ip = jumpTarget
-    JIF_FALSE,     // Koşullu atlama:  slots[cond] falsy ise ip = jumpTarget
-    JIF_TRUE,      // Koşullu atlama:  slots[cond] truthy ise ip = jumpTarget
-
-    // --- Fonksiyon çağrısı ---
-    CALL,          // Başka bir saQut fonksiyonunu çağır.
-                   //   Yeni frame açılır, argümanlar parametre slotlarına kopyalanır.
-                   //   Fonksiyon RETURN ile bitince sonuç slots[dest]'e yazılır.
-
-    RETURN,        // Bu frame'i kapat, slots[src]'yi caller'a ilet.
-
-    // --- Float aritmetik (#44) ---
-    LOAD_FLOAT,    // slots[dest] = floatValue (double sabit yükle)
-    FADD,          // slots[dest] = slots[left] + slots[right]  (float)
-    FSUB,          // slots[dest] = slots[left] - slots[right]  (float)
-    FMUL,          // slots[dest] = slots[left] * slots[right]  (float)
-    FDIV,          // slots[dest] = slots[left] / slots[right]  (float; sıfır → runtime_error)
-    FNEG,          // slots[dest] = -slots[src]                 (float tekli eksi)
-    INT_TO_FLOAT,  // slots[dest] = (double)slots[src]  — gizli int→float çevrimi (literal atamasında)
-    FLOAT_TO_INT,  // slots[dest] = (int)slots[src]     — açık cast (ileride: int(x))
-
-    // --- Float32 aritmetik (ADR-040: 32-bit IEEE single, her sonuç (float) truncate) ---
-    LOAD_FLOAT32,  // slots[dest] = (float)floatValue (single sabit yükle)
-    F32ADD,        // slots[dest] = (float)(slots[left] + slots[right])
-    F32SUB,        // slots[dest] = (float)(slots[left] - slots[right])
-    F32MUL,        // slots[dest] = (float)(slots[left] * slots[right])
-    F32DIV,        // slots[dest] = (float)(slots[left] / slots[right])  (sıfır → runtime_error)
-    F32NEG,        // slots[dest] = (float)(-slots[src])
-    INT_TO_FLOAT32,   // slots[dest] = (float)slots[src]      — int → float32
-    FLOAT32_TO_INT,   // slots[dest] = (int)slots[src]        — float32 → int (checked)
-    FLOAT_TO_FLOAT32, // slots[dest] = (float)slots[src]      — double → float (E003 veri kaybı gerçekleşir)
-    FLOAT32_TO_FLOAT, // slots[dest] = (double)slots[src]     — float → double (kayıpsız widening)
-
-    // --- LongInt aritmetik (ADR-040: 64-bit signed, tanımlı 2's-complement wrap) ---
-    LOAD_LONG,     // slots[dest] = int64Value (64-bit sabit yükle)
-    LADD,          // slots[dest] = slots[left] + slots[right]  (longint, uint64 wrap)
-    LSUB,          // slots[dest] = slots[left] - slots[right]  (longint)
-    LMUL,          // slots[dest] = slots[left] * slots[right]  (longint)
-    LDIV,          // slots[dest] = slots[left] / slots[right]  (sıfır → Error; INT64_MIN/-1 → INT64_MIN)
-    LMOD,          // slots[dest] = slots[left] % slots[right]  (sıfır → Error; INT64_MIN/-1 → 0)
-    LNEG,          // slots[dest] = -slots[src]                 (longint tekli eksi)
-    LBAND,         // slots[dest] = slots[left] & slots[right]  (64-bit)
-    LBOR,          // slots[dest] = slots[left] | slots[right]  (64-bit)
-    LBXOR,         // slots[dest] = slots[left] ^ slots[right]  (64-bit)
-    LSHL,          // slots[dest] = slots[left] << slots[right] (64-bit)
-    LSHR,          // slots[dest] = slots[left] >> slots[right] (64-bit aritmetik)
-    LBNOT,         // slots[dest] = ~slots[src]                 (64-bit)
-    INT_TO_LONG,   // slots[dest] = (int64)slots[src]  — int → longint (kayıpsız genişletme)
-    LONG_TO_INT_CHECKED, // slots[dest] = (int32)slots[src]; int32 aralığı dışı → fallible
-
-    // --- Struct (ADR-020: referans semantiği) ---
-    STRUCT_NEW,  // slots[dest] = yeni StructObject(intValue alan sayısı); functionName = struct tipi adı
-    FIELD_GET,   // slots[dest] = slots[src].fields[intValue]  (src=nesne, intValue=alan indeksi)
-    FIELD_SET,   // slots[dest].fields[intValue] = slots[right]  (dest=nesne, intValue=alan indeksi, right=değer)
-
-    // --- Array (ADR-020: referans semantiği) ---
-    ARRAY_NEW,   // slots[dest] = yeni ArrayObject(intValue eleman kapasitesi)
-    ARRAY_GET,   // slots[dest] = slots[left][slots[right]]  — sınır kontrolü
-    ARRAY_SET,   // slots[dest][slots[left]] = slots[right]  — sınır kontrolü (dest=dizi, left=idx, right=değer)
-    ARRAY_LEN,   // slots[dest] = slots[src].uzunluk()
-
-    // --- Modül-düzeyi değişken erişimi ---
-    // "Global" değil: her değişken kendi dosyasına (modülüne) aittir.
-    // Başka modüller bu alana doğrudan erişemez; yalnızca export/import ile ulaşabilir.
-    // TODO(#modül-scope): IRFunction.moduleId eklenerek çok-modüllü derlemede
-    //   her fonksiyonun kendi modülünün slot alanına bakması sağlanacak (bkz. TODO.md).
-    LOAD_GLOBAL,   // slots[dest] = moduleSlots[intValue]  (bu modülün modül-düzeyi değişkeni)
-    STORE_GLOBAL,  // moduleSlots[intValue] = slots[src]
-
-    // --- String işlemleri (ADR-024: immutable değer-tipi, içerik ==) ---
-    STRING_CONCAT, // slots[dest] = slots[left] + slots[right]  (yeni string üretir)
-
-    // --- Hata yönetimi (ADR-025: UNCHECKED try/catch/throw) ---
-    ENTER_TRY,  // try bloğuna giriş: TryFrame'i yığına it
-                //   dest       = catch bloğundaki Error değerinin yazılacağı slot
-                //   jumpTarget = catch bloğunun IR konumu (-1 → backpatch)
-                //   callDepth  = VM, callStack.size()'ı kayıt altına alır (unwind için)
-    LEAVE_TRY,  // try bloğundan normal çıkış: TryFrame'i çıkar (istisna olmadı)
-    THROW,      // slots[src] değerini fırlat → en yakın ENTER_TRY'a unwind
-                //   Yakalanmamışsa C++ exception olarak yükseltilir
-
-    // --- Tip dönüşümleri (ADR-026: as operatörü) ---
-    // Hatasız dönüşümler:
-    CAST_INT_TO_STR,    // slots[dest] = to_string(slots[src])  — int  → string
-    CAST_FLOAT_TO_STR,  // slots[dest] = to_string(slots[src])  — float → string
-    CAST_BOOL_TO_STR,   // slots[dest] = "true"/"false"          — bool  → string
-    // Fallible dönüşümler (left=0 → Error fırlat; left=1 → null döndür):
-    CAST_STR_TO_INT,    // slots[dest] = parse_int(slots[src])
-    CAST_STR_TO_FLOAT,  // slots[dest] = parse_float(slots[src])
-    CAST_FLOAT_TO_INT_CHECKED,  // slots[dest] = (int)slots[src]; NaN/Inf/taşma → fallible
-    CAST_INT_TO_BYTE_CHECKED,   // slots[dest] = slots[src]; 0-255 dışı → fallible (#86)
-    // ADR-040 longint/float32 string cast'leri:
-    CAST_LONG_TO_STR,   // slots[dest] = to_string(int64Value)   — longint → string (hatasız)
-    CAST_STR_TO_LONG,   // slots[dest] = parse_int64(slots[src]) — string → longint (fallible)
-    CAST_FLOAT32_TO_STR,// slots[dest] = to_string single         — float32 → string (hatasız)
-    CAST_STR_TO_FLOAT32,// slots[dest] = (float)parse            — string → float32 (fallible)
-    CAST_FLOAT_TO_LONG_CHECKED, // slots[dest] = (int64)slots[src]; NaN/Inf/int64 taşma → fallible
-
-    // --- Decimal aritmetik (ADR-028) ---
-    LOAD_DECIMAL,       // slots[dest] = decimalValue (decimal sabit yükle)
-    DADD,               // slots[dest] = slots[left] + slots[right]  (decimal)
-    DSUB,               // slots[dest] = slots[left] - slots[right]  (decimal)
-    DMUL,               // slots[dest] = slots[left] * slots[right]  (decimal)
-    DDIV,               // slots[dest] = slots[left] / slots[right]  (sıfır → Error)
-    DMOD,               // slots[dest] = slots[left] % slots[right]  (sıfır → Error)
-    DNEG,               // slots[dest] = -slots[src]                 (tekli eksi)
-    INT_TO_DECIMAL,     // slots[dest] = decimal(slots[src])         — gizli int→decimal terfi
-    FLOAT_TO_DECIMAL,   // slots[dest] = decimal(slots[src])         — gizli float→decimal terfi
-    // Decimal cast'ler (ADR-026 genişlemesi):
-    CAST_DECIMAL_TO_STR,    // slots[dest] = slots[src].toString()         — hatasız
-    CAST_DECIMAL_TO_FLOAT,  // slots[dest] = (double)slots[src]            — hatasız
-    CAST_DECIMAL_TO_INT,    // slots[dest] = trunc(slots[src])             — fallible (taşma)
-    CAST_STR_TO_DECIMAL,    // slots[dest] = decimal::fromString(slots[src]) — fallible
-
-    // --- Dış dünya (FFI — Foreign Function Interface) ---
-    CALLHOST,      // Host (C++) fonksiyonunu çağır. Şu an sadece "print" destekli.
-                   //   Dönüş değeri yok; sadece yan etki (stdout'a yazmak gibi).
+// Backend bayrakları (OPCODE_LIST üçüncü alanı)
+enum : uint8_t {
+    OP_VM  = 1u << 0,  // VM (normatif) — tüm opcode'lar
+    OP_JIT = 1u << 1,  // MIR JIT [EXPERIMENTAL] — ek koşullar mir_backend.cpp'de
 };
 
-// Hata ayıklama ve IR dump için okunabilir isim
+#define OPCODE_LIST(X) \
+    /* --- Değer yükleme --- */ \
+    X(LOAD_CONST,  2, OP_VM | OP_JIT) /* slots[dest] = intValue (tam sayı sabiti) */ \
+    X(LOAD_STRING, 2, OP_VM | OP_JIT) /* slots[dest] = stringValue */ \
+    X(LOAD_NULL,   1, OP_VM)          /* slots[dest] = null (ADR-021) */ \
+    X(LOAD_SLOT,   2, OP_VM | OP_JIT) /* slots[dest] = slots[src] */ \
+    /* --- Aritmetik (dest = left OP right) --- */ \
+    X(ADD, 3, OP_VM | OP_JIT) \
+    X(SUB, 3, OP_VM | OP_JIT) \
+    X(MUL, 3, OP_VM | OP_JIT) \
+    X(DIV, 3, OP_VM | OP_JIT) /* UYARI: sıfıra bölme → runtime_error */ \
+    X(MOD, 3, OP_VM | OP_JIT) \
+    /* --- Bitsel (dest = left OP right) --- */ \
+    X(BAND, 3, OP_VM | OP_JIT) /* slots[left] & slots[right] */ \
+    X(BOR,  3, OP_VM | OP_JIT) /* slots[left] | slots[right] */ \
+    X(BXOR, 3, OP_VM | OP_JIT) /* slots[left] ^ slots[right] */ \
+    X(SHL,  3, OP_VM | OP_JIT) /* slots[left] << slots[right] */ \
+    X(SHR,  3, OP_VM | OP_JIT) /* slots[left] >> slots[right] */ \
+    X(BNOT, 2, OP_VM | OP_JIT) /* slots[dest] = ~slots[src] (tekli) */ \
+    /* --- Karşılaştırma (sonuç: 1 = doğru, 0 = yanlış) --- */ \
+    X(LESS,          3, OP_VM | OP_JIT) \
+    X(LESS_EQUAL,    3, OP_VM | OP_JIT) \
+    X(GREATER,       3, OP_VM | OP_JIT) \
+    X(GREATER_EQUAL, 3, OP_VM | OP_JIT) \
+    X(EQUAL_EQUAL,   3, OP_VM | OP_JIT) \
+    X(NOT_EQUAL,     3, OP_VM | OP_JIT) \
+    /* --- Kontrol akışı --- */ \
+    X(JMP,       1, OP_VM | OP_JIT) /* ip = jumpTarget */ \
+    X(JIF_FALSE, 2, OP_VM | OP_JIT) /* cond falsy ise ip = jumpTarget */ \
+    X(JIF_TRUE,  2, OP_VM | OP_JIT) /* cond truthy ise ip = jumpTarget */ \
+    /* --- Fonksiyon çağrısı --- */ \
+    X(CALL,   3, OP_VM | OP_JIT) /* dest, functionName, argSlots */ \
+    X(RETURN, 1, OP_VM | OP_JIT) /* slots[src]'yi caller'a ilet */ \
+    /* --- Float aritmetik (#44) --- */ \
+    X(LOAD_FLOAT,   2, OP_VM | OP_JIT) /* slots[dest] = floatValue */ \
+    X(FADD, 3, OP_VM | OP_JIT) \
+    X(FSUB, 3, OP_VM | OP_JIT) \
+    X(FMUL, 3, OP_VM | OP_JIT) \
+    X(FDIV, 3, OP_VM | OP_JIT) /* sıfır → runtime_error */ \
+    X(FNEG, 2, OP_VM | OP_JIT) /* -slots[src] */ \
+    X(INT_TO_FLOAT, 2, OP_VM | OP_JIT) /* gizli int→float */ \
+    X(FLOAT_TO_INT, 2, OP_VM | OP_JIT) /* açık cast */ \
+    /* --- Float32 aritmetik (ADR-040: tek sonuç (float) truncate) --- */ \
+    X(LOAD_FLOAT32,     2, OP_VM | OP_JIT) /* single sabit yükle */ \
+    X(F32ADD, 3, OP_VM | OP_JIT) \
+    X(F32SUB, 3, OP_VM | OP_JIT) \
+    X(F32MUL, 3, OP_VM | OP_JIT) \
+    X(F32DIV, 3, OP_VM | OP_JIT) /* sıfır → runtime_error */ \
+    X(F32NEG, 2, OP_VM | OP_JIT) \
+    X(INT_TO_FLOAT32,   2, OP_VM | OP_JIT) /* int → float32 */ \
+    X(FLOAT32_TO_INT,   2, OP_VM | OP_JIT) /* float32 → int (checked) */ \
+    X(FLOAT_TO_FLOAT32, 2, OP_VM | OP_JIT) /* double → float (E003 veri kaybı) */ \
+    X(FLOAT32_TO_FLOAT, 2, OP_VM | OP_JIT) /* float → double (kayıpsız) */ \
+    /* --- LongInt aritmetik (ADR-040: 64-bit signed, wrap tanımlı) --- */ \
+    X(LOAD_LONG, 2, OP_VM | OP_JIT) /* 64-bit sabit yükle */ \
+    X(LADD, 3, OP_VM | OP_JIT) \
+    X(LSUB, 3, OP_VM | OP_JIT) \
+    X(LMUL, 3, OP_VM | OP_JIT) \
+    X(LDIV, 3, OP_VM | OP_JIT) /* sıfır → Error; INT64_MIN/-1 → INT64_MIN */ \
+    X(LMOD, 3, OP_VM | OP_JIT) /* sıfır → Error; INT64_MIN/-1 → 0 */ \
+    X(LNEG, 2, OP_VM | OP_JIT) \
+    X(LBAND, 3, OP_VM | OP_JIT) \
+    X(LBOR,  3, OP_VM | OP_JIT) \
+    X(LBXOR, 3, OP_VM | OP_JIT) \
+    X(LSHL,  3, OP_VM | OP_JIT) \
+    X(LSHR,  3, OP_VM | OP_JIT) /* aritmetik */ \
+    X(LBNOT, 2, OP_VM | OP_JIT) \
+    X(INT_TO_LONG,         2, OP_VM | OP_JIT) /* int → longint (kayıpsız) */ \
+    X(LONG_TO_INT_CHECKED, 3, OP_VM | OP_JIT) /* int32 aralığı dışı → fallible */ \
+    /* --- Struct (ADR-020: referans semantiği) --- */ \
+    X(STRUCT_NEW, 3, OP_VM) /* dest, intValue alan sayısı, functionName tip adı */ \
+    X(FIELD_GET,  3, OP_VM) /* slots[dest] = slots[src].fields[intValue] */ \
+    X(FIELD_SET,  3, OP_VM) /* slots[dest].fields[intValue] = slots[right] */ \
+    /* --- Array (ADR-020: referans semantiği; #206 packed elemanlar) --- */ \
+    X(ARRAY_NEW, 3, OP_VM) /* dest, intValue kapasite, arrayElemKind packed tip */ \
+    X(ARRAY_GET, 3, OP_VM) /* slots[dest] = slots[left][slots[right]] — sınır kontrolü */ \
+    X(ARRAY_SET, 3, OP_VM) /* slots[dest][slots[left]] = slots[right] — sınır kontrolü */ \
+    X(ARRAY_LEN, 2, OP_VM) /* slots[dest] = slots[src].uzunluk() */ \
+    /* --- Modül-düzeyi değişken erişimi --- */ \
+    X(LOAD_GLOBAL,  2, OP_VM) /* slots[dest] = moduleSlots[intValue] */ \
+    X(STORE_GLOBAL, 2, OP_VM) /* moduleSlots[intValue] = slots[src] */ \
+    /* --- String işlemleri (ADR-024: immutable değer-tipi) --- */ \
+    X(STRING_CONCAT, 3, OP_VM | OP_JIT) /* slots[dest] = slots[left] + slots[right] */ \
+    /* --- Hata yönetimi (ADR-025: UNCHECKED try/catch/throw) --- */ \
+    X(ENTER_TRY, 2, OP_VM) /* dest, jumpTarget; callDepth'i VM kaydeder */ \
+    X(LEAVE_TRY, 0, OP_VM) /* TryFrame'i çıkar (operand yok) */ \
+    X(THROW,     1, OP_VM) /* slots[src] değerini fırlat */ \
+    /* --- Tip dönüşümleri (ADR-026: as operatörü) — hatasız --- */ \
+    X(CAST_INT_TO_STR,   2, OP_VM | OP_JIT) \
+    X(CAST_FLOAT_TO_STR, 2, OP_VM | OP_JIT) \
+    X(CAST_BOOL_TO_STR,  2, OP_VM | OP_JIT) \
+    /* --- Tip dönüşümleri — fallible (left=0 → Error; left=1 → null) --- */ \
+    X(CAST_STR_TO_INT,            3, OP_VM | OP_JIT) \
+    X(CAST_STR_TO_FLOAT,          3, OP_VM | OP_JIT) \
+    X(CAST_FLOAT_TO_INT_CHECKED,  3, OP_VM | OP_JIT) /* NaN/Inf/taşma → fallible */ \
+    X(CAST_INT_TO_BYTE_CHECKED,   3, OP_VM | OP_JIT) /* 0-255 dışı → fallible (#86) */ \
+    X(CAST_LONG_TO_STR,           2, OP_VM | OP_JIT) /* longint → string (hatasız) */ \
+    X(CAST_STR_TO_LONG,           3, OP_VM | OP_JIT) /* string → longint (fallible) */ \
+    X(CAST_FLOAT32_TO_STR,        2, OP_VM | OP_JIT) /* float32 → string (hatasız) */ \
+    X(CAST_STR_TO_FLOAT32,        3, OP_VM | OP_JIT) /* string → float32 (fallible) */ \
+    X(CAST_FLOAT_TO_LONG_CHECKED, 3, OP_VM | OP_JIT) /* NaN/Inf/int64 taşma → fallible */ \
+    /* --- Decimal aritmetik (ADR-028) --- */ \
+    X(LOAD_DECIMAL,   2, OP_VM | OP_JIT) /* decimal sabit yükle */ \
+    X(DADD, 3, OP_VM | OP_JIT) \
+    X(DSUB, 3, OP_VM | OP_JIT) \
+    X(DMUL, 3, OP_VM | OP_JIT) \
+    X(DDIV, 3, OP_VM | OP_JIT) /* sıfır → Error */ \
+    X(DMOD, 3, OP_VM | OP_JIT) /* sıfır → Error */ \
+    X(DNEG, 2, OP_VM | OP_JIT) \
+    X(INT_TO_DECIMAL,   2, OP_VM | OP_JIT) /* gizli int→decimal terfi */ \
+    X(FLOAT_TO_DECIMAL, 2, OP_VM | OP_JIT) /* gizli float→decimal terfi */ \
+    X(CAST_DECIMAL_TO_STR,   2, OP_VM | OP_JIT) /* hatasız */ \
+    X(CAST_DECIMAL_TO_FLOAT, 2, OP_VM | OP_JIT) /* hatasız */ \
+    X(CAST_DECIMAL_TO_INT,   3, OP_VM | OP_JIT) /* trunc; taşma → fallible */ \
+    X(CAST_STR_TO_DECIMAL,   3, OP_VM | OP_JIT) /* fallible */ \
+    /* --- Dış dünya (FFI) --- */ \
+    X(CALLHOST, 2, OP_VM | OP_JIT) /* functionName, argSlots; şu an yalnız print */
+
+// Spec tablosundan türetilen enum — OPCODE_LIST'e satır eklemek yeterlidir.
+enum class Opcode {
+#define X(name, arity, backends) name,
+    OPCODE_LIST(X)
+#undef X
+};
+
+// Hata ayıklama ve IR dump için okunabilir isim (spec tablosundan türetilir)
 inline const char* opcodeName(Opcode op) {
     switch (op) {
-        case Opcode::LOAD_CONST:    return "LOAD_CONST";
-        case Opcode::LOAD_STRING:   return "LOAD_STRING";
-        case Opcode::LOAD_NULL:     return "LOAD_NULL";
-        case Opcode::LOAD_SLOT:     return "LOAD_SLOT";
-        case Opcode::ADD:           return "ADD";
-        case Opcode::SUB:           return "SUB";
-        case Opcode::MUL:           return "MUL";
-        case Opcode::DIV:           return "DIV";
-        case Opcode::MOD:           return "MOD";
-        case Opcode::BAND:          return "BAND";
-        case Opcode::BOR:           return "BOR";
-        case Opcode::BXOR:          return "BXOR";
-        case Opcode::SHL:           return "SHL";
-        case Opcode::SHR:           return "SHR";
-        case Opcode::BNOT:          return "BNOT";
-        case Opcode::LOAD_FLOAT:    return "LOAD_FLOAT";
-        case Opcode::FADD:          return "FADD";
-        case Opcode::FSUB:          return "FSUB";
-        case Opcode::FMUL:          return "FMUL";
-        case Opcode::FDIV:          return "FDIV";
-        case Opcode::FNEG:          return "FNEG";
-        case Opcode::INT_TO_FLOAT:  return "INT_TO_FLOAT";
-        case Opcode::FLOAT_TO_INT:  return "FLOAT_TO_INT";
-        case Opcode::LOAD_FLOAT32:  return "LOAD_FLOAT32";
-        case Opcode::F32ADD:        return "F32ADD";
-        case Opcode::F32SUB:        return "F32SUB";
-        case Opcode::F32MUL:        return "F32MUL";
-        case Opcode::F32DIV:        return "F32DIV";
-        case Opcode::F32NEG:        return "F32NEG";
-        case Opcode::INT_TO_FLOAT32:   return "INT_TO_FLOAT32";
-        case Opcode::FLOAT32_TO_INT:   return "FLOAT32_TO_INT";
-        case Opcode::FLOAT_TO_FLOAT32: return "FLOAT_TO_FLOAT32";
-        case Opcode::FLOAT32_TO_FLOAT: return "FLOAT32_TO_FLOAT";
-        case Opcode::LOAD_LONG:     return "LOAD_LONG";
-        case Opcode::LADD:          return "LADD";
-        case Opcode::LSUB:          return "LSUB";
-        case Opcode::LMUL:          return "LMUL";
-        case Opcode::LDIV:          return "LDIV";
-        case Opcode::LMOD:          return "LMOD";
-        case Opcode::LNEG:          return "LNEG";
-        case Opcode::LBAND:         return "LBAND";
-        case Opcode::LBOR:          return "LBOR";
-        case Opcode::LBXOR:         return "LBXOR";
-        case Opcode::LSHL:          return "LSHL";
-        case Opcode::LSHR:          return "LSHR";
-        case Opcode::LBNOT:         return "LBNOT";
-        case Opcode::INT_TO_LONG:         return "INT_TO_LONG";
-        case Opcode::LONG_TO_INT_CHECKED: return "LONG_TO_INT_CHECKED";
-        case Opcode::CAST_INT_TO_STR:         return "CAST_INT_TO_STR";
-        case Opcode::CAST_FLOAT_TO_STR:       return "CAST_FLOAT_TO_STR";
-        case Opcode::CAST_BOOL_TO_STR:        return "CAST_BOOL_TO_STR";
-        case Opcode::CAST_STR_TO_INT:         return "CAST_STR_TO_INT";
-        case Opcode::CAST_STR_TO_FLOAT:       return "CAST_STR_TO_FLOAT";
-        case Opcode::CAST_FLOAT_TO_INT_CHECKED: return "CAST_FLOAT_TO_INT_CHECKED";
-        case Opcode::CAST_INT_TO_BYTE_CHECKED:  return "CAST_INT_TO_BYTE_CHECKED";
-        case Opcode::CAST_LONG_TO_STR:        return "CAST_LONG_TO_STR";
-        case Opcode::CAST_STR_TO_LONG:        return "CAST_STR_TO_LONG";
-        case Opcode::CAST_FLOAT32_TO_STR:     return "CAST_FLOAT32_TO_STR";
-        case Opcode::CAST_STR_TO_FLOAT32:     return "CAST_STR_TO_FLOAT32";
-        case Opcode::CAST_FLOAT_TO_LONG_CHECKED: return "CAST_FLOAT_TO_LONG_CHECKED";
-        case Opcode::LOAD_DECIMAL:          return "LOAD_DECIMAL";
-        case Opcode::DADD:                  return "DADD";
-        case Opcode::DSUB:                  return "DSUB";
-        case Opcode::DMUL:                  return "DMUL";
-        case Opcode::DDIV:                  return "DDIV";
-        case Opcode::DMOD:                  return "DMOD";
-        case Opcode::DNEG:                  return "DNEG";
-        case Opcode::INT_TO_DECIMAL:        return "INT_TO_DECIMAL";
-        case Opcode::FLOAT_TO_DECIMAL:      return "FLOAT_TO_DECIMAL";
-        case Opcode::CAST_DECIMAL_TO_STR:   return "CAST_DECIMAL_TO_STR";
-        case Opcode::CAST_DECIMAL_TO_FLOAT: return "CAST_DECIMAL_TO_FLOAT";
-        case Opcode::CAST_DECIMAL_TO_INT:   return "CAST_DECIMAL_TO_INT";
-        case Opcode::CAST_STR_TO_DECIMAL:   return "CAST_STR_TO_DECIMAL";
-        case Opcode::STRUCT_NEW:    return "STRUCT_NEW";
-        case Opcode::FIELD_GET:     return "FIELD_GET";
-        case Opcode::FIELD_SET:     return "FIELD_SET";
-        case Opcode::ARRAY_NEW:     return "ARRAY_NEW";
-        case Opcode::ARRAY_GET:     return "ARRAY_GET";
-        case Opcode::ARRAY_SET:     return "ARRAY_SET";
-        case Opcode::ARRAY_LEN:     return "ARRAY_LEN";
-        case Opcode::LOAD_GLOBAL:   return "LOAD_GLOBAL";
-        case Opcode::STORE_GLOBAL:  return "STORE_GLOBAL";
-        case Opcode::LESS:          return "LESS";
-        case Opcode::LESS_EQUAL:    return "LESS_EQUAL";
-        case Opcode::GREATER:       return "GREATER";
-        case Opcode::GREATER_EQUAL: return "GREATER_EQUAL";
-        case Opcode::EQUAL_EQUAL:   return "EQUAL_EQUAL";
-        case Opcode::NOT_EQUAL:     return "NOT_EQUAL";
-        case Opcode::JMP:           return "JMP";
-        case Opcode::JIF_FALSE:     return "JIF_FALSE";
-        case Opcode::JIF_TRUE:      return "JIF_TRUE";
-        case Opcode::CALL:          return "CALL";
-        case Opcode::RETURN:        return "RETURN";
-        case Opcode::STRING_CONCAT: return "STRING_CONCAT";
-        case Opcode::ENTER_TRY:     return "ENTER_TRY";
-        case Opcode::LEAVE_TRY:     return "LEAVE_TRY";
-        case Opcode::THROW:         return "THROW";
-        case Opcode::CALLHOST:      return "CALLHOST";
+#define X(name, arity, backends) case Opcode::name: return #name;
+        OPCODE_LIST(X)
+#undef X
     }
     return "UNKNOWN";
 }
+
+// Operand arite bilgisi (spec tablosundan; tanım üstteki kurala göre)
+constexpr int opcodeArity(Opcode op) {
+    switch (op) {
+#define X(name, arity, backends) case Opcode::name: return arity;
+        OPCODE_LIST(X)
+#undef X
+    }
+    return 0;
+}
+
+// Destekleyen backend bayrakları (spec tablosundan; VM her zaman normatiftir)
+constexpr uint8_t opcodeBackends(Opcode op) {
+    switch (op) {
+#define X(name, arity, backends) case Opcode::name: return backends;
+        OPCODE_LIST(X)
+#undef X
+    }
+    return 0;
+}
+
+// MIR JIT temel destek filtresi — talimata bağlı ek koşullar
+// mir_backend.cpp::opcodeSupported()'da switch ile uygulanır.
+constexpr bool opcodeJitBaseSupported(Opcode op) {
+    return (opcodeBackends(op) & OP_JIT) != 0;
+}
+
+// Spec tablosundaki toplam opcode sayısı (testler ve iterasyon için)
+#define X(name, arity, backends) +1
+constexpr int kOpcodeCount = OPCODE_LIST(X);
+#undef X
 
 // ----------------------------------------------------------------------------
 // Instruction — Tek bir IR talimatı

@@ -171,7 +171,6 @@ saqutcompiler/
 │
 ├── editor/vscode/            # VS Code extension (syntax highlighting)
 ├── saqutwebside/             # Web platform (Astro-based)
-├── prompts/                  # AI agent role prompts
 ├── knowledge-base/           # AI agent knowledge files (09 topics)
 ├── AGENTS.md                 # Agent governance (binding rules)
 ├── CLAUDE.md                 # Project structure (auto-generated)

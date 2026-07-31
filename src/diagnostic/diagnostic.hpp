@@ -103,36 +103,41 @@ struct Diagnostic {
 // anlamıdır (ileride `saqut explain E003` bunu kullanabilir, #107/#98).
 // ============================================================================
 
+// #131: tek katalog — kod, seviye, başlık (kısa) ve kanonik mesaj.
+// Bağlama özel mesaj report sırasında verilir (katalogdaki mesaj sabit
+// kısmı taşır); title `saqut explain <kod>` için, message üretim noktalarının
+// şablonu içindir. 1.0 freeze (ADR-038) bu tabloyu dondurur.
 struct DiagInfo {
     const char* code;
     DiagLevel   level;
     const char* title;
+    const char* message;  // kanonik mesaj şablonu (#131)
 };
 
 inline const std::vector<DiagInfo>& diagnosticCatalog() {
     static const std::vector<DiagInfo> catalog = {
-        {"E001", DiagLevel::Error,   "Undefined variable/name"},
-        {"E002", DiagLevel::Error,   "Duplicate definition in same scope"},
-        {"E003", DiagLevel::Error,   "Type mismatch"},
-        {"E004", DiagLevel::Error,   "break/continue outside loop/switch"},
-        {"E005", DiagLevel::Error,   "return outside function"},
-        {"E006", DiagLevel::Error,   "Return type does not match signature"},
-        {"E007", DiagLevel::Error,   "Undefined type"},
-        {"E008", DiagLevel::Error,   "Function call argument mismatch"},
-        {"E009", DiagLevel::Error,   "Array size is not constant / invalid"},
-        {"E010", DiagLevel::Error,   "Recursive/cyclic struct definition"},
-        {"E011", DiagLevel::Error,   "struct/function declaration inside a function body"},
-        {"E012", DiagLevel::Error,   "Type does not support [index] access"},
-        {"W001", DiagLevel::Warning, "Unused variable"},
-        {"W002", DiagLevel::Warning, "Division by zero (constant expression)"},
-        {"W003", DiagLevel::Warning, "Unreachable (dead) code"},
-        {"W004", DiagLevel::Warning, "Implicit numeric widening"},
-        {"W006", DiagLevel::Warning, "Deprecated builtin call syntax (ADR-033)"},
-        {"E901", DiagLevel::Error,   "Syntax error: unexpected token"},
-        {"E902", DiagLevel::Error,   "Syntax error: expected type name after 'as'"},
-        {"E903", DiagLevel::Error,   "Syntax error: expected member name"},
-        {"E904", DiagLevel::Error,   "Syntax error: expected variable name"},
-        {"E905", DiagLevel::Error,   "Syntax error: expected closing delimiter"},
+        {"E001", DiagLevel::Error,   "Undefined variable/name", "'{0}' is not defined"},
+        {"E002", DiagLevel::Error,   "Duplicate definition in same scope", "'{0}' already defined in this scope"},
+        {"E003", DiagLevel::Error,   "Type mismatch", "type mismatch: expected {0}, got {1}"},
+        {"E004", DiagLevel::Error,   "break/continue outside loop/switch", "break/continue outside loop/switch"},
+        {"E005", DiagLevel::Error,   "return outside function", "return outside function"},
+        {"E006", DiagLevel::Error,   "Return type does not match signature", "'{0}' function must return {1} but some paths have no return"},
+        {"E007", DiagLevel::Error,   "Undefined type", "unknown type: '{0}'"},
+        {"E008", DiagLevel::Error,   "Function call argument mismatch", "argument mismatch in call to '{0}'"},
+        {"E009", DiagLevel::Error,   "Array size is not constant / invalid", "array size must be a constant expression"},
+        {"E010", DiagLevel::Error,   "Recursive/cyclic struct definition", "recursive struct definition: '{0}'"},
+        {"E011", DiagLevel::Error,   "struct/function declaration inside a function body", "declaration inside a function body"},
+        {"E012", DiagLevel::Error,   "Type does not support [index] access", "type '{0}' does not support [index] access"},
+        {"W001", DiagLevel::Warning, "Unused variable", "'{0}' is never used"},
+        {"W002", DiagLevel::Warning, "Division by zero (constant expression)", "division by zero in constant expression"},
+        {"W003", DiagLevel::Warning, "Unreachable (dead) code", "unreachable code"},
+        {"W004", DiagLevel::Warning, "Implicit numeric widening", "implicit numeric widening from {0} to {1}"},
+        {"W006", DiagLevel::Warning, "Deprecated builtin call syntax (ADR-033)", "deprecated builtin call syntax"},
+        {"E901", DiagLevel::Error,   "Syntax error: unexpected token", "unexpected token"},
+        {"E902", DiagLevel::Error,   "Syntax error: expected type name after 'as'", "expected type name after 'as'"},
+        {"E903", DiagLevel::Error,   "Syntax error: expected member name", "expected member name"},
+        {"E904", DiagLevel::Error,   "Syntax error: expected variable name", "expected variable name"},
+        {"E905", DiagLevel::Error,   "Syntax error: expected closing delimiter", "expected closing delimiter"},
     };
     return catalog;
 }

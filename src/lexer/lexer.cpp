@@ -33,12 +33,19 @@ int Lexer::getLastPosition() {
 }
 
 // --------------------------------------------------------------------------
-// acceptPosition: Yığındaki son geçici konumu kalıcı yap.
-// Örnek: offsetMap=[5,10], offset=15 → offsetMap.back()=10 olur.
-// Bu sayede include() denemesi başarılı olduğunda konum ilerletilmiş olur.
+// acceptPosition: Yığındaki son geçici konumu kalıcı yap — ve YIĞINDAN ÇIKAR.
+//
+// beginPosition() bir giriş push'lar; accept ya da reject o girişi tüketmek
+// zorundadır, aksi halde yığın token başına bir eleman büyür. (Eski hal
+// pop yapmadan offsetMap.back()'i kendi üstüne yazıyordu: hem no-op hem
+// sızıntı — 21040 token'lık girdide yığın 8481 elemana çıkıyordu.)
+//
+// Örnek: offsetMap=[5,10] → pop(10), yeni tepe 10 olur; yani iç tarama
+// sırasında ilerletilen konum çağırana devredilir.
 // --------------------------------------------------------------------------
 void Lexer::acceptPosition() {
     int t = offsetMap.back();
+    offsetMap.pop_back();
     setLastPosition(t);
 }
 

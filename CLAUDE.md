@@ -14,8 +14,7 @@ Claude ile her yeni oturumda:
    `docs/v0.9-v1.0-yol-haritasi.md` ve
    `docs/v1.0-issue-disposition.md` dosyalarını oku.
 
-Rol sistemi kaldırılmıştır. Ayrı rol prompt'u yoktur; tek çalışma disiplini
-`AGENTS.md` §4'tedir. Model adı yetki belirlemez.
+Tek çalışma disiplini `AGENTS.md` §4'tedir. Model adı yetki belirlemez.
 
 ## Değişmez ürün bağlamı
 

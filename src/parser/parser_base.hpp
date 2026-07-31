@@ -13,6 +13,7 @@
 #include <iostream>
 #include <cstdint>
 #include <string>
+#include <vector>
 #include "parser/token.hpp"
 #include "parser/ast.hpp"
 #include "tools.hpp"
@@ -32,6 +33,11 @@ public:
 private:
     TokenList tokens;      // Tokenizer'dan gelen token listesi
     int current = 0;       // Şu anki token indeksi
+
+    // Token indeksi → çözümlenmiş ParserToken önbelleği (bkz. getToken()).
+    // Dolu olmayan girişler token == nullptr ile işaretlidir; tokens listesi
+    // parse() süresince sabit olduğu için bu önbellek her zaman geçerlidir.
+    std::vector<ParserToken> tokenCache_;
 
     DiagnosticEngine* diag_ = nullptr; // Faz 2: konumlu sözdizimi tanıları (E9xx)
     SourceLocation lastLoc_;           // en son tüketilen gerçek token'ın konumu

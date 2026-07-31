@@ -50,12 +50,26 @@ ParserToken Parser::parseToken(Token* token) {
 }
 
 ParserToken Parser::getToken(int offset) {
-    if ((int) tokens.size() - 1 < current + offset) {
+    const int idx = current + offset;
+    if ((int) tokens.size() - 1 < idx) {
         ParserToken pt;
         pt.type = TokenType::SVR_VOID;
         return pt;
     }
-    return parseToken(tokens[current + offset]);
+
+    // parseToken() saf bir fonksiyondur: aynı Token* için hep aynı ParserToken'ı
+    // üretir. Ama currentToken()/lookahead() aynı indeksi tekrar tekrar sorar —
+    // 2.3 MB'lık girdide 1.06 milyon token için 6.17 milyon parseToken çağrısı
+    // ölçüldü (token başına 5.8 kat). Her çağrı bir std::string kopyası, zincirleme
+    // string karşılaştırması ve bir hash araması demekti. Sonuç indeks başına bir
+    // kez hesaplanıp saklanır; tokens listesi parse() süresince sabittir.
+    if (tokenCache_.size() != tokens.size())
+        tokenCache_.assign(tokens.size(), ParserToken{});
+
+    ParserToken& slot = tokenCache_[idx];
+    if (slot.token == nullptr)
+        slot = parseToken(tokens[idx]);
+    return slot;
 }
 
 void Parser::nextToken() {
@@ -76,6 +90,10 @@ ParserToken Parser::currentToken() {
 ASTNode* Parser::parse(TokenList toks) {
     tokens = toks;
     current = 0;
+    // Aynı Parser örneği ikinci kez parse() edilirse eski önbellek başka bir
+    // token listesine ait olur; boyut kontrolü getToken() içinde de var ama
+    // aynı boyutlu farklı liste durumuna karşı burada da temizlenir.
+    tokenCache_.clear();
     return parseProgram();
 }
 

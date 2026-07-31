@@ -806,6 +806,42 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             break;
         }
 
+        // ADR-010/#114 — literal yeniden-tipleme KARŞILAŞTIRMA için de geçerli.
+        //
+        // Aşağıdaki aritmetik yolunda (bkz. "Arithmetic / bitwise") bir operand
+        // literal, diğeri tipliyse literal diğerinin tipine göre yeniden
+        // tiplenir. Aynı kural karşılaştırmada da uygulanmalıdır; uygulanmazsa
+        // literal bağlamsız Float() (32-bit) tiplenir ve `decimal == literal`
+        // sessizce yanlış sonuç verir:
+        //
+        //     decimal c = 0.1 + 0.2;   // c == 0.3d, tam
+        //     if (c == 0.3)            // sağdaki 0.3 → float32 → decimal
+        //                              // float32 0.3'ü tam tutamaz → NEQ
+        //
+        // Üretilen IR (düzeltme öncesi):
+        //     LOAD_DECIMAL     s0 = 0.3d
+        //     LOAD_FLOAT32                       ← literal 32-bit float'a
+        //     FLOAT_TO_DECIMAL s3 = (decimal)s1  ← sonra decimal'e geri
+        //     EQUAL_EQUAL      s2 = s0 == s3     ← kirlenmiş operand
+        //
+        // Değere bağlı sessiz hata: 0.5/1.5 (ikinin kuvvetleri) float32'de tam
+        // temsil edildiği için EQ verir, 0.1/0.3/19.99 vermez. IR generator
+        // (ir_generator.cpp:766) decimal literal'i string'den kayıpsız parse
+        // ediyor — hata orada değil, resolvedType'ın decimal gelmemesinde.
+        //
+        // Yeniden-tipleme eşitlik/sıralama break'lerinden ÖNCE yapılmalıdır;
+        // aritmetik yoldaki kopya oraya asla ulaşmıyordu.
+        if (bin->Operator == TokenType::EQUAL_EQUAL || bin->Operator == TokenType::BANG_EQUAL ||
+            bin->Operator == TokenType::LESS       || bin->Operator == TokenType::LESS_EQUAL ||
+            bin->Operator == TokenType::GREATER    || bin->Operator == TokenType::GREATER_EQUAL) {
+            if (bin->Left && bin->Left->kind == ASTKind::Literal && !rightType.isError() &&
+                rightType.isNumeric())
+                leftType = checkExpr(bin->Left, rightType);
+            if (bin->Right && bin->Right->kind == ASTKind::Literal && !leftType.isError() &&
+                leftType.isNumeric())
+                rightType = checkExpr(bin->Right, leftType);
+        }
+
         // Eşitlik karşılaştırması: string dahil herhangi tiple çalışır
         if (bin->Operator == TokenType::EQUAL_EQUAL || bin->Operator == TokenType::BANG_EQUAL) {
             result = Type::Bool();

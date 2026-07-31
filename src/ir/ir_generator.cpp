@@ -789,7 +789,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.stringValue = std::move(content);
             ins.sourceLine = currentLoc_.line;
             ins.sourceCol = currentLoc_.column;
-            ins.sourceFile = currentLoc_.filePath;
+            ins.sourceFile = currentLoc_.filePath();
             currentFunction_->instructions.push_back(std::move(ins));
             break;
         }
@@ -1113,7 +1113,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.requiredCap = ffiRequiredCap;
             ins.sourceLine = call->loc.line;
             ins.sourceCol = call->loc.column;
-            ins.sourceFile = call->loc.filePath;
+            ins.sourceFile = call->loc.filePath();
             currentFunction_->instructions.push_back(std::move(ins));
             return destSlot;
         } else if (isBuiltin) {
@@ -1123,7 +1123,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.argSlots = argSlots;
             ins.sourceLine = call->loc.line;
             ins.sourceCol = call->loc.column;
-            ins.sourceFile = call->loc.filePath;
+            ins.sourceFile = call->loc.filePath();
             currentFunction_->instructions.push_back(std::move(ins));
             return -1; // Dönüş değeri yok
         } else {
@@ -1135,7 +1135,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.argSlots = argSlots;
             ins.sourceLine = call->loc.line;
             ins.sourceCol = call->loc.column;
-            ins.sourceFile = call->loc.filePath;
+            ins.sourceFile = call->loc.filePath();
             currentFunction_->instructions.push_back(std::move(ins));
             return destSlot;
         }
@@ -1829,7 +1829,7 @@ void IRGenerator::emitLoadConst(int destSlot, int value, const SourceLocation& l
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1840,7 +1840,7 @@ void IRGenerator::emitLoadSlot(int destSlot, int srcSlot, const SourceLocation& 
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1851,7 +1851,7 @@ void IRGenerator::emitLoadGlobal(int destSlot, int globalIndex, const SourceLoca
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1862,7 +1862,7 @@ void IRGenerator::emitStoreGlobal(int srcSlot, int globalIndex, const SourceLoca
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1873,7 +1873,7 @@ void IRGenerator::emitLoadFloat(int destSlot, double value, const SourceLocation
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1884,7 +1884,7 @@ void IRGenerator::emitIntToFloat(int destSlot, int srcSlot, const SourceLocation
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1896,7 +1896,7 @@ void IRGenerator::emitLoadFloat32(int destSlot, double value, const SourceLocati
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1908,7 +1908,7 @@ void IRGenerator::emitLoadLong(int destSlot, long long value, const SourceLocati
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1920,7 +1920,7 @@ void IRGenerator::emitIntToFloat32(int destSlot, int srcSlot, const SourceLocati
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1932,7 +1932,7 @@ void IRGenerator::emitIntToLong(int destSlot, int srcSlot, const SourceLocation&
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1944,7 +1944,7 @@ void IRGenerator::emitLoadDecimal(int destSlot, const DecimalValue& value,
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1955,7 +1955,7 @@ void IRGenerator::emitIntToDecimal(int destSlot, int srcSlot, const SourceLocati
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1966,7 +1966,7 @@ void IRGenerator::emitFloatToDecimal(int destSlot, int srcSlot, const SourceLoca
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1978,7 +1978,7 @@ void IRGenerator::emitLoadNull(int destSlot, const SourceLocation& loc) {
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -1991,7 +1991,7 @@ void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     // Alan adlarını struct layout'tan al — 218: IRFunction metadata'ya taşı
     auto it = structLayouts_.find(structType);
     if (it != structLayouts_.end()) {
@@ -2018,7 +2018,7 @@ void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx, const So
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -2041,7 +2041,7 @@ void IRGenerator::emitArrayNew(int destSlot, int capacity, ArrayElemKind k,
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
@@ -2108,7 +2108,7 @@ void IRGenerator::emitArrayLen(int destSlot, int arrSlot, const SourceLocation& 
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
-    ins.sourceFile = el.filePath;
+    ins.sourceFile = el.filePath();
     currentFunction_->instructions.push_back(std::move(ins));
 }
 

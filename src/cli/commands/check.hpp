@@ -58,7 +58,7 @@ inline int cmdCheck(const CliArgs& args) {
         rec["record"]  = "check.diagnostic";
         rec["level"]   = diagLevelName(d.level);
         rec["code"]    = d.code;
-        rec["file"]    = d.loc.filePath;
+        rec["file"]    = d.loc.filePath();
         rec["line"]    = d.loc.line;
         rec["column"]  = d.loc.column;
         rec["offset"]  = d.loc.offset;

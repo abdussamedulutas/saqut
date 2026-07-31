@@ -137,6 +137,16 @@ add_test(
             "${SAQUT_BINARY}"
 )
 
+# #146 (SQ-100-TOKEN-POSITIONS): saqut tokens her token için file +
+# line/column (1-tabanlı, column BYTE-tabanlı) + byteOffset (0-tabanlı) +
+# byteLength taşır; ASCII + UTF-8 çok baytlı fixture, bayt-identical
+# determinizm.
+add_test(
+    NAME tokens_positions
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/tokens_positions_test.sh"
+            "${SAQUT_BINARY}"
+)
+
 # Golden testleri — tests/golden/**/*.sqt dosyalarını otomatik keşfet.
 # Her .sqt için iki olası expected dosyası kontrol edilir:
 #   BASE.expected      → saqut run  (siyah-kutu çıktı testi)

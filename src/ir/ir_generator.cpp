@@ -31,6 +31,7 @@
 static ArrayElemKind arrayElemKindFromTypeName(const std::string& t);
 static ArrayElemKind arrayElemKindFromPrim(PrimitiveKind p);
 static ArrayElemKind arrayElemKindFromType(const Type& t);
+static void finalizeCapRequirements(IRFunction* fn);
 
 // Error struct alan sırası (ADR-025): makeError için IR tarafından bilinir
 // 0=line, 1=col, 2=message, 3=trace, 4=code
@@ -111,6 +112,7 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
             generateFunction(child);
             currentFunction_->slotCount = nextSlot_;
             finalizeSlotTypes(currentFunction_, fnDecl);
+            finalizeCapRequirements(currentFunction_);
         }
     }
     return program;
@@ -178,6 +180,7 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
             generateFunction(child);
             currentFunction_->slotCount = nextSlot_;
             finalizeSlotTypes(currentFunction_, fnDecl);
+            finalizeCapRequirements(currentFunction_);
         }
     }
 
@@ -1642,6 +1645,19 @@ SlotType IRGenerator::slotTypeFromTypeName(const std::string& t) const {
         return SlotType::Ref;
     // enum → int değeri; void/bilinmeyen → Int (nötr varsayılan).
     return SlotType::Int;
+}
+
+// #76/ADR-035: CALLHOST(__ffi__) requiredCap'lerini Instruction'ların SABİT
+// indeksleriyle IRFunction::capRequirements'a taşır. VM'in runtime capability
+// backstop'u (interpreter.cpp, B modeli) bu map'ten okur; map doldurulmazsa
+// backstop sessizce devre dışı kalır (#218'de map'e geçildi ama population
+// unutulmuştu). Talimat vektörü IR üretimi SONRASI değişmez (optimizasyon
+// AST'te çalışır), bu yüzden indeksler kalıcıdır.
+static void finalizeCapRequirements(IRFunction* fn) {
+    for (size_t i = 0; i < fn->instructions.size(); ++i) {
+        if (fn->instructions[i].requiredCap)
+            fn->capRequirements[static_cast<int>(i)] = *fn->instructions[i].requiredCap;
+    }
 }
 
 void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {

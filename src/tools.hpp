@@ -50,6 +50,8 @@ namespace Color {
     inline const char* SoftPembe   = "\033[38;2;225;175;195m";   // tip isimleri/string
     inline const char* SoftTurkuaz = "\033[38;2;155;205;205m";   // konum/referans
     inline const char* SoftGri     = "\033[38;2;145;145;155m";   // parantez/etiket
+    inline const char* KoyuSari    = "\033[38;2;200;180;80m";    // CFG metadata (blok aralığı, preds/succs/term etiketleri)
+    inline const char* Kirmizi     = "\033[38;2;235;120;120m";   // CALLHOST/FFI (dış dünya çağrıları)
 }
 
 inline std::string jsonEscape(const std::string& s) {

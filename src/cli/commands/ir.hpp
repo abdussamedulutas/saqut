@@ -60,8 +60,7 @@ inline int cmdIr(const CliArgs& args) {
         for (const std::string& name : program.functionOrder) {
             IRFunction& fn = program.functions.at(name);
             CFG cfg = buildCFG(fn.instructions);
-            std::cout << "===== " << name << " (" << fn.instructions.size()
-                      << " flat talimat, " << cfg.blocks.size() << " blok) =====\n";
+            std::cout << IrColor::SoftYesil() << name << IrColor::Reset() << "\n";
             std::cout << cfg.dump();
         }
         return saqut::exit_code::kSuccess;

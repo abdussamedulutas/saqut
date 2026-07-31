@@ -19,6 +19,7 @@
 #include <string>
 #include <sstream>
 #include "ir/instruction.hpp"
+#include "ir/ir_color.hpp"   // TTY-aware renk — redirect'te ANSI yok (#141 deseni)
 
 struct BasicBlock {
     int id = -1;
@@ -31,27 +32,40 @@ struct BasicBlock {
     std::vector<int> successors;
 
     std::string dump() const {
+        // TTY-aware renk: gerçek terminalde renkli, redirect/pipe'ta düz.
+        // Semantik metin (blok aralığı, kenar listesi, terminator) renkten
+        // bağımsız aynıdır — yalnız renk kod noktaları eklenir/çıkarılır.
         std::ostringstream os;
-        os << "BB_" << id << " [" << startIndex << ".." << endIndex << "]"
-           << " preds:{";
+        // Renk şeması (kullanıcı): blok adları gri, metadata koyu sarı,
+        // opcode turuncu, CALLHOST/FFI kırmızı, slot değerleri açık mavi.
+        os << IrColor::SoftGri() << "BB_" << id << IrColor::Reset()
+           << IrColor::KoyuSari() << " [" << startIndex << ".." << endIndex << "]"
+           << " preds:{" << IrColor::Reset();
         for (size_t i = 0; i < predecessors.size(); ++i) {
             if (i) os << ",";
-            os << "BB_" << predecessors[i];
+            os << IrColor::SoftGri() << "BB_" << predecessors[i] << IrColor::Reset();
         }
-        os << "} succs:{";
+        os << IrColor::KoyuSari() << "} succs:{" << IrColor::Reset();
         for (size_t i = 0; i < successors.size(); ++i) {
             if (i) os << ",";
-            os << "BB_" << successors[i];
+            os << IrColor::SoftGri() << "BB_" << successors[i] << IrColor::Reset();
         }
-        os << "} term=" << opcodeName(terminator);
-        if (jumpTarget >= 0) os << " ->BB_" << jumpTarget;
+        os << IrColor::KoyuSari() << "} term=" << IrColor::Reset()
+           << IrColor::KoyuSari() << opcodeName(terminator) << IrColor::Reset();
+        if (jumpTarget >= 0)
+            os << IrColor::KoyuSari() << " ->" << IrColor::Reset()
+               << IrColor::SoftGri() << "BB_" << jumpTarget << IrColor::Reset();
         os << "\n";
         for (const auto& ins : instructions) {
             os << "    ";
-            if (&ins == &instructions.back()) os << "* ";
+            if (&ins == &instructions.back()) os << IrColor::SoftGri() << "* " << IrColor::Reset();
             else os << "  ";
-            os << opcodeName(ins.opcode);
-            if (ins.dest >= 0) os << " s" << ins.dest;
+            // CALLHOST (builtin metod + __ffi__) dış dünya çağrısı → kırmızı;
+            // diğer opcode'lar turuncu.
+            const char* opColor = (ins.opcode == Opcode::CALLHOST)
+                ? IrColor::Kirmizi() : IrColor::SoftTuruncu();
+            os << opColor << opcodeName(ins.opcode) << IrColor::Reset();
+            if (ins.dest >= 0) os << " " << IrColor::SoftMavi() << "s" << ins.dest << IrColor::Reset();
             os << "\n";
         }
         return os.str();
@@ -102,7 +116,9 @@ struct CFG {
 
     std::string dump() const {
         std::ostringstream os;
-        os << "CFG: " << blocks.size() << " blocks\n";
+        os << IrColor::SoftGri() << "CFG: " << IrColor::Reset()
+           << IrColor::SoftTuruncu() << blocks.size() << IrColor::Reset()
+           << " blocks\n";
         for (const auto& b : blocks)
             os << b.dump();
         return os.str();

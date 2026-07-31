@@ -39,6 +39,8 @@ inline const char* SoftMor()     { return isTty() ? Color::SoftMor     : ""; }
 inline const char* SoftPembe()   { return isTty() ? Color::SoftPembe   : ""; }
 inline const char* SoftTurkuaz() { return isTty() ? Color::SoftTurkuaz : ""; }
 inline const char* SoftGri()     { return isTty() ? Color::SoftGri     : ""; }
+inline const char* KoyuSari()    { return isTty() ? Color::KoyuSari    : ""; }
+inline const char* Kirmizi()     { return isTty() ? Color::Kirmizi     : ""; }
 
 }  // namespace IrColor
 

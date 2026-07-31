@@ -52,3 +52,6 @@ src/mir/vendor/c2mir/*.o
 src/mir/vendor/c2mir/*.d
 src/mir/vendor/mir-utils/*.o
 src/mir/vendor/mir-utils/*.d
+
+# Release build dizini (debug build/ takip edilir, release ayrı)
+build-rel/*

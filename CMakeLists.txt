@@ -137,6 +137,14 @@ add_test(
             "${SAQUT_BINARY}"
 )
 
+# #218: saqut ir --cfg — flat liste yerine CFG (BasicBlock + kenarlar)
+# basar; fall-through kenar + blok ID semantiği + determinizm doğrulanır.
+add_test(
+    NAME ir_cfg_flag
+    COMMAND bash "${CMAKE_SOURCE_DIR}/tests/general/ir_cfg_flag_test.sh"
+            "${SAQUT_BINARY}" "${CMAKE_SOURCE_DIR}"
+)
+
 # #146 (SQ-100-TOKEN-POSITIONS): saqut tokens her token için file +
 # line/column (1-tabanlı, column BYTE-tabanlı) + byteOffset (0-tabanlı) +
 # byteLength taşır; ASCII + UTF-8 çok baytlı fixture, bayt-identical

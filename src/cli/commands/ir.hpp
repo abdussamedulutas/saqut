@@ -20,6 +20,7 @@
 #include "core/config.hpp"
 #include "opt/optimization_manager.hpp"
 #include "ir/ir_generator.hpp"
+#include "ir/ir_cfg.hpp"
 
 inline int cmdIr(const CliArgs& args) {
     std::string filePath = inputFilePath(args);
@@ -52,6 +53,19 @@ inline int cmdIr(const CliArgs& args) {
 
     IRGenerator irGenerator;
     IRProgram   program = irGenerator.generateModuleGraph(graph, symbolTable);
+
+    // #218: --cfg — flat liste yerine CFG (BasicBlock + kenarlar) bas.
+    // buildCFG gerçek implementasyondur; VM yine flat listeyi kullanır.
+    if (args.showCfg) {
+        for (const std::string& name : program.functionOrder) {
+            IRFunction& fn = program.functions.at(name);
+            CFG cfg = buildCFG(fn.instructions);
+            std::cout << "===== " << name << " (" << fn.instructions.size()
+                      << " flat talimat, " << cfg.blocks.size() << " blok) =====\n";
+            std::cout << cfg.dump();
+        }
+        return saqut::exit_code::kSuccess;
+    }
 
     // ADR-035 (#76): statik capability analizi — programın hangi cap'lere
     // ihtiyaç duyduğunu raporlar. caps::drop RUNTIME davranışıdır, bu üst

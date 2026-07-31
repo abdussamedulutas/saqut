@@ -39,6 +39,7 @@ struct CliArgs {
     bool optimized   = false;  // --optimized: sabit katlama + ölü kod eleme
     bool jsonOutput  = false;  // --json: JSON çıktı üret (varsayılan: düz metin)
     bool jsonlOutput = false;  // --jsonl: canonical JSONL çıktı (SQ-100 ailesi, #145)
+    bool showCfg     = false;  // --cfg: saqut ir — flat liste yerine CFG (BasicBlock + kenar) bas
     int  benchRuns   = 5;      // --runs=N: benchmark tekrar sayısı
     bool compileOnly = false;  // --compile-only: VM çalıştırmasını atla
     bool verbose     = false;  // --verbose: her aşamanın bitişini canlı yaz
@@ -112,6 +113,10 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
         }
         if (arg == "--jsonl") {
             args.jsonlOutput = true;
+            continue;
+        }
+        if (arg == "--cfg") {
+            args.showCfg = true;
             continue;
         }
         if (arg == "--optimized") {

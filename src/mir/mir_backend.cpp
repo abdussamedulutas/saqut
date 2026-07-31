@@ -636,8 +636,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 MIR_new_func_reg(ctx, func->u.func, mirType(slotKindOf(fn, i)), regName.c_str());
         }
 
-        std::vector<MIR_label_t> labelAt(instrN);
-        for (size_t i = 0; i < instrN; i++) labelAt[i] = MIR_new_label(ctx);
+        // #165: instrN+1 — son etiket "fonksiyon sonu" (past-the-end) sentinel'idir.
+        // IR generator, tüm yolları return eden switch'ten sonra JMP → instrN
+        // emit eder (hiç yürütülmez ama hedef geçerli olmalı). labelAt[instrN]
+        // bu hedefi karşılar; boyut instrN olursa out-of-bounds → segfault.
+        std::vector<MIR_label_t> labelAt(instrN + 1);
+        for (size_t i = 0; i <= instrN; i++) labelAt[i] = MIR_new_label(ctx);
 
         auto R = [&](int slot) { return MIR_new_reg_op(ctx, regs[static_cast<size_t>(slot)]); };
         // ADR-040: D (double) argüman bekleyen bir runtime call'a float32
@@ -1124,6 +1128,11 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     break;
             }
         }
+
+        // #165: fonksiyon sonu etiketi — switch sonrası "JMP → instrN"
+        // (past-the-end) hedefi bu etikete gider. RETURN'den sonra asla
+        // yürütülmez ama JIT'in geçerli bir hedefi olmalı.
+        MIR_append_insn(ctx, func, labelAt[instrN]);
 
         MIR_finish_func(ctx);
     }

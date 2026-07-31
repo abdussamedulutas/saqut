@@ -150,6 +150,27 @@ bool TypeChecker::pathAlwaysReturns(ASTNode* stmt) {
             return false; // else yok → if atlanabilir
         return pathAlwaysReturns(ifn->thenBranch) && pathAlwaysReturns(ifn->elseBranch);
     }
+    case ASTKind::SwitchStatement: {
+        // #165/#136: default case VARSA ve HER case body'si return ediyorsa
+        // switch garantili dönüş sağlar.
+        auto* sw = (SwitchStatementNode*) stmt;
+        bool hasDefault = false;
+        for (const auto& clause : sw->cases) {
+            if (clause.isDefault) {
+                hasDefault = true;
+                if (clause.body.empty())
+                    return false;
+                if (!pathAlwaysReturns(clause.body.back()))
+                    return false;
+            } else {
+                if (clause.body.empty())
+                    return false;
+                if (!pathAlwaysReturns(clause.body.back()))
+                    return false;
+            }
+        }
+        return hasDefault;
+    }
     default:
         return false; // döngü, atama, çağrı vb. → garanti yok
     }

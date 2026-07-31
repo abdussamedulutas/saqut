@@ -30,7 +30,8 @@
 #include "mir/vendor/mir-gen.h"
 #include "mir/vendor/mir.h"
 #include "vm/value.hpp"   // Value tam tanımı — object.hpp'nin vector<Value> üyeleri için
-#include "vm/object.hpp"  // StringObject — JIT string kutulama (ADR-037)
+#include "vm/object.hpp"
+#include "core/float_format.hpp"  // StringObject — JIT string kutulama (ADR-037)
 
 namespace mir_backend {
 
@@ -47,24 +48,16 @@ extern "C" void rt_jit_print_int(int64_t v) {
 // aynı biçim (setprecision(10) + nokta yoksa ".0"). Diferansiyel testin stdout
 // eşleşmesi buna bağlı (value.hpp:94-102). ──────────────────────────────────
 extern "C" void rt_jit_print_float(double v) {
-    std::ostringstream oss;
-    oss << std::setprecision(10) << v;
-    std::string s = oss.str();
-    if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
-        s += ".0";
-    std::cout << s << std::flush;
+    // #114: biçim tek kaynaktan (core/float_format.hpp) — VM senkronu
+    std::cout << formatDoublePrint(v) << std::flush;
 }
 
 // ── print(float32) trampoline'i — VM'in Value::toString() Float32 dalıyla BİREBİR
 // (setprecision(9) + nokta yoksa ".0"). Argüman JIT'te MIR_T_F register olduğundan
 // çağrı öncesi F2D ile double'a genişletilip buraya double gelir. ─────────────
 extern "C" void rt_jit_print_float32(double v) {
-    std::ostringstream oss;
-    oss << std::setprecision(9) << (float)v;
-    std::string s = oss.str();
-    if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
-        s += ".0";
-    std::cout << s << std::flush;
+    // #114: biçim tek kaynaktan (core/float_format.hpp) — VM senkronu
+    std::cout << formatFloat32Print(v) << std::flush;
 }
 
 // ── print(string) trampoline'i (Dilim 3, ADR-037). Argüman, JIT register'ında
@@ -111,9 +104,8 @@ extern "C" void* rt_jit_int_to_str(int64_t v) {
     return g_jitRuntimeStrings.back().get();
 }
 extern "C" void* rt_jit_float_to_str(double v) {
-    std::ostringstream oss;
-    oss << v;  // VM CAST_FLOAT_TO_STR default precision (print_float'tan FARKLI — birebir)
-    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(oss.str()));
+    // #114: biçim tek kaynaktan (core/float_format.hpp) — VM cast sözleşmesi
+    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(formatDoubleCast(v)));
     return g_jitRuntimeStrings.back().get();
 }
 extern "C" void* rt_jit_bool_to_str(int64_t v) {
@@ -128,9 +120,8 @@ extern "C" void* rt_jit_long_to_str(int64_t v) {
 // ADR-040: float32 → string. VM CAST_FLOAT32_TO_STR ile birebir (setprecision 9).
 // Argüman gerçek single (MIR_T_F) — F2D genişletmesi olmadan doğrudan.
 extern "C" void* rt_jit_float32_to_str(float v) {
-    std::ostringstream oss;
-    oss << std::setprecision(9) << v;
-    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(oss.str()));
+    // #114: biçim tek kaynaktan (core/float_format.hpp) — VM cast sözleşmesi
+    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(formatFloat32Cast(v)));
     return g_jitRuntimeStrings.back().get();
 }
 extern "C" int64_t rt_jit_str_to_int(void* s) {

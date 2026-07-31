@@ -20,6 +20,7 @@
 #include <iomanip>
 #include <stdexcept>
 #include "core/decimal.hpp"
+#include "core/float_format.hpp"
 
 // Forward — Object tam tanımı object.hpp'de; Value onu pointer olarak taşır.
 struct Object;
@@ -121,17 +122,10 @@ struct Value {
             case ValueKind::Decimal: return decimalValue.toString();
             case ValueKind::Float:
             case ValueKind::Float32: {
-                // Tam sayıysa "3.0", değilse "3.14" gibi — gereksiz sıfırları kırp.
-                // Float32'yi single'ın gerçek değerini ayırt edecek ~9 anlamlı hane
-                // (max_digits10) ile yaz → 0.1f+0.2f "0.300000012" görünür; double
-                // için 10 hane. Böylece 32/64-bit precision farkı gözlemlenebilir.
-                std::ostringstream oss;
-                oss << std::setprecision(kind == ValueKind::Float32 ? 9 : 10) << floatValue;
-                std::string s = oss.str();
-                // Nokta yoksa ".0" ekle (saQut float değerleri her zaman nokta içerir)
-                if (s.find('.') == std::string::npos && s.find('e') == std::string::npos)
-                    s += ".0";
-                return s;
+                // #114: biçim tek kaynaktan (core/float_format.hpp) — VM/JIT senkronu
+                return (kind == ValueKind::Float32)
+                    ? formatFloat32Print(floatValue)
+                    : formatDoublePrint(floatValue);
             }
             case ValueKind::String: return stringValue;
             case ValueKind::Ref:   return "<ref>";

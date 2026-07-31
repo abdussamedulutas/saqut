@@ -1,0 +1,30 @@
+IR DUMP
+
+NAME=hesapla PARAMS=1 SLOTS=7
+    0  LOAD_CONST      s1 = 0
+    1  GREATER         s2 = s0 > s1
+    2  JIF_FALSE       !s2 → 8
+    3  LOAD_CONST      s3 = 2
+    4  MUL             s4 = s0 * s3
+    5  RETURN          return s4
+    6  LOAD_CONST      s5 = 99
+    7  CALLHOST        print(s5)
+    8  LOAD_CONST      s6 = 0
+    9  RETURN          return s6
+
+NAME=main PARAMS=0 SLOTS=9
+    0  LOAD_CONST      s0 = 5
+    1  CALL            s1 = hesapla(s0)
+    2  CALLHOST        print(s1)
+    3  LOAD_CONST      s2 = 0
+    4  CALL            s3 = hesapla(s2)
+    5  CALLHOST        print(s3)
+    6  LOAD_CONST      s4 = 3
+    7  LOAD_CONST      s6 = 0
+    8  SUB             s5 = s6 - s4
+    9  CALL            s7 = hesapla(s5)
+   10  CALLHOST        print(s7)
+   11  LOAD_CONST      s8 = 0
+   12  RETURN          return s8
+
+END

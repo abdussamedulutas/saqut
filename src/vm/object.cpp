@@ -7,10 +7,28 @@
 
 // ── Yardımcı: tek bir nesneyi ve geçişli çocuklarını işaretle ────────────────
 
+// #217: tricolor marking — markObject artık yalnızca Grey yapar
+// (çocuk taraması gcStep'te yapılır)
 static void markObject(Object* obj) {
-    if (!obj || obj->marked) return;
+    if (!obj || obj->markState != MarkState::White) return;
+    obj->markState = MarkState::Grey;
     obj->marked = true;
-    obj->markChildren(); // çocukları özyinelemeli işaretle
+}
+
+// #217: bir nesnenin çocuklarını tara (Grey → Black)
+// Dönüş: bu adımda işlenen nesne sayısı (budget takibi için)
+int drainGrey(Heap* heap, int budget) {
+    int processed = 0;
+    Object* cur = heap->head;
+    while (cur && processed < budget) {
+        if (cur->markState == MarkState::Grey) {
+            cur->markChildren();
+            cur->markState = MarkState::Black;
+            ++processed;
+        }
+        cur = cur->next;
+    }
+    return processed;
 }
 
 // ── Heap::markValue ──────────────────────────────────────────────────────────
@@ -42,6 +60,8 @@ int Heap::sweep() {
     int      freed = 0;
 
     while (cur) {
+        // #217: markState'i sıfırla (incremental marking state)
+        cur->markState = MarkState::White;
         if (!cur->marked) {
             // Erişilemeyen nesne — listeden çıkar ve sil
             Object* dead = cur;
@@ -52,6 +72,7 @@ int Heap::sweep() {
             ++freed;
         } else {
             // Canlı nesne — işaret bitini sıfırla, ilerle
+            // markState zaten yukarıda sıfırlandı
             cur->marked = false;
             prev = &cur->next;
             cur  = cur->next;
@@ -71,6 +92,14 @@ void ArrayObject::markChildren() {
     for (const Value& v : elements)
         if (v.kind == ValueKind::Ref)
             markObject(v.ref);
+}
+
+void writeBarrier(Object* target, Object* newRef) {
+    if (!target || !newRef) return;
+    if (target->markState == MarkState::Black &&
+        newRef->markState == MarkState::White) {
+        target->markState = MarkState::Grey;
+    }
 }
 
 // ── StructObject::markChildren ───────────────────────────────────────────────

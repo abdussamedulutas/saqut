@@ -1,8 +1,8 @@
 IR DUMP
 
 NAME=main PARAMS=0 SLOTS=4
-    0  LOAD_LONG       s0 = 9223372036854775807l
-    1  LOAD_FLOAT32    s1 = 0.125f32
+    0  LOAD_LONG       
+    1  LOAD_FLOAT32    
     2  CALLHOST        print(s0)
     3  CALLHOST        print(s1)
     4  LOAD_STRING     s2 = "

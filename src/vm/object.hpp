@@ -36,9 +36,17 @@ enum class ObjectType { Array, Struct, String, Decimal };
 
 struct Value; // object.hpp <-> value.hpp çapraz bağımlılık; tam tanım value.hpp'de
 
+// #217: Incremental marking için tricolor state
+enum class MarkState : uint8_t {
+    White = 0,  // işaretlenmemiş (canlı olmayabilir)
+    Grey  = 1,  // işaretlendi ama çocukları henüz taranmadı
+    Black = 2,  // işaretlendi ve çocukları tarandı
+};
+
 struct Object {
     ObjectType type;
     bool       marked = false;
+    MarkState  markState = MarkState::White;  // #217: incremental marking
     Object*    next   = nullptr;
 
     // Mark aşaması: bu nesneden ulaşılabilen tüm referansları işaretle.
@@ -208,5 +216,11 @@ struct Heap {
     Heap(const Heap&)            = delete;
     Heap& operator=(const Heap&) = delete;
 };
+
+// #217: write barrier — object.cpp'te tanımlı
+void writeBarrier(Object* target, Object* newRef);
+
+// #217: incremental marking step — Grey queue'dan budget kadar işle
+int drainGrey(Heap* heap, int budget);
 
 #endif // SAQUT_VM_OBJECT

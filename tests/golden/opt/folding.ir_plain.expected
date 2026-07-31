@@ -1,0 +1,45 @@
+IR DUMP
+
+NAME=main PARAMS=0 SLOTS=28
+    0  LOAD_CONST      s0 = 2
+    1  LOAD_CONST      s1 = 3
+    2  LOAD_CONST      s2 = 4
+    3  MUL             s3 = s1 * s2
+    4  ADD             s4 = s0 + s3
+    5  CALLHOST        print(s4)
+    6  LOAD_CONST      s5 = 10
+    7  LOAD_CONST      s6 = 4
+    8  SUB             s7 = s5 - s6
+    9  LOAD_CONST      s8 = 2
+   10  DIV             s9 = s7 / s8
+   11  CALLHOST        print(s9)
+   12  LOAD_CONST      s10 = 1
+   13  LOAD_CONST      s11 = 1
+   14  EQUAL_EQUAL     s12 = s10 == s11
+   15  CALLHOST        print(s12)
+   16  LOAD_CONST      s13 = 0
+   17  LOAD_CONST      s14 = 1
+   18  EQUAL_EQUAL     s15 = s13 == s14
+   19  CALLHOST        print(s15)
+   20  LOAD_CONST      s16 = 1
+   21  LOAD_CONST      s17 = 2
+   22  ADD             s18 = s16 + s17
+   23  LOAD_CONST      s19 = 3
+   24  EQUAL_EQUAL     s20 = s18 == s19
+   25  CALLHOST        print(s20)
+   26  LOAD_CONST      s21 = 0
+   27  LOAD_CONST      s22 = 0
+   28  JIF_FALSE       !s21 → 31
+   29  LOAD_CONST      s23 = 1
+   30  LOAD_SLOT       s22 = s23
+   31  CALLHOST        print(s22)
+   32  LOAD_CONST      s24 = 1
+   33  LOAD_CONST      s25 = 1
+   34  JIF_TRUE        s24 → 37
+   35  LOAD_CONST      s26 = 0
+   36  LOAD_SLOT       s25 = s26
+   37  CALLHOST        print(s25)
+   38  LOAD_CONST      s27 = 0
+   39  RETURN          return s27
+
+END

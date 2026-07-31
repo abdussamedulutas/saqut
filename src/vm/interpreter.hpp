@@ -159,7 +159,9 @@ private:
     void maybeCollect();
 
     static constexpr int kGCDefaultThreshold = 1024;
+    static constexpr int kGCBudgetPerStep = 128;  // #217: incremental step'te işlenecek max nesne
     int gcInitialThreshold_ = kGCDefaultThreshold;
+    bool gcCycleActive_ = false;  // #217: incremental cycle devam ediyor mu?
     int gcThreshold_        = kGCDefaultThreshold; // bir sonraki tetikleme eşiği
 
     std::set<Capability>     caps_;       // ADR-035 (#76): açık capability'ler

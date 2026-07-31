@@ -285,26 +285,54 @@ bool Interpreter::shouldStop() {
 
 // Faz 5: mevcut durumdan bütçeli/step'li devam et.
 // ─────────────────────────────────────────────────────────────────────────────
-// maybeCollect — eşik tabanlı mark-sweep tetikleme (#77, ADR-022)
+// gcStep — incremental marking step (#217, ADR-022)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Kökler: globalSlots_ (modül-düzeyi değişkenler), callStack_ (her frame'in
-// slot'ları) ve pendingThrow_ (unwind sırasındaki Error nesnesi). Eşik
-// adaptif: toplama sonrası canlı kümenin 2 katına çıkar (küçülünce başlangıç
-// eşiğine iner) — canlı nesnesi çok programda her instruction'da sweep
-// koşulmasını önler, tetikleme sayısı deterministik kalır.
+// Her instruction boundary'de budget kadar Grey nesneyi Black'e çevir.
+// Grey kalmadığında sweep yap. Eşik adaptive.
+//
+// Kökler: globalSlots_, callStack_, pendingThrow_.
+// Her cycle başında kökleri markObject ile Grey yap, sonra drainGrey ile
+// budget'ı tüket. Kalan Grey'ler bir sonraki instruction boundary'de işlenir.
+//
+// Write barrier (object.cpp:writeBarrier): FIELD_SET/ARRAY_SET'te Siyah
+// nesneye Beyaz referans yazılırsa Siyah'ı Grey'e çevir.
 
 void Interpreter::maybeCollect() {
-    if (gcThreshold_ <= 0 || heap_.allocCount < gcThreshold_) return;
+    if (gcThreshold_ <= 0 || heap_.allocCount < gcThreshold_) {
+        // Cycle yoksa veya threshold aşılmadıysa, incremental step yap
+        // (eğer bir cycle devam ediyorsa)
+        if (gcCycleActive_) {
+            int processed = drainGrey(&heap_, kGCBudgetPerStep);
+            if (processed == 0) {
+                // Grey kalmadı → sweep yap
+                heap_.sweep();
+                gcCycleActive_ = false;
+                gcThreshold_ = std::max(gcInitialThreshold_, heap_.allocCount * 2);
+            }
+        }
+        return;
+    }
 
+    // Yeni GC cycle başlat
+    // 1. Tüm nesneleri White yap (sweep'te yapılır, ama ilk cycle'da gerekli)
+    // 2. Kökleri Grey yap
     heap_.markSlots(globalSlots_);
     for (const CallFrame& frame : callStack_)
         heap_.markSlots(frame.slots);
     if (pendingThrow_)
         heap_.markValue(*pendingThrow_);
 
-    heap_.sweep();
-    gcThreshold_ = std::max(gcInitialThreshold_, heap_.allocCount * 2);
+    gcCycleActive_ = true;
+
+    // İlk adımda budget kadar işle
+    int processed = drainGrey(&heap_, kGCBudgetPerStep);
+    if (processed == 0) {
+        // Köklerin çocuğu yoksa hemen sweep
+        heap_.sweep();
+        gcCycleActive_ = false;
+        gcThreshold_ = std::max(gcInitialThreshold_, heap_.allocCount * 2);
+    }
 }
 
 Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
@@ -830,15 +858,20 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         // ── Struct (ADR-020: referans semantiği) ──────────────────────────
         case Opcode::STRUCT_NEW: {
             StructObject* obj = heap_.allocStruct(instr.intValue);
+            // #218: fieldNames IRFunction metadata'dan al
             {
-                auto names = std::make_shared<std::vector<std::string>>(instr.fieldNames);
-                auto& reg = structFieldNamesRegistry_;
-                auto it = reg.find(instr.functionName);
-                if (it != reg.end()) {
-                    obj->fieldNames = it->second;
-                } else {
-                    reg[instr.functionName] = names;
-                    obj->fieldNames = names;
+                const auto& fn = *callStack_.back().function;
+                auto it = fn.structFieldNames.find(instr.functionName);
+                if (it != fn.structFieldNames.end()) {
+                    auto names = std::make_shared<std::vector<std::string>>(it->second);
+                    auto& reg = structFieldNamesRegistry_;
+                    auto regIt = reg.find(instr.functionName);
+                    if (regIt != reg.end()) {
+                        obj->fieldNames = regIt->second;
+                    } else {
+                        reg[instr.functionName] = names;
+                        obj->fieldNames = names;
+                    }
                 }
             }
             callStack_.back().slots[instr.dest] = Value::fromRef(obj);
@@ -863,7 +896,13 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             int idx = instr.intValue;
             if (idx < 0 || idx >= (int)obj->fields.size())
                 throw std::runtime_error("invalid struct field index " + std::to_string(idx));
-            obj->fields[idx] = frame.slots[instr.right];
+            {
+                // #217: write barrier — FIELD_SET
+                const Value& newVal = frame.slots[instr.right];
+                if (newVal.kind == ValueKind::Ref && newVal.ref)
+                    writeBarrier(obj, newVal.ref);
+                obj->fields[idx] = newVal;
+            }
             break;
         }
 
@@ -949,7 +988,13 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             // #206: elemKind'a göre doğru buffer'a yaz
             const Value& val = frame.slots[instr.right];
             switch (arr->elemKind) {
-                case ArrayElemKind::Ref:     arr->elements[idx] = val; break;
+                case ArrayElemKind::Ref:     {
+                    // #217: write barrier — ARRAY_SET
+                    if (val.kind == ValueKind::Ref && val.ref)
+                        writeBarrier(arr, val.ref);
+                    arr->elements[idx] = val;
+                    break;
+                }
                 case ArrayElemKind::Byte:    arr->bytes[idx] = (uint8_t)val.intValue; break;
                 case ArrayElemKind::Int:     arr->ints[idx] = val.intValue; break;
                 case ArrayElemKind::LongInt: arr->longs[idx] = val.asI64(); break;

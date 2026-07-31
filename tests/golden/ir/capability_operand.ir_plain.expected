@@ -3,7 +3,7 @@ IR DUMP
 NAME=main PARAMS=0 SLOTS=3
     0  LOAD_CONST      s0 = 0
     1  JIF_FALSE       !s0 → 4
-    2  CALLHOST        __ffi__() [cap:sys]
+    2  CALLHOST        __ffi__()
     3  CALLHOST        print(s1)
     4  LOAD_CONST      s2 = 0
     5  RETURN          return s2

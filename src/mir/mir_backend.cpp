@@ -27,6 +27,10 @@
 #include <unordered_map>
 #include <vector>
 
+// Merkezi exit kodu sınıfları (0/64/65/70). Bağımlılıksız saf sabit başlığı —
+// JIT runtime hatalarının VM ile aynı exit sözleşmesine uyması için gerekli.
+#include "cli/exit_codes.hpp"
+
 #include "mir/vendor/mir-gen.h"
 #include "mir/vendor/mir.h"
 #include "vm/value.hpp"   // Value tam tanımı — object.hpp'nin vector<Value> üyeleri için
@@ -92,12 +96,17 @@ extern "C" int64_t rt_jit_string_eq(void* a, void* b) {
     return static_cast<StringObject*>(a)->data == static_cast<StringObject*>(b)->data ? 1 : 0;
 }
 
+// JIT runtime hatalarının çıkış kodu. VM yakalanmamış runtime hatasında
+// kSoftwareError (70) döndürür; JIT aynı sözleşmeye uymalıdır (VM normatif).
+// Daha önce burada hard-coded 1 vardı — merkezi 0/64/65/70 sınıfı dışıydı.
+constexpr int kJitRuntimeErrorExit = saqut::exit_code::kSoftwareError;
+
 // ── Cast trampolinleri (Dilim 3). Hepsi non-nullable hedef; başarısızlık
 // uncaught (try/catch JIT'te yok) → rt_jit_cast_error, VM'in uncaught-throw
 // mesaj gövdesiyle birebir (interpreter.cpp CAST_* dalları). ──────────────────
 extern "C" void rt_jit_cast_error(const char* what) {
     std::cerr << "runtime error: " << what << "\n";  // div_zero deseniyle tutarlı
-    std::exit(1);
+    std::exit(kJitRuntimeErrorExit);
 }
 extern "C" void* rt_jit_int_to_str(int64_t v) {
     g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(std::to_string(v)));
@@ -233,6 +242,21 @@ extern "C" void* rt_jit_decimal_div(void* a, void* b) {
     if (jitDV(b).coeff == 0) rt_jit_cast_error("decimal division by zero");
     return jitBoxDecimal(DecimalValue::div(jitDV(a), jitDV(b)));
 }
+
+// ── decimal karşılaştırma trampolini ────────────────────────────────────────
+// Decimal JIT'te KUTULU pointer olarak taşınır (ADR-037). Native MIR_EQ/MIR_LT
+// bu pointer'ları karşılaştırır — yani ADRES eşitliği. `0.1+0.2 == 0.3` iki
+// ayrı kutu ürettiği için sessizce 0 döner; VM ise DecimalValue::compare ile
+// DEĞER karşılaştırıp 1 döndürür (VM≡JIT parity ihlali, sessiz yanlış değer).
+// String eşitliğinde (rt_jit_string_eq) aynı hata sınıfı kapatılmıştı, decimal
+// atlanmıştı.
+//
+// Tek trampolin bütün aileyi besler: -1/0/1 döner, çağrı sitesi sonucu 0 ile
+// karşılaştırıp ==, !=, <, <=, >, >= üretir — VM'in DecimalValue::compare
+// tabanlı karşılaştırma dallarıyla birebir.
+extern "C" int64_t rt_jit_decimal_cmp(void* a, void* b) {
+    return static_cast<int64_t>(DecimalValue::compare(jitDV(a), jitDV(b)));
+}
 extern "C" void* rt_jit_decimal_mod(void* a, void* b) {
     if (jitDV(b).coeff == 0) rt_jit_cast_error("decimal modulo by zero");
     return jitBoxDecimal(DecimalValue::mod(jitDV(a), jitDV(b)));
@@ -263,21 +287,28 @@ extern "C" void* rt_jit_str_to_decimal(void* s) {
 extern "C" void rt_jit_print_decimal(void* d) { std::cout << jitDV(d).toString() << std::flush; }
 
 // Sıfıra bölme — bu Dilim'de try/catch (ENTER_TRY/THROW) reddedildiğinden
-// yakalanamaz; VM'de de aynı program uncaught throw ile sonlanırdı. Mesaj/çıkış
-// VM davranışıyla eşleşir (interpreter.cpp E_DIVZERO).
+// yakalanamaz; VM'de de aynı program uncaught throw ile sonlanırdı.
+//
+// Mesaj ve çıkış kodu VM ile BİREBİR eşleşmelidir (VM normatif, AGENTS.md §8:
+// "exit code, stdout ve stderr ayrı sözleşmelerdir"). Ölçülen VM davranışı:
+//     a/b  → "runtime error: division by zero"        exit 70
+//     a%b  → "runtime error: sıfıra bölme (mod)"      exit 70
+//     f/f  → "runtime error: float division by zero"  exit 70
+// Önceki gerçekleme mod mesajını ASCII'ye düşürüyor ("sifira bolme") ve
+// üçünde de exit 1 döndürüyordu — merkezi kSoftwareError (70) sınıfı ihlali.
 extern "C" void rt_jit_div_zero() {
     std::cerr << "runtime error: division by zero\n";
-    std::exit(1);
+    std::exit(kJitRuntimeErrorExit);
 }
 
 extern "C" void rt_jit_mod_zero() {
-    std::cerr << "runtime error: sifira bolme (mod)\n";
-    std::exit(1);
+    std::cerr << "runtime error: sıfıra bölme (mod)\n";
+    std::exit(kJitRuntimeErrorExit);
 }
 
 extern "C" void rt_jit_fdiv_zero() {
     std::cerr << "runtime error: float division by zero\n";
-    std::exit(1);
+    std::exit(kJitRuntimeErrorExit);
 }
 
 // SlotType → MIR register tipi (MIRPLAN §3; ADR-040 genişletmesi).
@@ -435,6 +466,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_var_t  strEqArgs[2]     = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "b", 0}};
     MIR_item_t strEqProto      = MIR_new_proto_arr(ctx, "str_eq_proto", 1, &i64Ret, 2, strEqArgs);
     MIR_item_t strEqImport     = MIR_new_import(ctx, "rt_jit_string_eq");
+    MIR_var_t  decCmpArgs[2]    = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "b", 0}};
+    MIR_item_t decCmpProto     = MIR_new_proto_arr(ctx, "dec_cmp_proto", 1, &i64Ret, 2, decCmpArgs);
+    MIR_item_t decCmpImport    = MIR_new_import(ctx, "rt_jit_decimal_cmp");
     // Cast trampolinleri (Dilim 3). ret I64 (pointer/int) veya D; arg I64/D.
     MIR_type_t dRet            = MIR_T_D;
     MIR_item_t castI2SProto    = MIR_new_proto(ctx, "cast_i2s_proto", 1, &i64Ret, 1, MIR_T_I64, "v");
@@ -616,6 +650,26 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             return slotKindOf(fn, in.left) == SlotType::Str ||
                    slotKindOf(fn, in.right) == SlotType::Str;
         };
+        // Decimal operandlı karşılaştırma: kutulu pointer olduğu için native
+        // MIR_EQ/MIR_LT ADRES karşılaştırır — DEĞER için trampolin şart.
+        auto decimalOperands = [&](const Instruction& in) {
+            return slotKindOf(fn, in.left) == SlotType::Decimal ||
+                   slotKindOf(fn, in.right) == SlotType::Decimal;
+        };
+        // dest = rt_jit_decimal_cmp(left, right) <op> 0
+        // cmp -1/0/1 döndürür; istenen ilişki sonucun 0 ile karşılaştırılmasıdır.
+        int decCmpCounter = 0;
+        auto emitDecimalCompare = [&](const Instruction& in, MIR_insn_code_t rel) {
+            std::string tmpName = "deccmp" + std::to_string(decCmpCounter++);
+            MIR_reg_t tmp = MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, tmpName.c_str());
+            MIR_append_insn(ctx, func,
+                MIR_new_call_insn(ctx, 5, MIR_new_ref_op(ctx, decCmpProto),
+                    MIR_new_ref_op(ctx, decCmpImport),
+                    MIR_new_reg_op(ctx, tmp), R(in.left), R(in.right)));
+            MIR_append_insn(ctx, func,
+                MIR_new_insn(ctx, rel, R(in.dest),
+                    MIR_new_reg_op(ctx, tmp), MIR_new_int_op(ctx, 0)));
+        };
 
         for (size_t i = 0; i < instrN; i++) {
             MIR_append_insn(ctx, func, labelAt[i]);
@@ -718,7 +772,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decI2DImport), R(instr.dest), R(instr.src)));
                     break;
                 case Opcode::FLOAT_TO_DECIMAL:
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decFromFProto), MIR_new_ref_op(ctx, decF2DImport), R(instr.dest), R(instr.src)));
+                    // decFromFProto parametreyi MIR_T_D alır; kaynak slot
+                    // Float32 (MIR_T_F) olabilir — asDoubleOperand F2D ile
+                    // genişletir. Genişletmeden geçilirse MIR call'ı
+                    // "unexpected operand mode ... Got 'float', expected
+                    // 'double'" ile reddeder ve program VM'e düşer.
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decFromFProto), MIR_new_ref_op(ctx, decF2DImport), R(instr.dest), asDoubleOperand(instr.src)));
                     break;
                 case Opcode::CAST_DECIMAL_TO_STR:
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decToStrImport), R(instr.dest), R(instr.src)));
@@ -962,20 +1021,26 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 case Opcode::BNOT:
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_XOR, R(instr.dest), R(instr.src), MIR_new_int_op(ctx, -1)));
                     break;
-                // ── Karşılaştırmalar — float operand ise D-varyantı ──────
+                // ── Karşılaştırmalar — float operand ise D-varyantı, decimal
+                //    operand ise rt_jit_decimal_cmp trampolini ─────────────
                 case Opcode::LESS:
+                    if (decimalOperands(instr)) { emitDecimalCompare(instr, MIR_LT); break; }
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_LT, MIR_DLT, MIR_FLT), R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::LESS_EQUAL:
+                    if (decimalOperands(instr)) { emitDecimalCompare(instr, MIR_LE); break; }
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_LE, MIR_DLE, MIR_FLE), R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::GREATER:
+                    if (decimalOperands(instr)) { emitDecimalCompare(instr, MIR_GT); break; }
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_GT, MIR_DGT, MIR_FGT), R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::GREATER_EQUAL:
+                    if (decimalOperands(instr)) { emitDecimalCompare(instr, MIR_GE); break; }
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_GE, MIR_DGE, MIR_FGE), R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::EQUAL_EQUAL:
+                    if (decimalOperands(instr)) { emitDecimalCompare(instr, MIR_EQ); break; }
                     if (stringOperands(instr)) {
                         // dest = rt_jit_string_eq(left, right)  (içerik, ADR-023)
                         MIR_append_insn(ctx, func,
@@ -987,6 +1052,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     }
                     break;
                 case Opcode::NOT_EQUAL:
+                    if (decimalOperands(instr)) { emitDecimalCompare(instr, MIR_NE); break; }
                     if (stringOperands(instr)) {
                         // dest = !rt_jit_string_eq(left, right) → eq sonra XOR 1
                         MIR_append_insn(ctx, func,
@@ -1077,6 +1143,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_float32_to_str", reinterpret_cast<void*>(rt_jit_float32_to_str));
     MIR_load_external(ctx, "rt_jit_string_concat", reinterpret_cast<void*>(rt_jit_string_concat));
     MIR_load_external(ctx, "rt_jit_string_eq",     reinterpret_cast<void*>(rt_jit_string_eq));
+    MIR_load_external(ctx, "rt_jit_decimal_cmp",   reinterpret_cast<void*>(rt_jit_decimal_cmp));
     MIR_load_external(ctx, "rt_jit_int_to_str",           reinterpret_cast<void*>(rt_jit_int_to_str));
     MIR_load_external(ctx, "rt_jit_float_to_str",         reinterpret_cast<void*>(rt_jit_float_to_str));
     MIR_load_external(ctx, "rt_jit_bool_to_str",          reinterpret_cast<void*>(rt_jit_bool_to_str));

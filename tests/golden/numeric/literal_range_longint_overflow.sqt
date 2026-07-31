@@ -1,0 +1,14 @@
+// #219 A2 — int64 aralığı dışı literal E003 ile REDDEDİLMELİ.
+//
+// Bu dosya DERLENMEMELI.
+//
+// Regresyon: bu yol ir_generator'da KORUMASIZDI. parseIntegerLiteral içindeki
+// std::stoll out_of_range fırlatıyor, kimse yakalamıyordu — kullanıcı bir tanı
+// değil, derleyicinin çökmesini görüyordu:
+//   terminate called after throwing an instance of 'std::out_of_range'
+//   Iptal edildi (cekirdek dokuldu)   [cikis kodu 134]
+
+void main() {
+    longint y = 99999999999999999999;
+    print(y);
+}

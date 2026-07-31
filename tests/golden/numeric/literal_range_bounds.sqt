@@ -1,0 +1,39 @@
+// #219 A1/A2 — tam sayı literal aralık sözleşmesi (ADR-040), POZİTİF taraf.
+//
+// Bu dosya, her tipin SINIR DEĞERLERİNİN yazılabilir olduğunu kanıtlar.
+// Karşıtı: literal_range_int_overflow / literal_range_longint_overflow
+// (aralık dışı literal E003 ile reddedilir).
+//
+// Kritik vakalar burada, çünkü hepsi ayrı kod yollarından geçer:
+//   - int  en büyük  : 2147483647    → doğrudan literal
+//   - int  en küçük  : -2147483648   → unary '-' + 2147483648 (literal tek
+//                      başına int32'ye SIĞMAZ; negatif bağlamda geçerlidir)
+//   - longint en küçük: -9223372036854775808 → pozitif hali std::stoll'da
+//                      TAŞAR; bu literal daha önce sessizce 0 üretiyordu
+//   - longint, int32 üstü değer taşıyabilmeli (2147483648)
+
+void main() {
+    int imax = 2147483647;
+    int imin = -2147483648;
+    int izero = 0;
+    int ineg = -42;
+
+    longint lmax = 9223372036854775807;
+    longint lmin = -9223372036854775808;
+    longint lwide = 2147483648;   // int32'yi aşar, longint'e sığar
+    longint lneg = -2147483649;   // int32'nin altına iner
+
+    byte bmin = 0;
+    byte bmax = 255;
+
+    print(imax);
+    print(imin);
+    print(izero);
+    print(ineg);
+    print(lmax);
+    print(lmin);
+    print(lwide);
+    print(lneg);
+    print(bmin);
+    print(bmax);
+}

@@ -24,6 +24,7 @@
 #include "parser/nodes/statements.hpp"
 #include "tokenizer/token.hpp"
 
+#include <climits>   // LLONG_MIN (#219 A2: longint en küçük değer literal'i)
 #include <stdexcept>
 #include <string>
 
@@ -718,16 +719,38 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 long long val = 0;
                 if (lit->hasDirectValue)
                     val = lit->directIntValue;
-                else if (lit->parserToken.token)
-                    val = parseIntegerLiteral(lit->parserToken.token->token, lit->literalBase);
+                else if (lit->parserToken.token) {
+                    // #219 A2: burası korumasızdı — int64 aralığı dışı literal
+                    // yakalanmamış std::out_of_range ile derleyiciyi çökertiyordu
+                    // (kullanıcı tanı değil "terminate called" görüyordu).
+                    // Aralık denetimi artık type_checker'da (E003); buraya sadece
+                    // geçerli literal gelir. Tek istisna int64'ün EN KÜÇÜK değeri:
+                    // `-9223372036854775808` unary '-' + `9223372036854775808`
+                    // olarak parse edilir ve pozitif hali stoll'da taşar — bu
+                    // literal LLONG_MIN olarak üretilir, unary '-' onu geri
+                    // çevirir. Kalan catch ulaşılamaz bir backstop'tur.
+                    try {
+                        val = parseIntegerLiteral(lit->parserToken.token->token,
+                                                  lit->literalBase);
+                    } catch (...) {
+                        if (lit->parserToken.token->token == "9223372036854775808")
+                            val = LLONG_MIN; // -(-9223372036854775808) == kendisi
+                        else
+                            val = 0;
+                    }
+                }
                 emitLoadLong(slot, val);
             } else {
                 int value = 0;
                 if (lit->hasDirectValue)
                     value = lit->directIntValue;
                 else if (lit->parserToken.token) {
-                    // stoll + cast: int32 aralığı dışı literal çökme yerine wrap
-                    // (typechecker normalde bunu longint bağlamına yönlendirir).
+                    // #219 A1: eskiden aralık dışı literal burada sessizce 0
+                    // oluyordu (`int x = 99999999999999999999;` → 0, tanı yok).
+                    // Aralık denetimi artık type_checker'da (E003); bu catch
+                    // ulaşılamaz bir backstop. `-2147483648` için literal
+                    // 2147483648'dir ve int'e sığmaz — static_cast onu
+                    // INT32_MIN'e çevirir, unary '-' geri çevirir (iki tümleyen).
                     try {
                         value = static_cast<int>(
                             parseIntegerLiteral(lit->parserToken.token->token, lit->literalBase));

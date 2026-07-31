@@ -1,0 +1,15 @@
+// #219 A1 — int32 aralığı dışı literal E003 ile REDDEDİLMELİ.
+//
+// Bu dosya DERLENMEMELI.
+//
+// Regresyon: eskiden aralık denetimi hiç yoktu ve değer sessizce sarmalanıyordu
+//   int x = 2147483648;          → -2147483648  (işaret döndü)
+//   int x = 4294967296;          → 0
+//   int x = 9223372036854775807; → -1
+//   int x = 99999999999999999999;→ 0            (ir_generator'daki catch(...))
+// Hiçbirinde tanı üretilmiyordu; çıkış kodu 0'dı.
+
+void main() {
+    int x = 2147483648;
+    print(x);
+}

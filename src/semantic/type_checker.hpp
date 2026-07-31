@@ -64,6 +64,11 @@ private:
 
     // ADR-021: akış-duyarlı null daraltma — bu kapsamda non-null olduğu bilinen değişkenler
     std::unordered_set<std::string> narrowedNonNull_;
+
+    // #219 A1: unary '-' altındaki tam sayı literal'i denetlenirken >0 olur.
+    // Aralık denetimi üst sınırı bir kaydırır, böylece her tipin EN KÜÇÜK
+    // değeri (-2147483648, -9223372036854775808) yazılabilir kalır.
+    int negatedLiteralDepth_ = 0;
 };
 
 #endif // SAQUT_SEMANTIC_TYPE_CHECKER

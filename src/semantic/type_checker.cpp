@@ -25,6 +25,7 @@
 #include "parser/nodes/statements.hpp"
 
 #include <climits>
+#include <cstdint>   // INT32_MIN / INT32_MAX (#219 A1: int32 literal aralık denetimi)
 #include <cmath>
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -663,43 +664,89 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         int expRank = numericRank(expected);
 
         switch (lit->literalType) {
-        case LiteralType::INTEGER:
+        case LiteralType::INTEGER: {
+            // #219 A1/A2: tam sayı literal'inin değerini OKU ve taşmayı ayırt et.
+            //
+            // parseIntegerLiteral (std::stoll) int64 aralığı dışında out_of_range
+            // fırlatır. Bu istisna daha önce iki farklı yerde farklı şekilde ele
+            // alınıyordu: byte dalı yakalayıp aralık dışı sayıyordu (doğru),
+            // ir_generator'ın int dalı yakalayıp sessizce 0 yapıyordu (A1),
+            // longint dalı ise hiç yakalamıyordu ve derleyici çöküyordu (A2).
+            //
+            // Değer artık tek yerde okunur; `overflow` bayrağı "int64'e bile
+            // sığmadı" demektir ve hangi bağlamda olursa olsun aralık dışıdır.
+            long long v        = 0;
+            bool      overflow = false;
+            if (lit->hasDirectValue) {
+                v = lit->directIntValue;
+            } else if (lit->parserToken.token) {
+                try {
+                    v = parseIntegerLiteral(lit->parserToken.token->token, lit->literalBase);
+                } catch (...) {
+                    overflow = true;
+                }
+            }
+            const std::string litText = lit->parserToken.token
+                                            ? lit->parserToken.token->token
+                                            : std::to_string(v);
+
+            // Unary '-' altındaysak sınır bir kayar: int32 için negatif tarafta
+            // 2147483648 geçerlidir (sonuç -2147483648). Sadece üst sınırı
+            // etkiler; alt sınır zaten bu literal için erişilemez.
+            const bool negated = negatedLiteralDepth_ > 0;
+            const long long intMax  = negated ? 2147483648LL : INT32_MAX;
+
+            // Aralık dışı literal'i E003 ile reddeder. Tek çıkış noktası —
+            // byte/int/longint aynı sözleşmeyi paylaşsın diye.
+            auto rejectRange = [&](const char* typeName, const char* range,
+                                   const char* hint) {
+                diag_.report("E003", lit->loc,
+                             "integer literal " + litText + " is out of " + typeName +
+                                 " range (" + range + ")",
+                             hint);
+                result = Type::error();
+            };
+
             // byte bağlamı (#86): 0-255 aralık denetimi — sessiz kırpma YOK.
             if (!expected.isError() && expected.isByte()) {
-                long long v = 0;
-                if (lit->hasDirectValue)
-                    v = lit->directIntValue;
-                else if (lit->parserToken.token) {
-                    try {
-                        v = parseIntegerLiteral(lit->parserToken.token->token, lit->literalBase);
-                    } catch (...) {
-                        v = -1;
-                    } // taşma → aralık dışı say
-                }
-                if (v < 0 || v > 255) {
-                    diag_.report("E003", lit->loc,
-                                 "integer literal " +
-                                     (lit->parserToken.token ? lit->parserToken.token->token :
-                                                               std::to_string(v)) +
-                                     " is out of byte range (0-255)",
-                                 "byte holds 0-255; use int for larger values or a value in range");
-                    result = Type::error();
-                } else {
+                if (overflow || v < 0 || v > 255)
+                    rejectRange("byte", "0-255",
+                                "byte holds 0-255; use int for larger values or a value in range");
+                else
                     result = Type::Byte();
-                }
             }
             // Bağlam daha geniş sayısal tip ise literal o tip olarak tiplenir (ADR-010/028).
             else if (!expected.isError() && expected.isDecimal())
                 result = Type::Decimal();
             // ADR-040: longint rank kulesi dışında (numericRank longint'i tanımaz,
             // burada elle ele alınır) — longint bağlamında literal longint tiplenir.
-            else if (!expected.isError() && expected.isLongInt())
-                result = Type::LongInt();
+            // #219 A2: int64'e sığmayan literal burada reddedilir; aksi halde
+            // ir_generator'daki korumasız parseIntegerLiteral çağrısı derleyiciyi
+            // yakalanmamış std::out_of_range ile çökertiyordu.
+            else if (!expected.isError() && expected.isLongInt()) {
+                // int64'ün en küçük değeri (-9223372036854775808) yazılabilsin:
+                // literal 9223372036854775808 std::stoll'da taşar ama unary '-'
+                // altında geçerlidir. Eski davranış bunu sessizce 0 yapıyordu.
+                const bool longMinOk = negated && litText == "9223372036854775808";
+                if (overflow && !longMinOk)
+                    rejectRange("longint", "-9223372036854775808 to 9223372036854775807",
+                                "longint holds 64-bit signed values; use a literal in range");
+                else
+                    result = Type::LongInt();
+            }
             else if (expRank > 0)
                 result = expected; // float veya double bekleniyor
+            // #219 A1: int32 bağlamı. Önceden aralık denetimi hiç yoktu —
+            // 2147483648 sessizce -2147483648, 4294967296 sessizce 0,
+            // 99999999999999999999 sessizce 0 oluyordu (ADR-040 int32 sözleşmesi).
+            else if (overflow || v < INT32_MIN || v > intMax)
+                rejectRange("int", "-2147483648 to 2147483647",
+                            "int is 32-bit (ADR-040); use longint for larger values "
+                            "or a value in range");
             else
                 result = Type::Int();
             break;
+        }
         case LiteralType::FLOAT:
             // float literal → decimal bağlamında decimal olur (ADR-028); int bağlamında E003.
             if (!expected.isError() && expected.isDecimal())
@@ -766,7 +813,19 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
 
         // Unary (Left = nullptr): -, +, !, ~
         if (!bin->Left) {
-            Type rightType = checkExpr(bin->Right);
+            // #219 A1: `-2147483648` parser'da tek literal değil, unary '-' +
+            // `2147483648` literalidir. Literal tek başına int32 sınırını aşar
+            // ama ifadenin tamamı geçerli int32'dir (aynısı longint'in
+            // -9223372036854775808 değeri için de geçerli). Aralık denetimine
+            // "bir sonraki literal negatiflenecek" bilgisini taşı, aksi halde
+            // her tipin EN KÜÇÜK değeri yazılamaz hale gelirdi.
+            const bool negCtx = (bin->Operator == TokenType::MINUS) &&
+                                bin->Right && bin->Right->kind == ASTKind::Literal;
+            if (negCtx)
+                negatedLiteralDepth_++;
+            Type rightType = checkExpr(bin->Right, expected);
+            if (negCtx)
+                negatedLiteralDepth_--;
             if (bin->Operator == TokenType::BANG) {
                 result = Type::Bool();
             } else {

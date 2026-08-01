@@ -61,6 +61,9 @@ std::vector<void*> g_jitGlobalP;
 int64_t g_jitCallNullArgs[64]{};
 int64_t g_jitCallRetNull = 0;
 
+// Bench profil sayaçları — nullptr ise sayaç artırılmaz (sıfır ek yük).
+JitCallCounters* g_jitBenchCounters = nullptr;
+
 StringObject*  jitNewString(std::string v);
 DecimalObject* jitBoxDecimal(const DecimalValue& v);
 
@@ -391,6 +394,19 @@ extern "C" void rt_jit_host_arg_nullable_d(int64_t idx, int64_t kind,
 }
 
 extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
+    // Bench profil sayaçları (nullptr ise sıfır ek yük — yalnızca bir karşılaştırma).
+    // entryId bloklarına göre FFI/builtin ayrımı (bkz. host_registry.hpp):
+    //   [0..256)    FFI        → ffi++
+    //   [256..512)  Builtin    → builtin++
+    //   [512..)     Çekirdek   → (ffi/builtin dışı)
+    if (g_jitBenchCounters) {
+        if (g_jitBenchCounters->callhost) ++(*g_jitBenchCounters->callhost);
+        if (entryId < kBuiltinBase) {
+            if (g_jitBenchCounters->ffi) ++(*g_jitBenchCounters->ffi);
+        } else if (entryId < kCoreBase) {
+            if (g_jitBenchCounters->builtin) ++(*g_jitBenchCounters->builtin);
+        }
+    }
     g_jitHostFrame.reset();
     g_jitHostFrame.args     = g_jitHostArgs;
     g_jitHostFrame.argc     = (int32_t)argc;
@@ -939,8 +955,17 @@ struct FuncEntry {
 bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                               UnsupportedReason& outReason,
                               const std::vector<std::string>& programArgs,
-                              profiling::StageTimer* profiler) {
+                              profiling::StageTimer* profiler,
+                              JitCallCounters* counters) {
     if (!wholeProgramSupported(program, outReason)) return false;
+
+    // Bench sayaçlarını aktif et (profiler ile bağımsız — sayaçlar profil
+    // çalışmasında bile istenebilir; nullptr ise trampoline'lar atlar).
+    struct BenchCountersGuard {
+        JitCallCounters* prev;
+        ~BenchCountersGuard() { g_jitBenchCounters = prev; }
+    } benchGuard{ g_jitBenchCounters };
+    g_jitBenchCounters = counters;
 
     // Host çağrılarının ortamı. Heap YOK: heap gerektiren kayıtlar
     // wholeProgramSupported'da zaten reddedilir.

@@ -43,6 +43,7 @@
 #include "ir/ir_generator.hpp"
 #include "ir/instruction.hpp"
 #include "vm/interpreter.hpp"
+#include "mir/mir_backend.hpp"
 
 namespace fs = std::filesystem;
 
@@ -123,10 +124,11 @@ struct PhaseResult {
 
 // ── Timing tablosu ───────────────────────────────────────────────────────────
 static void printTimingTable(const std::vector<PhaseResult>& phases, int runs,
-                              const std::string& file, bool compileOnly) {
+                              const std::string& file, bool compileOnly,
+                              const std::string& execLabel) {
     std::cout << "\n=== saQut bench: " << file << " ===\n";
     std::cout << "Timing çalışması: " << runs;
-    if (compileOnly) std::cout << " | compile-only (VM atlandı)";
+    if (compileOnly) std::cout << " | compile-only (çalıştırma atlandı)";
     std::cout << "\n\n";
 
     const int W1 = 20, W2 = 12, W3 = 12;
@@ -139,7 +141,7 @@ static void printTimingTable(const std::vector<PhaseResult>& phases, int runs,
 
     BMicros compileAvg = 0, compileBest = 0;
     for (auto& p : phases) {
-        if (p.name == "vm-execute") continue;
+        if (p.name == execLabel) continue;
         compileAvg  += p.avg();
         compileBest += p.best();
     }
@@ -155,13 +157,13 @@ static void printTimingTable(const std::vector<PhaseResult>& phases, int runs,
               << std::right << std::setw(W3) << compileBest << "\n";
 
     if (!compileOnly) {
-        BMicros vmAvg = 0, vmBest = 0;
+        BMicros execAvg = 0, execBest = 0;
         for (auto& p : phases) {
-            if (p.name == "vm-execute") { vmAvg = p.avg(); vmBest = p.best(); }
+            if (p.name == execLabel) { execAvg = p.avg(); execBest = p.best(); }
         }
         std::cout << std::left  << std::setw(W1) << "toplam"
-                  << std::right << std::setw(W2) << (compileAvg + vmAvg)
-                  << std::right << std::setw(W3) << (compileBest + vmBest) << "\n";
+                  << std::right << std::setw(W2) << (compileAvg + execAvg)
+                  << std::right << std::setw(W3) << (compileBest + execBest) << "\n";
     }
     std::cout << "\n";
 }
@@ -181,6 +183,8 @@ struct PipelineTimes {
 static bool runPipeline(
     const std::vector<std::pair<std::string,std::string>>& fileSources,
     bool compileOnly,
+    bool useJit,
+    const std::vector<std::string>& programArgs,
     PipelineTimes& out,
     BenchProfile*  profile,   // null = timing modu, non-null = profil modu
     bool verbose = false)
@@ -263,34 +267,71 @@ static bool runPipeline(
         collectIRStats(profile->ir, program);
     if (verbose) std::cerr << "  ir-gen    " << out.irUs/1000 << " ms\n";
 
-    // ── 6: VM çalıştırma ─────────────────────────────────────────────────────
+    // ── 6: Çalıştırma (VM veya JIT) ──────────────────────────────────────────
     if (!compileOnly) {
-        Interpreter vm(program);
-        if (profile) {
-            // Profil modunda örneklem rezervasyonu + trace'i aktif et.
-            // reserve() içeride kSampleStride'a böler — burada verilen sayı
-            // beklenen TALİMAT sayısıdır, örneklem sayısı değil.
-            size_t estimatedInstr = profile->ir.totalInstr * 100; // çalışma sayısı tahmini
-            if (estimatedInstr < 1'000'000)  estimatedInstr = 1'000'000;
-            if (estimatedInstr > 50'000'000) estimatedInstr = 50'000'000; // 50M üst sınır
-            profile->vmTrace.reserve(estimatedInstr);
-            vm.setVMTrace(&profile->vmTrace);
-        }
-        auto ta = BClock::now();
-        try {
-            vm.run();
-        } catch (const std::exception& e) {
-            std::cerr << "bench: runtime error: " << e.what() << "\n";
-        }
-        auto tb = BClock::now();
-        out.vmUs = elapsed_us_b(ta, tb);
-        if (verbose) std::cerr << "  vm        " << out.vmUs/1000 << " ms\n";
+        if (useJit) {
+            // JIT yolu — IRProgram'u native koda derleyip main()'i çağırır.
+            // Sayaçlar yalnızca profil modunda toplanır (nullptr = sıfır ek yük).
+            mir_backend::JitCallCounters counters;
+            if (profile) {
+                counters.callhost = &profile->jitCallhostCount;
+                counters.ffi      = &profile->jitFfiCount;
+                counters.builtin  = &profile->jitBuiltinCount;
+            }
+            int                             jitResult = 0;
+            mir_backend::UnsupportedReason  reason;
+            profiling::StageTimer           stageTimer;
+            profiling::StageTimer*          profPtr = profile ? &stageTimer : nullptr;
 
-        if (profile) {
-            profile->vmHeapAllocCount = (uint64_t)vm.heapAllocCount();
-            // VM trace analizi — işlem BİTTİKTEN sonra
-            profile->calibrateTSC();
-            profile->analyzeVMTrace(opcodeNameBridge);
+            auto ta = BClock::now();
+            bool jitOk = mir_backend::tryCompileAndRunProgram(
+                program, jitResult, reason, programArgs, profPtr,
+                profile ? &counters : nullptr);
+            auto tb = BClock::now();
+            out.vmUs = elapsed_us_b(ta, tb);
+            if (verbose) std::cerr << "  jit       " << out.vmUs/1000 << " ms\n";
+
+            if (!jitOk) {
+                std::cerr << "bench: --jit bu programı tam olarak derleyemiyor "
+                          << "(fonksiyon '" << reason.functionName
+                          << "', desteklenmeyen opcode: " << reason.opcodeName
+                          << ") — VM'e sessizce düşülmüyor.\n";
+                return false;
+            }
+            if (profile) {
+                profile->jitUsed     = true;
+                profile->jitWarmupUs = (uint64_t)stageTimer.microsecondsFor("jit-warmup");
+                profile->jitExecUs   = (uint64_t)stageTimer.microsecondsFor("jit-exec");
+            }
+        } else {
+            // VM yolu — Interpreter üzerinde dispatch döngüsü.
+            Interpreter vm(program);
+            if (profile) {
+                // Profil modunda örneklem rezervasyonu + trace'i aktif et.
+                // reserve() içeride kSampleStride'a böler — burada verilen sayı
+                // beklenen TALİMAT sayısıdır, örneklem sayısı değil.
+                size_t estimatedInstr = profile->ir.totalInstr * 100; // çalışma sayısı tahmini
+                if (estimatedInstr < 1'000'000)  estimatedInstr = 1'000'000;
+                if (estimatedInstr > 50'000'000) estimatedInstr = 50'000'000; // 50M üst sınır
+                profile->vmTrace.reserve(estimatedInstr);
+                vm.setVMTrace(&profile->vmTrace);
+            }
+            auto ta = BClock::now();
+            try {
+                vm.run();
+            } catch (const std::exception& e) {
+                std::cerr << "bench: runtime error: " << e.what() << "\n";
+            }
+            auto tb = BClock::now();
+            out.vmUs = elapsed_us_b(ta, tb);
+            if (verbose) std::cerr << "  vm        " << out.vmUs/1000 << " ms\n";
+
+            if (profile) {
+                profile->vmHeapAllocCount = (uint64_t)vm.heapAllocCount();
+                // VM trace analizi — işlem BİTTİKTEN sonra
+                profile->calibrateTSC();
+                profile->analyzeVMTrace(opcodeNameBridge);
+            }
         }
     }
 
@@ -309,6 +350,9 @@ inline int cmdBench(const CliArgs& args) {
     const int  N           = std::max(1, args.benchRuns);
     const bool compileOnly = args.compileOnly;
     const bool verbose     = args.verbose;
+    const bool useJit      = args.useJit;
+    const std::vector<std::string>& programArgs = args.programArgs;
+    const std::string execLabel = useJit ? "jit-execute" : "vm-execute";
 
     // ── Bağımlılık tarama ────────────────────────────────────────────────────
     auto fileSources = discoverModules(filePath);
@@ -330,19 +374,20 @@ inline int cmdBench(const CliArgs& args) {
     PhaseResult rSym  {"symbol-collect", {}};
     PhaseResult rTc   {"type-check",     {}};
     PhaseResult rIr   {"ir-gen",         {}};
-    PhaseResult rVm   {"vm-execute",     {}};
+    PhaseResult rExec {execLabel,        {}};
 
     for (int run = 0; run < N; run++) {
         if (verbose) std::cerr << "[run " << (run+1) << "/" << N << "]\n";
         PipelineTimes pt;
-        if (!runPipeline(fileSources, compileOnly, pt, nullptr, verbose))
+        if (!runPipeline(fileSources, compileOnly, useJit, programArgs,
+                         pt, nullptr, verbose))
             return 1;
         rTok.samples.push_back(pt.tokUs);
         rPar.samples.push_back(pt.parseUs);
         rSym.samples.push_back(pt.symUs);
         rTc.samples.push_back(pt.tcUs);
         rIr.samples.push_back(pt.irUs);
-        if (!compileOnly) rVm.samples.push_back(pt.vmUs);
+        if (!compileOnly) rExec.samples.push_back(pt.vmUs);
 
         if (N > 3)
             std::cerr << "\r[bench] timing " << (run + 1) << "/" << N << "  " << std::flush;
@@ -351,8 +396,8 @@ inline int cmdBench(const CliArgs& args) {
 
     // ── Timing tablosunu yazdır ───────────────────────────────────────────────
     std::vector<PhaseResult> phases = {rTok, rPar, rSym, rTc, rIr};
-    if (!compileOnly) phases.push_back(rVm);
-    printTimingTable(phases, N, filePath, compileOnly);
+    if (!compileOnly) phases.push_back(rExec);
+    printTimingTable(phases, N, filePath, compileOnly, execLabel);
 
     double compileSec = (rTok.best() + rPar.best() + rSym.best() +
                          rTc.best()  + rIr.best()) / 1e6;
@@ -367,7 +412,8 @@ inline int cmdBench(const CliArgs& args) {
     if (verbose) std::cerr << "[profil çalışması]\n";
     BenchProfile profile;
     PipelineTimes profTimes;
-    if (!runPipeline(fileSources, compileOnly, profTimes, &profile, verbose))
+    if (!runPipeline(fileSources, compileOnly, useJit, programArgs,
+                     profTimes, &profile, verbose))
         return 1;
 
     // Profil raporunu yazdır

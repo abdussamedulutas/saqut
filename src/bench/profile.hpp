@@ -209,6 +209,15 @@ struct BenchProfile {
 
     uint64_t vmHeapAllocCount = 0;  // Heap::allocCount (toplam tahsis)
 
+    // JIT çalıştırma istatistikleri
+    // JIT kullanılmadığında varsayılan (0/false) kalır — zararsız.
+    bool     jitUsed          = false;  // profil raporu yazdırırken VM/JIT ayırmak için
+    uint64_t jitWarmupUs      = 0;     // IR→MIR çeviri + native derleme (jit-warmup)
+    uint64_t jitExecUs        = 0;     // derlenmiş native main() çalıştırma (jit-exec)
+    uint64_t jitCallhostCount = 0;    // CALLHOST trampoline çağrıları (FFI/builtin)
+    uint64_t jitFfiCount      = 0;     // yalnızca FFI çağrıları
+    uint64_t jitBuiltinCount  = 0;     // yalnızca builtin çağrıları
+
     // Analiz sonuçları — analyzeVMTrace() ile doldurulur
     std::unordered_map<std::string, OpcodeStats> opcodeResult;
     uint64_t tscHz = 0;  // kalibrasyon: tsc/saniye
@@ -595,26 +604,40 @@ inline void printBenchProfile(const BenchProfile& p,
               << "   CALLHOST site: " << fmtN(ir.ffiSites) << "\n";
     std::cout << "│\n";
 
-    // ── VM ─────────────────────────────────────────────────────────────────
+    // ── Çalıştırma (VM veya JIT) ────────────────────────────────────────────
     if (!compileOnly) {
-        auto& vm = p.vmTrace;
-        std::cout << "├─ [VM Çalıştırma]  " << fmtN(vmUs) << " µs\n";
-        std::cout << "│  Dispatch döngüsü : " << fmtN(vm.vmLoopIter) << "\n";
-        std::cout << "│  saQut CALL       : " << fmtN(vm.vmSaqutCalls) << "\n";
-        std::cout << "│  FFI (CALLHOST)   : " << fmtN(vm.vmFfiCalls) << "\n";
-        std::cout << "│  Builtin metod    : " << fmtN(vm.vmBuiltinCalls) << "\n";
-        std::cout << "│  Heap tahsis      : " << fmtN(p.vmHeapAllocCount) << " nesne\n";
-        std::cout << "│  Süre örneklemi   : "
-                  << fmtN(vm.sampleOpcodes.size())
-                  << " örnek (her "
-                  << BenchVMTrace::kSampleStride << " talimatta 1, ~"
-                  << fmtN((vm.sampleOpcodes.size() * 9) / 1024)
-                  << " KB)\n";
-        std::cout << "│\n";
+        if (p.jitUsed) {
+            // ── JIT ─────────────────────────────────────────────────────────
+            std::cout << "├─ [JIT Derleme/Isıtma]  " << fmtN(p.jitWarmupUs) << " µs\n";
+            std::cout << "│  IR→MIR çeviri + native koda derleme\n";
+            std::cout << "│\n";
+            std::cout << "├─ [JIT Çalıştırma]  " << fmtN(p.jitExecUs) << " µs\n";
+            std::cout << "│  CALLHOST (toplam): " << fmtN(p.jitCallhostCount) << "\n";
+            std::cout << "│  FFI çağrısı       : " << fmtN(p.jitFfiCount) << "\n";
+            std::cout << "│  Builtin çağrısı    : " << fmtN(p.jitBuiltinCount) << "\n";
+            std::cout << "│\n";
+        } else {
+            // ── VM ─────────────────────────────────────────────────────────
+            auto& vm = p.vmTrace;
+            std::cout << "├─ [VM Çalıştırma]  " << fmtN(vmUs) << " µs\n";
+            std::cout << "│  Dispatch döngüsü : " << fmtN(vm.vmLoopIter) << "\n";
+            std::cout << "│  saQut CALL       : " << fmtN(vm.vmSaqutCalls) << "\n";
+            std::cout << "│  FFI (CALLHOST)   : " << fmtN(vm.vmFfiCalls) << "\n";
+            std::cout << "│  Builtin metod    : " << fmtN(vm.vmBuiltinCalls) << "\n";
+            std::cout << "│  Heap tahsis      : " << fmtN(p.vmHeapAllocCount) << " nesne\n";
+            std::cout << "│  Süre örneklemi   : "
+                      << fmtN(vm.sampleOpcodes.size())
+                      << " örnek (her "
+                      << BenchVMTrace::kSampleStride << " talimatta 1, ~"
+                      << fmtN((vm.sampleOpcodes.size() * 9) / 1024)
+                      << " KB)\n";
+            std::cout << "│\n";
+        }
     }
 
     // ── Opcode profili ─────────────────────────────────────────────────────
-    if (!compileOnly && !p.opcodeResult.empty()) {
+    // JIT'de native kod çalışır; opcode trace mevcut değil.
+    if (!compileOnly && !p.jitUsed && !p.opcodeResult.empty()) {
         std::cout << "└─ [Opcode Profili — çalışma zamanı dağılımı]\n\n";
 
         // Çalışma sayısına göre sırala (azalan)
@@ -694,7 +717,9 @@ inline void printBenchProfile(const BenchProfile& p,
                   << BenchVMTrace::kSampleStride << " talimatta bir alınan\n"
                   << "  örneklemden türetilmiş tahminlerdir; \"—\" o opcode'un "
                   << "hiç örneklenmediğini gösterir.\n\n";
+    } else if (!compileOnly && p.jitUsed) {
+        std::cout << "└─ (Opcode profili atlandı — JIT modunda kullanılamaz)\n\n";
     } else if (compileOnly) {
-        std::cout << "└─ (VM atlandı — opcode profili yok)\n\n";
+        std::cout << "└─ (Çalıştırma atlandı — opcode profili yok)\n\n";
     }
 }

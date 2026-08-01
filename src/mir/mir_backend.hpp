@@ -37,6 +37,14 @@ struct UnsupportedReason {
     std::string opcodeName;
 };
 
+// JIT çalıştırma sırasında çağrı sayaçları.
+// nullptr ise sayaç artırılmaz (timing modu — sıfır ek yük).
+struct JitCallCounters {
+    uint64_t* callhost = nullptr;
+    uint64_t* ffi      = nullptr;
+    uint64_t* builtin  = nullptr;
+};
+
 // Programın TAMAMINI MIR ile native koda derleyip main()'i gerçekten
 // çalıştırmayı dener. Başarılıysa true döner, outExitCode main'in RETURN
 // değerini taşır — bu durumda program uçtan uca JIT'lenmiştir, VM hiç
@@ -49,7 +57,8 @@ struct UnsupportedReason {
 bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                               UnsupportedReason& outReason,
                               const std::vector<std::string>& programArgs,
-                              profiling::StageTimer* profiler = nullptr);
+                              profiling::StageTimer* profiler = nullptr,
+                              JitCallCounters* counters = nullptr);
 
 }  // namespace mir_backend
 

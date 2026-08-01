@@ -184,10 +184,29 @@ extern "C" void rt_jit_array_set_p(void* a, int64_t idx, void* v) {
     jitArraySet(arr, idx, jitUnboxForSlot(arr->elemKind, v));
 }
 
-extern "C" void* rt_jit_struct_new(int64_t fieldCount) {
+// STRUCT_NEW metadata'sı: VM fieldNames'i ve ADR-021 nullable zero-init
+// maskesini IRFunction'dan okur. JIT'te talimat başına bir kayıt indeksi
+// geçirilir; tablo derleme sırasında doldurulur.
+namespace {
+struct JitStructMeta {
+    std::shared_ptr<std::vector<std::string>> names;
+    std::vector<bool>                         nullableMask;
+};
+std::vector<JitStructMeta> g_jitStructMeta;
+}
+
+extern "C" void* rt_jit_struct_new(int64_t fieldCount, int64_t metaId) {
     if (!g_jitHeap) return nullptr;
     jitMaybeCollect();
-    return g_jitHeap->allocStruct((int)fieldCount);
+    auto* obj = g_jitHeap->allocStruct((int)fieldCount);
+    if (metaId >= 0 && metaId < (int64_t)g_jitStructMeta.size()) {
+        const auto& m = g_jitStructMeta[(size_t)metaId];
+        obj->fieldNames = m.names;
+        size_t n = std::min(m.nullableMask.size(), obj->fields.size());
+        for (size_t i = 0; i < n; ++i)
+            if (m.nullableMask[i]) obj->fields[i] = Value::null();
+    }
+    return obj;
 }
 
 static Value* jitFieldAt(void* o, int64_t idx) {
@@ -636,16 +655,6 @@ bool opcodeSupported(const Instruction& instr, const std::vector<bool>& fnNullab
             // finalizeSlotTypes bu opcode'ların dest türünü çözmüyor (kodda
             // TODO). Çözülene dek yalnızca türü kesin olanlar JIT'te.
             return instr.valueType != SlotType::Unknown;
-        case Opcode::STRUCT_NEW:
-            // STRUCT_NEW yalnızca alan sayısıyla tahsis eder; VM ayrıca
-            // fieldNames metadata'sını ve ADR-021 nullable zero-init maskesini
-            // kurar (iç içe struct örnekleme dahil). Bu metadata IRFunction'da
-            // ve trampoline geçirilmiyor — geçirilene dek yalnızca metadata
-            // GEREKTİRMEYEN struct'lar JIT'te.
-            //
-            // Ölçüldü: nested_field_access VM "5102030", JIT "invalid struct
-            // field index 0" (iç struct örneklenmemiş).
-            return false;
         case Opcode::CALLHOST:
             return isSupportedCallhost(instr, fnNullable);
         default:
@@ -723,6 +732,18 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
             }
         }
 
+        // ADR-021: nullable alanlı struct'lar JIT dışında. FIELD_GET ham
+        // 64-bit döndürür; null ile 0 ayırt edilemez (ölçüldü:
+        // zero_init_nullable VM "1101110711" / JIT "1100000701").
+        // #221'deki isNull bayrağının alan okumalarına yayılması ayrı iş.
+        for (const auto& kv : fn.structFieldNullable)
+            for (bool b : kv.second)
+                if (b) {
+                    outReason.functionName = name;
+                    outReason.opcodeName   = "<nullable struct alani>";
+                    return false;
+                }
+
         for (SlotType st : fn.slotTypes) {
             // Int/LongInt/Float/Float32 register-skaler; Str/Decimal kutulu
             // pointer (I64, ADR-037). Ref hâlâ sonraki dilimde (shadow stack).
@@ -770,6 +791,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     jitSetHostEnv(&jitEnv);
     jitSetHeap(&jitHeap);
     jitShadowStack().clear();
+    g_jitStructMeta.clear();
 
     if (program.findFunction("main") == nullptr) {
         outReason.functionName = "main";
@@ -881,7 +903,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t asetDImport     = MIR_new_import(ctx, "rt_jit_array_set_d");
     MIR_item_t asetPProto      = MIR_new_proto_arr(ctx, "asp_proto", 0, nullptr, 3, asetIVars);
     MIR_item_t asetPImport     = MIR_new_import(ctx, "rt_jit_array_set_p");
-    MIR_item_t snewProto       = MIR_new_proto(ctx, "snew_proto", 1, &i64Ret, 1, MIR_T_I64, "n");
+    MIR_var_t  snewVars[2]     = {{MIR_T_I64, "n", 0}, {MIR_T_I64, "m", 0}};
+    MIR_item_t snewProto       = MIR_new_proto_arr(ctx, "snew_proto", 1, &i64Ret, 2, snewVars);
     MIR_item_t snewImport      = MIR_new_import(ctx, "rt_jit_struct_new");
     MIR_var_t  fgetVars[2]     = {{MIR_T_I64, "o", 0}, {MIR_T_I64, "i", 0}};
     MIR_item_t fgetIProto      = MIR_new_proto_arr(ctx, "fgi_proto", 1, &i64Ret, 2, fgetVars);
@@ -1633,9 +1656,24 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     break;
                 }
                 case Opcode::STRUCT_NEW: {
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                    int64_t metaId = -1;
+                    {
+                        JitStructMeta m;
+                        auto nameIt = fn.structFieldNames.find(instr.functionName);
+                        if (nameIt != fn.structFieldNames.end())
+                            m.names = std::make_shared<std::vector<std::string>>(nameIt->second);
+                        auto nullIt = fn.structFieldNullable.find(instr.functionName);
+                        if (nullIt != fn.structFieldNullable.end())
+                            m.nullableMask = nullIt->second;
+                        if (m.names || !m.nullableMask.empty()) {
+                            metaId = (int64_t)g_jitStructMeta.size();
+                            g_jitStructMeta.push_back(std::move(m));
+                        }
+                    }
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
                         MIR_new_ref_op(ctx, snewProto), MIR_new_ref_op(ctx, snewImport),
-                        R(instr.dest), MIR_new_int_op(ctx, instr.intValue)));
+                        R(instr.dest), MIR_new_int_op(ctx, instr.intValue),
+                        MIR_new_int_op(ctx, metaId)));
                     emitShadowSet(instr.dest);
                     break;
                 }

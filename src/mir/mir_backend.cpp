@@ -52,9 +52,42 @@ namespace {
 namespace {
 Heap* g_jitHeap = nullptr;
 int   g_jitGcThreshold = 1024;
+std::vector<int64_t> g_jitGlobalI;
+std::vector<double> g_jitGlobalD;
+std::vector<void*> g_jitGlobalP;
 
 StringObject*  jitNewString(std::string v);
 DecimalObject* jitBoxDecimal(const DecimalValue& v);
+
+extern "C" int64_t rt_jit_global_load_i(int64_t index) {
+    if (index < 0 || index >= (int64_t)g_jitGlobalI.size()) return 0;
+    return g_jitGlobalI[(size_t)index];
+}
+
+extern "C" void rt_jit_global_store_i(int64_t index, int64_t value) {
+    if (index >= 0 && index < (int64_t)g_jitGlobalI.size())
+        g_jitGlobalI[(size_t)index] = value;
+}
+
+extern "C" double rt_jit_global_load_d(int64_t index) {
+    if (index < 0 || index >= (int64_t)g_jitGlobalD.size()) return 0.0;
+    return g_jitGlobalD[(size_t)index];
+}
+
+extern "C" void rt_jit_global_store_d(int64_t index, double value) {
+    if (index >= 0 && index < (int64_t)g_jitGlobalD.size())
+        g_jitGlobalD[(size_t)index] = value;
+}
+
+extern "C" int64_t rt_jit_global_load_p(int64_t index) {
+    if (index < 0 || index >= (int64_t)g_jitGlobalP.size()) return 0;
+    return reinterpret_cast<int64_t>(g_jitGlobalP[(size_t)index]);
+}
+
+extern "C" void rt_jit_global_store_p(int64_t index, int64_t value) {
+    if (index >= 0 && index < (int64_t)g_jitGlobalP.size())
+        g_jitGlobalP[(size_t)index] = reinterpret_cast<void*>(value);
+}
 
 // #228: JIT safepoint'i. VM'de toplama talimat döngüsündeki maybeCollect ile
 // tetiklenir; JIT'te o döngü yok, bu yüzden TAHSİS noktasında denenir.
@@ -68,6 +101,8 @@ void jitMaybeCollect() {
     if (!g_jitHeap || g_jitHeap->allocCount < g_jitGcThreshold) return;
     for (Object* o : jitShadowStack().slots)
         if (o) g_jitHeap->markValue(Value::fromRef(o));
+    for (void* p : g_jitGlobalP)
+        if (p) g_jitHeap->markValue(Value::fromRef(static_cast<Object*>(p)));
     while (drainGrey(g_jitHeap, 4096) > 0) {}
     g_jitHeap->sweep();
     g_jitGcThreshold = std::max(1024, g_jitHeap->allocCount * 2);
@@ -280,6 +315,14 @@ extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
         // desteklenmiyor) — VM'in uncaught throw davranışıyla aynı.
         std::cerr << "runtime error: " << g_jitHostFrame.err.message << std::endl;
         std::exit(70);
+    }
+    if (g_jitHostFrame.ret.kind == HostKind::Str) {
+        auto* s = static_cast<StringObject*>(g_jitHostFrame.ret.p);
+        g_jitHostFrame.ret = HostSlot::fromStr(jitNewString(s ? s->data : std::string{}));
+    } else if (g_jitHostFrame.ret.kind == HostKind::Decimal) {
+        auto* d = static_cast<DecimalObject*>(g_jitHostFrame.ret.p);
+        g_jitHostFrame.ret = HostSlot::fromDecimal(
+            jitBoxDecimal(d ? d->val : DecimalValue{}));
     }
     return g_jitHostFrame.ret.i;
 }
@@ -676,6 +719,19 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
                 outReason.opcodeName   = opcodeName(instr.opcode);
                 return false;
             }
+            if (instr.opcode == Opcode::LOAD_GLOBAL || instr.opcode == Opcode::STORE_GLOBAL) {
+                int slot = instr.opcode == Opcode::LOAD_GLOBAL ? instr.dest : instr.src;
+                SlotType t = slotKindOf(fn, slot);
+                if (t != SlotType::Int && t != SlotType::LongInt &&
+                    t != SlotType::Float && t != SlotType::Float32 &&
+                    t != SlotType::Str && t != SlotType::Decimal &&
+                    t != SlotType::Ref) {
+                    outReason.functionName = name;
+                    outReason.opcodeName = std::string(opcodeName(instr.opcode)) +
+                                           " <boxed global>";
+                    return false;
+                }
+            }
             // String operandlı SIRALAMA (</<=/>/>=) JIT'te desteklenmez —
             // zaten frontend'de reddedilir (E003: "for string use only == and
             // !="), bu yalnızca savunmacı bir kalkan. Eşitlik (==/!=) İÇERİK
@@ -793,6 +849,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     jitEnv.heap        = &jitHeap;
     jitSetHostEnv(&jitEnv);
     jitSetHeap(&jitHeap);
+    g_jitGlobalI.assign((size_t)program.globalCount, 0);
+    g_jitGlobalD.assign((size_t)program.globalCount, 0.0);
+    g_jitGlobalP.assign((size_t)program.globalCount, nullptr);
     jitShadowStack().clear();
     g_jitStructMeta.clear();
 
@@ -936,6 +995,20 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t hostCallImport  = MIR_new_import(ctx, "rt_jit_host_call");
     MIR_item_t hostCallDProto  = MIR_new_proto_arr(ctx, "host_call_d_proto", 1, &dRet, 2, hostCallVars);
     MIR_item_t hostCallDImport = MIR_new_import(ctx, "rt_jit_host_call_d");
+    MIR_var_t globalIVars[2] = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "v", 0}};
+    MIR_item_t globalLoadIProto = MIR_new_proto_arr(ctx, "global_load_i_proto", 1, &i64Ret, 1, globalIVars);
+    MIR_item_t globalLoadIImport = MIR_new_import(ctx, "rt_jit_global_load_i");
+    MIR_item_t globalStoreIProto = MIR_new_proto_arr(ctx, "global_store_i_proto", 0, nullptr, 2, globalIVars);
+    MIR_item_t globalStoreIImport = MIR_new_import(ctx, "rt_jit_global_store_i");
+    MIR_var_t globalDVars[2] = {{MIR_T_I64, "i", 0}, {MIR_T_D, "v", 0}};
+    MIR_item_t globalLoadDProto = MIR_new_proto_arr(ctx, "global_load_d_proto", 1, &dRet, 1, globalDVars);
+    MIR_item_t globalLoadDImport = MIR_new_import(ctx, "rt_jit_global_load_d");
+    MIR_item_t globalStoreDProto = MIR_new_proto_arr(ctx, "global_store_d_proto", 0, nullptr, 2, globalDVars);
+    MIR_item_t globalStoreDImport = MIR_new_import(ctx, "rt_jit_global_store_d");
+    MIR_item_t globalLoadPProto = MIR_new_proto_arr(ctx, "global_load_p_proto", 1, &i64Ret, 1, globalIVars);
+    MIR_item_t globalLoadPImport = MIR_new_import(ctx, "rt_jit_global_load_p");
+    MIR_item_t globalStorePProto = MIR_new_proto_arr(ctx, "global_store_p_proto", 0, nullptr, 2, globalIVars);
+    MIR_item_t globalStorePImport = MIR_new_import(ctx, "rt_jit_global_store_p");
 
     MIR_item_t printDProto     = MIR_new_proto(ctx, "print_d_proto", 0, nullptr, 1, MIR_T_I64, "v");
     MIR_item_t printDImport    = MIR_new_import(ctx, "rt_jit_print_decimal");
@@ -1618,6 +1691,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     for (int argSlot : instr.argSlots) ops.push_back(R(argSlot));
                     MIR_append_insn(ctx, func,
                         MIR_new_insn_arr(ctx, MIR_CALL, ops.size(), ops.data()));
+                    SlotType rt = slotKindOf(fn, instr.dest);
+                    if (rt == SlotType::Str || rt == SlotType::Decimal || rt == SlotType::Ref)
+                        emitShadowSet(instr.dest);
                     break;
                 }
                 case Opcode::ARRAY_NEW: {
@@ -1634,6 +1710,29 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_ref_op(ctx, alenProto), MIR_new_ref_op(ctx, alenImport),
                         R(instr.dest), R(instr.src)));
                     break;
+                case Opcode::LOAD_GLOBAL: {
+                    SlotType gt = instr.valueType != SlotType::Unknown
+                                      ? instr.valueType : slotKindOf(fn, instr.dest);
+                    bool isD = gt == SlotType::Float || gt == SlotType::Float32;
+                    bool isP = gt == SlotType::Str || gt == SlotType::Decimal || gt == SlotType::Ref;
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                        MIR_new_ref_op(ctx, isD ? globalLoadDProto : (isP ? globalLoadPProto : globalLoadIProto)),
+                        MIR_new_ref_op(ctx, isD ? globalLoadDImport : (isP ? globalLoadPImport : globalLoadIImport)),
+                        R(instr.dest), MIR_new_int_op(ctx, instr.intValue)));
+                    if (isP) emitShadowSet(instr.dest);
+                    break;
+                }
+                case Opcode::STORE_GLOBAL: {
+                    SlotType gt = slotKindOf(fn, instr.src);
+                    bool isD = gt == SlotType::Float || gt == SlotType::Float32;
+                    bool isP = gt == SlotType::Str || gt == SlotType::Decimal || gt == SlotType::Ref;
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                        MIR_new_ref_op(ctx, isD ? globalStoreDProto : (isP ? globalStorePProto : globalStoreIProto)),
+                        MIR_new_ref_op(ctx, isD ? globalStoreDImport : (isP ? globalStorePImport : globalStoreIImport)),
+                        MIR_new_int_op(ctx, instr.intValue),
+                        isD ? asDoubleOperand(instr.src) : R(instr.src)));
+                    break;
+                }
                 case Opcode::ARRAY_GET: {
                     SlotType vt = instr.valueType;
                     bool isD = (vt == SlotType::Float || vt == SlotType::Float32);
@@ -1850,6 +1949,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_host_arg_d",  reinterpret_cast<void*>(rt_jit_host_arg_d));
     MIR_load_external(ctx, "rt_jit_host_call",   reinterpret_cast<void*>(rt_jit_host_call));
     MIR_load_external(ctx, "rt_jit_host_call_d", reinterpret_cast<void*>(rt_jit_host_call_d));
+    MIR_load_external(ctx, "rt_jit_global_load_i", reinterpret_cast<void*>(rt_jit_global_load_i));
+    MIR_load_external(ctx, "rt_jit_global_store_i", reinterpret_cast<void*>(rt_jit_global_store_i));
+    MIR_load_external(ctx, "rt_jit_global_load_d", reinterpret_cast<void*>(rt_jit_global_load_d));
+    MIR_load_external(ctx, "rt_jit_global_store_d", reinterpret_cast<void*>(rt_jit_global_store_d));
+    MIR_load_external(ctx, "rt_jit_global_load_p", reinterpret_cast<void*>(rt_jit_global_load_p));
+    MIR_load_external(ctx, "rt_jit_global_store_p", reinterpret_cast<void*>(rt_jit_global_store_p));
     MIR_load_external(ctx, "rt_jit_print_int",   reinterpret_cast<void*>(rt_jit_print_int));
     MIR_load_external(ctx, "rt_jit_print_float", reinterpret_cast<void*>(rt_jit_print_float));
     MIR_load_external(ctx, "rt_jit_print_float32", reinterpret_cast<void*>(rt_jit_print_float32));

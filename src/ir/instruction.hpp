@@ -174,8 +174,8 @@ enum : uint8_t {
     X(ARRAY_SET, 3, OP_VM | OP_JIT) /* slots[dest][slots[left]] = slots[right] — sınır kontrolü */ \
     X(ARRAY_LEN, 2, OP_VM | OP_JIT) /* slots[dest] = slots[src].uzunluk() */ \
     /* --- Modül-düzeyi değişken erişimi --- */ \
-    X(LOAD_GLOBAL,  2, OP_VM) /* slots[dest] = moduleSlots[intValue] */ \
-    X(STORE_GLOBAL, 2, OP_VM) /* moduleSlots[intValue] = slots[src] */ \
+    X(LOAD_GLOBAL,  2, OP_VM | OP_JIT) /* slots[dest] = moduleSlots[intValue] */ \
+    X(STORE_GLOBAL, 2, OP_VM | OP_JIT) /* moduleSlots[intValue] = slots[src] */ \
     /* --- String işlemleri (ADR-024: immutable değer-tipi) --- */ \
     X(STRING_CONCAT, 3, OP_VM | OP_JIT) /* slots[dest] = slots[left] + slots[right] */ \
     /* --- Hata yönetimi (ADR-025: UNCHECKED try/catch/throw) --- */ \

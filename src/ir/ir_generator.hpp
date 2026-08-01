@@ -171,6 +171,7 @@ private:
 
     // Global değişken ismi → global index
     std::unordered_map<std::string, int> nameToGlobal_;
+    std::unordered_map<int, SlotType> globalSlotTypes_;
     int                                  globalCount_ = 0;
 
     // Struct alan düzeni: struct adı → sıralı [(alan adı, Type)] listesi

@@ -63,6 +63,7 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
     // dönüş türü bilinmiyordu.
     std::vector<VariableDeclNode*> allGlobalVars;
     nameToGlobal_.clear();
+    globalSlotTypes_.clear();
     for (auto& unit : graph.units) {
         program.moduleRegistry.intern(unit.filePath);
         int moduleGlobalCount = 0;
@@ -70,6 +71,7 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
             if (child->kind == ASTKind::VariableDecl) {
                 auto* vd = static_cast<VariableDeclNode*>(child);
                 nameToGlobal_[vd->name] = globalCount_++;
+                globalSlotTypes_[nameToGlobal_[vd->name]] = slotTypeFromTypeName(vd->varType);
                 program.globalCount++;
                 program.globalNames.push_back(vd->name);
                 allGlobalVars.push_back(vd);
@@ -136,10 +138,12 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
     // 1. Geçiş: modül-düzeyi VariableDecl'leri topla ve kayıt et
     // "Global" değil — bu dosyanın (modülün) kendi değişkenleri.
     std::vector<VariableDeclNode*> globalVars;
+    globalSlotTypes_.clear();
     for (ASTNode* child : programNode->getChildren()) {
         if (child->kind == ASTKind::VariableDecl) {
             auto* vd = (VariableDeclNode*) child;
             nameToGlobal_[vd->name] = globalCount_++;
+            globalSlotTypes_[nameToGlobal_[vd->name]] = slotTypeFromTypeName(vd->varType);
             program.globalCount++;
             program.globalNames.push_back(vd->name);
             globalVars.push_back(vd);
@@ -1930,6 +1934,8 @@ void IRGenerator::emitLoadGlobal(int destSlot, int globalIndex, const SourceLoca
     Instruction ins(Opcode::LOAD_GLOBAL);
     ins.dest = destSlot;
     ins.intValue = globalIndex;
+    auto gt = globalSlotTypes_.find(globalIndex);
+    if (gt != globalSlotTypes_.end()) ins.valueType = gt->second;
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;

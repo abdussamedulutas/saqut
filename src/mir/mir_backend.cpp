@@ -437,11 +437,28 @@ extern "C" int64_t rt_jit_string_eq(void* a, void* b) {
 // kSoftwareError (70) döndürür; JIT aynı sözleşmeye uymalıdır (VM normatif).
 // Daha önce burada hard-coded 1 vardı — merkezi 0/64/65/70 sınıfı dışıydı.
 constexpr int kJitRuntimeErrorExit = saqut::exit_code::kSoftwareError;
+bool g_jitCastNullable = false;
+int64_t g_jitCastNull = 0;
+
+extern "C" void rt_jit_cast_begin(int64_t nullableMode) {
+    g_jitCastNullable = nullableMode != 0;
+    g_jitCastNull = 0;
+}
+
+extern "C" int64_t rt_jit_cast_ret_is_null() {
+    int64_t result = g_jitCastNull;
+    g_jitCastNullable = false;
+    return result;
+}
 
 // ── Cast trampolinleri (Dilim 3). Hepsi non-nullable hedef; başarısızlık
 // uncaught (try/catch JIT'te yok) → rt_jit_cast_error, VM'in uncaught-throw
 // mesaj gövdesiyle birebir (interpreter.cpp CAST_* dalları). ──────────────────
 extern "C" void rt_jit_cast_error(const char* what) {
+    if (g_jitCastNullable) {
+        g_jitCastNull = 1;
+        return;
+    }
     std::cerr << "runtime error: " << what << "\n";  // div_zero deseniyle tutarlı
     std::exit(kJitRuntimeErrorExit);
 }
@@ -715,7 +732,7 @@ bool opcodeSupported(const Instruction& instr, const std::vector<bool>& fnNullab
         case Opcode::LONG_TO_INT_CHECKED:
         case Opcode::CAST_DECIMAL_TO_INT:
         case Opcode::CAST_STR_TO_DECIMAL:
-            return instr.left != 1;
+            return true;
         case Opcode::RETURN:
             return instr.src >= 0;  // void RETURN (src=-1) bu dilimde yok
         case Opcode::ARRAY_GET:
@@ -809,6 +826,22 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
                 case Opcode::GREATER_EQUAL:
                 case Opcode::RETURN:
                 case Opcode::FIELD_GET:
+                case Opcode::CAST_STR_TO_INT:
+                case Opcode::CAST_STR_TO_FLOAT:
+                case Opcode::CAST_FLOAT_TO_INT_CHECKED:
+                case Opcode::CAST_INT_TO_BYTE_CHECKED:
+                case Opcode::CAST_STR_TO_LONG:
+                case Opcode::CAST_STR_TO_FLOAT32:
+                case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
+                case Opcode::LONG_TO_INT_CHECKED:
+                case Opcode::CAST_DECIMAL_TO_INT:
+                case Opcode::CAST_STR_TO_DECIMAL:
+                case Opcode::CAST_INT_TO_STR:
+                case Opcode::CAST_FLOAT_TO_STR:
+                case Opcode::CAST_FLOAT32_TO_STR:
+                case Opcode::CAST_LONG_TO_STR:
+                case Opcode::CAST_BOOL_TO_STR:
+                case Opcode::CAST_DECIMAL_TO_STR:
                 case Opcode::LOAD_NULL:
                 case Opcode::LOAD_SLOT:
                     break;  // null-farkındalıklı
@@ -875,6 +908,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     g_jitGlobalP.assign((size_t)program.globalCount, nullptr);
     std::fill(std::begin(g_jitCallNullArgs), std::end(g_jitCallNullArgs), 0);
     g_jitCallRetNull = 0;
+    g_jitCastNullable = false;
+    g_jitCastNull = 0;
     jitShadowStack().clear();
     g_jitStructMeta.clear();
 
@@ -946,6 +981,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t castL2IImport   = MIR_new_import(ctx, "rt_jit_long_to_int_checked");
     MIR_item_t castF2LProto    = MIR_new_proto(ctx, "cast_f2l_proto", 1, &i64Ret, 1, MIR_T_D, "v");
     MIR_item_t castF2LImport   = MIR_new_import(ctx, "rt_jit_float_to_long_checked");
+    MIR_item_t castBeginProto  = MIR_new_proto(ctx, "cast_begin_proto", 0, nullptr, 1, MIR_T_I64, "n");
+    MIR_item_t castBeginImport = MIR_new_import(ctx, "rt_jit_cast_begin");
+    MIR_item_t castNullProto   = MIR_new_proto_arr(ctx, "cast_null_proto", 1, &i64Ret, 0, nullptr);
+    MIR_item_t castNullImport  = MIR_new_import(ctx, "rt_jit_cast_ret_is_null");
     // Decimal trampolinleri (Dilim 3). Kutulu → I64 pointer. Binary I64,I64→I64;
     // unary I64→I64; float→dec D→I64; dec→float I64→D.
     MIR_var_t  decBinArgs[2]   = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "b", 0}};
@@ -1302,6 +1341,34 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 MIR_new_ref_op(ctx, ssProto), MIR_new_ref_op(ctx, ssImport),
                 MIR_new_int_op(ctx, (int64_t)slot), R(slot)));
         };
+        auto emitCastBegin = [&](const Instruction& in) {
+            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                MIR_new_ref_op(ctx, castBeginProto), MIR_new_ref_op(ctx, castBeginImport),
+                MIR_new_int_op(ctx, in.left == 1 ? 1 : 0)));
+        };
+        auto emitCastNull = [&](const Instruction& in) {
+            if (!isNullableSlot(in.dest)) return;
+            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                MIR_new_ref_op(ctx, castNullProto), MIR_new_ref_op(ctx, castNullImport),
+                MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(in.dest)])));
+        };
+        auto isFallibleCast = [](Opcode op) {
+            switch (op) {
+                case Opcode::CAST_STR_TO_INT:
+                case Opcode::CAST_STR_TO_FLOAT:
+                case Opcode::CAST_FLOAT_TO_INT_CHECKED:
+                case Opcode::CAST_INT_TO_BYTE_CHECKED:
+                case Opcode::CAST_STR_TO_LONG:
+                case Opcode::CAST_STR_TO_FLOAT32:
+                case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
+                case Opcode::LONG_TO_INT_CHECKED:
+                case Opcode::CAST_DECIMAL_TO_INT:
+                case Opcode::CAST_STR_TO_DECIMAL:
+                    return true;
+                default:
+                    return false;
+            }
+        };
 
         for (int pi = 0; pi < fn.paramCount; ++pi) {
             if (!isNullableSlot(pi)) continue;
@@ -1358,30 +1425,46 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF322SProto), MIR_new_ref_op(ctx, castF322SImport), R(instr.dest), R(instr.src)));
                     break;
                 case Opcode::CAST_STR_TO_INT:
+                    emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2IProto), MIR_new_ref_op(ctx, castS2IImport), R(instr.dest), R(instr.src)));
+                    emitCastNull(instr);
                     break;
                 case Opcode::CAST_STR_TO_FLOAT:
+                    emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2FProto), MIR_new_ref_op(ctx, castS2FImport), R(instr.dest), R(instr.src)));
+                    emitCastNull(instr);
                     break;
                 case Opcode::CAST_FLOAT_TO_INT_CHECKED:
+                    emitCastBegin(instr);
                     // srcType float32 OLABİLİR (ir_generator.cpp: srcIsFloat =
                     // srcIsFloat32||srcIsDouble) — call D bekliyor, F2D şart.
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2IProto), MIR_new_ref_op(ctx, castF2IImport), R(instr.dest), asDoubleOperand(instr.src)));
+                    emitCastNull(instr);
                     break;
                 case Opcode::CAST_INT_TO_BYTE_CHECKED:
+                    emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castI2BProto), MIR_new_ref_op(ctx, castI2BImport), R(instr.dest), R(instr.src)));
+                    emitCastNull(instr);
                     break;
                 case Opcode::CAST_STR_TO_LONG:
+                    emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2LProto), MIR_new_ref_op(ctx, castS2LImport), R(instr.dest), R(instr.src)));
+                    emitCastNull(instr);
                     break;
                 case Opcode::CAST_STR_TO_FLOAT32:
+                    emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2F32Proto), MIR_new_ref_op(ctx, castS2F32Import), R(instr.dest), R(instr.src)));
+                    emitCastNull(instr);
                     break;
                 case Opcode::LONG_TO_INT_CHECKED:
+                    emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castL2IProto), MIR_new_ref_op(ctx, castL2IImport), R(instr.dest), R(instr.src)));
+                    emitCastNull(instr);
                     break;
                 case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
+                    emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2LProto), MIR_new_ref_op(ctx, castF2LImport), R(instr.dest), asDoubleOperand(instr.src)));
+                    emitCastNull(instr);
                     break;
                 // ── Decimal (Dilim 3) — kutulu; sabit derleme zamanı, aritmetik call ──
                 case Opcode::LOAD_DECIMAL: {
@@ -1424,13 +1507,17 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decToStrImport), R(instr.dest), R(instr.src)));
                     break;
                 case Opcode::CAST_DECIMAL_TO_INT:
+                    emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decToIntImport), R(instr.dest), R(instr.src)));
+                    emitCastNull(instr);
                     break;
                 case Opcode::CAST_DECIMAL_TO_FLOAT:
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decToFProto), MIR_new_ref_op(ctx, decToFImport), R(instr.dest), R(instr.src)));
                     break;
                 case Opcode::CAST_STR_TO_DECIMAL:
+                    emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, decUnIProto), MIR_new_ref_op(ctx, decS2DImport), R(instr.dest), R(instr.src)));
+                    emitCastNull(instr);
                     break;
                 case Opcode::LOAD_SLOT: {
                     // Float→DMOV, Float32→FMOV, diğerleri MOV (pointer/int/longint I64).
@@ -2012,7 +2099,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     else
                         setNullFlag(instr.dest, 0);
                 } else if (instr.opcode == Opcode::CALLHOST || instr.opcode == Opcode::CALL ||
-                           instr.opcode == Opcode::FIELD_GET) {
+                           instr.opcode == Opcode::FIELD_GET || isFallibleCast(instr.opcode)) {
                 } else {
                     setNullFlag(instr.dest, 0);
                 }
@@ -2083,6 +2170,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_str_to_float32",        reinterpret_cast<void*>(rt_jit_str_to_float32));
     MIR_load_external(ctx, "rt_jit_long_to_int_checked",   reinterpret_cast<void*>(rt_jit_long_to_int_checked));
     MIR_load_external(ctx, "rt_jit_float_to_long_checked", reinterpret_cast<void*>(rt_jit_float_to_long_checked));
+    MIR_load_external(ctx, "rt_jit_cast_begin", reinterpret_cast<void*>(rt_jit_cast_begin));
+    MIR_load_external(ctx, "rt_jit_cast_ret_is_null", reinterpret_cast<void*>(rt_jit_cast_ret_is_null));
     MIR_load_external(ctx, "rt_jit_decimal_add", reinterpret_cast<void*>(rt_jit_decimal_add));
     MIR_load_external(ctx, "rt_jit_decimal_sub", reinterpret_cast<void*>(rt_jit_decimal_sub));
     MIR_load_external(ctx, "rt_jit_decimal_mul", reinterpret_cast<void*>(rt_jit_decimal_mul));

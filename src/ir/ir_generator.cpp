@@ -1914,6 +1914,18 @@ void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
             case Opcode::FIELD_GET:
                 if (ins.valueNullable && markNullable(ins.dest)) changed = true;
                 break;
+            case Opcode::CAST_STR_TO_INT:
+            case Opcode::CAST_STR_TO_FLOAT:
+            case Opcode::CAST_FLOAT_TO_INT_CHECKED:
+            case Opcode::CAST_INT_TO_BYTE_CHECKED:
+            case Opcode::CAST_STR_TO_LONG:
+            case Opcode::CAST_STR_TO_FLOAT32:
+            case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
+            case Opcode::LONG_TO_INT_CHECKED:
+            case Opcode::CAST_DECIMAL_TO_INT:
+            case Opcode::CAST_STR_TO_DECIMAL:
+                if (ins.left == 1 && markNullable(ins.dest)) changed = true;
+                break;
             case Opcode::LOAD_SLOT:
                 if (ins.src >= 0 && ins.src < fn->slotCount &&
                     fn->slotNullable[static_cast<size_t>(ins.src)])

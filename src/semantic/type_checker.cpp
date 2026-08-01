@@ -15,7 +15,7 @@
 
 #include "semantic/type_checker.hpp"
 
-#include "builtin/builtin_methods.hpp"
+#include "data/data_registry.hpp"
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/declarations.hpp"
 #include "parser/nodes/expressions.hpp"
@@ -1176,8 +1176,7 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
     //      — W006 uyarısıyla çalışır, v0.7.0'da kaldırılacak.
     case ASTKind::ScopeCall: {
         auto* sc = (ScopeCallNode*) node;
-        const auto& reg = BuiltinMethodRegistry::instance();
-
+        
         // Önce tüm argümanları (dotCall'da receiver dahil) denetle
         std::vector<Type> argTypes;
         for (auto* arg : sc->arguments)
@@ -1265,7 +1264,7 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             isStruct = true;
         } else {
             // ── 3. ESKİ sözdizimi: ElemTip::method / StructAd::method ─────
-            elemType = BuiltinMethodRegistry::resolveElemType(sc->leftTypeName);
+            elemType = dataResolveElemType(sc->leftTypeName);
             if (elemType.isError()) {
                 if (table_.hasStruct(sc->leftTypeName)) {
                     isStruct = true;
@@ -1297,7 +1296,7 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             }
         }
 
-        const BuiltinMethod* bm = reg.lookup(lookupName, sc->methodName, isStruct, isReceiverArray);
+        const DataMethod* bm = dataLookupMethod(lookupName, sc->methodName, isStruct, isReceiverArray);
         if (!bm) {
             // Hata mesajında hangi tiplerin bu metodu desteklediğini söyle
             std::string typeDesc = sc->dotCall ? recvType.toString() : sc->leftTypeName;
@@ -1329,20 +1328,20 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         bool anyError = false;
         for (size_t i = 0; i < sc->arguments.size(); ++i) {
             Type argType = argTypes[i];
-            const ParamRule& pr = bm->params[i];
+            const DataParamRule& pr = bm->params[i];
 
             Type expectedType;
             switch (pr.kind) {
-            case ParamKind::Fixed:
+            case DataParamKind::Fixed:
                 expectedType = pr.fixedType;
                 break;
-            case ParamKind::ElemType:
+            case DataParamKind::ElemType:
                 expectedType = elemType;
                 break;
-            case ParamKind::ElemArray:
+            case DataParamKind::ElemArray:
                 expectedType = Type::array(elemType);
                 break;
-            case ParamKind::StringVal:
+            case DataParamKind::StringVal:
                 expectedType = Type::String();
                 break;
             }
@@ -1367,19 +1366,21 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
 
         // Dönüş tipini hesapla
         switch (bm->ret.kind) {
-        case ReturnKind::Fixed:
+        case DataReturnKind::Fixed:
             result = bm->ret.fixedType;
             break;
-        case ReturnKind::ElemType:
+        case DataReturnKind::ElemType:
             result = elemType;
             break;
-        case ReturnKind::ElemArray:
+        case DataReturnKind::ElemArray:
             result = Type::array(elemType);
             break;
         }
 
-        // builtinId'yi node'a yaz (IR codegen kullanır)
-        sc->builtinId = bm->runtimeId;
+        // builtinId'yi node'a yaz (IR codegen kullanır). #223: id artık kayıtta
+        // saklanmaz, registry'deki konumdan türetilir — imza ve gövde aynı
+        // kayıtta olduğu için ikisinin kayması imkânsız.
+        sc->builtinId = dataMethodId(bm);
         break;
     }
 

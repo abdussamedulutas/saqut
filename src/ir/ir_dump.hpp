@@ -27,7 +27,7 @@
 #include <string>
 #include "ir/instruction.hpp"
 #include "ir/ir_color.hpp"
-#include "builtin/builtin_methods.hpp"
+#include "data/data_registry.hpp"
 
 namespace IrDump {
 
@@ -185,8 +185,9 @@ inline std::string operands(const Instruction& ins, const Palette& p = kFlatPale
             break;
         case Opcode::CALLHOST:
             if (ins.functionName == "__builtin_method__") {
-                const auto* bm = BuiltinMethodRegistry::instance().byId(ins.intValue);
-                std::string methodLabel = bm ? bm->name : ("id" + std::to_string(ins.intValue));
+                const auto* bm = dataMethodAt(ins.intValue);
+                std::string methodLabel = bm ? std::string(bm->name)
+                                             : ("id" + std::to_string(ins.intValue));
                 if (ins.dest >= 0)
                     os << s(ins.dest) << " " << L("=") << " ";
                 os << L("builtin::") << p.fn() << methodLabel << reset << L("(");

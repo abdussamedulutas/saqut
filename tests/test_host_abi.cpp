@@ -15,6 +15,7 @@
 #include "ffi/host_abi.hpp"
 #include "ffi/host_bridge.hpp"
 #include "ffi/host_registry.hpp"
+#include "data/data_registry.hpp"
 
 int main() {
     // 1) Boyut ve kopyalanabilirlik sözleşmesi.
@@ -164,10 +165,37 @@ int main() {
         // Bilinmeyen sembolik ad → drift yakalanmalı (sessiz yanlış dispatch yok)
         assert(hostEntryIndex("BOYLE_BIR_SEY_YOK") == kHostIdInvalid);
 
-        // Bağlanmamış blok → açık hata, sessiz başarı DEĞİL
+        // Bağlanmamış id → açık hata, sessiz başarı DEĞİL.
+        // (kBuiltinBase artık bağlı — #223; boş çekirdek bloğu kullanılır.)
         f.reset();
-        assert(rt_host_call(kBuiltinBase, &f) != 0);
+        f.args = nullptr; f.argc = 0;
+        assert(rt_host_call(kCoreBase, &f) != 0);
         assert(f.err.failed());
+
+        // #223: built-in metodlar da aynı giriş noktasından çalışır.
+        // string::upper — id, imza ve gövde artık aynı kayıtta (DataMethod).
+        {
+            const DataMethod* m = dataLookupMethod("string", "upper", false, false);
+            assert(m != nullptr);
+            HostSlot in[1] = { HostSlot::fromStr(nullptr) };
+            StringObject so("merhaba");
+            in[0] = HostSlot::fromStr(&so);
+            f.reset();
+            f.args = in; f.argc = 1;
+            assert(rt_host_call(kBuiltinBase + dataMethodId(m), &f) == 0);
+            assert(hostAsString(f.ret) == "MERHABA");
+        }
+
+        // Eksik argümanla çağrı bellek hatası DEĞİL, açık hata vermeli —
+        // ABI sözleşmesi backend'lere de açıktır.
+        {
+            const DataMethod* m = dataLookupMethod("int", "length", false, true);
+            assert(m != nullptr);
+            f.reset();
+            f.args = nullptr; f.argc = 0;
+            assert(rt_host_call(kBuiltinBase + dataMethodId(m), &f) != 0);
+            assert(f.err.failed());
+        }
     }
 
     // 9) Metadata eksiksizliği. Bir host fonksiyonunun dönüş türü/bayrakları

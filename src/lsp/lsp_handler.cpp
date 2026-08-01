@@ -4,7 +4,7 @@
 #include "core/type.hpp"
 #include "lsp/uri.hpp"
 #include "lsp/position.hpp"
-#include "builtin/builtin_methods.hpp"
+#include "data/data_registry.hpp"
 #include <algorithm>
 #include <cctype>
 #include <map>
@@ -777,9 +777,9 @@ static CompletionCtx analyzeContext(DocumentState& state, int byteOffset) {
 // ── Builtin metod listesi (BuiltinMethodRegistry'den) ───────────────────────
 
 // BuiltinMethodRegistry'deki bir metodu LSP CompletionItem'a dönüştürür.
-static nlohmann::json builtinMethodItem(const BuiltinMethod* m) {
+static nlohmann::json builtinMethodItem(const DataMethod* m) {
     // insertText: methodAdı(arg1, arg2) — receiver (params[0]) hariç
-    std::string insertText = m->name + "(";
+    std::string insertText = std::string(m->name) + "(";
     for (size_t i = 1; i < m->params.size(); ++i) {
         if (i > 1) insertText += ", ";
         insertText += "${" + std::to_string(i) + "}";
@@ -791,17 +791,17 @@ static nlohmann::json builtinMethodItem(const BuiltinMethod* m) {
     for (size_t i = 1; i < m->params.size(); ++i) {
         if (i > 1) detail += ", ";
         switch (m->params[i].kind) {
-            case ParamKind::Fixed:     detail += m->params[i].fixedType.toString(); break;
-            case ParamKind::ElemType:  detail += "T";   break;
-            case ParamKind::ElemArray: detail += "T[]"; break;
-            case ParamKind::StringVal: detail += "string"; break;
+            case DataParamKind::Fixed:     detail += m->params[i].fixedType.toString(); break;
+            case DataParamKind::ElemType:  detail += "T";   break;
+            case DataParamKind::ElemArray: detail += "T[]"; break;
+            case DataParamKind::StringVal: detail += "string"; break;
         }
     }
     detail += ") → ";
     switch (m->ret.kind) {
-        case ReturnKind::Fixed:     detail += m->ret.fixedType.toString(); break;
-        case ReturnKind::ElemType:  detail += "T";   break;
-        case ReturnKind::ElemArray: detail += "T[]"; break;
+        case DataReturnKind::Fixed:     detail += m->ret.fixedType.toString(); break;
+        case DataReturnKind::ElemType:  detail += "T";   break;
+        case DataReturnKind::ElemArray: detail += "T[]"; break;
     }
 
     return {
@@ -818,8 +818,7 @@ static nlohmann::json builtinMethodItem(const BuiltinMethod* m) {
 // StringVal metodları yalnızca string için, StructVal metodları yalnızca struct için.
 static nlohmann::json builtinMethodsForType(const Type& receiverType, const std::string& typeName) {
     nlohmann::json items = nlohmann::json::array();
-    const auto& reg = BuiltinMethodRegistry::instance();
-
+    
     bool isReceiverArray = receiverType.isArray();
     bool isString        = receiverType.isString();
     bool isStruct        = receiverType.isStruct();
@@ -837,19 +836,18 @@ static nlohmann::json builtinMethodsForType(const Type& receiverType, const std:
         return items;
 
     // Uygun kategorilere göre filtrele
-    for (int i = 0; i < reg.count(); ++i) {
-        const BuiltinMethod* m = reg.byId(i);
-        if (!m) continue;
+    for (const DataMethod& method : dataAllMethods()) {
+        const DataMethod* m = &method;
 
         bool include = false;
         switch (m->category) {
-            case MethodCategory::Array:
+            case DataMethodCategory::Array:
                 include = isReceiverArray;
                 break;
-            case MethodCategory::StringVal:
+            case DataMethodCategory::StringVal:
                 include = isString;
                 break;
-            case MethodCategory::StructVal:
+            case DataMethodCategory::StructVal:
                 include = isStruct;
                 break;
         }
@@ -1233,19 +1231,19 @@ static nlohmann::json signatureForFunction(Symbol* sym) {
 // includeReceiver: `array::push(arr, x)` biçiminde receiver AÇIK ilk argümandır
 // — imzada görünmeli ki activeParameter hizalansın; UFCS'te (arr.push(x))
 // receiver örtük olduğundan atlanır.
-static nlohmann::json signatureForBuiltinMethod(const BuiltinMethod* m,
+static nlohmann::json signatureForBuiltinMethod(const DataMethod* m,
                                                 bool includeReceiver = false) {
-    auto paramTypeStr = [](const ParamRule& p) -> std::string {
+    auto paramTypeStr = [](const DataParamRule& p) -> std::string {
         switch (p.kind) {
-            case ParamKind::Fixed:     return p.fixedType.toString();
-            case ParamKind::ElemType:  return "T";
-            case ParamKind::ElemArray: return "T[]";
-            case ParamKind::StringVal: return "string";
+            case DataParamKind::Fixed:     return p.fixedType.toString();
+            case DataParamKind::ElemType:  return "T";
+            case DataParamKind::ElemArray: return "T[]";
+            case DataParamKind::StringVal: return "string";
         }
         return "?";
     };
     nlohmann::json paramsArr = nlohmann::json::array();
-    std::string label = m->name + "(";
+    std::string label = std::string(m->name) + "(";
     for (size_t i = includeReceiver ? 0 : 1; i < m->params.size(); ++i) {
         std::string p = paramTypeStr(m->params[i]);
         if (!paramsArr.empty()) label += ", ";
@@ -1254,9 +1252,9 @@ static nlohmann::json signatureForBuiltinMethod(const BuiltinMethod* m,
     }
     label += ") → ";
     switch (m->ret.kind) {
-        case ReturnKind::Fixed:     label += m->ret.fixedType.toString(); break;
-        case ReturnKind::ElemType:  label += "T";   break;
-        case ReturnKind::ElemArray: label += "T[]"; break;
+        case DataReturnKind::Fixed:     label += m->ret.fixedType.toString(); break;
+        case DataReturnKind::ElemType:  label += "T";   break;
+        case DataReturnKind::ElemArray: label += "T[]"; break;
     }
     return {{"label", label}, {"parameters", paramsArr}};
 }
@@ -1284,7 +1282,7 @@ nlohmann::json LspHandler::handleSignatureHelp(const nlohmann::json& id,
         if (recvType.isError()) return;
         std::string leftName = recvType.isStruct()
             ? recvType.structName : recvType.toString();
-        const BuiltinMethod* m = BuiltinMethodRegistry::instance().lookup(
+        const DataMethod* m = dataLookupMethod(
             leftName, ctx.callee, recvType.isStruct(), recvType.isArray());
         if (m) sig = signatureForBuiltinMethod(m, includeReceiver);
     };
@@ -1301,12 +1299,12 @@ nlohmann::json LspHandler::handleSignatureHelp(const nlohmann::json& id,
         builtinSigForType(typeOfName(ctx.dotReceiver), false);
     } else if (ctx.scopeTarget == "array") {
         // ADR-033 ad alanı: array::push(arr, x) — kategori sabit
-        const BuiltinMethod* m = BuiltinMethodRegistry::instance().lookup(
+        const DataMethod* m = dataLookupMethod(
             "array", ctx.callee, false, false);
         if (m) sig = signatureForBuiltinMethod(m, true);
     } else if (ctx.scopeTarget == "struct") {
         // ADR-033 ad alanı: struct::toJson(p)
-        const BuiltinMethod* m = BuiltinMethodRegistry::instance().lookup(
+        const DataMethod* m = dataLookupMethod(
             "struct", ctx.callee, true, false);
         if (m) sig = signatureForBuiltinMethod(m, true);
     } else if (!ctx.scopeTarget.empty()) {

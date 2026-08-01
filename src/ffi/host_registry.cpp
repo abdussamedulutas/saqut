@@ -13,6 +13,7 @@
 #include <stdexcept>
 
 #include "ffi/host_bridge.hpp"
+#include "data/data_registry.hpp"
 #include "ffi/host_functions.hpp"
 
 namespace {
@@ -131,6 +132,20 @@ const std::vector<HostEntry>& hostRegistry() {
             e.thunk = legacy[i].thunk;
             t[kHostFnBase + i] = e;
         }
+
+        // Blok 2: built-in metodlar (#223). Kayıtlar src/data/ modüllerinden
+        // gelir — imza ve gövde orada AYNI kayıtta durur, bu yüzden burada
+        // yalnızca indeks uzayına yerleştirme yapılır.
+        const auto& methods = dataAllMethods();
+        for (size_t i = 0; i < methods.size(); ++i) {
+            HostEntry e;
+            e.symbolicId = methods[i].name;
+            e.arity      = static_cast<int8_t>(methods[i].params.size());
+            e.flags      = methods[i].flags;
+            e.retKind    = methods[i].retKind;
+            e.thunk      = methods[i].thunk;
+            t[kBuiltinBase + i] = e;
+        }
         return t;
     }();
     return table;
@@ -170,8 +185,7 @@ extern "C" int rt_host_call(int32_t entryId, HostCallFrame* f) {
         if (thunk) return thunk(f);
     }
 
-    // Built-in ve çekirdek blokları adım 4–5'te bağlanır. Bağlı olmayan bir
-    // id sessizce yanlış fonksiyona gitmez — açık hata döner.
+    // Bağlı olmayan bir id sessizce yanlış fonksiyona gitmez — açık hata döner.
     f->err.set("host entry bagli degil: " + std::to_string(entryId), "E_FFI");
     return 1;
 }

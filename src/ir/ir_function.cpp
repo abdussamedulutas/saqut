@@ -11,7 +11,7 @@
 // ============================================================================
 
 #include "ir/ir_function.hpp"
-#include "builtin/builtin_methods.hpp"
+#include "data/data_registry.hpp"
 #include "ir/ir_color.hpp"
 #include "ir/ir_dump.hpp"
 #include "tools.hpp"

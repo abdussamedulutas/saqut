@@ -14,7 +14,7 @@
 #include "ir/ir_generator.hpp"
 #include "ir/ir_cfg.hpp"
 
-#include "builtin/builtin_methods.hpp"
+#include "data/data_registry.hpp"
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/declarations.hpp"
 #include "parser/nodes/expressions.hpp"

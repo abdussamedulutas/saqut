@@ -616,9 +616,12 @@ bool isSupportedCallhost(const Instruction& instr, const std::vector<bool>& fnNu
     //
     // Ölçüldü: array_float VM "33.52" / JIT "302",
     //          array_string VM "12worldworld1" / JIT "12091740481".
+    // Eleman-tipli dönüşler (pop/remove) artık valueType üzerinden çözülüyor;
+    // Unknown kalırsa tür bilinmiyor demektir.
     static const char* kElemTypedReturns[] = {"pop", "remove"};
     for (const char* n : kElemTypedReturns)
-        if (std::strcmp(he->symbolicId, n) == 0) return false;
+        if (std::strcmp(he->symbolicId, n) == 0 && instr.valueType == SlotType::Unknown)
+            return false;
     return true;
 }
 
@@ -1727,22 +1730,45 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                             isD ? asDoubleOperand(as) : R(as)));
                     }
                     const HostEntry* he = hostEntryAt(instr.intValue);
-                    bool retIsD = he && (he->retKind == HostKind::Float ||
-                                         he->retKind == HostKind::Float32);
-                    MIR_reg_t dst = (instr.dest >= 0)
-                                  ? regs[static_cast<size_t>(instr.dest)]
-                                  : newTmp("hostsink");
+                    // valueType doluysa (built-in metodlar) o otoritedir:
+                    // registry retKind'i eleman-tipli dönüşlerde statik kalır.
+                    HostKind rk = he ? he->retKind : HostKind::Void;
+                    if (instr.valueType != SlotType::Unknown) {
+                        switch (instr.valueType) {
+                            case SlotType::Float:   rk = HostKind::Float;   break;
+                            case SlotType::Float32: rk = HostKind::Float32; break;
+                            case SlotType::Str:     rk = HostKind::Str;     break;
+                            case SlotType::Decimal: rk = HostKind::Decimal; break;
+                            case SlotType::Ref:     rk = HostKind::Ref;     break;
+                            case SlotType::LongInt: rk = HostKind::LongInt; break;
+                            default: break;
+                        }
+                    }
+                    bool retIsD = (rk == HostKind::Float || rk == HostKind::Float32);
+                    // Dönüş double proto'dan gelir; hedef slot Float32 ise
+                    // register MIR_T_F'tir → araya geçici D register ve D2F.
+                    bool needF = retIsD && instr.dest >= 0 &&
+                                 slotKindOf(fn, instr.dest) == SlotType::Float32;
+                    static int hostDTmp = 0;
+                    MIR_reg_t dst = needF
+                                  ? MIR_new_func_reg(ctx, func->u.func, MIR_T_D,
+                                        ("hostd" + std::to_string(hostDTmp++)).c_str())
+                                  : (instr.dest >= 0 ? regs[static_cast<size_t>(instr.dest)]
+                                                     : newTmp("hostsink"));
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
                         MIR_new_ref_op(ctx, retIsD ? hostCallDProto : hostCallProto),
                         MIR_new_ref_op(ctx, retIsD ? hostCallDImport : hostCallImport),
                         MIR_new_reg_op(ctx, dst),
                         MIR_new_int_op(ctx, instr.intValue),
                         MIR_new_int_op(ctx, (int64_t)instr.argSlots.size())));
+                    if (needF)
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_D2F,
+                            R(instr.dest), MIR_new_reg_op(ctx, dst)));
                     // Pointer dönüşü GC'ye görünür olmalı: host thunk'ı heap'te
                     // nesne üretmiş olabilir (string metodları, split).
-                    if (instr.dest >= 0 && he &&
-                        (he->retKind == HostKind::Str || he->retKind == HostKind::Ref ||
-                         he->retKind == HostKind::Decimal))
+                    if (instr.dest >= 0 &&
+                        (rk == HostKind::Str || rk == HostKind::Ref ||
+                         rk == HostKind::Decimal))
                         emitShadowSet(instr.dest);
                     break;
                 }

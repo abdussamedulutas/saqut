@@ -1169,6 +1169,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
         ins.intValue = kBuiltinBase + sc->builtinId;
         ins.argSlots = std::move(argSlots);
         ins.dest = destSlot;
+        if (!returnsVoid) ins.valueType = slotTypeFromType(sc->resolvedType);
         ins.sourceLine = sc->loc.line;
         ins.sourceCol = sc->loc.column;
         currentFunction_->instructions.push_back(std::move(ins));
@@ -1820,6 +1821,7 @@ void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
                 break;
             }
             case Opcode::CALLHOST: {
+                if (ins.valueType != SlotType::Unknown) { nk = ins.valueType; break; }
                 // #227: dönüş türü registry'den gelir. Bu bilgi olmadan JIT
                 // double dönen bir host fonksiyonunun sonucunu Int register'a
                 // yazmaya çalışır ve MIR tip hatası verir (ölçüldü: MATH_PI).

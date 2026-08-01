@@ -120,6 +120,13 @@ bool Interpreter::isExecutableLine(const std::string& file, int line) const {
 }
 
 bool Interpreter::isBreakpoint() const {
+    // Sıcak yol: breakpoint yoksa hiçbir iş yapma. Aşağıdaki arama
+    // `breakpoints_.count({file, line})` ile geçici bir std::pair kurar ve
+    // dosya yolu string'ini KOPYALAR — küme boş olsa bile. Bu fonksiyon her
+    // talimatta çağrıldığı için ölçümde VM'in sıcak döngüsündeki tahsislerin
+    // ~%92'si buradan geliyordu (boş `while` döngüsünde bile iterasyon başına
+    // ~5 tahsis). Debugger bağlı değilken breakpoints_ her zaman boştur.
+    if (breakpoints_.empty()) return false;
     if (callStack_.empty()) return false;
     const CallFrame& frame = callStack_.back();
     if (!frame.function) return false;

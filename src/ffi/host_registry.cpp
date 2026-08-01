@@ -14,6 +14,7 @@
 
 #include "ffi/host_bridge.hpp"
 #include "data/data_registry.hpp"
+#include "data/date.hpp"
 #include "ffi/host_functions.hpp"
 
 namespace {
@@ -130,6 +131,16 @@ const std::vector<HostEntry>& hostRegistry() {
             e.flags      = hostFlagsFor(legacy[i].symbolicId);
             e.retKind    = hostRetKindFor(legacy[i].symbolicId);
             e.thunk = legacy[i].thunk;
+            // #225: date'in saf fonksiyonları src/data/date.cpp'de. Eski
+            // tabloda thunk == nullptr bırakılmıştır (sembolik id ve arite
+            // tek kaynak olarak orada kalsın, indeksler kaymasın diye);
+            // gövde buradan bağlanır.
+            if (!e.thunk)
+                for (const auto& d : dataDateFunctions())
+                    if (std::strcmp(d.symbolicId, legacy[i].symbolicId) == 0) {
+                        e.thunk = d.thunk;
+                        break;
+                    }
             t[kHostFnBase + i] = e;
         }
 

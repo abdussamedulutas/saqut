@@ -8,7 +8,6 @@
 // ============================================================================
 
 #include "ffi/host_functions.hpp"
-#include "ffi/date_calc.hpp"
 #include "ffi/host_bridge.hpp"
 #include <chrono>
 #include <cmath>
@@ -251,6 +250,10 @@ static int sys_args(HostCallFrame* f) {
     return 0;
 }
 
+// ── date: yalnız now() burada (#225) ────────────────────────────────────────
+// Kalan 15 date fonksiyonu SAF hesaptır ve src/data/date.cpp'ye taşındı.
+// now() FFI'da kalır çünkü sistem saati gerçekten ortamdan gelen bilgidir.
+//
 // ── date implementasyonları (#88, ADR-035) ──────────────────────────────────
 // Yalnızca now() capability ister (--allow-sys); geri kalan saf hesap.
 // ⚠️ v1 kısıtı: saQut'ta 64-bit int yok — fromEpochMillis/toEpochMillis
@@ -266,109 +269,8 @@ static int date_now(HostCallFrame* f) {
     return 0;
 }
 
-static int date_fromEpochMillis(HostCallFrame* f) {
-    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]));
-    return 0;
-}
-
-static int date_toEpochMillis(HostCallFrame* f) {
-    // root.sqt'te dönüş `int` — daraltma KASITLI ve eski davranışla birebir.
-    f->ret = HostSlot::fromInt((int)hostAsI64(f->args[0]));
-    return 0;
-}
-
-static int date_addDays(HostCallFrame* f) {
-    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]) + hostAsI64(f->args[1]) * 86400000LL);
-    return 0;
-}
-static int date_addHours(HostCallFrame* f) {
-    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]) + hostAsI64(f->args[1]) * 3600000LL);
-    return 0;
-}
-static int date_addMinutes(HostCallFrame* f) {
-    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]) + hostAsI64(f->args[1]) * 60000LL);
-    return 0;
-}
-static int date_addSeconds(HostCallFrame* f) {
-    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]) + hostAsI64(f->args[1]) * 1000LL);
-    return 0;
-}
-
-static int date_year(HostCallFrame* f) {
-    f->ret = HostSlot::fromInt(date_calc::breakDown(hostAsI64(f->args[0])).y);
-    return 0;
-}
-static int date_month(HostCallFrame* f) {
-    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).mo);
-    return 0;
-}
-static int date_day(HostCallFrame* f) {
-    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).d);
-    return 0;
-}
-static int date_hour(HostCallFrame* f) {
-    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).h);
-    return 0;
-}
-static int date_minute(HostCallFrame* f) {
-    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).mi);
-    return 0;
-}
-static int date_second(HostCallFrame* f) {
-    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).s);
-    return 0;
-}
-
-static int date_diffMillis(HostCallFrame* f) {
-    // root.sqt dönüşü `int` — daraltma eski davranışla birebir korunur.
-    f->ret = HostSlot::fromInt((int)(hostAsI64(f->args[0]) - hostAsI64(f->args[1])));
-    return 0;
-}
-
 // "2026-07-12T10:00:00Z" — v1 yalnızca UTC (ADR-035); başka format → null.
-static int date_parse(HostCallFrame* f) {
-    const std::string& s = hostAsString(f->args[0]);
-    int y, mo, d, h, mi, se;
-    char zChar = 0;
-    // Geçersiz girdi null döner — HATA DEĞİL (root.sqt dönüşü `date?`,
-    // ADR-021). rt_host_call 0 döner, err boş kalır.
-    if (s.size() != 20) { f->ret = HostSlot::null(); return 0; }
-    if (std::sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%2d%c",
-                     &y, &mo, &d, &h, &mi, &se, &zChar) != 7 || zChar != 'Z')
-        { f->ret = HostSlot::null(); return 0; }
-    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || se > 59)
-        { f->ret = HostSlot::null(); return 0; }
-    long long ms = date_calc::assemble(y, (unsigned)mo, (unsigned)d,
-                                        (unsigned)h, (unsigned)mi, (unsigned)se);
-    f->ret = HostSlot::fromDate(ms);
-    return 0;
-}
-
 // pattern alt kümesi: yyyy MM dd HH mm ss (ADR-035'te sabitlenir)
-static int date_format(HostCallFrame* f) {
-    auto b = date_calc::breakDown(hostAsI64(f->args[0]));
-    char buf[16];
-    std::string out;
-    const std::string& pat = hostAsString(f->args[1]);
-    size_t i = 0;
-    auto matches = [&](const char* tok) {
-        size_t n = std::string(tok).size();
-        return pat.compare(i, n, tok) == 0;
-    };
-    while (i < pat.size()) {
-        if (matches("yyyy")) { std::snprintf(buf, sizeof buf, "%04d", b.y); out += buf; i += 4; }
-        else if (matches("MM")) { std::snprintf(buf, sizeof buf, "%02u", b.mo); out += buf; i += 2; }
-        else if (matches("dd")) { std::snprintf(buf, sizeof buf, "%02u", b.d); out += buf; i += 2; }
-        else if (matches("HH")) { std::snprintf(buf, sizeof buf, "%02u", b.h); out += buf; i += 2; }
-        else if (matches("mm")) { std::snprintf(buf, sizeof buf, "%02u", b.mi); out += buf; i += 2; }
-        else if (matches("ss")) { std::snprintf(buf, sizeof buf, "%02u", b.s); out += buf; i += 2; }
-        else { out += pat[i]; ++i; }
-    }
-    // String dönüşü ömür sahibi üzerinden bağlanır (bkz. HostRetOwner).
-    hostSetRetString(*f, std::move(out));
-    return 0;
-}
-
 // core — derleyici sürümü (SAQUT_VERSION derleme zamanında gömülür)
 static int core_version(HostCallFrame* f) {
     hostSetRetString(*f, SAQUT_VERSION);
@@ -412,21 +314,21 @@ const std::vector<HostFn>& hostFnTable() {
         { "SYS_SLEEP", 1, sys_sleep },
         { "SYS_ARGS", 0, sys_args },
         { "DATE_NOW", 0, date_now },
-        { "DATE_FROM_EPOCH_MS", 1, date_fromEpochMillis },
-        { "DATE_TO_EPOCH_MS", 1, date_toEpochMillis },
-        { "DATE_ADD_DAYS", 2, date_addDays },
-        { "DATE_ADD_HOURS", 2, date_addHours },
-        { "DATE_ADD_MINUTES", 2, date_addMinutes },
-        { "DATE_ADD_SECONDS", 2, date_addSeconds },
-        { "DATE_YEAR", 1, date_year },
-        { "DATE_MONTH", 1, date_month },
-        { "DATE_DAY", 1, date_day },
-        { "DATE_HOUR", 1, date_hour },
-        { "DATE_MINUTE", 1, date_minute },
-        { "DATE_SECOND", 1, date_second },
-        { "DATE_DIFF_MS", 2, date_diffMillis },
-        { "DATE_PARSE", 1, date_parse },
-        { "DATE_FORMAT", 2, date_format },
+        { "DATE_FROM_EPOCH_MS", 1, nullptr },
+        { "DATE_TO_EPOCH_MS", 1, nullptr },
+        { "DATE_ADD_DAYS", 2, nullptr },
+        { "DATE_ADD_HOURS", 2, nullptr },
+        { "DATE_ADD_MINUTES", 2, nullptr },
+        { "DATE_ADD_SECONDS", 2, nullptr },
+        { "DATE_YEAR", 1, nullptr },
+        { "DATE_MONTH", 1, nullptr },
+        { "DATE_DAY", 1, nullptr },
+        { "DATE_HOUR", 1, nullptr },
+        { "DATE_MINUTE", 1, nullptr },
+        { "DATE_SECOND", 1, nullptr },
+        { "DATE_DIFF_MS", 2, nullptr },
+        { "DATE_PARSE", 1, nullptr },
+        { "DATE_FORMAT", 2, nullptr },
         { "CORE_VERSION", 0, core_version },
     };
     return table;

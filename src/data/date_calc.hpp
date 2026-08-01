@@ -2,7 +2,7 @@
 // saQut FFI — Gregoryen Takvim Matematiği (#88, ADR-036)
 // ============================================================================
 //
-// DİZİN:   src/ffi/date_calc.hpp
+// DİZİN:   src/data/date_calc.hpp
 // BAĞIMLI: Yok (sadece standart kütüphane)
 //
 // AMAÇ:
@@ -16,8 +16,8 @@
 //
 // ============================================================================
 
-#ifndef SAQUT_FFI_DATE_CALC
-#define SAQUT_FFI_DATE_CALC
+#ifndef SAQUT_DATA_DATE_CALC
+#define SAQUT_DATA_DATE_CALC
 
 #include <cstdint>
 
@@ -77,4 +77,4 @@ inline long long assemble(int y, unsigned mo, unsigned d, unsigned h, unsigned m
 
 } // namespace date_calc
 
-#endif // SAQUT_FFI_DATE_CALC
+#endif // SAQUT_DATA_DATE_CALC

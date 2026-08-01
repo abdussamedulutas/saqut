@@ -20,7 +20,7 @@ for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg 
     # test_host_abi gerçek registry'yi çağırır (rt_host_call) — host gövdeleri
     # ve object.cpp gerekir. SAQUT_VERSION normalde CMake'ten gelir.
     # #223: registry built-in metodları src/data/ modüllerinden alır.
-    [ "$t" = "test_host_abi" ] && extra="$ROOT/src/vm/object.cpp $ROOT/src/ffi/host_registry.cpp $ROOT/src/ffi/host_functions.cpp $ROOT/src/data/data_registry.cpp $ROOT/src/data/string.cpp $ROOT/src/data/array.cpp $ROOT/src/data/struct.cpp -DSAQUT_VERSION=\"test\""
+    [ "$t" = "test_host_abi" ] && extra="$ROOT/src/vm/object.cpp $ROOT/src/ffi/host_registry.cpp $ROOT/src/ffi/host_functions.cpp $ROOT/src/data/data_registry.cpp $ROOT/src/data/string.cpp $ROOT/src/data/array.cpp $ROOT/src/data/struct.cpp $ROOT/src/data/date.cpp -DSAQUT_VERSION=\"test\""
     "$CXX" "${FLAGS[@]}" "$ROOT/tests/$t.cpp" $extra -o "/tmp/saqut_$t"
     "/tmp/saqut_$t"
 done

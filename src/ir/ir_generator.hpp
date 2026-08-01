@@ -99,14 +99,16 @@ private:
     void emitStructNew(int destSlot, const std::string& structType,
                        int fieldCount, const SourceLocation& loc = {});
     void emitFieldGet(int destSlot, int objSlot, int fieldIdx,
-                      const SourceLocation& loc = {});
+                      const SourceLocation& loc = {},
+                      SlotType valueType = SlotType::Unknown);
     void emitFieldSet(int objSlot, int fieldIdx, int valSlot,
                       int line = 0, int col = 0);
     // #206: arrayElemKind parametresi eklendi — packed primitive array'ler için
     void emitArrayNew(int destSlot, int capacity, ArrayElemKind k,
                       const SourceLocation& loc = {});
     void emitArrayGet(int destSlot, int arrSlot, int idxSlot,
-                      int line = 0, int col = 0);
+                      int line = 0, int col = 0,
+                      SlotType valueType = SlotType::Unknown);
     void emitArraySet(int arrSlot, int idxSlot, int valSlot,
                       int line = 0, int col = 0);
     void emitArrayLen(int destSlot, int arrSlot,
@@ -201,6 +203,7 @@ private:
 
     // Bir tip adını ("float"/"int"/struct/array...) SlotType'a eşler.
     SlotType slotTypeFromTypeName(const std::string& typeName) const;
+    SlotType slotTypeFromType(const Type& t) const;
 
     // Fonksiyon gövdesi bittikten sonra (slotCount kesinleştiğinde) çağrılır:
     // slotTypes'ı doldurur — parametreler bildirilen tipten, geri kalan

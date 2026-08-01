@@ -1225,7 +1225,8 @@ int IRGenerator::generateExpression(ASTNode* node) {
             structName = exprObj->resolvedType.structName;
         int idx = getStructFieldIndex(structName, ma->member);
         if (idx >= 0)
-            emitFieldGet(destSlot, objSlot, idx);
+            emitFieldGet(destSlot, objSlot, idx, {},
+                         slotTypeFromType(ma->resolvedType));
         return destSlot;
     }
     case ASTKind::ArrayLiteral: {
@@ -1248,7 +1249,8 @@ int IRGenerator::generateExpression(ASTNode* node) {
         int arrSlot = generateExpression(idx->object);
         int idxSlot = generateExpression(idx->index);
         int destSlot = freshSlot();
-        emitArrayGet(destSlot, arrSlot, idxSlot, idx->loc.line, idx->loc.column);
+        emitArrayGet(destSlot, arrSlot, idxSlot, idx->loc.line, idx->loc.column,
+                     slotTypeFromType(idx->resolvedType));
         return destSlot;
     }
 
@@ -1666,6 +1668,11 @@ int IRGenerator::lookupVariable(const std::string& name) {
 // Slot tipi hesaplama (Dilim 1.5, MIRPLAN §3)
 // ─────────────────────────────────────────────────────────────────────────────
 
+SlotType IRGenerator::slotTypeFromType(const Type& t) const {
+    if (t.isArray() || t.isStruct()) return SlotType::Ref;
+    return slotTypeFromTypeName(t.toString());
+}
+
 SlotType IRGenerator::slotTypeFromTypeName(const std::string& t) const {
     if (t == "double")
         return SlotType::Float; // 64-bit
@@ -1831,6 +1838,11 @@ void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
                 }
                 break;
             }
+            case Opcode::ARRAY_GET:
+            case Opcode::FIELD_GET:
+            case Opcode::LOAD_GLOBAL:
+                if (ins.valueType != SlotType::Unknown) nk = ins.valueType;
+                break;
             // FIELD_GET/ARRAY_GET/LOAD_GLOBAL: sonuç türü opcode'dan
             // belli değil (eleman/alan türü gerekir). Dilim 1.5 JIT'i bu
             // opcode'ları zaten reddediyor; `--types` için Int kalır.
@@ -2078,11 +2090,13 @@ void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
-void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx, const SourceLocation& loc) {
+void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx,
+                                const SourceLocation& loc, SlotType valueType) {
     Instruction ins(Opcode::FIELD_GET);
     ins.dest = destSlot;
     ins.src = objSlot;
     ins.intValue = fieldIdx;
+    ins.valueType = valueType;
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;
@@ -2149,11 +2163,13 @@ static ArrayElemKind arrayElemKindFromType(const Type& t) {
     return arrayElemKindFromPrim(t.elementType->prim);
 }
 
-void IRGenerator::emitArrayGet(int destSlot, int arrSlot, int idxSlot, int line, int col) {
+void IRGenerator::emitArrayGet(int destSlot, int arrSlot, int idxSlot, int line, int col,
+                                SlotType valueType) {
     Instruction ins(Opcode::ARRAY_GET);
     ins.dest = destSlot;
     ins.left = arrSlot;
     ins.right = idxSlot;
+    ins.valueType = valueType;
     ins.sourceLine = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.line : line;
     ins.sourceCol = (line == 0 && col == 0 && currentLoc_.isValid()) ? currentLoc_.column : col;
     currentFunction_->instructions.push_back(std::move(ins));

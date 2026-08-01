@@ -9,6 +9,7 @@
 
 #include "ffi/host_functions.hpp"
 #include "ffi/date_calc.hpp"
+#include "ffi/host_bridge.hpp"
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -22,46 +23,69 @@
 
 // ── math implementasyonları ─────────────────────────────────────────────────
 
-static Value math_abs(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt(std::abs(a[0].intValue));
+// #222: math ailesi NATİF thunk'tır — Value'ya hiç uğramaz.
+//
+// Bu ailenin sarmalayıcıdan çıkarılması ölçülebilir: sarmalayıcı her çağrıda
+// bir std::vector<Value> tahsis eder ve HostSlot→Value→HostSlot çift
+// dönüşümü yapar (80 baytlık Value'lar). Natif thunk doğrudan HostSlot okur.
+//
+// Hepsi HOST_PURE: env istemez, heap'e dokunmaz, hata döndürmez
+// (#89: IEEE754 korunur — sqrt(-1) NaN döner, Error FIRLATMAZ).
+static int math_abs(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt(std::abs(static_cast<int>(hostAsI64(f->args[0]))));
+    return 0;
 }
-static Value math_absf(const std::vector<Value>& a, HostContext&) {
-    return Value::fromFloat(std::fabs(a[0].floatValue));
+static int math_absf(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(std::fabs(hostAsDouble(f->args[0])));
+    return 0;
 }
-static Value math_min(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt(std::min(a[0].intValue, a[1].intValue));
+static int math_min(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt(static_cast<int>(
+        std::min(hostAsI64(f->args[0]), hostAsI64(f->args[1]))));
+    return 0;
 }
-static Value math_max(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt(std::max(a[0].intValue, a[1].intValue));
+static int math_max(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt(static_cast<int>(
+        std::max(hostAsI64(f->args[0]), hostAsI64(f->args[1]))));
+    return 0;
 }
-static Value math_minf(const std::vector<Value>& a, HostContext&) {
-    return Value::fromFloat(std::fmin(a[0].floatValue, a[1].floatValue));
+static int math_minf(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(std::fmin(hostAsDouble(f->args[0]), hostAsDouble(f->args[1])));
+    return 0;
 }
-static Value math_maxf(const std::vector<Value>& a, HostContext&) {
-    return Value::fromFloat(std::fmax(a[0].floatValue, a[1].floatValue));
+static int math_maxf(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(std::fmax(hostAsDouble(f->args[0]), hostAsDouble(f->args[1])));
+    return 0;
 }
-static Value math_sqrt(const std::vector<Value>& a, HostContext&) {
-    return Value::fromFloat(std::sqrt(a[0].floatValue));   // sqrt(-1) → NaN (Error yok)
+static int math_sqrt(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(std::sqrt(hostAsDouble(f->args[0])));  // sqrt(-1) → NaN
+    return 0;
 }
-static Value math_pow(const std::vector<Value>& a, HostContext&) {
-    return Value::fromFloat(std::pow(a[0].floatValue, a[1].floatValue));
+static int math_pow(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(std::pow(hostAsDouble(f->args[0]), hostAsDouble(f->args[1])));
+    return 0;
 }
-static Value math_floor(const std::vector<Value>& a, HostContext&) {
-    return Value::fromFloat(std::floor(a[0].floatValue));
+static int math_floor(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(std::floor(hostAsDouble(f->args[0])));
+    return 0;
 }
-static Value math_ceil(const std::vector<Value>& a, HostContext&) {
-    return Value::fromFloat(std::ceil(a[0].floatValue));
+static int math_ceil(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(std::ceil(hostAsDouble(f->args[0])));
+    return 0;
 }
-static Value math_round(const std::vector<Value>& a, HostContext&) {
-    return Value::fromFloat(std::round(a[0].floatValue));
+static int math_round(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(std::round(hostAsDouble(f->args[0])));
+    return 0;
 }
 // #89: sabit yok — ffi bildirimi yalnızca fonksiyon; PI/E sıfır-argümanlı
 // saf fonksiyon olarak sunulur (import {PI, E} from math; PI();).
-static Value math_PI(const std::vector<Value>&, HostContext&) {
-    return Value::fromFloat(3.14159265358979323846);
+static int math_PI(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(3.14159265358979323846);
+    return 0;
 }
-static Value math_E(const std::vector<Value>&, HostContext&) {
-    return Value::fromFloat(2.71828182845904523536);
+static int math_E(HostCallFrame* f) {
+    f->ret = HostSlot::fromFloat(2.71828182845904523536);
+    return 0;
 }
 
 // ── caps implementasyonları (#91, ADR-035) ──────────────────────────────────
@@ -295,19 +319,23 @@ static Value date_format(const std::vector<Value>& a, HostContext&) {
 
 const std::vector<HostFn>& hostFnTable() {
     static const std::vector<HostFn> table = {
-        { "MATH_ABS",   1, math_abs   },
-        { "MATH_ABSF",  1, math_absf  },
-        { "MATH_MIN",   2, math_min   },
-        { "MATH_MAX",   2, math_max   },
-        { "MATH_MINF",  2, math_minf  },
-        { "MATH_MAXF",  2, math_maxf  },
-        { "MATH_SQRT",  1, math_sqrt  },
-        { "MATH_POW",   2, math_pow   },
-        { "MATH_FLOOR", 1, math_floor },
-        { "MATH_CEIL",  1, math_ceil  },
-        { "MATH_ROUND", 1, math_round },
-        { "MATH_PI",    0, math_PI    },
-        { "MATH_E",     0, math_E     },
+        // #222: math ailesi natif thunk'a taşındı (hostNativeThunks). Eski
+        // tabloda impl == nullptr olarak DURUR — sembolik id ve arite tek
+        // kaynak olarak burada kalsın, indeksler kaymasın diye. Dispatch
+        // rt_host_call'da natif tabloya gider.
+        { "MATH_ABS",   1, nullptr },
+        { "MATH_ABSF",  1, nullptr },
+        { "MATH_MIN",   2, nullptr },
+        { "MATH_MAX",   2, nullptr },
+        { "MATH_MINF",  2, nullptr },
+        { "MATH_MAXF",  2, nullptr },
+        { "MATH_SQRT",  1, nullptr },
+        { "MATH_POW",   2, nullptr },
+        { "MATH_FLOOR", 1, nullptr },
+        { "MATH_CEIL",  1, nullptr },
+        { "MATH_ROUND", 1, nullptr },
+        { "MATH_PI",    0, nullptr },
+        { "MATH_E",     0, nullptr },
         { "CAPS_DROP",  1, caps_drop  },
         { "CAPS_HAS",   1, caps_has   },
         { "FS_READ_FILE",   1, fs_readFile   },
@@ -340,6 +368,33 @@ const std::vector<HostFn>& hostFnTable() {
         { "DATE_FORMAT",           2, date_format         },
         { "CORE_VERSION",        0, [](const std::vector<Value>&, HostContext&) {
             return Value::fromString(SAQUT_VERSION); }},
+    };
+    return table;
+}
+
+// ── Natif thunk tablosu (#222) ───────────────────────────────────────────────
+//
+// Yeni ABI'ye taşınmış gövdeler. hostFnTable() ile AYNI sembolik id uzayını
+// paylaşır: bir id burada varsa rt_host_call natif yolu kullanır, yoksa eski
+// gövdeye (sarmalayıcı üzerinden) düşer.
+//
+// Geçiş bu şekilde aile aile yapılabiliyor — her adım kendi başına yeşil test
+// bırakıyor ve hız kazancı ölçülebiliyor.
+const std::vector<HostNativeFn>& hostNativeThunks() {
+    static const std::vector<HostNativeFn> table = {
+        { "MATH_ABS",   math_abs   },
+        { "MATH_ABSF",  math_absf  },
+        { "MATH_MIN",   math_min   },
+        { "MATH_MAX",   math_max   },
+        { "MATH_MINF",  math_minf  },
+        { "MATH_MAXF",  math_maxf  },
+        { "MATH_SQRT",  math_sqrt  },
+        { "MATH_POW",   math_pow   },
+        { "MATH_FLOOR", math_floor },
+        { "MATH_CEIL",  math_ceil  },
+        { "MATH_ROUND", math_round },
+        { "MATH_PI",    math_PI    },
+        { "MATH_E",     math_E     },
     };
     return table;
 }

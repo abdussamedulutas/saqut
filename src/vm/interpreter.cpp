@@ -16,6 +16,7 @@
 #include "builtin/builtin_methods.hpp"
 #include "bench/profile.hpp"
 #include "ffi/host_functions.hpp"
+#include "ffi/host_registry.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
@@ -1354,18 +1355,28 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                         break;
                     }
                 }
-                std::vector<Value> argVals;
-                argVals.reserve(instr.argSlots.size());
+                // #222: tek giriş noktası (rt_host_call). Exception artık
+                // sınırı geçmiyor — hata f.err üzerinden dönüyor. VM ve her
+                // backend aynı yolu kullanır.
+                hostScratch_.reset();
+                hostScratch_.slots.reserve(instr.argSlots.size());
                 for (int s : instr.argSlots)
-                    argVals.push_back(frame.slots[s]);
-                try {
-                    HostContext ctx{&caps_, &programArgs_, &heap_};
-                    Value ret = callHostFn(instr.intValue, argVals, ctx);
-                    if (instr.dest >= 0)
-                        callStack_.back().slots[instr.dest] = ret;
-                } catch (const std::runtime_error& e) {
-                    pendingThrow_ = makeErrorValue(e.what(), "E_FFI",
+                    hostScratch_.slots.push_back(toHostSlot(frame.slots[s], hostScratch_));
+
+                HostEnv env{&caps_, &programArgs_, &heap_, nullptr};
+                HostCallFrame& f = hostFrame_;
+                f.reset();
+                f.args     = hostScratch_.slots.data();
+                f.argc     = static_cast<int32_t>(hostScratch_.slots.size());
+                f.env      = &env;
+                f.retOwner = &hostRetOwner_;
+
+                if (rt_host_call(kHostFnBase + instr.intValue, &f) != 0) {
+                    pendingThrow_ = makeErrorValue(f.err.message,
+                                                   f.err.code.empty() ? "E_FFI" : f.err.code,
                                                    instr.sourceLine, instr.sourceCol);
+                } else if (instr.dest >= 0) {
+                    callStack_.back().slots[instr.dest] = fromHostSlot(f.ret);
                 }
             } else {
                 executeHostFunction(instr.functionName, frame.slots, instr.argSlots);

@@ -170,6 +170,19 @@ int main() {
         assert(f.err.failed());
     }
 
+    // 9) Metadata eksiksizliği. Bir host fonksiyonunun dönüş türü/bayrakları
+    //    bilinmiyorsa korumacı varsayılana düşer — çalışır ama JIT o çağrıyı
+    //    gereksiz yere pahalı sayar. Sessizce olmasın diye burada kırılır.
+    {
+        auto missing = hostEntriesMissingMetadata();
+        if (!missing.empty()) {
+            std::printf("METADATA EKSIK:");
+            for (const auto& s : missing) std::printf(" %s", s.c_str());
+            std::printf("\n");
+        }
+        assert(missing.empty());
+    }
+
     std::printf("test_host_abi: TUM TESTLER GECTI\n");
     return 0;
 }

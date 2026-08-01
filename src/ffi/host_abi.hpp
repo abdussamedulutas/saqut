@@ -213,12 +213,20 @@ using HostThunk = int (*)(HostCallFrame* f);
 // birleşir. CALLHOST artık functionName string'ine bakmaz — intValue bu
 // tablonun indeksidir.
 // ----------------------------------------------------------------------------
+// Bayrakların anlamı BACKEND'İN SORACAĞI soruya göre tanımlıdır, "fonksiyon
+// matematiksel olarak saf mı" sorusuna göre değil.
+//
+// Örnek: fs::exists ve sys::env dış dünyayı okur (yan etkili sayılır) ama
+// HEAP'e dokunmaz ve HostEnv istemez → bu ABI açısından HOST_PURE'dur.
+// JIT'in bilmek istediği tek şey budur: çağrı GC'yi tetikleyebilir mi,
+// env pointer'ı geçmem gerekir mi.
 enum : uint8_t {
-    HOST_PURE       = 0,       // heap'e dokunmaz, GC safepoint gerekmez
-    HOST_NEEDS_HEAP = 1u << 0, // env->heap kullanır (tahsis yapabilir)
+    HOST_PURE       = 0,       // HostEnv gerekmez, heap'e dokunmaz → JIT safepoint istemez
+    HOST_NEEDS_HEAP = 1u << 0, // env->heap kullanır (tahsis yapabilir → GC tetikleyebilir)
     HOST_NEEDS_CAPS = 1u << 1, // env->caps okur/değiştirir
     HOST_NEEDS_ARGS = 1u << 2, // env->programArgs okur
     HOST_MUTATING   = 1u << 3, // receiver'ı yerinde değiştirir (built-in metod)
+    HOST_CAN_FAIL   = 1u << 4, // hata döndürebilir (eski gövdelerde: throw)
 };
 
 struct HostEntry {

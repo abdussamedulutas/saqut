@@ -70,4 +70,9 @@ const HostEntry* hostEntryAt(int32_t id);
 // ----------------------------------------------------------------------------
 extern "C" int rt_host_call(int32_t entryId, HostCallFrame* f);
 
+// Test yardımcısı: metadata tablosunda kaydı olmayan sembolik id'leri döndürür.
+// Boş olmalı — dolu dönmesi, bir host fonksiyonunun dönüş türü/bayrakları
+// bilinmeden korumacı varsayılana düştüğü anlamına gelir.
+std::vector<std::string> hostEntriesMissingMetadata();
+
 #endif // SAQUT_FFI_HOST_REGISTRY

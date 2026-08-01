@@ -25,6 +25,7 @@
 #include "vm/value.hpp"
 #include "vm/object.hpp"
 #include "core/capability.hpp"
+#include "ffi/host_abi.hpp"
 
 // VM state'ine erişim gereken host fonksiyonlar (caps::drop/has, sys::args,
 // fs::readBytes/writeBytes) için enjekte edilen bağlam. Pointer'lar
@@ -46,7 +47,20 @@ struct HostFn {
 
 // Tüm host fonksiyonların düz tablosu. Index = sayısal host id (root.sqt'e
 // gömülmez; hostFnIndex ile çözülür).
+//
+// #222: impl == nullptr olan kayıtlar yeni ABI'ye taşınmıştır — gövdeleri
+// hostNativeThunks() içindedir. Kayıt burada sembolik id ve arite için
+// (tek kaynak, indeks kararlılığı) durmaya devam eder.
 const std::vector<HostFn>& hostFnTable();
+
+// #222: yeni ABI'ye taşınmış gövdeler. hostFnTable ile aynı sembolik id
+// uzayını paylaşır; rt_host_call önce buraya bakar, yoksa eski gövdeye düşer.
+// Geçiş aile aile yapılabilsin diye ayrı tablo.
+struct HostNativeFn {
+    const char* symbolicId;
+    HostThunk   thunk;
+};
+const std::vector<HostNativeFn>& hostNativeThunks();
 
 // Sembolik id → sayısal index. Bulunamazsa -1 (root.sqt ↔ C++ drift kontrolü).
 int hostFnIndex(const std::string& symbolicId);

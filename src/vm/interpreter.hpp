@@ -24,6 +24,7 @@
 #include "core/capability.hpp"
 #include "vm/call_frame.hpp"
 #include "vm/object.hpp"
+#include "ffi/host_bridge.hpp"   // #222: HostCallScratch / HostRetOwner
 #include "profiling/stage_timer.hpp"
 
 // Forward-declare: BenchVMTrace tam tanımı bench/profile.hpp'de.
@@ -166,6 +167,16 @@ private:
 
     std::set<Capability>     caps_;       // ADR-035 (#76): açık capability'ler
     std::vector<std::string> programArgs_; // #90: `--` sonrası argümanlar
+
+    // #222: host çağrı ABI'si — çağrılar arasında YENİDEN KULLANILIR.
+    // Çağrı başına heap tahsisi yapmamanın yolu budur: scratch argüman
+    // dönüşümünün, owner dönüş değerinin ömrünü taşır; ikisi de her
+    // CALLHOST'ta reset edilir, yeniden tahsis edilmez.
+    HostCallScratch hostScratch_;
+    HostRetOwner    hostRetOwner_;
+    // Frame de yeniden kullanılır: içinde HostError'ın iki std::string'i var
+    // ve her CALLHOST'ta yeniden kurmak sıcak yolda ölçülebilir maliyetti.
+    HostCallFrame   hostFrame_;
 
     // Faz 5: bütçe/step kısıtlarını kontrol eder, true = durmalı
     bool shouldStop();

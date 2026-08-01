@@ -15,6 +15,8 @@
 #define SAQUT_CORE_DECIMAL
 
 #include <cstdint>
+
+#include "data/decimal_core.hpp"
 #include <string>
 #include <stdexcept>
 #include <cmath>
@@ -96,26 +98,8 @@ struct DecimalValue {
 
     // -1 (a<b), 0 (a==b), 1 (a>b)
     static int compare(const DecimalValue& a, const DecimalValue& b) {
-        // Ortak eksponente çek, sonra katsayıları karşılaştır
-        if (a.exp == b.exp) {
-            return (a.coeff < b.coeff) ? -1 : (a.coeff > b.coeff) ? 1 : 0;
-        }
-        // __int128 ile hizalama: taşmayı önle
-        if (a.exp > b.exp) {
-            int32_t diff = a.exp - b.exp;
-            if (diff > 18) return (a.coeff >= 0 ? 1 : -1); // a çok büyük
-            __int128 ac = (__int128)a.coeff;
-            for (int i = 0; i < diff; i++) ac *= 10;
-            __int128 bc = (__int128)b.coeff;
-            return (ac < bc) ? -1 : (ac > bc) ? 1 : 0;
-        } else {
-            int32_t diff = b.exp - a.exp;
-            if (diff > 18) return (b.coeff >= 0 ? -1 : 1);
-            __int128 ac = (__int128)a.coeff;
-            __int128 bc = (__int128)b.coeff;
-            for (int i = 0; i < diff; i++) bc *= 10;
-            return (ac < bc) ? -1 : (ac > bc) ? 1 : 0;
-        }
+        // #224: hizalama taşma-güvenli 64-bit ile (decimal_core) — __int128 yok.
+        return decimal_core::compareScaled(a.coeff, a.exp, b.coeff, b.exp);
     }
 
     bool operator==(const DecimalValue& o) const { return compare(*this, o) == 0; }
@@ -132,70 +116,67 @@ struct DecimalValue {
     static DecimalValue overflow() { return {INT64_MAX, 0}; }
 
     static DecimalValue add(const DecimalValue& a, const DecimalValue& b) {
+        // #224: __int128 yerine taşma-denetimli 64-bit. Davranış birebir korunur.
         if (a.exp == b.exp) {
-            // Doğrudan topla
-            __int128 sum = (__int128)a.coeff + b.coeff;
-            if (sum > INT64_MAX || sum < INT64_MIN) return overflow();
-            DecimalValue r{(int64_t)sum, a.exp};
+            int64_t sum;
+            if (!decimal_core::addOv(a.coeff, b.coeff, &sum)) return overflow();
+            DecimalValue r{sum, a.exp};
             r.normalize();
             return r;
         }
-        // Hizala: küçük eksponente çek
+        // Hizala: BÜYÜK eksponentli tarafı küçüğe çek (hassasiyet kaybı olmaz).
         if (a.exp > b.exp) {
             int32_t diff = a.exp - b.exp;
+            // 18 basamaktan fazla fark: küçük taraf yutulur (eski davranış).
             if (diff > 18) { DecimalValue r = a; r.normalize(); return r; }
-            __int128 ac = (__int128)a.coeff;
-            for (int i = 0; i < diff; i++) ac *= 10;
-            if (ac > INT64_MAX || ac < INT64_MIN) return overflow();
-            __int128 sum = ac + b.coeff;
-            if (sum > INT64_MAX || sum < INT64_MIN) return overflow();
-            DecimalValue r{(int64_t)sum, b.exp};
+            int64_t ac;
+            if (!decimal_core::scale10(a.coeff, diff, &ac)) return overflow();
+            int64_t sum;
+            if (!decimal_core::addOv(ac, b.coeff, &sum)) return overflow();
+            DecimalValue r{sum, b.exp};
             r.normalize();
             return r;
         } else {
             int32_t diff = b.exp - a.exp;
             if (diff > 18) { DecimalValue r = b; r.normalize(); return r; }
-            __int128 bc = (__int128)b.coeff;
-            for (int i = 0; i < diff; i++) bc *= 10;
-            if (bc > INT64_MAX || bc < INT64_MIN) return overflow();
-            __int128 sum = (__int128)a.coeff + bc;
-            if (sum > INT64_MAX || sum < INT64_MIN) return overflow();
-            DecimalValue r{(int64_t)sum, a.exp};
+            int64_t bc;
+            if (!decimal_core::scale10(b.coeff, diff, &bc)) return overflow();
+            int64_t sum;
+            if (!decimal_core::addOv(a.coeff, bc, &sum)) return overflow();
+            DecimalValue r{sum, a.exp};
             r.normalize();
             return r;
         }
     }
 
     static DecimalValue sub(const DecimalValue& a, const DecimalValue& b) {
-        DecimalValue nb{-b.coeff, b.exp};
-        return add(a, nb);
+        // #224: -INT64_MIN taşar (karşılığı yok) — eskiden UB idi.
+        int64_t nb;
+        if (!decimal_core::negOv(b.coeff, &nb)) return overflow();
+        return add(a, DecimalValue{nb, b.exp});
     }
 
     static DecimalValue mul(const DecimalValue& a, const DecimalValue& b) {
-        __int128 c = (__int128)a.coeff * b.coeff;
-        if (c > INT64_MAX || c < INT64_MIN) return overflow();
-        int32_t e = a.exp + b.exp;
-        DecimalValue r{(int64_t)c, e};
+        // #224: taşma bölme ile önceden denetlenir — __int128 gerekmez.
+        int64_t c;
+        if (!decimal_core::mulOv(a.coeff, b.coeff, &c)) return overflow();
+        DecimalValue r{c, a.exp + b.exp};
         r.normalize();
         return r;
     }
 
     // bölme: en fazla 18 anlamlı basamak
     static DecimalValue div(const DecimalValue& a, const DecimalValue& b) {
-        if (b.coeff == 0) return overflow(); // sıfıra bölme → overflow sentinel (VM Error'a çevirir)
+        if (b.coeff == 0) return overflow(); // sıfıra bölme → VM Error'a çevirir
+        // #224: eskiden katsayı 10^17 ile büyütülüp __int128'te bölünüyordu.
+        // Şimdi uzun bölme: her adımda bir basamak üretilir, ara değer hiçbir
+        // zaman 64-bit'i aşmaz. Üretilen basamak sayısı eksponente yansır.
         const int PREC = 17;
-        __int128 ac = (__int128)a.coeff;
-        // hassasiyet için katsayıyı büyüt
-        for (int i = 0; i < PREC; i++) ac *= 10;
-        __int128 result = ac / b.coeff;
-        int32_t resExp  = a.exp - b.exp - PREC;
-        // int64 sınırını aş: büyüklüğe göre kırp
-        while ((result > INT64_MAX || result < INT64_MIN) && resExp < 0) {
-            result /= 10;
-            resExp++;
-        }
-        if (result > INT64_MAX || result < INT64_MIN) return overflow();
-        DecimalValue r{(int64_t)result, resExp};
+        int64_t q;
+        int     digits = 0;
+        if (!decimal_core::divScaled(a.coeff, b.coeff, PREC, &q, &digits))
+            return overflow();
+        DecimalValue r{q, a.exp - b.exp - digits};
         r.normalize();
         return r;
     }

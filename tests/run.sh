@@ -9,7 +9,7 @@ FLAGS=(-std=c++20 -Wall -Wextra -I"$ROOT/src")
 SAQUT="$ROOT/build/saqut"
 
 # ── Birim testler ─────────────────────────────────────────────────────────────
-for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg test_host_abi; do
+for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg test_host_abi test_decimal_core; do
     echo "=== $t ==="
     # test_cfg buildCFG gerçeklemesini (ir_cfg.cpp) da derler — hata sınıfı
     # testi için implementasyon gerekli (#218).
@@ -24,6 +24,16 @@ for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg 
     "$CXX" "${FLAGS[@]}" "$ROOT/tests/$t.cpp" $extra -o "/tmp/saqut_$t"
     "/tmp/saqut_$t"
 done
+
+# ── Taşınabilirlik denetimi (#224) ────────────────────────────────────────────
+# decimal saQut'un sentetik tipidir: aritmetiği C++'a özgü hiçbir şeye
+# dayanamaz, çünkü WASM/JS/PHP hedeflerinde aynı sonucu vermek zorundadır.
+echo "=== tasinabilirlik: decimal cekirdegi ==="
+if grep -n "__int128" "$ROOT/src/data/decimal_core.hpp" "$ROOT/src/core/decimal.hpp" | grep -v "^[^:]*:[0-9]*: *//" | grep -v "//.*__int128"; then
+    echo "HATA: decimal cekirdeginde __int128 var — WASM/JS/PHP'ye tasinamaz"
+    exit 1
+fi
+echo "  decimal cekirdegi tasinabilir (yalniz int64/uint64)"
 
 # ── Golden testler ────────────────────────────────────────────────────────────
 echo "=== golden ==="

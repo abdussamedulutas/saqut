@@ -41,6 +41,7 @@ struct HostMeta {
 const HostMeta kHostMeta[] = {
     // core
     {"CORE_VERSION",       HostKind::Str,     HOST_PURE},
+    {"CORE_PRINT",         HostKind::Void,    HOST_PURE},
     // math — tamamı saf hesap (#89: IEEE754 korunur, throw yok)
     {"MATH_ABS",           HostKind::Int,     HOST_PURE},
     {"MATH_ABSF",          HostKind::Float,   HOST_PURE},
@@ -59,18 +60,20 @@ const HostMeta kHostMeta[] = {
     {"CAPS_DROP",          HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
     {"CAPS_HAS",           HostKind::Int,     HOST_NEEDS_CAPS | HOST_CAN_FAIL},
     // fs — byte[] döndüren readBytes heap'te array tahsis eder
-    {"FS_READ_FILE",       HostKind::Str,     HOST_CAN_FAIL},
+    {"FS_READ_FILE",       HostKind::Str,     HOST_NEEDS_CAPS | HOST_CAN_FAIL},
     {"FS_READ_BYTES",      HostKind::Ref,     HOST_NEEDS_HEAP | HOST_CAN_FAIL},
-    {"FS_WRITE_FILE",      HostKind::Void,    HOST_CAN_FAIL},
-    {"FS_WRITE_BYTES",     HostKind::Void,    HOST_CAN_FAIL},
-    {"FS_APPEND",          HostKind::Void,    HOST_CAN_FAIL},
-    {"FS_EXISTS",          HostKind::Int,     HOST_PURE},
-    {"FS_REMOVE",          HostKind::Void,    HOST_CAN_FAIL},
-    // sys — args() string[] tahsis eder ve programArgs okur
-    {"SYS_RANDOM",         HostKind::Float,   HOST_PURE},
-    {"SYS_RANDOM_INT",     HostKind::Int,     HOST_CAN_FAIL},
-    {"SYS_ENV",            HostKind::Str,     HOST_PURE},
-    {"SYS_SLEEP",          HostKind::Void,    HOST_PURE},
+    {"FS_WRITE_FILE",      HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
+    {"FS_WRITE_BYTES",     HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
+    {"FS_APPEND",          HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
+    {"FS_EXISTS",          HostKind::Int,     HOST_NEEDS_CAPS},
+    {"FS_REMOVE",          HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
+    // sys / fs — capability gerektirir (ADR-035). JIT'in HostEnv'i VM'inkinden
+    // ayrı bir caps kümesi taşıdığı için bu aile JIT dışında kalır
+    // (isSupportedCallhost: HOST_NEEDS_CAPS reddi).
+    {"SYS_RANDOM",         HostKind::Float,   HOST_NEEDS_CAPS},
+    {"SYS_RANDOM_INT",     HostKind::Int,     HOST_NEEDS_CAPS | HOST_CAN_FAIL},
+    {"SYS_ENV",            HostKind::Str,     HOST_NEEDS_CAPS},
+    {"SYS_SLEEP",          HostKind::Void,    HOST_NEEDS_CAPS},
     {"SYS_ARGS",           HostKind::Ref,     HOST_NEEDS_HEAP | HOST_NEEDS_ARGS},
     // date — saf hesap (date_calc.hpp), epoch-ms üzerinde
     {"DATE_NOW",           HostKind::Date,    HOST_PURE},

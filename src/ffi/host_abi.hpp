@@ -70,7 +70,9 @@ enum class HostKind : uint8_t {
     Float32,  // 32-bit IEEE single — d alanı ((float) truncate'li)
     Date,     // UTC epoch-ms — i alanı
     Str,      // StringObject* — p alanı
-    Decimal,  // DecimalValue* — p alanı (kutulu: coeff+exp register'a sığmaz)
+    Decimal,  // DecimalObject* — p alanı (kutulu: coeff+exp register'a sığmaz).
+              // Str'in StringObject* olmasıyla tutarlı: sınırda bileşik
+              // değerler HER ZAMAN GC nesne ailesinden bir pointer'dır.
     Ref,      // Object* (array/struct) — p alanı
     Null,     // değer yok; p == nullptr
     Void,     // dönüş yok (arity 0 dönüşlü thunk'lar)

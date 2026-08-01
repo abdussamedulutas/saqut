@@ -15,6 +15,7 @@
 #include "ir/ir_cfg.hpp"
 
 #include "data/data_registry.hpp"
+#include "ffi/host_registry.hpp"
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/declarations.hpp"
 #include "parser/nodes/expressions.hpp"
@@ -1106,8 +1107,12 @@ int IRGenerator::generateExpression(ASTNode* node) {
             // CALLHOST: sayısal host id ile FFI dispatch (ADR-034, #107)
             int destSlot = ffiReturnsVoid ? -1 : freshSlot();
             Instruction ins(Opcode::CALLHOST);
+            // #227: intValue artık BİRLEŞİK registry indeksidir (kHostFnBase
+            // + host id). functionName yalnızca IR dump okunabilirliği için
+            // kalır — dispatch ona BAKMAZ, sıcak yolda string karşılaştırması
+            // yok.
             ins.functionName = "__ffi__";
-            ins.intValue = ffiHostId;
+            ins.intValue = kHostFnBase + ffiHostId;
             ins.dest = destSlot;
             ins.argSlots = argSlots;
             ins.requiredCap = ffiRequiredCap;
@@ -1117,9 +1122,12 @@ int IRGenerator::generateExpression(ASTNode* node) {
             currentFunction_->instructions.push_back(std::move(ins));
             return destSlot;
         } else if (isBuiltin) {
-            // CALLHOST: host (C++) fonksiyonu çağır (print gibi), dönüş değeri yok
+            // CALLHOST: çekirdek host fonksiyonu (print). #227: artık registry'de
+            // sıradan bir kayıt — intValue birleşik indeksi taşır, dispatch
+            // functionName'e BAKMAZ (o yalnızca IR dump okunabilirliği için).
             Instruction ins(Opcode::CALLHOST);
             ins.functionName = fnName;
+            ins.intValue = hostEntryIndex(fnName == "print" ? "CORE_PRINT" : "");
             ins.argSlots = argSlots;
             ins.sourceLine = call->loc.line;
             ins.sourceCol = call->loc.column;
@@ -1156,8 +1164,9 @@ int IRGenerator::generateExpression(ASTNode* node) {
         int destSlot = returnsVoid ? -1 : freshSlot();
 
         Instruction ins(Opcode::CALLHOST);
+        // #227: birleşik registry indeksi (kBuiltinBase + metod id).
         ins.functionName = "__builtin_method__";
-        ins.intValue = sc->builtinId;
+        ins.intValue = kBuiltinBase + sc->builtinId;
         ins.argSlots = std::move(argSlots);
         ins.dest = destSlot;
         ins.sourceLine = sc->loc.line;
@@ -1801,6 +1810,25 @@ void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
                 auto it = funcReturnKind_.find(ins.functionName);
                 if (it != funcReturnKind_.end())
                     nk = it->second;
+                break;
+            }
+            case Opcode::CALLHOST: {
+                // #227: dönüş türü registry'den gelir. Bu bilgi olmadan JIT
+                // double dönen bir host fonksiyonunun sonucunu Int register'a
+                // yazmaya çalışır ve MIR tip hatası verir (ölçüldü: MATH_PI).
+                const HostEntry* he = hostEntryAt(ins.intValue);
+                if (he) {
+                    switch (he->retKind) {
+                        case HostKind::Float:   nk = SlotType::Float;   break;
+                        case HostKind::Float32: nk = SlotType::Float32; break;
+                        case HostKind::LongInt: nk = SlotType::LongInt; break;
+                        case HostKind::Date:    nk = SlotType::Date;    break;
+                        case HostKind::Str:     nk = SlotType::Str;     break;
+                        case HostKind::Decimal: nk = SlotType::Decimal; break;
+                        case HostKind::Ref:     nk = SlotType::Ref;     break;
+                        default: break;   // Int / Void / Null → Int
+                    }
+                }
                 break;
             }
             // FIELD_GET/ARRAY_GET/LOAD_GLOBAL: sonuç türü opcode'dan

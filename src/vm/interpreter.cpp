@@ -1341,7 +1341,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 bf.env      = &benv;
                 bf.retOwner = &hostRetOwner_;
 
-                if (rt_host_call(kBuiltinBase + instr.intValue, &bf) != 0) {
+                if (rt_host_call(instr.intValue, &bf) != 0) {
                     pendingThrow_ = makeErrorValue(bf.err.message,
                                                    bf.err.code.empty() ? "E_BUILTIN" : bf.err.code,
                                                    instr.sourceLine, instr.sourceCol);
@@ -1381,7 +1381,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 f.env      = &env;
                 f.retOwner = &hostRetOwner_;
 
-                if (rt_host_call(kHostFnBase + instr.intValue, &f) != 0) {
+                if (rt_host_call(instr.intValue, &f) != 0) {
                     pendingThrow_ = makeErrorValue(f.err.message,
                                                    f.err.code.empty() ? "E_FFI" : f.err.code,
                                                    instr.sourceLine, instr.sourceCol);

@@ -10,6 +10,8 @@
 #include "ffi/host_functions.hpp"
 #include "ffi/host_bridge.hpp"
 #include <chrono>
+#include <functional>
+#include <iostream>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -202,8 +204,13 @@ static int sys_random(HostCallFrame* f) {
     static std::random_device rd;
     static std::mt19937_64 gen(rd());
     std::uniform_real_distribution<double> dist(0.0, 1.0);
-    // Eski davranış Value::fromFloat (double) idi — root.sqt `float` yazsa da
-    // gözlemlenen çıktı double biçimidir. Birebir korunur.
+    // Eski davranış Value::fromFloat (double) — root.sqt `float` yazsa da
+    // gözlemlenen çıktı double biçimidir, birebir korunur.
+    //
+    // NOT (#227): bildirim ile gövde arasındaki bu uyumsuzluk gerçektir ve
+    // JIT'te MIR tip hatasına yol açar ('dge': Got float, expected double).
+    // Bugün SYS_RANDOM zaten capability gerektirdiği için JIT dışında;
+    // düzeltilirse ikisi birlikte ele alınmalı.
     f->ret = HostSlot::fromFloat(dist(gen));
     return 0;
 }
@@ -271,6 +278,24 @@ static int date_now(HostCallFrame* f) {
 
 // "2026-07-12T10:00:00Z" — v1 yalnızca UTC (ADR-035); başka format → null.
 // pattern alt kümesi: yyyy MM dd HH mm ss (ADR-035'te sabitlenir)
+// #227: print — registry'de sıradan bir kayıt. Öncesinde CALLHOST'un üçüncü
+// dalıydı (functionName == "print" → executeHostFunction) ve JIT'te tek özel
+// durumdu. Artık diğer host fonksiyonlarıyla aynı yoldan geçer.
+//
+// Çıktı yönlendirmesi (DAP modu, #105) env->outputSink üzerinden gelir;
+// bağlı değilse doğrudan stdout.
+static int core_print(HostCallFrame* f) {
+    if (f->argc < 1) { f->ret = HostSlot::voidVal(); return 0; }
+    std::string text = fromHostSlot(f->args[0]).toString();
+    if (f->env && f->env->outputSink) {
+        (*static_cast<std::function<void(const std::string&)>*>(f->env->outputSink))(text);
+    } else {
+        std::cout << text << std::flush;
+    }
+    f->ret = HostSlot::voidVal();
+    return 0;
+}
+
 // core — derleyici sürümü (SAQUT_VERSION derleme zamanında gömülür)
 static int core_version(HostCallFrame* f) {
     hostSetRetString(*f, SAQUT_VERSION);
@@ -330,6 +355,7 @@ const std::vector<HostFn>& hostFnTable() {
         { "DATE_PARSE", 1, nullptr },
         { "DATE_FORMAT", 2, nullptr },
         { "CORE_VERSION", 0, core_version },
+        { "CORE_PRINT",   1, core_print   },
     };
     return table;
 }

@@ -168,7 +168,7 @@ nlohmann::json LspHandler::handleInitialize(const nlohmann::json& id,
     };
     nlohmann::json result = {
         {"capabilities", capabilities},
-        {"serverInfo",   {{"name", "saQut"}, {"version", "0.1.0"}}}
+        {"serverInfo",   {{"name", "saQut"}, {"version", SAQUT_VERSION}}}
     };
     return JsonRpc::makeResponse(id, result);
 }

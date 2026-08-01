@@ -48,7 +48,7 @@ struct HostRetOwner;  // aşağıda tanımlı
 struct HostCallScratch {
     std::vector<HostSlot>                      slots;
     std::vector<std::unique_ptr<StringObject>> strings;
-    std::vector<std::unique_ptr<DecimalValue>> decimals;
+    std::vector<std::unique_ptr<DecimalObject>> decimals;
 
     void reset() {
         slots.clear();
@@ -73,8 +73,8 @@ struct HostCallScratch {
 // hem sızıntısızdır.
 // ----------------------------------------------------------------------------
 struct HostRetOwner {
-    StringObject string;
-    DecimalValue decimal;
+    StringObject  string;
+    DecimalObject decimal{DecimalValue{}};
 };
 
 // Thunk'ların dönüş kurma yardımcıları — ret.p'yi elle yazmak sarkan pointer
@@ -87,7 +87,7 @@ inline void hostSetRetString(HostCallFrame& f, std::string s) {
 
 inline void hostSetRetDecimal(HostCallFrame& f, const DecimalValue& d) {
     auto* owner = static_cast<HostRetOwner*>(f.retOwner);
-    owner->decimal = d;
+    owner->decimal.val = d;
     f.ret = HostSlot::fromDecimal(&owner->decimal);
 }
 
@@ -128,7 +128,7 @@ inline HostSlot toHostSlot(const Value& v, HostCallScratch& scratch) {
             return HostSlot::fromStr(scratch.strings.back().get());
         }
         case ValueKind::Decimal: {
-            scratch.decimals.push_back(std::make_unique<DecimalValue>(v.decimalValue));
+            scratch.decimals.push_back(std::make_unique<DecimalObject>(v.decimalValue));
             return HostSlot::fromDecimal(scratch.decimals.back().get());
         }
     }
@@ -156,7 +156,10 @@ inline Value fromHostSlot(const HostSlot& s) {
             return s.p ? Value::fromString(static_cast<StringObject*>(s.p)->data)
                        : Value::fromString("");
         case HostKind::Decimal:
-            return s.p ? Value::fromDecimal(*static_cast<DecimalValue*>(s.p))
+            // Sınırda decimal HER ZAMAN DecimalObject*'tır (VM scratch'i de,
+            // JIT'in kutuladığı da). Ham DecimalValue* okumak 8 bayt kayma
+            // demekti — ölçüldü: print(decimal) ham katsayı basıyordu.
+            return s.p ? Value::fromDecimal(static_cast<DecimalObject*>(s.p)->val)
                        : Value::fromDecimal(DecimalValue{});
     }
     return Value::null();

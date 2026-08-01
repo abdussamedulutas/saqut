@@ -79,6 +79,8 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
             } else if (child->kind == ASTKind::FunctionDecl) {
                 auto* fnDecl = static_cast<FunctionDeclNode*>(child);
                 funcReturnKind_[fnDecl->name] = slotTypeFromTypeName(fnDecl->returnType);
+                funcReturnNullable_[fnDecl->name] = !fnDecl->returnType.empty() &&
+                                                     fnDecl->returnType.back() == '?';
             }
         }
         program.moduleGlobalCounts[unit.moduleId] = moduleGlobalCount;
@@ -158,6 +160,8 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
             continue;
         auto* fnDecl = (FunctionDeclNode*) child;
         funcReturnKind_[fnDecl->name] = slotTypeFromTypeName(fnDecl->returnType);
+        funcReturnNullable_[fnDecl->name] = !fnDecl->returnType.empty() &&
+                                             fnDecl->returnType.back() == '?';
     }
 
     // 2. Geçiş: fonksiyonları üret
@@ -1081,6 +1085,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
         bool isBuiltin = false;
         int ffiHostId = -1;
         bool ffiReturnsVoid = false;
+        const Type* ffiReturnType = nullptr;
         std::optional<Capability> ffiRequiredCap;
 
         if (call->callee && call->callee->kind == ASTKind::Identifier) {
@@ -1097,6 +1102,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 ffiHostId = calleeId->resolvedSymbol->hostFnId;
                 ffiReturnsVoid = calleeId->resolvedSymbol->type.returnType &&
                                  calleeId->resolvedSymbol->type.returnType->isVoid();
+                ffiReturnType = calleeId->resolvedSymbol->type.returnType.get();
                 ffiRequiredCap = calleeId->resolvedSymbol->requiredCap;
             }
         }
@@ -1120,6 +1126,10 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.dest = destSlot;
             ins.argSlots = argSlots;
             ins.requiredCap = ffiRequiredCap;
+            if (!ffiReturnsVoid && ffiReturnType) {
+                ins.valueType = slotTypeFromType(*ffiReturnType);
+                ins.valueNullable = ffiReturnType->nullable;
+            }
             ins.sourceLine = call->loc.line;
             ins.sourceCol = call->loc.column;
             ins.sourceFile = call->loc.filePath();
@@ -1145,6 +1155,8 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.dest = destSlot;
             ins.functionName = fnName;
             ins.argSlots = argSlots;
+            auto rn = funcReturnNullable_.find(fnName);
+            ins.valueNullable = rn != funcReturnNullable_.end() && rn->second;
             ins.sourceLine = call->loc.line;
             ins.sourceCol = call->loc.column;
             ins.sourceFile = call->loc.filePath();
@@ -1174,6 +1186,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
         ins.argSlots = std::move(argSlots);
         ins.dest = destSlot;
         if (!returnsVoid) ins.valueType = slotTypeFromType(sc->resolvedType);
+        if (!returnsVoid) ins.valueNullable = sc->resolvedType.nullable;
         ins.sourceLine = sc->loc.line;
         ins.sourceCol = sc->loc.column;
         currentFunction_->instructions.push_back(std::move(ins));
@@ -1231,7 +1244,7 @@ int IRGenerator::generateExpression(ASTNode* node) {
         int idx = getStructFieldIndex(structName, ma->member);
         if (idx >= 0)
             emitFieldGet(destSlot, objSlot, idx, {},
-                         slotTypeFromType(ma->resolvedType));
+                         slotTypeFromType(ma->resolvedType), ma->resolvedType.nullable);
         return destSlot;
     }
     case ASTKind::ArrayLiteral: {
@@ -1892,6 +1905,15 @@ void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
             case Opcode::LOAD_NULL:
                 if (markNullable(ins.dest)) changed = true;
                 break;
+            case Opcode::CALLHOST:
+                if (ins.valueNullable && markNullable(ins.dest)) changed = true;
+                break;
+            case Opcode::CALL:
+                if (ins.valueNullable && markNullable(ins.dest)) changed = true;
+                break;
+            case Opcode::FIELD_GET:
+                if (ins.valueNullable && markNullable(ins.dest)) changed = true;
+                break;
             case Opcode::LOAD_SLOT:
                 if (ins.src >= 0 && ins.src < fn->slotCount &&
                     fn->slotNullable[static_cast<size_t>(ins.src)])
@@ -2099,12 +2121,14 @@ void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int
 }
 
 void IRGenerator::emitFieldGet(int destSlot, int objSlot, int fieldIdx,
-                                const SourceLocation& loc, SlotType valueType) {
+                                const SourceLocation& loc, SlotType valueType,
+                                bool valueNullable) {
     Instruction ins(Opcode::FIELD_GET);
     ins.dest = destSlot;
     ins.src = objSlot;
     ins.intValue = fieldIdx;
     ins.valueType = valueType;
+    ins.valueNullable = valueNullable;
     auto el = effectiveLoc(loc);
     ins.sourceLine = el.line;
     ins.sourceCol = el.column;

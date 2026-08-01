@@ -323,6 +323,7 @@ struct Instruction {
     // GET dest'ini buradan çözer; JIT register/köprü tipi buradan seçer. SET-tarafı
     // (FIELD_SET/ARRAY_SET/STORE_GLOBAL) gerektirmez — değer slot'undan bilinir.
     SlotType valueType = SlotType::Unknown;
+    bool valueNullable = false;
 
     // Kaynak konum — yalnızca hata-odaklı opcode'larda (CALL, RETURN, THROW,
     // ARRAY_GET/SET, FIELD_SET) set edilir. filePath IRFunction::moduleId'den

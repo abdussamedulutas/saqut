@@ -100,7 +100,8 @@ private:
                        int fieldCount, const SourceLocation& loc = {});
     void emitFieldGet(int destSlot, int objSlot, int fieldIdx,
                       const SourceLocation& loc = {},
-                      SlotType valueType = SlotType::Unknown);
+                      SlotType valueType = SlotType::Unknown,
+                      bool valueNullable = false);
     void emitFieldSet(int objSlot, int fieldIdx, int valSlot,
                       int line = 0, int col = 0);
     // #206: arrayElemKind parametresi eklendi — packed primitive array'ler için
@@ -201,6 +202,7 @@ private:
     // Fonksiyon adı → dönüş türü. Gövdeler üretilmeden önce tüm FunctionDecl'
     // lerin dönüş tipinden doldurulur (CALL sonuç slot'unun türü için).
     std::unordered_map<std::string, SlotType> funcReturnKind_;
+    std::unordered_map<std::string, bool> funcReturnNullable_;
 
     // Bir tip adını ("float"/"int"/struct/array...) SlotType'a eşler.
     SlotType slotTypeFromTypeName(const std::string& typeName) const;

@@ -55,9 +55,27 @@ int   g_jitGcThreshold = 1024;
 std::vector<int64_t> g_jitGlobalI;
 std::vector<double> g_jitGlobalD;
 std::vector<void*> g_jitGlobalP;
+int64_t g_jitCallNullArgs[64]{};
+int64_t g_jitCallRetNull = 0;
 
 StringObject*  jitNewString(std::string v);
 DecimalObject* jitBoxDecimal(const DecimalValue& v);
+
+extern "C" void rt_jit_call_arg_null_set(int64_t index, int64_t value) {
+    if (index >= 0 && index < 64) g_jitCallNullArgs[index] = value;
+}
+
+extern "C" int64_t rt_jit_call_arg_null_get(int64_t index) {
+    return index >= 0 && index < 64 ? g_jitCallNullArgs[index] : 0;
+}
+
+extern "C" void rt_jit_call_ret_null_set(int64_t value) {
+    g_jitCallRetNull = value;
+}
+
+extern "C" int64_t rt_jit_call_ret_null_get() {
+    return g_jitCallRetNull;
+}
 
 extern "C" int64_t rt_jit_global_load_i(int64_t index) {
     if (index < 0 || index >= (int64_t)g_jitGlobalI.size()) return 0;
@@ -261,6 +279,9 @@ extern "C" void*   rt_jit_field_get_p(void* o, int64_t idx) {
     if (v->kind == ValueKind::Decimal) return jitBoxDecimal(v->decimalValue);
     return v->ref;
 }
+extern "C" int64_t rt_jit_field_is_null(void* o, int64_t idx) {
+    return jitFieldAt(o, idx)->kind == ValueKind::Null ? 1 : 0;
+}
 
 extern "C" void rt_jit_field_set_i(void* o, int64_t idx, int64_t v) {
     *jitFieldAt(o, idx) = Value::fromLongInt(v);
@@ -304,6 +325,17 @@ extern "C" void rt_jit_host_arg_d(int64_t idx, int64_t kind, double v) {
     g_jitHostArgs[idx].d    = v;
 }
 
+extern "C" void rt_jit_host_arg_nullable_i(int64_t idx, int64_t kind,
+                                             int64_t v, int64_t isNull) {
+    rt_jit_host_arg_i(idx, isNull ? (int64_t)HostKind::Null : kind, v);
+}
+
+extern "C" void rt_jit_host_arg_nullable_d(int64_t idx, int64_t kind,
+                                             double v, int64_t isNull) {
+    if (isNull) rt_jit_host_arg_i(idx, (int64_t)HostKind::Null, 0);
+    else rt_jit_host_arg_d(idx, kind, v);
+}
+
 extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
     g_jitHostFrame.reset();
     g_jitHostFrame.args     = g_jitHostArgs;
@@ -330,6 +362,10 @@ extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
 extern "C" double rt_jit_host_call_d(int64_t entryId, int64_t argc) {
     (void)rt_jit_host_call(entryId, argc);
     return g_jitHostFrame.ret.d;
+}
+
+extern "C" int64_t rt_jit_host_ret_is_null() {
+    return g_jitHostFrame.ret.kind == HostKind::Null ? 1 : 0;
 }
 
 // ── print(int) trampoline'i — VM'in Value::toString()'iyle birebir (ADR-024).
@@ -636,22 +672,13 @@ SlotType slotKindOf(const IRFunction& fn, int slot) {
     return SlotType::Int;
 }
 
-bool isSupportedCallhost(const Instruction& instr, const std::vector<bool>& fnNullable) {
+bool isSupportedCallhost(const Instruction& instr, const std::vector<bool>&) {
     if ((int)instr.argSlots.size() > kMaxHostArgs) return false;
     const HostEntry* he = hostEntryAt(instr.intValue);
     if (!he || !he->thunk) return false;
     // JIT'in HostEnv'i VM'inkinden ayrı bir caps kümesi taşır: caps::has()
     // VM'de 1, JIT'te 0 dönerdi (ölçüldü: golden/caps/drop_and_has).
     if (he->flags & (HOST_NEEDS_CAPS | HOST_NEEDS_ARGS)) return false;
-    // Trampolin yalnızca ham 64-bit taşır; HostSlot::kind kaybolur, null ile
-    // 0 ayırt edilemez (ölçüldü: string::indexOf JIT'te 0, VM'de null).
-    if (instr.dest >= 0 && instr.dest < (int)fnNullable.size() &&
-        fnNullable[static_cast<size_t>(instr.dest)])
-        return false;
-    static const char* kNullableReturns[] = {"indexOf", "DATE_PARSE", "SYS_ENV"};
-    for (const char* n : kNullableReturns)
-        if (std::strcmp(he->symbolicId, n) == 0) return false;
-
     // Dönüş türü ELEMAN TİPİNE bağlı olan metodlar reddedilir: registry'nin
     // retKind'i statik bir değerdir (Int), oysa gerçek tür receiver'ın eleman
     // tipidir. Trampolin ham 64-bit taşıdığı için float/string elemanlı bir
@@ -776,6 +803,12 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
             switch (instr.opcode) {
                 case Opcode::EQUAL_EQUAL:
                 case Opcode::NOT_EQUAL:
+                case Opcode::LESS:
+                case Opcode::LESS_EQUAL:
+                case Opcode::GREATER:
+                case Opcode::GREATER_EQUAL:
+                case Opcode::RETURN:
+                case Opcode::FIELD_GET:
                 case Opcode::LOAD_NULL:
                 case Opcode::LOAD_SLOT:
                     break;  // null-farkındalıklı
@@ -791,18 +824,6 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
             }
         }
 
-        // ADR-021: nullable alanlı struct'lar JIT dışında. FIELD_GET ham
-        // 64-bit döndürür; null ile 0 ayırt edilemez (ölçüldü:
-        // zero_init_nullable VM "1101110711" / JIT "1100000701").
-        // #221'deki isNull bayrağının alan okumalarına yayılması ayrı iş.
-        for (const auto& kv : fn.structFieldNullable)
-            for (bool b : kv.second)
-                if (b) {
-                    outReason.functionName = name;
-                    outReason.opcodeName   = "<nullable struct alani>";
-                    return false;
-                }
-
         for (SlotType st : fn.slotTypes) {
             // Int/LongInt/Float/Float32 register-skaler; Str/Decimal kutulu
             // pointer (I64, ADR-037). Ref hâlâ sonraki dilimde (shadow stack).
@@ -811,7 +832,7 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
             if (st != SlotType::Int && st != SlotType::LongInt &&
                 st != SlotType::Float && st != SlotType::Float32 &&
                 st != SlotType::Str && st != SlotType::Decimal &&
-                st != SlotType::Ref) {
+                st != SlotType::Ref && st != SlotType::Date) {
                 outReason.functionName = name;
                 outReason.opcodeName =
                     std::string("<desteklenmeyen slot turu: ") + slotTypeName(st) + ">";
@@ -852,6 +873,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     g_jitGlobalI.assign((size_t)program.globalCount, 0);
     g_jitGlobalD.assign((size_t)program.globalCount, 0.0);
     g_jitGlobalP.assign((size_t)program.globalCount, nullptr);
+    std::fill(std::begin(g_jitCallNullArgs), std::end(g_jitCallNullArgs), 0);
+    g_jitCallRetNull = 0;
     jitShadowStack().clear();
     g_jitStructMeta.clear();
 
@@ -975,6 +998,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t fgetDImport     = MIR_new_import(ctx, "rt_jit_field_get_d");
     MIR_item_t fgetPProto      = MIR_new_proto_arr(ctx, "fgp_proto", 1, &i64Ret, 2, fgetVars);
     MIR_item_t fgetPImport     = MIR_new_import(ctx, "rt_jit_field_get_p");
+    MIR_item_t fgetNullProto   = MIR_new_proto_arr(ctx, "fgn_proto", 1, &i64Ret, 2, fgetVars);
+    MIR_item_t fgetNullImport  = MIR_new_import(ctx, "rt_jit_field_is_null");
     MIR_var_t  fsetIVars[3]    = {{MIR_T_I64, "o", 0}, {MIR_T_I64, "i", 0}, {MIR_T_I64, "v", 0}};
     MIR_item_t fsetIProto      = MIR_new_proto_arr(ctx, "fsi_proto", 0, nullptr, 3, fsetIVars);
     MIR_item_t fsetIImport     = MIR_new_import(ctx, "rt_jit_field_set_i");
@@ -990,11 +1015,31 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_var_t  hostArgDVars[3] = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "k", 0}, {MIR_T_D, "v", 0}};
     MIR_item_t hostArgDProto   = MIR_new_proto_arr(ctx, "host_arg_d_proto", 0, nullptr, 3, hostArgDVars);
     MIR_item_t hostArgDImport  = MIR_new_import(ctx, "rt_jit_host_arg_d");
+    MIR_var_t hostArgNIVars[4] = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "k", 0},
+                                  {MIR_T_I64, "v", 0}, {MIR_T_I64, "n", 0}};
+    MIR_item_t hostArgNIProto = MIR_new_proto_arr(ctx, "host_arg_ni_proto", 0, nullptr, 4, hostArgNIVars);
+    MIR_item_t hostArgNIImport = MIR_new_import(ctx, "rt_jit_host_arg_nullable_i");
+    MIR_var_t hostArgNDVars[4] = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "k", 0},
+                                  {MIR_T_D, "v", 0}, {MIR_T_I64, "n", 0}};
+    MIR_item_t hostArgNDProto = MIR_new_proto_arr(ctx, "host_arg_nd_proto", 0, nullptr, 4, hostArgNDVars);
+    MIR_item_t hostArgNDImport = MIR_new_import(ctx, "rt_jit_host_arg_nullable_d");
     MIR_var_t  hostCallVars[2] = {{MIR_T_I64, "e", 0}, {MIR_T_I64, "n", 0}};
     MIR_item_t hostCallProto   = MIR_new_proto_arr(ctx, "host_call_proto", 1, &i64Ret, 2, hostCallVars);
     MIR_item_t hostCallImport  = MIR_new_import(ctx, "rt_jit_host_call");
     MIR_item_t hostCallDProto  = MIR_new_proto_arr(ctx, "host_call_d_proto", 1, &dRet, 2, hostCallVars);
     MIR_item_t hostCallDImport = MIR_new_import(ctx, "rt_jit_host_call_d");
+    MIR_item_t hostRetNullProto = MIR_new_proto_arr(ctx, "host_ret_null_proto", 1, &i64Ret, 0, nullptr);
+    MIR_item_t hostRetNullImport = MIR_new_import(ctx, "rt_jit_host_ret_is_null");
+    MIR_var_t callNullSetVars[2] = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "n", 0}};
+    MIR_item_t callArgNullSetProto = MIR_new_proto_arr(ctx, "call_arg_null_set_proto", 0, nullptr, 2, callNullSetVars);
+    MIR_item_t callArgNullSetImport = MIR_new_import(ctx, "rt_jit_call_arg_null_set");
+    MIR_var_t callNullGetVars[1] = {{MIR_T_I64, "i", 0}};
+    MIR_item_t callArgNullGetProto = MIR_new_proto_arr(ctx, "call_arg_null_get_proto", 1, &i64Ret, 1, callNullGetVars);
+    MIR_item_t callArgNullGetImport = MIR_new_import(ctx, "rt_jit_call_arg_null_get");
+    MIR_item_t callRetNullSetProto = MIR_new_proto_arr(ctx, "call_ret_null_set_proto", 0, nullptr, 1, callNullGetVars);
+    MIR_item_t callRetNullSetImport = MIR_new_import(ctx, "rt_jit_call_ret_null_set");
+    MIR_item_t callRetNullGetProto = MIR_new_proto_arr(ctx, "call_ret_null_get_proto", 1, &i64Ret, 0, nullptr);
+    MIR_item_t callRetNullGetImport = MIR_new_import(ctx, "rt_jit_call_ret_null_get");
     MIR_var_t globalIVars[2] = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "v", 0}};
     MIR_item_t globalLoadIProto = MIR_new_proto_arr(ctx, "global_load_i_proto", 1, &i64Ret, 1, globalIVars);
     MIR_item_t globalLoadIImport = MIR_new_import(ctx, "rt_jit_global_load_i");
@@ -1257,6 +1302,15 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 MIR_new_ref_op(ctx, ssProto), MIR_new_ref_op(ctx, ssImport),
                 MIR_new_int_op(ctx, (int64_t)slot), R(slot)));
         };
+
+        for (int pi = 0; pi < fn.paramCount; ++pi) {
+            if (!isNullableSlot(pi)) continue;
+            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                MIR_new_ref_op(ctx, callArgNullGetProto),
+                MIR_new_ref_op(ctx, callArgNullGetImport),
+                MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(pi)]),
+                MIR_new_int_op(ctx, pi)));
+        }
 
         for (size_t i = 0; i < instrN; i++) {
             MIR_append_insn(ctx, func, labelAt[i]);
@@ -1684,6 +1738,16 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     break;
                 case Opcode::CALL: {
                     const FuncEntry& callee = funcMap.at(instr.functionName);
+                    for (size_t ai = 0; ai < instr.argSlots.size(); ++ai) {
+                        int as = instr.argSlots[ai];
+                        MIR_op_t nullOp = isNullableSlot(as)
+                            ? MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(as)])
+                            : MIR_new_int_op(ctx, 0);
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                            MIR_new_ref_op(ctx, callArgNullSetProto),
+                            MIR_new_ref_op(ctx, callArgNullSetImport),
+                            MIR_new_int_op(ctx, (int64_t)ai), nullOp));
+                    }
                     std::vector<MIR_op_t> ops;
                     ops.push_back(MIR_new_ref_op(ctx, callee.protoItem));
                     ops.push_back(MIR_new_ref_op(ctx, callee.callRef));
@@ -1691,6 +1755,11 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     for (int argSlot : instr.argSlots) ops.push_back(R(argSlot));
                     MIR_append_insn(ctx, func,
                         MIR_new_insn_arr(ctx, MIR_CALL, ops.size(), ops.data()));
+                    if (isNullableSlot(instr.dest))
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                            MIR_new_ref_op(ctx, callRetNullGetProto),
+                            MIR_new_ref_op(ctx, callRetNullGetImport),
+                            MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(instr.dest)])));
                     SlotType rt = slotKindOf(fn, instr.dest);
                     if (rt == SlotType::Str || rt == SlotType::Decimal || rt == SlotType::Ref)
                         emitShadowSet(instr.dest);
@@ -1790,6 +1859,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         R(instr.dest), R(instr.src),
                         MIR_new_int_op(ctx, instr.intValue)));
                     if (isP) emitShadowSet(instr.dest);
+                    if (isNullableSlot(instr.dest))
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
+                            MIR_new_ref_op(ctx, fgetNullProto),
+                            MIR_new_ref_op(ctx, fgetNullImport),
+                            MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(instr.dest)]),
+                            R(instr.src), MIR_new_int_op(ctx, instr.intValue)));
                     break;
                 }
                 case Opcode::FIELD_SET: {
@@ -1821,12 +1896,23 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                             default:                hk = HostKind::Int;     break;
                         }
                         bool isD = (ast == SlotType::Float || ast == SlotType::Float32);
-                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
-                            MIR_new_ref_op(ctx, isD ? hostArgDProto : hostArgIProto),
-                            MIR_new_ref_op(ctx, isD ? hostArgDImport : hostArgIImport),
-                            MIR_new_int_op(ctx, (int64_t)ai),
-                            MIR_new_int_op(ctx, (int64_t)hk),
-                            isD ? asDoubleOperand(as) : R(as)));
+                        bool isN = isNullableSlot(as);
+                        if (isN) {
+                            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 6,
+                                MIR_new_ref_op(ctx, isD ? hostArgNDProto : hostArgNIProto),
+                                MIR_new_ref_op(ctx, isD ? hostArgNDImport : hostArgNIImport),
+                                MIR_new_int_op(ctx, (int64_t)ai),
+                                MIR_new_int_op(ctx, (int64_t)hk),
+                                isD ? asDoubleOperand(as) : R(as),
+                                MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(as)])));
+                        } else {
+                            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
+                                MIR_new_ref_op(ctx, isD ? hostArgDProto : hostArgIProto),
+                                MIR_new_ref_op(ctx, isD ? hostArgDImport : hostArgIImport),
+                                MIR_new_int_op(ctx, (int64_t)ai),
+                                MIR_new_int_op(ctx, (int64_t)hk),
+                                isD ? asDoubleOperand(as) : R(as)));
+                        }
                     }
                     const HostEntry* he = hostEntryAt(instr.intValue);
                     // valueType doluysa (built-in metodlar) o otoritedir:
@@ -1838,6 +1924,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                             case SlotType::Float32: rk = HostKind::Float32; break;
                             case SlotType::Str:     rk = HostKind::Str;     break;
                             case SlotType::Decimal: rk = HostKind::Decimal; break;
+                            case SlotType::Date:    rk = HostKind::Date;    break;
                             case SlotType::Ref:     rk = HostKind::Ref;     break;
                             case SlotType::LongInt: rk = HostKind::LongInt; break;
                             default: break;
@@ -1863,6 +1950,11 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     if (needF)
                         MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_D2F,
                             R(instr.dest), MIR_new_reg_op(ctx, dst)));
+                    if (instr.dest >= 0 && isNullableSlot(instr.dest))
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                            MIR_new_ref_op(ctx, hostRetNullProto),
+                            MIR_new_ref_op(ctx, hostRetNullImport),
+                            MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(instr.dest)])));
                     // Pointer dönüşü GC'ye görünür olmalı: host thunk'ı heap'te
                     // nesne üretmiş olabilir (string metodları, split).
                     if (instr.dest >= 0 &&
@@ -1879,6 +1971,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_insn(ctx, MIR_MOV, R(instr.dest), MIR_new_int_op(ctx, 0)));
                     break;
                 case Opcode::RETURN:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                        MIR_new_ref_op(ctx, callRetNullSetProto),
+                        MIR_new_ref_op(ctx, callRetNullSetImport),
+                        isNullableSlot(instr.src)
+                            ? MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(instr.src)])
+                            : MIR_new_int_op(ctx, 0)));
                     MIR_append_insn(ctx, func, MIR_new_ret_insn(ctx, 1, R(instr.src)));
                     break;
                 default:
@@ -1913,6 +2011,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                             MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(instr.src)])));
                     else
                         setNullFlag(instr.dest, 0);
+                } else if (instr.opcode == Opcode::CALLHOST || instr.opcode == Opcode::CALL ||
+                           instr.opcode == Opcode::FIELD_GET) {
                 } else {
                     setNullFlag(instr.dest, 0);
                 }
@@ -1942,13 +2042,21 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_field_get_i", reinterpret_cast<void*>(rt_jit_field_get_i));
     MIR_load_external(ctx, "rt_jit_field_get_d", reinterpret_cast<void*>(rt_jit_field_get_d));
     MIR_load_external(ctx, "rt_jit_field_get_p", reinterpret_cast<void*>(rt_jit_field_get_p));
+    MIR_load_external(ctx, "rt_jit_field_is_null", reinterpret_cast<void*>(rt_jit_field_is_null));
     MIR_load_external(ctx, "rt_jit_field_set_i", reinterpret_cast<void*>(rt_jit_field_set_i));
     MIR_load_external(ctx, "rt_jit_field_set_d", reinterpret_cast<void*>(rt_jit_field_set_d));
     MIR_load_external(ctx, "rt_jit_field_set_p", reinterpret_cast<void*>(rt_jit_field_set_p));
     MIR_load_external(ctx, "rt_jit_host_arg_i",  reinterpret_cast<void*>(rt_jit_host_arg_i));
     MIR_load_external(ctx, "rt_jit_host_arg_d",  reinterpret_cast<void*>(rt_jit_host_arg_d));
+    MIR_load_external(ctx, "rt_jit_host_arg_nullable_i", reinterpret_cast<void*>(rt_jit_host_arg_nullable_i));
+    MIR_load_external(ctx, "rt_jit_host_arg_nullable_d", reinterpret_cast<void*>(rt_jit_host_arg_nullable_d));
     MIR_load_external(ctx, "rt_jit_host_call",   reinterpret_cast<void*>(rt_jit_host_call));
     MIR_load_external(ctx, "rt_jit_host_call_d", reinterpret_cast<void*>(rt_jit_host_call_d));
+    MIR_load_external(ctx, "rt_jit_host_ret_is_null", reinterpret_cast<void*>(rt_jit_host_ret_is_null));
+    MIR_load_external(ctx, "rt_jit_call_arg_null_set", reinterpret_cast<void*>(rt_jit_call_arg_null_set));
+    MIR_load_external(ctx, "rt_jit_call_arg_null_get", reinterpret_cast<void*>(rt_jit_call_arg_null_get));
+    MIR_load_external(ctx, "rt_jit_call_ret_null_set", reinterpret_cast<void*>(rt_jit_call_ret_null_set));
+    MIR_load_external(ctx, "rt_jit_call_ret_null_get", reinterpret_cast<void*>(rt_jit_call_ret_null_get));
     MIR_load_external(ctx, "rt_jit_global_load_i", reinterpret_cast<void*>(rt_jit_global_load_i));
     MIR_load_external(ctx, "rt_jit_global_store_i", reinterpret_cast<void*>(rt_jit_global_store_i));
     MIR_load_external(ctx, "rt_jit_global_load_d", reinterpret_cast<void*>(rt_jit_global_load_d));

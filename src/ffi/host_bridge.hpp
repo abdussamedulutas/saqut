@@ -1,0 +1,136 @@
+// ============================================================================
+// saQut FFI — Value ↔ HostSlot Köprüsü
+// ============================================================================
+//
+// DİZİN:   src/ffi/host_bridge.hpp
+// KATMAN:  FFI — VM'in iç temsili ile backend-nötr ABI arasındaki TEK çeviri
+//
+// AMAÇ (#222):
+//   host_abi.hpp sınırı tanımlar; bu dosya VM tarafını o sınıra bağlar.
+//   Backend'ler (JIT/LLVM/gccjit) HostSlot'u DOĞRUDAN üretir — bu köprüden
+//   geçmezler. Çeviri yalnızca VM içindir, çünkü Value backend-nötr değildir
+//   (80 bayt, gömülü std::string + DecimalValue).
+//
+// STRING SAHİPLİĞİ:
+//   VM string'i Value::stringValue içinde inline tutar; HostSlot pointer
+//   ister. toHostSlot bu yüzden bir StringObject'e ihtiyaç duyar. Ömrü
+//   çağrı boyunca ÇAĞIRANIN tuttuğu geçici tampon (HostCallScratch)
+//   tarafından garanti edilir — thunk dönene kadar yaşar, sonra ölür.
+//   Thunk'un ÜRETTİĞİ string ise ayrı: onu çağıran Value'ya kopyalar.
+//   (GC-yönetimli string için bkz. Heap::allocString TODO'su — shadow stack
+//   önkoşulu.)
+//
+// ============================================================================
+
+#ifndef SAQUT_FFI_HOST_BRIDGE
+#define SAQUT_FFI_HOST_BRIDGE
+
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "ffi/host_abi.hpp"
+#include "vm/object.hpp"
+#include "vm/value.hpp"
+
+// ----------------------------------------------------------------------------
+// HostCallScratch — tek bir host çağrısının geçici belleği.
+//
+// Çağrı başına heap tahsisini önlemek için ÇAĞIRAN tarafından yeniden
+// kullanılır (Interpreter bir tane tutar, her CALLHOST'ta reset eder).
+//
+// Neden gerekli: HostSlot string'i pointer taşır ama VM'in Value'sundaki
+// string inline'dır — pointer verecek bir nesne yok. Bu tampon çağrı süresince
+// o nesneleri barındırır.
+// ----------------------------------------------------------------------------
+struct HostCallScratch {
+    std::vector<HostSlot>                      slots;
+    std::vector<std::unique_ptr<StringObject>> strings;
+    std::vector<std::unique_ptr<DecimalValue>> decimals;
+
+    void reset() {
+        slots.clear();
+        strings.clear();
+        decimals.clear();
+    }
+};
+
+// ----------------------------------------------------------------------------
+// toHostSlot — VM Value → sınır temsili.
+//
+// String ve Decimal için scratch'te bir nesne oluşturur (pointer ömrü çağrı
+// boyunca garanti). Diğer türler doğrudan kopyalanır.
+// ----------------------------------------------------------------------------
+inline HostSlot toHostSlot(const Value& v, HostCallScratch& scratch) {
+    switch (v.kind) {
+        case ValueKind::Int:     return HostSlot::fromInt(v.intValue);
+        case ValueKind::LongInt: return HostSlot::fromLong(v.int64Value);
+        case ValueKind::Date:    return HostSlot::fromDate(v.int64Value);
+        case ValueKind::Float:   return HostSlot::fromFloat(v.floatValue);
+        case ValueKind::Float32: return HostSlot::fromFloat32(v.floatValue);
+        case ValueKind::Null:    return HostSlot::null();
+        case ValueKind::Ref:     return HostSlot::fromRef(v.ref);
+        case ValueKind::String: {
+            scratch.strings.push_back(std::make_unique<StringObject>(v.stringValue));
+            return HostSlot::fromStr(scratch.strings.back().get());
+        }
+        case ValueKind::Decimal: {
+            scratch.decimals.push_back(std::make_unique<DecimalValue>(v.decimalValue));
+            return HostSlot::fromDecimal(scratch.decimals.back().get());
+        }
+    }
+    return HostSlot::null();
+}
+
+// ----------------------------------------------------------------------------
+// fromHostSlot — sınır temsili → VM Value.
+//
+// Thunk'un ürettiği string/decimal İÇERİK OLARAK kopyalanır: dönüş
+// değerinin ömrü çağrıdan uzundur (çağıranın slot'unda yaşar), scratch ise
+// çağrı sonunda ölür.
+// ----------------------------------------------------------------------------
+inline Value fromHostSlot(const HostSlot& s) {
+    switch (s.kind) {
+        case HostKind::Int:     return Value::fromInt(static_cast<int>(s.i));
+        case HostKind::LongInt: return Value::fromLongInt(s.i);
+        case HostKind::Date:    return Value::fromDate(s.i);
+        case HostKind::Float:   return Value::fromFloat(s.d);
+        case HostKind::Float32: return Value::fromFloat32(s.d);
+        case HostKind::Ref:     return Value::fromRef(static_cast<Object*>(s.p));
+        case HostKind::Null:    return Value::null();
+        case HostKind::Void:    return Value::null();
+        case HostKind::Str:
+            return s.p ? Value::fromString(static_cast<StringObject*>(s.p)->data)
+                       : Value::fromString("");
+        case HostKind::Decimal:
+            return s.p ? Value::fromDecimal(*static_cast<DecimalValue*>(s.p))
+                       : Value::fromDecimal(DecimalValue{});
+    }
+    return Value::null();
+}
+
+// ----------------------------------------------------------------------------
+// Thunk gövdelerinin okuma yardımcıları.
+//
+// Host fonksiyonları bugün `args[0].intValue` gibi doğrudan Value alanına
+// erişiyor. Yeni imzada aynı kolaylığı sağlar, ayrıca sayısal genişletmeyi
+// tek yerde toplar (Value::asI64/asDouble ile aynı kurallar — ADR-040).
+// ----------------------------------------------------------------------------
+inline int64_t hostAsI64(const HostSlot& s) {
+    if (s.kind == HostKind::Float || s.kind == HostKind::Float32)
+        return static_cast<int64_t>(s.d);
+    return s.i;
+}
+
+inline double hostAsDouble(const HostSlot& s) {
+    if (s.kind == HostKind::Float || s.kind == HostKind::Float32) return s.d;
+    return static_cast<double>(s.i);
+}
+
+inline const std::string& hostAsString(const HostSlot& s) {
+    static const std::string kEmpty;
+    if (s.kind != HostKind::Str || !s.p) return kEmpty;
+    return static_cast<StringObject*>(s.p)->data;
+}
+
+#endif // SAQUT_FFI_HOST_BRIDGE

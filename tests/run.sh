@@ -9,12 +9,15 @@ FLAGS=(-std=c++20 -Wall -Wextra -I"$ROOT/src")
 SAQUT="$ROOT/build/saqut"
 
 # ── Birim testler ─────────────────────────────────────────────────────────────
-for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg; do
+for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg test_host_abi; do
     echo "=== $t ==="
     # test_cfg buildCFG gerçeklemesini (ir_cfg.cpp) da derler — hata sınıfı
     # testi için implementasyon gerekli (#218).
+    # test_host_abi StringObject/Heap gerçeklemesini (object.cpp) gerektirir —
+    # sınır temsili string'i pointer olarak taşır (#222).
     extra=""
     [ "$t" = "test_cfg" ] && extra="$ROOT/src/ir/ir_cfg.cpp"
+    [ "$t" = "test_host_abi" ] && extra="$ROOT/src/vm/object.cpp"
     "$CXX" "${FLAGS[@]}" "$ROOT/tests/$t.cpp" $extra -o "/tmp/saqut_$t"
     "/tmp/saqut_$t"
 done

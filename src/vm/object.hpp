@@ -180,6 +180,36 @@ struct Heap {
         return obj;
     }
 
+    // #222: GC-yönetimli string tahsisi.
+    //
+    // VM string'i Value::stringValue içinde INLINE tutar ve buraya hiç
+    // uğramaz — bu yol yalnızca SINIR temsili içindir (JIT register'ı ve
+    // host ABI'si string'i pointer olarak taşır, bkz. host_abi.hpp).
+    //
+    // Bugün JIT ürettiği string'leri g_jitRuntimeStrings'te süresiz tutuyor:
+    // 200k concat'te JIT 21,8 MB / VM 6,8 MB (ölçüldü). Bu sızıntının çözümü
+    // burasıdır — AMA HENÜZ BAĞLANAMAZ:
+    //
+    //   GC kökleri yalnızca globalSlots_ ve VM callStack_ frame'leridir
+    //   (Interpreter::maybeCollect). JIT'in string'leri hiçbir Value'da
+    //   yaşamaz, yalnızca MIR register'ında — yani kök gösterilemezler.
+    //   Şimdi bağlarsak GC onları CANLIYKEN siler: sızıntı use-after-free'ye
+    //   dönüşür, ki bu kesinlikle daha kötüdür.
+    //
+    // Önkoşul: JIT register'larındaki referansları GC'ye görünür kılan shadow
+    // stack (Ref dilimi). O geldiğinde JIT string'leri ve host thunk'larının
+    // dönüş string'leri buraya taşınır. TODO(#222/Ref dilimi).
+    //
+    // Bugün kullanan: VM tarafında host ABI dönüş string'leri (kök: çağıran
+    // frame'in slot'u — maybeCollect zaten tarar).
+    StringObject* allocString(std::string s = "") {
+        auto* obj = new StringObject(std::move(s));
+        obj->next = head;
+        head      = obj;
+        ++allocCount;
+        return obj;
+    }
+
     StructObject* allocStruct(int fieldCount) {
         auto* obj = new StructObject(fieldCount);
         obj->next = head;

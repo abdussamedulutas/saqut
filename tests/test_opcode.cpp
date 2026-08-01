@@ -35,13 +35,16 @@ int main() {
     // OLMAYAN bir opcode tüketirse wholeProgramSupported reddeder (sessiz
     // yanlış cevap yerine eksik kapsam — ADR-037: VM normatif).
     assert(opcodeJitBaseSupported(Opcode::LOAD_NULL));
-    assert(!opcodeJitBaseSupported(Opcode::STRUCT_NEW));
-    assert(!opcodeJitBaseSupported(Opcode::FIELD_GET));
-    assert(!opcodeJitBaseSupported(Opcode::FIELD_SET));
-    assert(!opcodeJitBaseSupported(Opcode::ARRAY_NEW));
-    assert(!opcodeJitBaseSupported(Opcode::ARRAY_GET));
-    assert(!opcodeJitBaseSupported(Opcode::ARRAY_SET));
-    assert(!opcodeJitBaseSupported(Opcode::ARRAY_LEN));
+    // #228: Ref ailesi shadow stack ile açıldı — JIT'in ürettiği nesneler artık
+    // GC'ye görünür. Talimata bağlı ek koşullar (STRUCT_NEW metadata'sı,
+    // GET'lerin valueType'ı) mir_backend.cpp::opcodeSupported'da.
+    assert(opcodeJitBaseSupported(Opcode::STRUCT_NEW));
+    assert(opcodeJitBaseSupported(Opcode::FIELD_GET));
+    assert(opcodeJitBaseSupported(Opcode::FIELD_SET));
+    assert(opcodeJitBaseSupported(Opcode::ARRAY_NEW));
+    assert(opcodeJitBaseSupported(Opcode::ARRAY_GET));
+    assert(opcodeJitBaseSupported(Opcode::ARRAY_SET));
+    assert(opcodeJitBaseSupported(Opcode::ARRAY_LEN));
     assert(!opcodeJitBaseSupported(Opcode::LOAD_GLOBAL));
     assert(!opcodeJitBaseSupported(Opcode::STORE_GLOBAL));
     assert(!opcodeJitBaseSupported(Opcode::ENTER_TRY));

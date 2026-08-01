@@ -53,6 +53,9 @@ namespace {
 Heap* g_jitHeap = nullptr;
 int   g_jitGcThreshold = 1024;
 
+StringObject*  jitNewString(std::string v);
+DecimalObject* jitBoxDecimal(const DecimalValue& v);
+
 // #228: JIT safepoint'i. VM'de toplama talimat döngüsündeki maybeCollect ile
 // tetiklenir; JIT'te o döngü yok, bu yüzden TAHSİS noktasında denenir.
 //
@@ -132,7 +135,12 @@ extern "C" void* rt_jit_array_get_p(void* a, int64_t idx) {
     if (!arr) jitBoundsFail("array", idx, 0);
     int64_t len = dataArraySize(arr);
     if (idx < 0 || idx >= len) jitBoundsFail("array", idx, len);
-    return dataArrayElemAt(arr, (int)idx).ref;
+    Value v = dataArrayElemAt(arr, (int)idx);
+    // VM string'i Value içinde INLINE tutar; JIT sınırında pointer gerekir.
+    // Kutulama GC-yönetimli heap'e yapılır (shadow stack ile görünür).
+    if (v.kind == ValueKind::String)  return jitNewString(v.stringValue);
+    if (v.kind == ValueKind::Decimal) return jitBoxDecimal(v.decimalValue);
+    return v.ref;
 }
 
 static void jitArraySet(ArrayObject* arr, int64_t idx, const Value& v) {
@@ -157,8 +165,23 @@ extern "C" void rt_jit_array_set_i(void* a, int64_t idx, int64_t v) {
 extern "C" void rt_jit_array_set_d(void* a, int64_t idx, double v) {
     jitArraySet(static_cast<ArrayObject*>(a), idx, Value::fromFloat(v));
 }
+// Pointer yazarken kutulu string/decimal VM temsiline geri çevrilir; array
+// eleman tipi bunu belirler (ADR-024: string değer-tipi, inline saklanır).
+static Value jitUnboxForSlot(ArrayElemKind ek, void* p) {
+    auto* o = static_cast<Object*>(p);
+    if (o && ek == ArrayElemKind::Ref) {
+        if (o->type == ObjectType::String)
+            return Value::fromString(static_cast<StringObject*>(o)->data);
+        if (o->type == ObjectType::Decimal)
+            return Value::fromDecimal(static_cast<DecimalObject*>(o)->val);
+    }
+    return Value::fromRef(o);
+}
+
 extern "C" void rt_jit_array_set_p(void* a, int64_t idx, void* v) {
-    jitArraySet(static_cast<ArrayObject*>(a), idx, Value::fromRef(static_cast<Object*>(v)));
+    auto* arr = static_cast<ArrayObject*>(a);
+    if (!arr) jitBoundsFail("array", idx, 0);
+    jitArraySet(arr, idx, jitUnboxForSlot(arr->elemKind, v));
 }
 
 extern "C" void* rt_jit_struct_new(int64_t fieldCount) {
@@ -178,7 +201,12 @@ static Value* jitFieldAt(void* o, int64_t idx) {
 
 extern "C" int64_t rt_jit_field_get_i(void* o, int64_t idx) { return jitFieldAt(o, idx)->asI64(); }
 extern "C" double  rt_jit_field_get_d(void* o, int64_t idx) { return jitFieldAt(o, idx)->asDouble(); }
-extern "C" void*   rt_jit_field_get_p(void* o, int64_t idx) { return jitFieldAt(o, idx)->ref; }
+extern "C" void*   rt_jit_field_get_p(void* o, int64_t idx) {
+    Value* v = jitFieldAt(o, idx);
+    if (v->kind == ValueKind::String)  return jitNewString(v->stringValue);
+    if (v->kind == ValueKind::Decimal) return jitBoxDecimal(v->decimalValue);
+    return v->ref;
+}
 
 extern "C" void rt_jit_field_set_i(void* o, int64_t idx, int64_t v) {
     *jitFieldAt(o, idx) = Value::fromLongInt(v);
@@ -187,7 +215,7 @@ extern "C" void rt_jit_field_set_d(void* o, int64_t idx, double v) {
     *jitFieldAt(o, idx) = Value::fromFloat(v);
 }
 extern "C" void rt_jit_field_set_p(void* o, int64_t idx, void* v) {
-    *jitFieldAt(o, idx) = Value::fromRef(static_cast<Object*>(v));
+    *jitFieldAt(o, idx) = jitUnboxForSlot(ArrayElemKind::Ref, v);
 }
 
 // ── #227: birleşik host çağrı trampolini ────────────────────────────────────
@@ -561,6 +589,17 @@ bool isSupportedCallhost(const Instruction& instr, const std::vector<bool>& fnNu
     static const char* kNullableReturns[] = {"indexOf", "DATE_PARSE", "SYS_ENV"};
     for (const char* n : kNullableReturns)
         if (std::strcmp(he->symbolicId, n) == 0) return false;
+
+    // Dönüş türü ELEMAN TİPİNE bağlı olan metodlar reddedilir: registry'nin
+    // retKind'i statik bir değerdir (Int), oysa gerçek tür receiver'ın eleman
+    // tipidir. Trampolin ham 64-bit taşıdığı için float/string elemanlı bir
+    // array'de pop() yanlış yorumlanır.
+    //
+    // Ölçüldü: array_float VM "33.52" / JIT "302",
+    //          array_string VM "12worldworld1" / JIT "12091740481".
+    static const char* kElemTypedReturns[] = {"pop", "remove"};
+    for (const char* n : kElemTypedReturns)
+        if (std::strcmp(he->symbolicId, n) == 0) return false;
     return true;
 }
 
@@ -587,6 +626,26 @@ bool opcodeSupported(const Instruction& instr, const std::vector<bool>& fnNullab
             return instr.left != 1;
         case Opcode::RETURN:
             return instr.src >= 0;  // void RETURN (src=-1) bu dilimde yok
+        case Opcode::ARRAY_GET:
+        case Opcode::FIELD_GET:
+            // valueType (ADR-039) eleman/alan türünü taşır. Unknown ise tür
+            // IR'de kaybolmuştur ve JIT hangi register genişliğini kullanacağını
+            // bilemez — ham 64-bit okumak string/float elemanlarda yanlış
+            // sonuç verir (ölçüldü: string[] elemanı "3abc" yerine "3000").
+            //
+            // finalizeSlotTypes bu opcode'ların dest türünü çözmüyor (kodda
+            // TODO). Çözülene dek yalnızca türü kesin olanlar JIT'te.
+            return instr.valueType != SlotType::Unknown;
+        case Opcode::STRUCT_NEW:
+            // STRUCT_NEW yalnızca alan sayısıyla tahsis eder; VM ayrıca
+            // fieldNames metadata'sını ve ADR-021 nullable zero-init maskesini
+            // kurar (iç içe struct örnekleme dahil). Bu metadata IRFunction'da
+            // ve trampoline geçirilmiyor — geçirilene dek yalnızca metadata
+            // GEREKTİRMEYEN struct'lar JIT'te.
+            //
+            // Ölçüldü: nested_field_access VM "5102030", JIT "invalid struct
+            // field index 0" (iç struct örneklenmemiş).
+            return false;
         case Opcode::CALLHOST:
             return isSupportedCallhost(instr, fnNullable);
         default:
@@ -1618,6 +1677,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                             case SlotType::Str:     hk = HostKind::Str;     break;
                             case SlotType::Decimal: hk = HostKind::Decimal; break;
                             case SlotType::Date:    hk = HostKind::Date;    break;
+                            case SlotType::Ref:     hk = HostKind::Ref;     break;
                             default:                hk = HostKind::Int;     break;
                         }
                         bool isD = (ast == SlotType::Float || ast == SlotType::Float32);
@@ -1640,6 +1700,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_reg_op(ctx, dst),
                         MIR_new_int_op(ctx, instr.intValue),
                         MIR_new_int_op(ctx, (int64_t)instr.argSlots.size())));
+                    // Pointer dönüşü GC'ye görünür olmalı: host thunk'ı heap'te
+                    // nesne üretmiş olabilir (string metodları, split).
+                    if (instr.dest >= 0 && he &&
+                        (he->retKind == HostKind::Str || he->retKind == HostKind::Ref ||
+                         he->retKind == HostKind::Decimal))
+                        emitShadowSet(instr.dest);
                     break;
                 }
                 case Opcode::LOAD_NULL:

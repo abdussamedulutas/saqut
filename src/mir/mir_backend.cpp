@@ -745,7 +745,7 @@ bool isSupportedCallhost(const Instruction& instr, const std::vector<bool>&) {
     if (!he || !he->thunk) return false;
     // JIT'in HostEnv'i VM'inkinden ayrı bir caps kümesi taşır: caps::has()
     // VM'de 1, JIT'te 0 dönerdi (ölçüldü: golden/caps/drop_and_has).
-    if (he->flags & (HOST_NEEDS_CAPS | HOST_NEEDS_ARGS)) return false;
+    if (he->flags & HOST_NEEDS_CAPS) return false;
     // Dönüş türü ELEMAN TİPİNE bağlı olan metodlar reddedilir: registry'nin
     // retKind'i statik bir değerdir (Int), oysa gerçek tür receiver'ın eleman
     // tipidir. Trampolin ham 64-bit taşıdığı için float/string elemanlı bir
@@ -938,6 +938,7 @@ struct FuncEntry {
 
 bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                               UnsupportedReason& outReason,
+                              const std::vector<std::string>& programArgs,
                               profiling::StageTimer* profiler) {
     if (!wholeProgramSupported(program, outReason)) return false;
 
@@ -948,10 +949,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     static Heap                     jitHeap;
     g_jitGcThreshold = 1024;
     static std::set<Capability>     jitCaps;
-    static std::vector<std::string> jitArgs;
     static HostEnv                  jitEnv;
     jitEnv.caps        = &jitCaps;
-    jitEnv.programArgs = &jitArgs;
+    jitEnv.programArgs = &programArgs;
     jitEnv.heap        = &jitHeap;
     jitSetHostEnv(&jitEnv);
     jitSetHeap(&jitHeap);

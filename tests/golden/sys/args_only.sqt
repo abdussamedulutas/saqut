@@ -1,0 +1,12 @@
+import {args} from sys;
+
+void main() {
+    string[] values = args();
+    print(values.length());
+    if (values.length() > 0) {
+        print(values[0]);
+    }
+    if (values.length() > 1) {
+        print(values[1]);
+    }
+}

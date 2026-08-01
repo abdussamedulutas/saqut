@@ -118,7 +118,8 @@ inline int cmdRun(const CliArgs& args) {
         // + native derleme) ve "jit-exec" (yalnizca calistirma) mir_backend
         // TARAFINDAN ayri ayri raporlanir, burada tek bir "vm/jit" ile
         // sarilmiyor (kullanici talimati: bu ikisi karistirilmasin).
-        bool jitOk = mir_backend::tryCompileAndRunProgram(program, jitResult, reason, profilerPtr);
+        bool jitOk = mir_backend::tryCompileAndRunProgram(
+            program, jitResult, reason, args.programArgs, profilerPtr);
         if (jitOk) {
             if (args.verbose) std::cerr << "[jit] program bastan sona JIT'lendi (VM calismadi)\n";
             if (args.profile) stageTimer.printReport(std::cerr);

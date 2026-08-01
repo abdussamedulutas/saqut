@@ -143,7 +143,8 @@ inline int cmdExec(const CliArgs& args) {
         if (args.useJit) {
             int jitResult = 0;
             mir_backend::UnsupportedReason reason;
-            bool jitOk = mir_backend::tryCompileAndRunProgram(program, jitResult, reason);
+            bool jitOk = mir_backend::tryCompileAndRunProgram(
+                program, jitResult, reason, args.programArgs);
             if (jitOk) {
                 exitCode = jitResult;
             } else {

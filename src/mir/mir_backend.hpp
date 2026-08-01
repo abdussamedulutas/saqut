@@ -25,6 +25,7 @@
 #define SAQUT_MIR_BACKEND
 
 #include <string>
+#include <vector>
 #include "ir/ir_program.hpp"
 #include "profiling/stage_timer.hpp"
 
@@ -47,6 +48,7 @@ struct UnsupportedReason {
 //   "jit-exec"   — yalnızca derlenmiş native main()'in ÇALIŞTIRILMASI
 bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                               UnsupportedReason& outReason,
+                              const std::vector<std::string>& programArgs,
                               profiling::StageTimer* profiler = nullptr);
 
 }  // namespace mir_backend

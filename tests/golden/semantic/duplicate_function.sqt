@@ -1,0 +1,10 @@
+// #229: aynı isimde iki fonksiyon tanımı. Hata SINIFI: çift tanım sessizce
+// kabul edilirse IR'de aynı isimde iki fonksiyon oluşur (functionOrder'da iki
+// kayıt, functions map'inde bir tane) ve VM tutarsız duruma düşüp ÇÖKER.
+int main() {
+    return 0;
+}
+
+int main() {
+    return 25;
+}

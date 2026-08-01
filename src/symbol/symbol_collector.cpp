@@ -153,9 +153,20 @@ void SymbolCollector::pass1aRegisterNames(ASTNode* program, int moduleId) {
             // Stub: placeholder tip — pass1b'de gerçek imzayla güncellenecek.
             // define sadece ismin varlığını tescillemek için çağrılır.
             auto* fn = static_cast<FunctionDeclNode*>(child);
-            table_.define(fn->name, SymbolKind::Function,
-                          Type::function(Type::Void(), {}), fn->loc, moduleId);
-            // Çakışma hatası pass1b'de çok daha anlamlı mesajla verilecek.
+            if (!table_.define(fn->name, SymbolKind::Function,
+                               Type::function(Type::Void(), {}), fn->loc, moduleId)) {
+                // Çakışma BURADA raporlanmalı: pass1b `existing` bulduğunda
+                // sembolü günceller ve hata vermez, yani ikinci tanım sessizce
+                // birincinin yerine geçerdi. IR'de aynı isimde iki fonksiyon
+                // oluşur (functionOrder'da iki kayıt, functions map'inde bir
+                // tane) ve VM tutarsız duruma düşüp çökerdi.
+                Symbol* ex = table_.resolve(fn->name);
+                std::string hint = ex
+                    ? "'" + fn->name + "' first defined at " + ex->definitionLoc.toString()
+                    : "choose a different name";
+                diag_.report("E002", fn->loc,
+                             "'" + fn->name + "' already defined in this scope", hint);
+            }
             break;
         }
 

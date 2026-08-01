@@ -47,6 +47,11 @@ struct IRProgram {
 
     // Yeni fonksiyon ekle
     void addFunction(IRFunction fn) {
+        // emplace çakışmada SESSİZCE hiçbir şey yapmaz. functionOrder'a yine
+        // de isim eklenirse iki liste tutarsızlaşır (order'da iki kayıt,
+        // map'te bir tane) ve VM çöker. Çift tanım semantic'te E002 ile
+        // yakalanır; bu savunma o denetim atlanırsa bile tutarlılığı korur.
+        if (functions.count(fn.name)) return;
         functionOrder.push_back(fn.name);
         functions.emplace(fn.name, std::move(fn));
     }

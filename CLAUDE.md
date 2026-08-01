@@ -16,6 +16,12 @@ Claude ile her yeni oturumda:
 
 Tek çalışma disiplini `AGENTS.md` §4'tedir. Model adı yetki belirlemez.
 
+## Commit kuralı
+
+Commit mesajlarına `Co-Authored-By`, `Claude-Session`, `Generated with ...`
+gibi araç/model imzası **eklenmez**. Commit mesajı yalnızca yapılan işi ve
+gerekçesini anlatır. Bu kural PR açıklamaları için de geçerlidir.
+
 ## Değişmez ürün bağlamı
 
 - `0.8.0` yayınlanmış baseline'dır.

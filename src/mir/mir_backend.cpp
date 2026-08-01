@@ -14,6 +14,12 @@
 
 #include "mir/mir_backend.hpp"
 
+#include <cstring>
+#include <set>
+
+#include "ffi/host_bridge.hpp"
+#include "ffi/host_registry.hpp"
+
 #include <climits>
 #include <cmath>
 #include <cstdint>
@@ -40,6 +46,58 @@
 namespace mir_backend {
 
 namespace {
+
+// ── #227: birleşik host çağrı trampolini ────────────────────────────────────
+//
+// JIT'in host çağrıları için bilmesi gereken TEK köprü. Öncesinde yalnızca
+// print destekleniyordu; 44 host fonksiyonu + 26 built-in metodu açmak 70
+// ayrı trampolin demekti. Artık yeni host fonksiyonu eklemek JIT'e hiç
+// dokunmaz.
+//
+// Argümanlar MIR'den tek tek geçirilemez (değişken arite), bu yüzden sabit bir
+// tampona yazılır. Tek iş parçacığı varsayımı (MIRPLAN §9), string
+// trampolinleriyle aynı kısıt.
+constexpr int kMaxHostArgs = 8;
+namespace {
+HostSlot      g_jitHostArgs[kMaxHostArgs];
+HostRetOwner  g_jitHostRetOwner;
+HostCallFrame g_jitHostFrame;
+HostEnv*      g_jitHostEnv = nullptr;
+}  // namespace
+
+void jitSetHostEnv(HostEnv* env) { g_jitHostEnv = env; }
+
+extern "C" void rt_jit_host_arg_i(int64_t idx, int64_t kind, int64_t v) {
+    if (idx < 0 || idx >= kMaxHostArgs) return;
+    g_jitHostArgs[idx].kind = (HostKind)kind;
+    g_jitHostArgs[idx].i    = v;
+}
+
+extern "C" void rt_jit_host_arg_d(int64_t idx, int64_t kind, double v) {
+    if (idx < 0 || idx >= kMaxHostArgs) return;
+    g_jitHostArgs[idx].kind = (HostKind)kind;
+    g_jitHostArgs[idx].d    = v;
+}
+
+extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
+    g_jitHostFrame.reset();
+    g_jitHostFrame.args     = g_jitHostArgs;
+    g_jitHostFrame.argc     = (int32_t)argc;
+    g_jitHostFrame.env      = g_jitHostEnv;
+    g_jitHostFrame.retOwner = &g_jitHostRetOwner;
+    if (rt_host_call((int32_t)entryId, &g_jitHostFrame) != 0) {
+        // ADR-037: JIT'te yakalanabilir hata yolu yok (ENTER_TRY
+        // desteklenmiyor) — VM'in uncaught throw davranışıyla aynı.
+        std::cerr << "runtime error: " << g_jitHostFrame.err.message << std::endl;
+        std::exit(70);
+    }
+    return g_jitHostFrame.ret.i;
+}
+
+extern "C" double rt_jit_host_call_d(int64_t entryId, int64_t argc) {
+    (void)rt_jit_host_call(entryId, argc);
+    return g_jitHostFrame.ret.d;
+}
 
 // ── print(int) trampoline'i — VM'in Value::toString()'iyle birebir (ADR-024).
 // #120: VM (9ac66d5) trailing "\n" eklemeyi bıraktı (console:: FFI hazırlığı,
@@ -340,11 +398,28 @@ SlotType slotKindOf(const IRFunction& fn, int slot) {
     return SlotType::Int;
 }
 
-bool isSupportedCallhost(const Instruction& instr) {
-    return instr.functionName == "print" && instr.argSlots.size() == 1;
+bool isSupportedCallhost(const Instruction& instr, const std::vector<bool>& fnNullable) {
+    if ((int)instr.argSlots.size() > kMaxHostArgs) return false;
+    const HostEntry* he = hostEntryAt(instr.intValue);
+    if (!he || !he->thunk) return false;
+    // Heap tahsisi GC kökü ister; JIT register'ları shadow stack olmadan
+    // taranamaz (Ref dilimi önkoşulu).
+    if (he->flags & HOST_NEEDS_HEAP) return false;
+    // JIT'in HostEnv'i VM'inkinden ayrı bir caps kümesi taşır: caps::has()
+    // VM'de 1, JIT'te 0 dönerdi (ölçüldü: golden/caps/drop_and_has).
+    if (he->flags & (HOST_NEEDS_CAPS | HOST_NEEDS_ARGS)) return false;
+    // Trampolin yalnızca ham 64-bit taşır; HostSlot::kind kaybolur, null ile
+    // 0 ayırt edilemez (ölçüldü: string::indexOf JIT'te 0, VM'de null).
+    if (instr.dest >= 0 && instr.dest < (int)fnNullable.size() &&
+        fnNullable[static_cast<size_t>(instr.dest)])
+        return false;
+    static const char* kNullableReturns[] = {"indexOf", "DATE_PARSE", "SYS_ENV"};
+    for (const char* n : kNullableReturns)
+        if (std::strcmp(he->symbolicId, n) == 0) return false;
+    return true;
 }
 
-bool opcodeSupported(const Instruction& instr) {
+bool opcodeSupported(const Instruction& instr, const std::vector<bool>& fnNullable) {
     // Temel destek OPCODE_LIST spec tablosundan türetilir (opcodeJitBaseSupported,
     // #132). Talimata bağlı ek koşullar — nullable hedef (instr.left==1 →
     // başarısızlıkta null; null'un register temsili JIT'te ayrı tasarım turu,
@@ -368,7 +443,7 @@ bool opcodeSupported(const Instruction& instr) {
         case Opcode::RETURN:
             return instr.src >= 0;  // void RETURN (src=-1) bu dilimde yok
         case Opcode::CALLHOST:
-            return isSupportedCallhost(instr);
+            return isSupportedCallhost(instr, fnNullable);
         default:
             return true;
     }
@@ -380,7 +455,7 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
     for (auto& name : program.functionOrder) {
         IRFunction& fn = program.functions.at(name);
         for (auto& instr : fn.instructions) {
-            if (!opcodeSupported(instr)) {
+            if (!opcodeSupported(instr, fn.slotNullable)) {
                 outReason.functionName = name;
                 outReason.opcodeName   = opcodeName(instr.opcode);
                 return false;
@@ -472,6 +547,17 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                               UnsupportedReason& outReason,
                               profiling::StageTimer* profiler) {
     if (!wholeProgramSupported(program, outReason)) return false;
+
+    // Host çağrılarının ortamı. Heap YOK: heap gerektiren kayıtlar
+    // wholeProgramSupported'da zaten reddedilir.
+    static std::set<Capability>     jitCaps;
+    static std::vector<std::string> jitArgs;
+    static HostEnv                  jitEnv;
+    jitEnv.caps        = &jitCaps;
+    jitEnv.programArgs = &jitArgs;
+    jitEnv.heap        = nullptr;
+    jitSetHostEnv(&jitEnv);
+
     if (program.findFunction("main") == nullptr) {
         outReason.functionName = "main";
         outReason.opcodeName   = "(fonksiyon bulunamadi)";
@@ -559,6 +645,18 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t decF2DImport    = MIR_new_import(ctx, "rt_jit_float_to_decimal");
     MIR_item_t decToFProto     = MIR_new_proto(ctx, "dec_tof_proto", 1, &dRet, 1, MIR_T_I64, "v");
     MIR_item_t decToFImport    = MIR_new_import(ctx, "rt_jit_decimal_to_float");
+    MIR_var_t  hostArgIVars[3] = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "k", 0}, {MIR_T_I64, "v", 0}};
+    MIR_item_t hostArgIProto   = MIR_new_proto_arr(ctx, "host_arg_i_proto", 0, nullptr, 3, hostArgIVars);
+    MIR_item_t hostArgIImport  = MIR_new_import(ctx, "rt_jit_host_arg_i");
+    MIR_var_t  hostArgDVars[3] = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "k", 0}, {MIR_T_D, "v", 0}};
+    MIR_item_t hostArgDProto   = MIR_new_proto_arr(ctx, "host_arg_d_proto", 0, nullptr, 3, hostArgDVars);
+    MIR_item_t hostArgDImport  = MIR_new_import(ctx, "rt_jit_host_arg_d");
+    MIR_var_t  hostCallVars[2] = {{MIR_T_I64, "e", 0}, {MIR_T_I64, "n", 0}};
+    MIR_item_t hostCallProto   = MIR_new_proto_arr(ctx, "host_call_proto", 1, &i64Ret, 2, hostCallVars);
+    MIR_item_t hostCallImport  = MIR_new_import(ctx, "rt_jit_host_call");
+    MIR_item_t hostCallDProto  = MIR_new_proto_arr(ctx, "host_call_d_proto", 1, &dRet, 2, hostCallVars);
+    MIR_item_t hostCallDImport = MIR_new_import(ctx, "rt_jit_host_call_d");
+
     MIR_item_t printDProto     = MIR_new_proto(ctx, "print_d_proto", 0, nullptr, 1, MIR_T_I64, "v");
     MIR_item_t printDImport    = MIR_new_import(ctx, "rt_jit_print_decimal");
     MIR_item_t divZeroProto    = MIR_new_proto(ctx, "divzero_proto", 0, nullptr, 0);
@@ -1232,32 +1330,40 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     break;
                 }
                 case Opcode::CALLHOST: {
-                    // isSupportedCallhost() yalnizca tek-argumanli print'i gecirdi.
-                    // Argüman türüne göre int/float/string trampolinini seç.
-                    int      a  = instr.argSlots[0];
-                    SlotType at = slotKindOf(fn, a);
-                    if (at == SlotType::Float)
-                        MIR_append_insn(ctx, func,
-                            MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printFProto), MIR_new_ref_op(ctx, printFImport), R(a)));
-                    else if (at == SlotType::Float32) {
-                        // float32 argümanı F2D ile double'a genişletilip print_f32'ye
-                        // geçilir (VM float32 toString biçimi trampolinde uygulanır).
-                        static int f32TmpCounter = 0;
-                        std::string tmpName = "f32print" + std::to_string(f32TmpCounter++);
-                        MIR_reg_t tmp = MIR_new_func_reg(ctx, func->u.func, MIR_T_D, tmpName.c_str());
-                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_F2D, MIR_new_reg_op(ctx, tmp), R(a)));
-                        MIR_append_insn(ctx, func,
-                            MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printF32Proto), MIR_new_ref_op(ctx, printF32Import), MIR_new_reg_op(ctx, tmp)));
+                    for (size_t ai = 0; ai < instr.argSlots.size(); ++ai) {
+                        int      as  = instr.argSlots[ai];
+                        SlotType ast = slotKindOf(fn, as);
+                        HostKind hk  = HostKind::Int;
+                        switch (ast) {
+                            case SlotType::Int:     hk = HostKind::Int;     break;
+                            case SlotType::LongInt: hk = HostKind::LongInt; break;
+                            case SlotType::Float:   hk = HostKind::Float;   break;
+                            case SlotType::Float32: hk = HostKind::Float32; break;
+                            case SlotType::Str:     hk = HostKind::Str;     break;
+                            case SlotType::Decimal: hk = HostKind::Decimal; break;
+                            case SlotType::Date:    hk = HostKind::Date;    break;
+                            default:                hk = HostKind::Int;     break;
+                        }
+                        bool isD = (ast == SlotType::Float || ast == SlotType::Float32);
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
+                            MIR_new_ref_op(ctx, isD ? hostArgDProto : hostArgIProto),
+                            MIR_new_ref_op(ctx, isD ? hostArgDImport : hostArgIImport),
+                            MIR_new_int_op(ctx, (int64_t)ai),
+                            MIR_new_int_op(ctx, (int64_t)hk),
+                            isD ? asDoubleOperand(as) : R(as)));
                     }
-                    else if (at == SlotType::Str)
-                        MIR_append_insn(ctx, func,
-                            MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printSProto), MIR_new_ref_op(ctx, printSImport), R(a)));
-                    else if (at == SlotType::Decimal)
-                        MIR_append_insn(ctx, func,
-                            MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printDProto), MIR_new_ref_op(ctx, printDImport), R(a)));
-                    else
-                        MIR_append_insn(ctx, func,
-                            MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printProto), MIR_new_ref_op(ctx, printImport), R(a)));
+                    const HostEntry* he = hostEntryAt(instr.intValue);
+                    bool retIsD = he && (he->retKind == HostKind::Float ||
+                                         he->retKind == HostKind::Float32);
+                    MIR_reg_t dst = (instr.dest >= 0)
+                                  ? regs[static_cast<size_t>(instr.dest)]
+                                  : newTmp("hostsink");
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
+                        MIR_new_ref_op(ctx, retIsD ? hostCallDProto : hostCallProto),
+                        MIR_new_ref_op(ctx, retIsD ? hostCallDImport : hostCallImport),
+                        MIR_new_reg_op(ctx, dst),
+                        MIR_new_int_op(ctx, instr.intValue),
+                        MIR_new_int_op(ctx, (int64_t)instr.argSlots.size())));
                     break;
                 }
                 case Opcode::LOAD_NULL:
@@ -1318,6 +1424,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
 
     MIR_finish_module(ctx);
     MIR_load_module(ctx, mod);
+    MIR_load_external(ctx, "rt_jit_host_arg_i",  reinterpret_cast<void*>(rt_jit_host_arg_i));
+    MIR_load_external(ctx, "rt_jit_host_arg_d",  reinterpret_cast<void*>(rt_jit_host_arg_d));
+    MIR_load_external(ctx, "rt_jit_host_call",   reinterpret_cast<void*>(rt_jit_host_call));
+    MIR_load_external(ctx, "rt_jit_host_call_d", reinterpret_cast<void*>(rt_jit_host_call_d));
     MIR_load_external(ctx, "rt_jit_print_int",   reinterpret_cast<void*>(rt_jit_print_int));
     MIR_load_external(ctx, "rt_jit_print_float", reinterpret_cast<void*>(rt_jit_print_float));
     MIR_load_external(ctx, "rt_jit_print_float32", reinterpret_cast<void*>(rt_jit_print_float32));

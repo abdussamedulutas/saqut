@@ -27,47 +27,23 @@
 #include "core/capability.hpp"
 #include "ffi/host_abi.hpp"
 
-// VM state'ine erişim gereken host fonksiyonlar (caps::drop/has, sys::args,
-// fs::readBytes/writeBytes) için enjekte edilen bağlam. Pointer'lar
-// Interpreter'ın gerçek üyelerine işaret eder — caps mutasyonu (drop)
-// doğrudan VM durumunu etkiler, heap byte[] tahsisi için kullanılır.
-struct HostContext {
-    std::set<Capability>*           caps        = nullptr;
-    const std::vector<std::string>* programArgs = nullptr;
-    Heap*                            heap        = nullptr;
-};
-
-// Tek bir host fonksiyon kaydı. Çoğu impl saf (heap/throw gerektirmeyen);
-// yalnızca caps/sys::args gibi birkaçı ctx üzerinden VM durumuna dokunur.
+// Tek bir host fonksiyon kaydı.
+//
+// #222: gövde artık HostThunk'tır — tüm host fonksiyonları ortak ABI'yi
+// kullanır (host_abi.hpp). Eski HostContext ve Value-tabanlı imza kaldırıldı;
+// VM durumuna erişim HostEnv üzerinden, hata dönüşü HostError üzerindendir.
 struct HostFn {
-    const char* symbolicId;                                          // "MATH_SQRT"
-    int         arity;                                                // beklenen argüman sayısı
-    Value     (*impl)(const std::vector<Value>& args, HostContext& ctx); // C++ gövde
+    const char* symbolicId;   // "MATH_SQRT" — root.sqt bu adı yazar
+    int         arity;        // beklenen argüman sayısı
+    HostThunk   thunk;        // ortak ABI gövdesi
 };
 
 // Tüm host fonksiyonların düz tablosu. Index = sayısal host id (root.sqt'e
 // gömülmez; hostFnIndex ile çözülür).
 //
-// #222: impl == nullptr olan kayıtlar yeni ABI'ye taşınmıştır — gövdeleri
-// hostNativeThunks() içindedir. Kayıt burada sembolik id ve arite için
-// (tek kaynak, indeks kararlılığı) durmaya devam eder.
 const std::vector<HostFn>& hostFnTable();
-
-// #222: yeni ABI'ye taşınmış gövdeler. hostFnTable ile aynı sembolik id
-// uzayını paylaşır; rt_host_call önce buraya bakar, yoksa eski gövdeye düşer.
-// Geçiş aile aile yapılabilsin diye ayrı tablo.
-struct HostNativeFn {
-    const char* symbolicId;
-    HostThunk   thunk;
-};
-const std::vector<HostNativeFn>& hostNativeThunks();
 
 // Sembolik id → sayısal index. Bulunamazsa -1 (root.sqt ↔ C++ drift kontrolü).
 int hostFnIndex(const std::string& symbolicId);
-
-// id ile host fonksiyonu çağır. id geçersizse Value::null() döner.
-// Hata durumunda std::runtime_error fırlatabilir (VM bunu yakalanabilir
-// saQut Error'a çevirir, ADR-025).
-Value callHostFn(int id, const std::vector<Value>& args, HostContext& ctx);
 
 #endif // SAQUT_FFI_HOST_FUNCTIONS

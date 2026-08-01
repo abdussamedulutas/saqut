@@ -92,129 +92,163 @@ static int math_E(HostCallFrame* f) {
 // drop/has caps::drop kendisi capability istemez (izin düşürmek her zaman
 // serbest); VM'nin gerçek caps_ kümesine ctx.caps üzerinden dokunur.
 
-static Value caps_drop(const std::vector<Value>& a, HostContext& ctx) {
-    auto cap = capabilityFromName(a[0].stringValue);
-    if (!cap) throw std::runtime_error("unknown capability '" + a[0].stringValue + "'");
-    if (ctx.caps) ctx.caps->erase(*cap);
-    return Value::fromInt(0); // void
+static int caps_drop(HostCallFrame* f) {
+    const std::string& name = hostAsString(f->args[0]);
+    auto cap = capabilityFromName(name);
+    if (!cap) { f->err.set("unknown capability '" + name + "'", "E_FFI"); return 1; }
+    if (f->env && f->env->caps) f->env->caps->erase(*cap);
+    f->ret = HostSlot::voidVal();
+    return 0;
 }
-static Value caps_has(const std::vector<Value>& a, HostContext& ctx) {
-    auto cap = capabilityFromName(a[0].stringValue);
-    if (!cap) throw std::runtime_error("unknown capability '" + a[0].stringValue + "'");
-    bool has = ctx.caps && ctx.caps->find(*cap) != ctx.caps->end();
-    return Value::fromInt(has ? 1 : 0);
+static int caps_has(HostCallFrame* f) {
+    const std::string& name = hostAsString(f->args[0]);
+    auto cap = capabilityFromName(name);
+    if (!cap) { f->err.set("unknown capability '" + name + "'", "E_FFI"); return 1; }
+    bool has = f->env && f->env->caps && f->env->caps->find(*cap) != f->env->caps->end();
+    f->ret = HostSlot::fromInt(has ? 1 : 0);
+    return 0;
 }
 
 // ── fs implementasyonları (#87) ─────────────────────────────────────────────
 // v1: yol güvenliği yok (hepsi-ya-hiçbir-şey, --allow-fs). Handle/descriptor
 // YOK — tek atımlık read/write (record-replay v1.2.0 önkoşulu, ADR-034 §5).
 
-static Value fs_readFile(const std::vector<Value>& a, HostContext&) {
-    std::ifstream f(a[0].stringValue, std::ios::in | std::ios::binary);
-    if (!f.is_open())
-        throw std::runtime_error("cannot open file '" + a[0].stringValue + "'");
+static int fs_readFile(HostCallFrame* fr) {
+    const std::string& path = hostAsString(fr->args[0]);
+    std::ifstream f(path, std::ios::in | std::ios::binary);
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "'", "E_FFI"); return 1; }
     std::ostringstream ss;
     ss << f.rdbuf();
-    return Value::fromString(ss.str());
+    hostSetRetString(*fr, ss.str());
+    return 0;
 }
 
-static Value fs_writeFile(const std::vector<Value>& a, HostContext&) {
-    std::ofstream f(a[0].stringValue, std::ios::out | std::ios::binary | std::ios::trunc);
-    if (!f.is_open())
-        throw std::runtime_error("cannot open file '" + a[0].stringValue + "' for writing");
-    f << a[1].stringValue;
-    return Value::fromInt(0); // void
+static int fs_writeFile(HostCallFrame* fr) {
+    const std::string& path = hostAsString(fr->args[0]);
+    std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
+    f << hostAsString(fr->args[1]);
+    fr->ret = HostSlot::voidVal();
+    return 0;
 }
 
-static Value fs_append(const std::vector<Value>& a, HostContext&) {
-    std::ofstream f(a[0].stringValue, std::ios::out | std::ios::binary | std::ios::app);
-    if (!f.is_open())
-        throw std::runtime_error("cannot open file '" + a[0].stringValue + "' for writing");
-    f << a[1].stringValue;
-    return Value::fromInt(0); // void
+static int fs_append(HostCallFrame* fr) {
+    const std::string& path = hostAsString(fr->args[0]);
+    std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::app);
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
+    f << hostAsString(fr->args[1]);
+    fr->ret = HostSlot::voidVal();
+    return 0;
 }
 
-static Value fs_readBytes(const std::vector<Value>& a, HostContext& ctx) {
-    std::ifstream f(a[0].stringValue, std::ios::in | std::ios::binary);
-    if (!f.is_open())
-        throw std::runtime_error("cannot open file '" + a[0].stringValue + "'");
+static int fs_readBytes(HostCallFrame* fr) {
+    const std::string& path = hostAsString(fr->args[0]);
+    std::ifstream f(path, std::ios::in | std::ios::binary);
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "'", "E_FFI"); return 1; }
     std::ostringstream ss;
     ss << f.rdbuf();
     std::string bytes = ss.str();
 
-    ArrayObject* arr = ctx.heap->allocArray((int)bytes.size(), ArrayElemKind::Byte);
+    if (!fr->env || !fr->env->heap) {
+        fr->err.set("readBytes: heap yok", "E_FFI");
+        return 1;
+    }
+    ArrayObject* arr = fr->env->heap->allocArray((int)bytes.size(), ArrayElemKind::Byte);
     arr->bytes.resize(bytes.size());
     for (size_t i = 0; i < bytes.size(); ++i)
         arr->bytes[i] = (uint8_t)bytes[i];
-    return Value::fromRef(arr);
+    fr->ret = HostSlot::fromRef(arr);
+    return 0;
 }
 
-static Value fs_writeBytes(const std::vector<Value>& a, HostContext&) {
-    if (a[1].kind != ValueKind::Ref || !a[1].ref)
-        throw std::runtime_error("writeBytes: expected byte[]");
-    auto* arr = static_cast<ArrayObject*>(a[1].ref);
-    std::ofstream f(a[0].stringValue, std::ios::out | std::ios::binary | std::ios::trunc);
-    if (!f.is_open())
-        throw std::runtime_error("cannot open file '" + a[0].stringValue + "' for writing");
+static int fs_writeBytes(HostCallFrame* fr) {
+    if (fr->args[1].kind != HostKind::Ref || !fr->args[1].p) {
+        fr->err.set("writeBytes: expected byte[]", "E_FFI");
+        return 1;
+    }
+    auto* arr = static_cast<ArrayObject*>(fr->args[1].p);
+    const std::string& path = hostAsString(fr->args[0]);
+    std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
     if (arr->elemKind == ArrayElemKind::Byte) {
         f.write(reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size());
     } else {
         for (const Value& v : arr->elements)
             f.put(static_cast<char>(v.intValue & 0xFF));
     }
-    return Value::fromInt(0); // void
+    fr->ret = HostSlot::voidVal();
+    return 0;
 }
 
-static Value fs_exists(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt(std::filesystem::exists(a[0].stringValue) ? 1 : 0);
+static int fs_exists(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt(std::filesystem::exists(hostAsString(f->args[0])) ? 1 : 0);
+    return 0;
 }
 
-static Value fs_remove(const std::vector<Value>& a, HostContext&) {
+static int fs_remove(HostCallFrame* f) {
+    const std::string& path = hostAsString(f->args[0]);
     std::error_code ec;
-    bool removed = std::filesystem::remove(a[0].stringValue, ec);
-    if (ec) throw std::runtime_error("cannot remove '" + a[0].stringValue + "': " + ec.message());
-    if (!removed) throw std::runtime_error("file not found: '" + a[0].stringValue + "'");
-    return Value::fromInt(0); // void
+    bool removed = std::filesystem::remove(path, ec);
+    if (ec)       { f->err.set("cannot remove '" + path + "': " + ec.message(), "E_FFI"); return 1; }
+    if (!removed) { f->err.set("file not found: '" + path + "'", "E_FFI"); return 1; }
+    f->ret = HostSlot::voidVal();
+    return 0;
 }
 
 // ── sys implementasyonları (#90) ────────────────────────────────────────────
 // Non-deterministik/dış-durum-okuyan — --allow-sys. Kaynak: OS CSPRNG
 // (std::random_device), rand() DEĞİL.
 
-static Value sys_random(const std::vector<Value>&, HostContext&) {
+static int sys_random(HostCallFrame* f) {
     static std::random_device rd;
     static std::mt19937_64 gen(rd());
     std::uniform_real_distribution<double> dist(0.0, 1.0);
-    return Value::fromFloat(dist(gen));
+    // Eski davranış Value::fromFloat (double) idi — root.sqt `float` yazsa da
+    // gözlemlenen çıktı double biçimidir. Birebir korunur.
+    f->ret = HostSlot::fromFloat(dist(gen));
+    return 0;
 }
 
-static Value sys_randomInt(const std::vector<Value>& a, HostContext&) {
-    int lo = a[0].intValue, hi = a[1].intValue;
-    if (lo >= hi)
-        throw std::runtime_error("randomInt: invalid range [" + std::to_string(lo) +
-                                  ", " + std::to_string(hi) + ")");
+static int sys_randomInt(HostCallFrame* f) {
+    int lo = (int)hostAsI64(f->args[0]), hi = (int)hostAsI64(f->args[1]);
+    if (lo >= hi) {
+        f->err.set("randomInt: invalid range [" + std::to_string(lo) +
+                   ", " + std::to_string(hi) + ")", "E_FFI");
+        return 1;
+    }
     static std::random_device rd;
     static std::mt19937_64 gen(rd());
     std::uniform_int_distribution<int> dist(lo, hi - 1);
-    return Value::fromInt(dist(gen));
+    f->ret = HostSlot::fromInt(dist(gen));
+    return 0;
 }
 
-static Value sys_env(const std::vector<Value>& a, HostContext&) {
-    const char* v = std::getenv(a[0].stringValue.c_str());
-    return v ? Value::fromString(std::string(v)) : Value::null();
+static int sys_env(HostCallFrame* f) {
+    const char* v = std::getenv(hostAsString(f->args[0]).c_str());
+    // Tanımsız değişken null döner (root.sqt: `string?`) — hata DEĞİL.
+    if (!v) { f->ret = HostSlot::null(); return 0; }
+    hostSetRetString(*f, std::string(v));
+    return 0;
 }
 
-static Value sys_sleep(const std::vector<Value>& a, HostContext&) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(a[0].intValue));
-    return Value::fromInt(0); // void
+static int sys_sleep(HostCallFrame* f) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(hostAsI64(f->args[0])));
+    f->ret = HostSlot::voidVal();
+    return 0;
 }
 
-static Value sys_args(const std::vector<Value>&, HostContext& ctx) {
-    const auto& args = ctx.programArgs ? *ctx.programArgs : std::vector<std::string>{};
-    ArrayObject* arr = ctx.heap->allocArray((int)args.size());
+static int sys_args(HostCallFrame* f) {
+    if (!f->env || !f->env->heap) { f->err.set("args: heap yok", "E_FFI"); return 1; }
+    // Eski kod burada `ctx.programArgs ? *ctx.programArgs : std::vector{}`
+    // yazıyordu — programArgs null iken GEÇİCİ bir vector'e referans bağlayan
+    // sarkan referanstı. Boş tablo doğrudan ele alınır.
+    static const std::vector<std::string> kNoArgs;
+    const auto& args = f->env->programArgs ? *f->env->programArgs : kNoArgs;
+    ArrayObject* arr = f->env->heap->allocArray((int)args.size());
     for (const auto& s : args)
         arr->elements.push_back(Value::fromString(s));
-    return Value::fromRef(arr);
+    f->ret = HostSlot::fromRef(arr);
+    return 0;
 }
 
 // ── date implementasyonları (#88, ADR-035) ──────────────────────────────────
@@ -224,79 +258,98 @@ static Value sys_args(const std::vector<Value>&, HostContext& ctx) {
 // sınır, ADR-035'te belgelenir). date DEĞERİNİN kendisi (Value::int64Value)
 // tam hassasiyetlidir; year/month/day/addX/diffMillis bu yüzden güvenlidir.
 
-static Value date_now(const std::vector<Value>&, HostContext&) {
+static int date_now(HostCallFrame* f) {
     auto now = std::chrono::system_clock::now();
     long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                        now.time_since_epoch()).count();
-    return Value::fromDate(ms);
+    f->ret = HostSlot::fromDate(ms);
+    return 0;
 }
 
-static Value date_fromEpochMillis(const std::vector<Value>& a, HostContext&) {
-    return Value::fromDate((long long)a[0].intValue);
+static int date_fromEpochMillis(HostCallFrame* f) {
+    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]));
+    return 0;
 }
 
-static Value date_toEpochMillis(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt((int)a[0].int64Value);
+static int date_toEpochMillis(HostCallFrame* f) {
+    // root.sqt'te dönüş `int` — daraltma KASITLI ve eski davranışla birebir.
+    f->ret = HostSlot::fromInt((int)hostAsI64(f->args[0]));
+    return 0;
 }
 
-static Value date_addDays(const std::vector<Value>& a, HostContext&) {
-    return Value::fromDate(a[0].int64Value + (long long)a[1].intValue * 86400000LL);
+static int date_addDays(HostCallFrame* f) {
+    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]) + hostAsI64(f->args[1]) * 86400000LL);
+    return 0;
 }
-static Value date_addHours(const std::vector<Value>& a, HostContext&) {
-    return Value::fromDate(a[0].int64Value + (long long)a[1].intValue * 3600000LL);
+static int date_addHours(HostCallFrame* f) {
+    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]) + hostAsI64(f->args[1]) * 3600000LL);
+    return 0;
 }
-static Value date_addMinutes(const std::vector<Value>& a, HostContext&) {
-    return Value::fromDate(a[0].int64Value + (long long)a[1].intValue * 60000LL);
+static int date_addMinutes(HostCallFrame* f) {
+    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]) + hostAsI64(f->args[1]) * 60000LL);
+    return 0;
 }
-static Value date_addSeconds(const std::vector<Value>& a, HostContext&) {
-    return Value::fromDate(a[0].int64Value + (long long)a[1].intValue * 1000LL);
-}
-
-static Value date_year(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt(date_calc::breakDown(a[0].int64Value).y);
-}
-static Value date_month(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).mo);
-}
-static Value date_day(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).d);
-}
-static Value date_hour(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).h);
-}
-static Value date_minute(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).mi);
-}
-static Value date_second(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt((int)date_calc::breakDown(a[0].int64Value).s);
+static int date_addSeconds(HostCallFrame* f) {
+    f->ret = HostSlot::fromDate(hostAsI64(f->args[0]) + hostAsI64(f->args[1]) * 1000LL);
+    return 0;
 }
 
-static Value date_diffMillis(const std::vector<Value>& a, HostContext&) {
-    return Value::fromInt((int)(a[0].int64Value - a[1].int64Value));
+static int date_year(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt(date_calc::breakDown(hostAsI64(f->args[0])).y);
+    return 0;
+}
+static int date_month(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).mo);
+    return 0;
+}
+static int date_day(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).d);
+    return 0;
+}
+static int date_hour(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).h);
+    return 0;
+}
+static int date_minute(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).mi);
+    return 0;
+}
+static int date_second(HostCallFrame* f) {
+    f->ret = HostSlot::fromInt((int)date_calc::breakDown(hostAsI64(f->args[0])).s);
+    return 0;
+}
+
+static int date_diffMillis(HostCallFrame* f) {
+    // root.sqt dönüşü `int` — daraltma eski davranışla birebir korunur.
+    f->ret = HostSlot::fromInt((int)(hostAsI64(f->args[0]) - hostAsI64(f->args[1])));
+    return 0;
 }
 
 // "2026-07-12T10:00:00Z" — v1 yalnızca UTC (ADR-035); başka format → null.
-static Value date_parse(const std::vector<Value>& a, HostContext&) {
-    const std::string& s = a[0].stringValue;
+static int date_parse(HostCallFrame* f) {
+    const std::string& s = hostAsString(f->args[0]);
     int y, mo, d, h, mi, se;
     char zChar = 0;
-    if (s.size() != 20) return Value::null();
+    // Geçersiz girdi null döner — HATA DEĞİL (root.sqt dönüşü `date?`,
+    // ADR-021). rt_host_call 0 döner, err boş kalır.
+    if (s.size() != 20) { f->ret = HostSlot::null(); return 0; }
     if (std::sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%2d%c",
                      &y, &mo, &d, &h, &mi, &se, &zChar) != 7 || zChar != 'Z')
-        return Value::null();
+        { f->ret = HostSlot::null(); return 0; }
     if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || se > 59)
-        return Value::null();
+        { f->ret = HostSlot::null(); return 0; }
     long long ms = date_calc::assemble(y, (unsigned)mo, (unsigned)d,
                                         (unsigned)h, (unsigned)mi, (unsigned)se);
-    return Value::fromDate(ms);
+    f->ret = HostSlot::fromDate(ms);
+    return 0;
 }
 
 // pattern alt kümesi: yyyy MM dd HH mm ss (ADR-035'te sabitlenir)
-static Value date_format(const std::vector<Value>& a, HostContext&) {
-    auto b = date_calc::breakDown(a[0].int64Value);
+static int date_format(HostCallFrame* f) {
+    auto b = date_calc::breakDown(hostAsI64(f->args[0]));
     char buf[16];
     std::string out;
-    const std::string& pat = a[1].stringValue;
+    const std::string& pat = hostAsString(f->args[1]);
     size_t i = 0;
     auto matches = [&](const char* tok) {
         size_t n = std::string(tok).size();
@@ -311,7 +364,15 @@ static Value date_format(const std::vector<Value>& a, HostContext&) {
         else if (matches("ss")) { std::snprintf(buf, sizeof buf, "%02u", b.s); out += buf; i += 2; }
         else { out += pat[i]; ++i; }
     }
-    return Value::fromString(out);
+    // String dönüşü ömür sahibi üzerinden bağlanır (bkz. HostRetOwner).
+    hostSetRetString(*f, std::move(out));
+    return 0;
+}
+
+// core — derleyici sürümü (SAQUT_VERSION derleme zamanında gömülür)
+static int core_version(HostCallFrame* f) {
+    hostSetRetString(*f, SAQUT_VERSION);
+    return 0;
 }
 
 // ── Tablo (index = sayısal host id) ──────────────────────────────────────────
@@ -323,81 +384,55 @@ const std::vector<HostFn>& hostFnTable() {
         // tabloda impl == nullptr olarak DURUR — sembolik id ve arite tek
         // kaynak olarak burada kalsın, indeksler kaymasın diye. Dispatch
         // rt_host_call'da natif tabloya gider.
-        { "MATH_ABS",   1, nullptr },
-        { "MATH_ABSF",  1, nullptr },
-        { "MATH_MIN",   2, nullptr },
-        { "MATH_MAX",   2, nullptr },
-        { "MATH_MINF",  2, nullptr },
-        { "MATH_MAXF",  2, nullptr },
-        { "MATH_SQRT",  1, nullptr },
-        { "MATH_POW",   2, nullptr },
-        { "MATH_FLOOR", 1, nullptr },
-        { "MATH_CEIL",  1, nullptr },
-        { "MATH_ROUND", 1, nullptr },
-        { "MATH_PI",    0, nullptr },
-        { "MATH_E",     0, nullptr },
-        { "CAPS_DROP",  1, caps_drop  },
-        { "CAPS_HAS",   1, caps_has   },
-        { "FS_READ_FILE",   1, fs_readFile   },
-        { "FS_WRITE_FILE",  2, fs_writeFile  },
-        { "FS_APPEND",      2, fs_append     },
-        { "FS_READ_BYTES",  1, fs_readBytes  },
+        { "MATH_ABS", 1, math_abs },
+        { "MATH_ABSF", 1, math_absf },
+        { "MATH_MIN", 2, math_min },
+        { "MATH_MAX", 2, math_max },
+        { "MATH_MINF", 2, math_minf },
+        { "MATH_MAXF", 2, math_maxf },
+        { "MATH_SQRT", 1, math_sqrt },
+        { "MATH_POW", 2, math_pow },
+        { "MATH_FLOOR", 1, math_floor },
+        { "MATH_CEIL", 1, math_ceil },
+        { "MATH_ROUND", 1, math_round },
+        { "MATH_PI", 0, math_PI },
+        { "MATH_E", 0, math_E },
+        { "CAPS_DROP", 1, caps_drop },
+        { "CAPS_HAS", 1, caps_has },
+        { "FS_READ_FILE", 1, fs_readFile },
+        { "FS_WRITE_FILE", 2, fs_writeFile },
+        { "FS_APPEND", 2, fs_append },
+        { "FS_READ_BYTES", 1, fs_readBytes },
         { "FS_WRITE_BYTES", 2, fs_writeBytes },
-        { "FS_EXISTS",      1, fs_exists     },
-        { "FS_REMOVE",      1, fs_remove     },
-        { "SYS_RANDOM",     0, sys_random    },
+        { "FS_EXISTS", 1, fs_exists },
+        { "FS_REMOVE", 1, fs_remove },
+        { "SYS_RANDOM", 0, sys_random },
         { "SYS_RANDOM_INT", 2, sys_randomInt },
-        { "SYS_ENV",        1, sys_env       },
-        { "SYS_SLEEP",      1, sys_sleep     },
-        { "SYS_ARGS",       0, sys_args      },
-        { "DATE_NOW",             0, date_now             },
-        { "DATE_FROM_EPOCH_MS",   1, date_fromEpochMillis },
-        { "DATE_TO_EPOCH_MS",     1, date_toEpochMillis   },
-        { "DATE_ADD_DAYS",        2, date_addDays         },
-        { "DATE_ADD_HOURS",       2, date_addHours        },
-        { "DATE_ADD_MINUTES",     2, date_addMinutes      },
-        { "DATE_ADD_SECONDS",     2, date_addSeconds      },
-        { "DATE_YEAR",             1, date_year           },
-        { "DATE_MONTH",            1, date_month          },
-        { "DATE_DAY",              1, date_day            },
-        { "DATE_HOUR",             1, date_hour           },
-        { "DATE_MINUTE",           1, date_minute         },
-        { "DATE_SECOND",           1, date_second         },
-        { "DATE_DIFF_MS",          2, date_diffMillis     },
-        { "DATE_PARSE",            1, date_parse          },
-        { "DATE_FORMAT",           2, date_format         },
-        { "CORE_VERSION",        0, [](const std::vector<Value>&, HostContext&) {
-            return Value::fromString(SAQUT_VERSION); }},
+        { "SYS_ENV", 1, sys_env },
+        { "SYS_SLEEP", 1, sys_sleep },
+        { "SYS_ARGS", 0, sys_args },
+        { "DATE_NOW", 0, date_now },
+        { "DATE_FROM_EPOCH_MS", 1, date_fromEpochMillis },
+        { "DATE_TO_EPOCH_MS", 1, date_toEpochMillis },
+        { "DATE_ADD_DAYS", 2, date_addDays },
+        { "DATE_ADD_HOURS", 2, date_addHours },
+        { "DATE_ADD_MINUTES", 2, date_addMinutes },
+        { "DATE_ADD_SECONDS", 2, date_addSeconds },
+        { "DATE_YEAR", 1, date_year },
+        { "DATE_MONTH", 1, date_month },
+        { "DATE_DAY", 1, date_day },
+        { "DATE_HOUR", 1, date_hour },
+        { "DATE_MINUTE", 1, date_minute },
+        { "DATE_SECOND", 1, date_second },
+        { "DATE_DIFF_MS", 2, date_diffMillis },
+        { "DATE_PARSE", 1, date_parse },
+        { "DATE_FORMAT", 2, date_format },
+        { "CORE_VERSION", 0, core_version },
     };
     return table;
 }
 
-// ── Natif thunk tablosu (#222) ───────────────────────────────────────────────
-//
-// Yeni ABI'ye taşınmış gövdeler. hostFnTable() ile AYNI sembolik id uzayını
-// paylaşır: bir id burada varsa rt_host_call natif yolu kullanır, yoksa eski
-// gövdeye (sarmalayıcı üzerinden) düşer.
-//
-// Geçiş bu şekilde aile aile yapılabiliyor — her adım kendi başına yeşil test
-// bırakıyor ve hız kazancı ölçülebiliyor.
-const std::vector<HostNativeFn>& hostNativeThunks() {
-    static const std::vector<HostNativeFn> table = {
-        { "MATH_ABS",   math_abs   },
-        { "MATH_ABSF",  math_absf  },
-        { "MATH_MIN",   math_min   },
-        { "MATH_MAX",   math_max   },
-        { "MATH_MINF",  math_minf  },
-        { "MATH_MAXF",  math_maxf  },
-        { "MATH_SQRT",  math_sqrt  },
-        { "MATH_POW",   math_pow   },
-        { "MATH_FLOOR", math_floor },
-        { "MATH_CEIL",  math_ceil  },
-        { "MATH_ROUND", math_round },
-        { "MATH_PI",    math_PI    },
-        { "MATH_E",     math_E     },
-    };
-    return table;
-}
+
 
 int hostFnIndex(const std::string& symbolicId) {
     static const std::unordered_map<std::string, int> index = [] {
@@ -410,8 +445,3 @@ int hostFnIndex(const std::string& symbolicId) {
     return it != index.end() ? it->second : -1;
 }
 
-Value callHostFn(int id, const std::vector<Value>& args, HostContext& ctx) {
-    const auto& t = hostFnTable();
-    if (id < 0 || id >= (int)t.size() || !t[id].impl) return Value::null();
-    return t[id].impl(args, ctx);
-}

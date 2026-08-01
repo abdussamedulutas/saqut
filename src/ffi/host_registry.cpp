@@ -65,7 +65,7 @@ const HostMeta kHostMeta[] = {
     {"FS_EXISTS",          HostKind::Int,     HOST_PURE},
     {"FS_REMOVE",          HostKind::Void,    HOST_CAN_FAIL},
     // sys — args() string[] tahsis eder ve programArgs okur
-    {"SYS_RANDOM",         HostKind::Float32, HOST_PURE},
+    {"SYS_RANDOM",         HostKind::Float,   HOST_PURE},
     {"SYS_RANDOM_INT",     HostKind::Int,     HOST_CAN_FAIL},
     {"SYS_ENV",            HostKind::Str,     HOST_PURE},
     {"SYS_SLEEP",          HostKind::Void,    HOST_PURE},
@@ -109,50 +109,6 @@ HostKind hostRetKindFor(const char* symbolicId) {
     return m ? m->retKind : HostKind::Void;
 }
 
-// ── Adım 2 köprüsü: eski HostFn gövdesini yeni HostThunk imzasına sar ────────
-//
-// Eski gövde: Value(const std::vector<Value>&, HostContext&) — ve std::runtime_error
-//             fırlatabilir.
-// Yeni imza:  int(HostCallFrame*) — hata f->err'e yazılır.
-//
-// Sarmalayıcı çeviriyi ve exception yakalamayı yapar. Exception buradan öteye
-// GEÇMEZ: bu, ABI'nin "backend'e C++ unwind sızmaz" garantisinin uygulandığı
-// tek nokta.
-int callLegacyHostFn(int legacyId, HostCallFrame* f) {
-    const auto& table = hostFnTable();
-    if (legacyId < 0 || legacyId >= (int)table.size() || !table[legacyId].impl) {
-        f->err.set("gecersiz host fonksiyon id: " + std::to_string(legacyId), "E_FFI");
-        return 1;
-    }
-
-    // HostSlot → Value (eski gövde Value bekliyor).
-    std::vector<Value> args;
-    args.reserve(static_cast<size_t>(f->argc));
-    for (int32_t i = 0; i < f->argc; ++i)
-        args.push_back(fromHostSlot(f->args[i]));
-
-    HostContext ctx{
-        f->env ? f->env->caps        : nullptr,
-        f->env ? f->env->programArgs : nullptr,
-        f->env ? f->env->heap        : nullptr,
-    };
-
-    if (!f->retOwner) {
-        // Sözleşme ihlali: çağıran ömür sahibini bağlamamış. Sessizce sarkan
-        // pointer üretmektense açık hata.
-        f->err.set("host cagri cercevesinde retOwner bagli degil", "E_FFI");
-        return 1;
-    }
-
-    try {
-        hostSetRetValue(*f, table[legacyId].impl(args, ctx));
-        return 0;
-    } catch (const std::runtime_error& e) {
-        f->err.set(e.what(), "E_FFI");
-        return 1;
-    }
-}
-
 }  // namespace
 
 // ── Tablo ────────────────────────────────────────────────────────────────────
@@ -172,15 +128,7 @@ const std::vector<HostEntry>& hostRegistry() {
             e.arity      = static_cast<int8_t>(legacy[i].arity);
             e.flags      = hostFlagsFor(legacy[i].symbolicId);
             e.retKind    = hostRetKindFor(legacy[i].symbolicId);
-            // Natif thunk varsa doğrudan bağla — sıcak yolda arama yok.
-            // Yoksa nullptr kalır ve rt_host_call eski gövdeye sarmalayıcıyla
-            // düşer (geçiş sürüyor).
-            e.thunk = nullptr;
-            for (const auto& n : hostNativeThunks())
-                if (std::strcmp(n.symbolicId, legacy[i].symbolicId) == 0) {
-                    e.thunk = n.thunk;
-                    break;
-                }
+            e.thunk = legacy[i].thunk;
             t[kHostFnBase + i] = e;
         }
         return t;
@@ -215,17 +163,15 @@ extern "C" int rt_host_call(int32_t entryId, HostCallFrame* f) {
     if (!f) return 1;
     f->err.clear();
 
-    if (entryId >= kHostFnBase && entryId < kBuiltinBase) {
-        // Sıcak yol: natif thunk bağlıysa doğrudan çağır — Value'ya hiç
-        // uğramaz, çağrı başına tahsis yok.
-        const auto& t = hostRegistry();
-        if (entryId < (int32_t)t.size() && t[static_cast<size_t>(entryId)].thunk)
-            return t[static_cast<size_t>(entryId)].thunk(f);
-        // Geçiş yolu: gövde henüz taşınmadı, sarmalayıcıyla çağır.
-        return callLegacyHostFn(entryId - kHostFnBase, f);
+    // Sıcak yol: doğrudan thunk. Value'ya hiç uğramaz, çağrı başına tahsis yok.
+    const auto& t = hostRegistry();
+    if (entryId >= 0 && entryId < (int32_t)t.size()) {
+        HostThunk thunk = t[static_cast<size_t>(entryId)].thunk;
+        if (thunk) return thunk(f);
     }
 
-    // Built-in ve çekirdek blokları adım 4–5'te bağlanır.
+    // Built-in ve çekirdek blokları adım 4–5'te bağlanır. Bağlı olmayan bir
+    // id sessizce yanlış fonksiyona gitmez — açık hata döner.
     f->err.set("host entry bagli degil: " + std::to_string(entryId), "E_FFI");
     return 1;
 }

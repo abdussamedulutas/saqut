@@ -47,9 +47,9 @@ int main() {
     assert(opcodeJitBaseSupported(Opcode::ARRAY_LEN));
     assert(opcodeJitBaseSupported(Opcode::LOAD_GLOBAL));
     assert(opcodeJitBaseSupported(Opcode::STORE_GLOBAL));
-    assert(!opcodeJitBaseSupported(Opcode::ENTER_TRY));
-    assert(!opcodeJitBaseSupported(Opcode::LEAVE_TRY));
-    assert(!opcodeJitBaseSupported(Opcode::THROW));
+    assert(opcodeJitBaseSupported(Opcode::ENTER_TRY));
+    assert(opcodeJitBaseSupported(Opcode::LEAVE_TRY));
+    assert(opcodeJitBaseSupported(Opcode::THROW));
     assert(opcodeJitBaseSupported(Opcode::LOAD_CONST));
     assert(opcodeJitBaseSupported(Opcode::ADD));
     assert(opcodeJitBaseSupported(Opcode::FADD));

@@ -179,9 +179,9 @@ enum : uint8_t {
     /* --- String işlemleri (ADR-024: immutable değer-tipi) --- */ \
     X(STRING_CONCAT, 3, OP_VM | OP_JIT) /* slots[dest] = slots[left] + slots[right] */ \
     /* --- Hata yönetimi (ADR-025: UNCHECKED try/catch/throw) --- */ \
-    X(ENTER_TRY, 2, OP_VM) /* dest, jumpTarget; callDepth'i VM kaydeder */ \
-    X(LEAVE_TRY, 0, OP_VM) /* TryFrame'i çıkar (operand yok) */ \
-    X(THROW,     1, OP_VM) /* slots[src] değerini fırlat */ \
+    X(ENTER_TRY, 2, OP_VM | OP_JIT) /* dest, jumpTarget; callDepth'i VM kaydeder */ \
+    X(LEAVE_TRY, 0, OP_VM | OP_JIT) /* TryFrame'i çıkar (operand yok) */ \
+    X(THROW,     1, OP_VM | OP_JIT) /* slots[src] değerini fırlat */ \
     /* --- Tip dönüşümleri (ADR-026: as operatörü) — hatasız --- */ \
     X(CAST_INT_TO_STR,   2, OP_VM | OP_JIT) \
     X(CAST_FLOAT_TO_STR, 2, OP_VM | OP_JIT) \

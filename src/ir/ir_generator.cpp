@@ -1816,6 +1816,46 @@ void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {
             }
         }
     }
+
+    // 3. Nullable maskesi (#221). slotTypes'tan AYRI bir fixpoint çünkü farklı
+    // bir soruya cevap verir: "bu slot null TUTABİLİR mi?" — değer türü değil.
+    //
+    // Kaynaklar:
+    //   - LOAD_NULL dest'i    → doğrudan nullable
+    //   - bildirilen `T?` parametre → nullable
+    //   - LOAD_SLOT           → kaynaktan yayılır
+    // Tek yönlü ve monoton (bir kez nullable olan geri dönmez) → fixpoint sonlu.
+    fn->slotNullable.assign(static_cast<size_t>(fn->slotCount), false);
+
+    auto markNullable = [&](int slot) -> bool {
+        if (slot < 0 || slot >= fn->slotCount) return false;
+        if (fn->slotNullable[static_cast<size_t>(slot)]) return false;
+        fn->slotNullable[static_cast<size_t>(slot)] = true;
+        return true;
+    };
+
+    for (size_t i = 0; i < decl->params.size() && i < static_cast<size_t>(fn->slotCount); ++i)
+        if (decl->params[i]->varType.size() > 0 && decl->params[i]->varType.back() == '?')
+            markNullable(static_cast<int>(i));
+
+    changed = true;
+    for (int guard = 0; changed && guard < 8; ++guard) {
+        changed = false;
+        for (const Instruction& ins : fn->instructions) {
+            switch (ins.opcode) {
+            case Opcode::LOAD_NULL:
+                if (markNullable(ins.dest)) changed = true;
+                break;
+            case Opcode::LOAD_SLOT:
+                if (ins.src >= 0 && ins.src < fn->slotCount &&
+                    fn->slotNullable[static_cast<size_t>(ins.src)])
+                    if (markNullable(ins.dest)) changed = true;
+                break;
+            default:
+                break;
+            }
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

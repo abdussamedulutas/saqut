@@ -26,9 +26,15 @@ int main() {
         assert(opcodeArity(op) >= 0 && opcodeArity(op) <= 4);
     }
 
-    // 3) JIT temel destek — VM-only dilimler (struct/array/global/try/null)
+    // 3) JIT temel destek — VM-only dilimler (struct/array/global/try)
     //    OP_JIT bayrağı taşımaz; skaler dilimler taşır.
-    assert(!opcodeJitBaseSupported(Opcode::LOAD_NULL));
+    //
+    // #221: LOAD_NULL artık JIT'te destekleniyor — nullable slot başına gizli
+    // "isNull" yandaş register'ı ile. Bir Int register'ı 0 ile null'u ayıramaz,
+    // bu yüzden null'luk ayrı bitte taşınır. Nullable slot'u null-farkında
+    // OLMAYAN bir opcode tüketirse wholeProgramSupported reddeder (sessiz
+    // yanlış cevap yerine eksik kapsam — ADR-037: VM normatif).
+    assert(opcodeJitBaseSupported(Opcode::LOAD_NULL));
     assert(!opcodeJitBaseSupported(Opcode::STRUCT_NEW));
     assert(!opcodeJitBaseSupported(Opcode::FIELD_GET));
     assert(!opcodeJitBaseSupported(Opcode::FIELD_SET));

@@ -405,6 +405,45 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
                     break;
             }
         }
+        // #221: nullable slot'lar yalnızca null-farkındalıklı opcode'larda
+        // tüketilebilir. Bu dilimde yalnız EQUAL_EQUAL/NOT_EQUAL (ve slot'a
+        // yazan LOAD_NULL/LOAD_SLOT) null'u doğru işler.
+        //
+        // NEDEN REDDEDİYORUZ: nullable bir slot'u ör. ADD'e verirsek, JIT
+        // null'u 0 gibi toplar ve SESSİZCE yanlış sonuç üretir — VM ise
+        // narrowing sayesinde oraya hiç gelmez. Eksik kapsam kabul edilebilir,
+        // yanlış cevap değil (ADR-037: VM normatif).
+        //
+        // BİLİNEN EKSİK (narrowing): tip denetleyici `if (a != null) { int x = a; }`
+        // içinde a'nın non-null olduğunu KANITLAR (ADR-021 akış analizi), ama bu
+        // bilgi IR'ye inmez — slotNullable hâlâ true kalır ve buradaki kalkan
+        // gereksiz yere reddeder. Etkilenen: golden/null/narrowing.sqt,
+        // and_narrowing.sqt. Çözüm, narrowing sonucunu IR'de taşımak (ayrı iş);
+        // o zamana kadar bu iki fixture VM'de kalır — yanlış cevap değil, eksik
+        // kapsam.
+        for (const auto& instr : fn.instructions) {
+            auto usesNullable = [&](int slot) {
+                return slot >= 0 && slot < (int)fn.slotNullable.size() &&
+                       fn.slotNullable[static_cast<size_t>(slot)];
+            };
+            switch (instr.opcode) {
+                case Opcode::EQUAL_EQUAL:
+                case Opcode::NOT_EQUAL:
+                case Opcode::LOAD_NULL:
+                case Opcode::LOAD_SLOT:
+                    break;  // null-farkındalıklı
+                default:
+                    if (usesNullable(instr.left) || usesNullable(instr.right) ||
+                        usesNullable(instr.src)) {
+                        outReason.functionName = name;
+                        outReason.opcodeName =
+                            std::string(opcodeName(instr.opcode)) + " <nullable operand>";
+                        return false;
+                    }
+                    break;
+            }
+        }
+
         for (SlotType st : fn.slotTypes) {
             // Int/LongInt/Float/Float32 register-skaler; Str/Decimal kutulu
             // pointer (I64, ADR-037). Ref hâlâ sonraki dilimde (shadow stack).
@@ -600,6 +639,23 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 MIR_new_func_reg(ctx, func->u.func, mirType(slotKindOf(fn, i)), regName.c_str());
         }
 
+        // #221: nullable slot'lar için gizli "isNull" yandaş register'ı.
+        // Bir Int register'ı 0 ile null'u ayıramaz (64 bitin tamamı geçerli
+        // değer), bu yüzden null'luk AYRI bir bitte taşınır. VM'de bu sorun
+        // yok — Value ayrıca `kind` taşır. Yalnızca nullable slot'lar için
+        // ayrılır; diğerleri hiç etkilenmez (register baskısı yok).
+        std::vector<MIR_reg_t> nullFlagRegs(static_cast<size_t>(fn.slotCount), 0);
+        auto isNullableSlot = [&](int slot) -> bool {
+            return slot >= 0 && slot < (int)fn.slotNullable.size() &&
+                   fn.slotNullable[static_cast<size_t>(slot)];
+        };
+        for (int i = 0; i < fn.slotCount; i++) {
+            if (!isNullableSlot(i)) continue;
+            std::string flagName = "isnull" + std::to_string(i);
+            nullFlagRegs[static_cast<size_t>(i)] =
+                MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, flagName.c_str());
+        }
+
         // #165: instrN+1 — son etiket "fonksiyon sonu" (past-the-end) sentinel'idir.
         // IR generator, tüm yolları return eden switch'ten sonra JMP → instrN
         // emit eder (hiç yürütülmez ama hedef geçerli olmalı). labelAt[instrN]
@@ -608,6 +664,21 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
         for (size_t i = 0; i <= instrN; i++) labelAt[i] = MIR_new_label(ctx);
 
         auto R = [&](int slot) { return MIR_new_reg_op(ctx, regs[static_cast<size_t>(slot)]); };
+
+        // #221: nullable slot'un isNull bayrağını ayarla. `v` sabiti 0 (değer
+        // var) veya 1 (null). Slot nullable değilse hiçbir şey yapmaz.
+        //
+        // DİKKAT: değer üreten HER opcode bunu 0'a çekmek zorundadır, yoksa
+        // önceki null'luk sızar: `int? a; a = 5;` sonrası `a == null` yanlışlıkla
+        // true kalırdı. setNullFlag çağrısı unutulan bir opcode = sessiz yanlış
+        // cevap, bu yüzden emitInstr sonunda TOPLU olarak uygulanır (aşağıya bak).
+        auto setNullFlag = [&](int slot, int v) {
+            if (!isNullableSlot(slot)) return;
+            MIR_append_insn(ctx, func,
+                MIR_new_insn(ctx, MIR_MOV,
+                    MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(slot)]),
+                    MIR_new_int_op(ctx, v)));
+        };
         // ADR-040: D (double) argüman bekleyen bir runtime call'a float32
         // kaynak slot geçilecekse önce F2D ile genişlet (MIR call'da MIR_T_F/
         // MIR_T_D operand tip uyuşmazlığına düşmemek için — rt_jit_print_float32
@@ -669,6 +740,60 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             MIR_append_insn(ctx, func,
                 MIR_new_insn(ctx, rel, R(in.dest),
                     MIR_new_reg_op(ctx, tmp), MIR_new_int_op(ctx, 0)));
+        };
+
+        // #221: null-farkındalıklı eşitlik. VM semantiği (interpreter.cpp
+        // EQUAL_EQUAL/NOT_EQUAL) NULL-ÖNCELİKLİDİR ve birebir eşlenir:
+        //   ikisi de null      → eşit
+        //   yalnız biri null   → eşit DEĞİL
+        //   hiçbiri null değil → normal değer karşılaştırması
+        //
+        // Üretilen kod (eq için; ne'de sonuç XOR 1 ile terslenir):
+        //     bothNull = lnull & rnull
+        //     anyNull  = lnull | rnull
+        //     valEq    = <normal karşılaştırma>
+        //     dest     = bothNull | (valEq & ~anyNull)
+        //
+        // Dallanmasız — JIT sıcak yolunda tahmin edilemeyen branch üretmez.
+        // Operandlardan hiçbiri nullable değilse çağıran bu yolu hiç kullanmaz.
+        int nullTmpCounter = 0;
+        auto newTmp = [&](const char* prefix) {
+            std::string n = std::string(prefix) + std::to_string(nullTmpCounter++);
+            return MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, n.c_str());
+        };
+        // Bir operandın "null mu?" bitini veren operand. Slot nullable değilse
+        // sabit 0 — MIR sabit katlaması bunu bedavaya indirir.
+        auto nullBitOf = [&](int slot) -> MIR_op_t {
+            if (!isNullableSlot(slot)) return MIR_new_int_op(ctx, 0);
+            return MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(slot)]);
+        };
+        auto eitherNullable = [&](const Instruction& in) {
+            return isNullableSlot(in.left) || isNullableSlot(in.right);
+        };
+        // valEqReg: normal (null'suz) karşılaştırmanın sonucunu tutan register.
+        // Bu fonksiyon onu null kurallarıyla düzeltip dest'e yazar.
+        auto applyNullEquality = [&](const Instruction& in, MIR_reg_t valEqReg, bool negate) {
+            MIR_reg_t bothNull = newTmp("bothnull");
+            MIR_reg_t anyNull  = newTmp("anynull");
+            MIR_reg_t masked   = newTmp("nullmask");
+            MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_AND,
+                MIR_new_reg_op(ctx, bothNull), nullBitOf(in.left), nullBitOf(in.right)));
+            MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_OR,
+                MIR_new_reg_op(ctx, anyNull), nullBitOf(in.left), nullBitOf(in.right)));
+            // masked = anyNull ^ 1   (yani "hiçbiri null değil")
+            MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_XOR,
+                MIR_new_reg_op(ctx, masked), MIR_new_reg_op(ctx, anyNull),
+                MIR_new_int_op(ctx, 1)));
+            // masked = valEq & masked
+            MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_AND,
+                MIR_new_reg_op(ctx, masked), MIR_new_reg_op(ctx, valEqReg),
+                MIR_new_reg_op(ctx, masked)));
+            // dest = bothNull | masked   → EQUAL_EQUAL sonucu
+            MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_OR,
+                R(in.dest), MIR_new_reg_op(ctx, bothNull), MIR_new_reg_op(ctx, masked)));
+            if (negate)  // NOT_EQUAL: eşitliğin tersi
+                MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_XOR,
+                    R(in.dest), R(in.dest), MIR_new_int_op(ctx, 1)));
         };
 
         for (size_t i = 0; i < instrN; i++) {
@@ -1040,6 +1165,17 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, cmpOp(instr, MIR_GE, MIR_DGE, MIR_FGE), R(instr.dest), R(instr.left), R(instr.right)));
                     break;
                 case Opcode::EQUAL_EQUAL:
+                    // #221: operandlardan biri nullable ise null-öncelikli yol.
+                    // Değer karşılaştırması geçici bir register'a yapılır, sonra
+                    // null kurallarıyla düzeltilir.
+                    if (eitherNullable(instr)) {
+                        MIR_reg_t valEq = newTmp("valeq");
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx,
+                            cmpOp(instr, MIR_EQ, MIR_DEQ, MIR_FEQ),
+                            MIR_new_reg_op(ctx, valEq), R(instr.left), R(instr.right)));
+                        applyNullEquality(instr, valEq, /*negate=*/false);
+                        break;
+                    }
                     if (decimalOperands(instr)) { emitDecimalCompare(instr, MIR_EQ); break; }
                     if (stringOperands(instr)) {
                         // dest = rt_jit_string_eq(left, right)  (içerik, ADR-023)
@@ -1052,6 +1188,14 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     }
                     break;
                 case Opcode::NOT_EQUAL:
+                    if (eitherNullable(instr)) {
+                        MIR_reg_t valEq = newTmp("valeq");
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx,
+                            cmpOp(instr, MIR_EQ, MIR_DEQ, MIR_FEQ),
+                            MIR_new_reg_op(ctx, valEq), R(instr.left), R(instr.right)));
+                        applyNullEquality(instr, valEq, /*negate=*/true);
+                        break;
+                    }
                     if (decimalOperands(instr)) { emitDecimalCompare(instr, MIR_NE); break; }
                     if (stringOperands(instr)) {
                         // dest = !rt_jit_string_eq(left, right) → eq sonra XOR 1
@@ -1116,12 +1260,51 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                             MIR_new_call_insn(ctx, 3, MIR_new_ref_op(ctx, printProto), MIR_new_ref_op(ctx, printImport), R(a)));
                     break;
                 }
+                case Opcode::LOAD_NULL:
+                    // #221: değer register'ı 0'a çekilir (belirlenmiş durum —
+                    // çöp okumayı önler), null'luk yandaş bayrakta taşınır.
+                    // Bayrak aşağıdaki toplu adımda 1 yapılır.
+                    MIR_append_insn(ctx, func,
+                        MIR_new_insn(ctx, MIR_MOV, R(instr.dest), MIR_new_int_op(ctx, 0)));
+                    break;
                 case Opcode::RETURN:
                     MIR_append_insn(ctx, func, MIR_new_ret_insn(ctx, 1, R(instr.src)));
                     break;
                 default:
                     // opcodeSupported() yukarida zaten eledi.
                     break;
+            }
+
+            // #221: null bayrağı bakımı — TOPLU, opcode başına DEĞİL.
+            //
+            // Bu tasarım kasıtlı: bayrağı her case içinde elle ayarlasaydık,
+            // unutulan tek bir opcode sessizce yanlış cevap verirdi (eski
+            // null'luk sızar → `int? a; a = 5;` sonrası `a == null` true).
+            // Burada kural tek yerde ve istisnasız: dest'e yazan her talimat
+            // bayrağı tazeler. LOAD_NULL → 1, diğer her şey → 0.
+            //
+            // EQUAL_EQUAL/NOT_EQUAL kendi case'lerinde null-farkındalıklı
+            // karşılaştırma üretir (aşağıdaki nullAwareCompare); onların dest'i
+            // bir bool'dur ve nullable değildir, bu yüzden burada 0 yazılması
+            // doğrudur.
+            if (instr.dest >= 0 && isNullableSlot(instr.dest)) {
+                if (instr.opcode == Opcode::LOAD_NULL) {
+                    setNullFlag(instr.dest, 1);
+                } else if (instr.opcode == Opcode::LOAD_SLOT) {
+                    // `b = null;` IR'de LOAD_NULL + LOAD_SLOT olarak üretilir
+                    // (bkz. IR dump: LOAD_NULL s11 / LOAD_SLOT s10 = s11), yani
+                    // null'luk KOPYA ile taşınır. Bayrağı sıfırlamak burada
+                    // sessiz yanlış cevap verirdi — kaynaktan kopyalanmalı.
+                    // Kaynak nullable değilse sabit 0 kopyalanır (doğru).
+                    if (isNullableSlot(instr.src))
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                            MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(instr.dest)]),
+                            MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(instr.src)])));
+                    else
+                        setNullFlag(instr.dest, 0);
+                } else {
+                    setNullFlag(instr.dest, 0);
+                }
             }
         }
 

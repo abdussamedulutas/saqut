@@ -104,12 +104,16 @@ inline constexpr ValueRepRow kValueRepTable[] = {
      "(opcodeSupported). Ref JIT'i ADR-037 Dilim 3/4 kapsamı."},
     {"Null",
      "kind etiketi yalnız (alan yok)",
-     "— (register temsili YOK)",
-     "temsil-yok",
+     "yandaş isNull bayrak register'ı (#221)",
+     "tasarim",
      "\"null\"",
-     "JIT null temsili ayrı tasarım turu: nullable cast'ler (left==1) ve "
-     "LOAD_NULL JIT'te reddedilir (opcodeSupported). v1 sözleşmesinde "
-     "VM normatif — bu bilinçli eksiklik, ADR-037 açık noktası."},
+     "VM'de null'luk Value::kind'da; JIT'te nullable slot başına GİZLİ bir "
+     "isNull register'ında. Değer register'ı 0'a çekilir, null'luk ayrı bitte "
+     "taşınır — bir Int register'ı 0 ile null'u ayıramaz (64 bitin tamamı "
+     "geçerli değer). Eşitlik null-öncelikli ve dallanmasız üretilir (VM ile "
+     "birebir). Nullable slot'u null-farkında OLMAYAN bir opcode tüketirse "
+     "wholeProgramSupported reddeder: eksik kapsam kabul, yanlış cevap değil. "
+     "Nullable fallible cast'ler (left==1) hâlâ reddedilir — ayrı dilim."},
 };
 
 // Tablo satır sayısı — türetilmiş; ValueKind sayısı (9) ile test çapraz doğrular.

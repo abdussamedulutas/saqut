@@ -99,7 +99,7 @@ enum : uint8_t {
     /* --- Değer yükleme --- */ \
     X(LOAD_CONST,  2, OP_VM | OP_JIT) /* slots[dest] = intValue (tam sayı sabiti) */ \
     X(LOAD_STRING, 2, OP_VM | OP_JIT) /* slots[dest] = stringValue */ \
-    X(LOAD_NULL,   1, OP_VM)          /* slots[dest] = null (ADR-021) */ \
+    X(LOAD_NULL,   1, OP_VM | OP_JIT) /* slots[dest] = null (ADR-021); JIT'te yandaş isNull bayrağı (#221) */ \
     X(LOAD_SLOT,   2, OP_VM | OP_JIT) /* slots[dest] = slots[src] */ \
     /* --- Aritmetik (dest = left OP right) --- */ \
     X(ADD, 3, OP_VM | OP_JIT) \

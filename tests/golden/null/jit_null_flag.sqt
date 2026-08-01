@@ -1,0 +1,41 @@
+// #221: JIT'te null temsili — yandaş isNull bayrak register'ı.
+//
+// Hata SINIFI: bir Int register'ı 0 ile null'u ayıramaz (64 bitin tamamı
+// geçerli değer). Null'luk ayrı bir bitte taşınmazsa `int? a = 0;` için
+// `a == null` SESSİZCE true döner — VM false der. Bu, VM≡JIT sözleşmesinin
+// (ADR-037) doğrudan ihlali olurdu.
+//
+// Kritik durumlar ayrı ayrı ölçülür: 0 null değildir, atanmamış nullable
+// null'dur, null'a atama sonrası bayrak tazelenir, iki null birbirine eşittir.
+
+int main() {
+    // 1) 0 ile null AYRI — bayrak olmadan bu satır yanlış cevap verir
+    int? zero = 0;
+    print(zero == null);        // false
+
+    // 2) Atanmamış nullable null başlar (ADR-021 zero-init)
+    int? unset;
+    print(unset == null);       // true
+
+    // 3) Bayrak tazelenmeli: null'dan değere
+    int? a;
+    a = 7;
+    print(a == null);           // false — eski null'luk sızmamalı
+
+    // 4) Bayrak tazelenmeli: değerden null'a
+    int? b = 3;
+    b = null;
+    print(b == null);           // true
+
+    // 5) null == null → eşit; NOT_EQUAL tersi
+    int? p;
+    int? q;
+    print(p == q);              // true
+    print(p != q);              // false
+
+    // 6) Biri null biri değil → eşit DEĞİL (her iki yönde)
+    int? r = 1;
+    print(r == p);              // false
+    print(p == r);              // false
+    return 0;
+}

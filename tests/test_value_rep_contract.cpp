@@ -63,7 +63,8 @@ int main() {
         assert(validStatus.count(kValueRepTable[i].jitStatus) == 1);
 
     // 4) Tablo JIT davranışıyla çelişmiyor (opcode düzeyinde gerçeklik):
-    //    - Null: tablo "temsil-yok" diyor VE LOAD_NULL JIT'te gerçekten reddediliyor.
+    //    - Null: tablo "tasarim" diyor VE LOAD_NULL JIT'te gerçekten destekleniyor
+    //      (#221: yandaş isNull bayrak register'ı — VM'de kind, JIT'te ayrı bit).
     //    - Skalerler (Int/LongInt/Float/Float32/Date): "uyumlu".
     auto row = [](const char* name) -> const ValueRepRow& {
         for (int i = 0; i < kValueRepRowCount; ++i)
@@ -72,8 +73,8 @@ int main() {
         assert(false && "row yok");
         return kValueRepTable[0];
     };
-    assert(std::string(row("Null").jitStatus) == "temsil-yok");
-    assert(!opcodeJitBaseSupported(Opcode::LOAD_NULL));
+    assert(std::string(row("Null").jitStatus) == "tasarim");
+    assert(opcodeJitBaseSupported(Opcode::LOAD_NULL));
     assert(std::string(row("Int").jitStatus)     == "uyumlu");
     assert(std::string(row("LongInt").jitStatus) == "uyumlu");
     assert(std::string(row("Float").jitStatus)   == "uyumlu");

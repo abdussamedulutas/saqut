@@ -42,6 +42,18 @@ struct IRFunction {
     // boyutta (IRGenerator::finalizeSlotTypes doldurur). Boşsa (eski yol) tümü
     // Int varsayılır. JIT register tiplemesi + `saqut ir --types` bunu okur.
     std::vector<SlotType>    slotTypes;
+    // ADR-021 + #221: slot indeksi → bu slot `T?` (nullable) mı? slotTypes ile
+    // aynı boyutta. Boşsa tümü non-nullable varsayılır.
+    //
+    // NEDEN AYRI ALAN: slotTypes bir slot'un DEĞER türünü söyler (Int/Float/...),
+    // ama null'u temsil edemez — bir Int register'ında 64 bitin tamamı geçerli
+    // değerdir, 0 ile null ayrılamaz. VM'de bu sorun yok (Value ayrıca `kind`
+    // taşır), fakat JIT ham register kullanır. Bu maske, JIT'in nullable slot
+    // başına gizli bir "isNull" yandaş register'ı ayırmasını sağlar.
+    //
+    // Bu bilgi olmadan LOAD_NULL JIT'te SESSİZCE YANLIŞ cevap verirdi:
+    // `int? a = 0;` için `a == null` true dönerdi (VM false der).
+    std::vector<bool>        slotNullable;
     // Faz 5: (sourceLine) → ilk instruction IP indeksi (breakpoint eşlemesi için)
     std::unordered_map<int, int> lineToFirstIP;
     CFG cfg;

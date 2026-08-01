@@ -178,6 +178,7 @@ static const char* opcodeNameBridge(int op) {
 // profile != nullptr ise token/AST/IR/VM istatistikleri de toplanır.
 struct PipelineTimes {
     BMicros tokUs = 0, parseUs = 0, symUs = 0, tcUs = 0, irUs = 0, vmUs = 0;
+    BMicros jitWarmupUs = 0;  // yalnızca JIT modunda: IR→MIR+native derleme süresi
 };
 
 static bool runPipeline(
@@ -281,15 +282,21 @@ static bool runPipeline(
             int                             jitResult = 0;
             mir_backend::UnsupportedReason  reason;
             profiling::StageTimer           stageTimer;
-            profiling::StageTimer*          profPtr = profile ? &stageTimer : nullptr;
 
             auto ta = BClock::now();
             bool jitOk = mir_backend::tryCompileAndRunProgram(
-                program, jitResult, reason, programArgs, profPtr,
+                program, jitResult, reason, programArgs, &stageTimer,
                 profile ? &counters : nullptr);
             auto tb = BClock::now();
-            out.vmUs = elapsed_us_b(ta, tb);
-            if (verbose) std::cerr << "  jit       " << out.vmUs/1000 << " ms\n";
+            // Warmup (derleme) süresi ayrı tutulur — timing tablosundaki
+            // jit-execute yalnızca native çalıştırmayı göstersin (VM'deki
+            // vm-execute ile adil kıyas). ScopedStage overhead'i ns
+            // seviyesindedir; µs seviyesindeki ölçümü etkilemez.
+            out.jitWarmupUs = stageTimer.microsecondsFor("jit-warmup");
+            out.vmUs = elapsed_us_b(ta, tb) - out.jitWarmupUs;
+            if (out.vmUs < 0) out.vmUs = 0;
+            if (verbose) std::cerr << "  jit       " << out.vmUs/1000 << " ms"
+                                   << " (+warmup " << out.jitWarmupUs/1000 << " ms)\n";
 
             if (!jitOk) {
                 std::cerr << "bench: --jit bu programı tam olarak derleyemiyor "
@@ -300,8 +307,8 @@ static bool runPipeline(
             }
             if (profile) {
                 profile->jitUsed     = true;
-                profile->jitWarmupUs = (uint64_t)stageTimer.microsecondsFor("jit-warmup");
-                profile->jitExecUs   = (uint64_t)stageTimer.microsecondsFor("jit-exec");
+                profile->jitWarmupUs = (uint64_t)out.jitWarmupUs;
+                profile->jitExecUs   = (uint64_t)out.vmUs;
             }
         } else {
             // VM yolu — Interpreter üzerinde dispatch döngüsü.
@@ -374,6 +381,7 @@ inline int cmdBench(const CliArgs& args) {
     PhaseResult rSym  {"symbol-collect", {}};
     PhaseResult rTc   {"type-check",     {}};
     PhaseResult rIr   {"ir-gen",         {}};
+    PhaseResult rWarm {"jit-warmup",     {}};  // yalnızca JIT modunda doldurulur
     PhaseResult rExec {execLabel,        {}};
 
     for (int run = 0; run < N; run++) {
@@ -387,6 +395,7 @@ inline int cmdBench(const CliArgs& args) {
         rSym.samples.push_back(pt.symUs);
         rTc.samples.push_back(pt.tcUs);
         rIr.samples.push_back(pt.irUs);
+        if (useJit && !compileOnly) rWarm.samples.push_back(pt.jitWarmupUs);
         if (!compileOnly) rExec.samples.push_back(pt.vmUs);
 
         if (N > 3)
@@ -396,11 +405,14 @@ inline int cmdBench(const CliArgs& args) {
 
     // ── Timing tablosunu yazdır ───────────────────────────────────────────────
     std::vector<PhaseResult> phases = {rTok, rPar, rSym, rTc, rIr};
+    if (useJit && !compileOnly) phases.push_back(rWarm);
     if (!compileOnly) phases.push_back(rExec);
     printTimingTable(phases, N, filePath, compileOnly, execLabel);
 
     double compileSec = (rTok.best() + rPar.best() + rSym.best() +
                          rTc.best()  + rIr.best()) / 1e6;
+    // JIT'te native derleme (warmup) derleme işidir — verime dahil edilir.
+    if (useJit && !compileOnly) compileSec += rWarm.best() / 1e6;
     if (compileSec > 0) {
         double mbps = (totalBytes / 1024.0 / 1024.0) / compileSec;
         std::cout << "Derleme verimi (best): "

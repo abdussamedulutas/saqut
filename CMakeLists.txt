@@ -20,6 +20,24 @@ else()
     message(STATUS "Release modu (statik, optimize)")
 endif()
 
+# ── Gömülü saQut çekirdeği (#226) ─────────────────────────────────────────
+# src/internal/*.sqt gerçek saQut kaynaklarıdır ve derleme sırasında binary'ye
+# gömülür (Node.js'in js2c.py deseni). Elle gömme YOK: yeni bir .sqt eklemek
+# yeterlidir, CONFIGURE_DEPENDS sayesinde cmake onu kendiliğinden görür.
+file(GLOB_RECURSE INTERNAL_SQT CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/internal/*.sqt")
+set(INTERNAL_HEADER "${CMAKE_BINARY_DIR}/generated/internal_sources.hpp")
+
+add_custom_command(
+    OUTPUT  "${INTERNAL_HEADER}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
+    COMMAND python3 "${CMAKE_SOURCE_DIR}/scripts/embed_internal.py"
+                    "${CMAKE_SOURCE_DIR}/src/internal"
+                    "${INTERNAL_HEADER}"
+    DEPENDS ${INTERNAL_SQT} "${CMAKE_SOURCE_DIR}/scripts/embed_internal.py"
+    COMMENT "saQut cekirdegi gomuluyor (src/internal/*.sqt)"
+    VERBATIM)
+add_custom_target(embed_internal DEPENDS "${INTERNAL_HEADER}")
+
 # Tüm kaynak dosyaları topla
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
@@ -46,6 +64,9 @@ if(SAQUT_MIR_HAS_NO_IPA_CP_CLONE)
 endif()
 
 add_executable(saqut ${SOURCES})
+# Üretilen başlık kaynaklardan önce hazır olmalı.
+add_dependencies(saqut embed_internal)
+target_include_directories(saqut PRIVATE "${CMAKE_BINARY_DIR}/generated")
 
 target_include_directories(saqut PRIVATE src)
 target_link_libraries(saqut PRIVATE mir_core)

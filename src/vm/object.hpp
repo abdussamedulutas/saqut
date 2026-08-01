@@ -210,6 +210,15 @@ struct Heap {
         return obj;
     }
 
+    // #228: JIT decimal kutulaması da GC'ye girer (shadow stack ile görünür).
+    DecimalObject* allocDecimal(const DecimalValue& v) {
+        auto* obj = new DecimalObject(v);
+        obj->next = head;
+        head      = obj;
+        ++allocCount;
+        return obj;
+    }
+
     StructObject* allocStruct(int fieldCount) {
         auto* obj = new StructObject(fieldCount);
         obj->next = head;

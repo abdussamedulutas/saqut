@@ -165,14 +165,14 @@ enum : uint8_t {
     X(INT_TO_LONG,         2, OP_VM | OP_JIT) /* int → longint (kayıpsız) */ \
     X(LONG_TO_INT_CHECKED, 3, OP_VM | OP_JIT) /* int32 aralığı dışı → fallible */ \
     /* --- Struct (ADR-020: referans semantiği) --- */ \
-    X(STRUCT_NEW, 3, OP_VM) /* dest, intValue alan sayısı, functionName tip adı */ \
-    X(FIELD_GET,  3, OP_VM) /* slots[dest] = slots[src].fields[intValue] */ \
-    X(FIELD_SET,  3, OP_VM) /* slots[dest].fields[intValue] = slots[right] */ \
+    X(STRUCT_NEW, 3, OP_VM | OP_JIT) /* dest, intValue alan sayısı, functionName tip adı */ \
+    X(FIELD_GET,  3, OP_VM | OP_JIT) /* slots[dest] = slots[src].fields[intValue] */ \
+    X(FIELD_SET,  3, OP_VM | OP_JIT) /* slots[dest].fields[intValue] = slots[right] */ \
     /* --- Array (ADR-020: referans semantiği; #206 packed elemanlar) --- */ \
-    X(ARRAY_NEW, 3, OP_VM) /* dest, intValue kapasite, arrayElemKind packed tip */ \
-    X(ARRAY_GET, 3, OP_VM) /* slots[dest] = slots[left][slots[right]] — sınır kontrolü */ \
-    X(ARRAY_SET, 3, OP_VM) /* slots[dest][slots[left]] = slots[right] — sınır kontrolü */ \
-    X(ARRAY_LEN, 2, OP_VM) /* slots[dest] = slots[src].uzunluk() */ \
+    X(ARRAY_NEW, 3, OP_VM | OP_JIT) /* dest, intValue kapasite, arrayElemKind packed tip */ \
+    X(ARRAY_GET, 3, OP_VM | OP_JIT) /* slots[dest] = slots[left][slots[right]] — sınır kontrolü */ \
+    X(ARRAY_SET, 3, OP_VM | OP_JIT) /* slots[dest][slots[left]] = slots[right] — sınır kontrolü */ \
+    X(ARRAY_LEN, 2, OP_VM | OP_JIT) /* slots[dest] = slots[src].uzunluk() */ \
     /* --- Modül-düzeyi değişken erişimi --- */ \
     X(LOAD_GLOBAL,  2, OP_VM) /* slots[dest] = moduleSlots[intValue] */ \
     X(STORE_GLOBAL, 2, OP_VM) /* moduleSlots[intValue] = slots[src] */ \

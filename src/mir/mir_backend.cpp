@@ -19,6 +19,8 @@
 
 #include "ffi/host_bridge.hpp"
 #include "ffi/host_registry.hpp"
+#include "vm/shadow_stack.hpp"
+#include "data/array.hpp"
 
 #include <climits>
 #include <cmath>
@@ -46,6 +48,147 @@
 namespace mir_backend {
 
 namespace {
+
+namespace {
+Heap* g_jitHeap = nullptr;
+int   g_jitGcThreshold = 1024;
+
+// #228: JIT safepoint'i. VM'de toplama talimat döngüsündeki maybeCollect ile
+// tetiklenir; JIT'te o döngü yok, bu yüzden TAHSİS noktasında denenir.
+//
+// Kökler: shadow stack (JIT register'larındaki referanslar). VM callStack'i
+// JIT çalışırken boştur, dolayısıyla başka kök yoktur.
+//
+// Stop-the-world ve tam döngü: incremental adım JIT'te anlamsız çünkü
+// tahsisler arasında geri dönülecek bir yorumlayıcı döngüsü yok.
+void jitMaybeCollect() {
+    if (!g_jitHeap || g_jitHeap->allocCount < g_jitGcThreshold) return;
+    for (Object* o : jitShadowStack().slots)
+        if (o) g_jitHeap->markValue(Value::fromRef(o));
+    while (drainGrey(g_jitHeap, 4096) > 0) {}
+    g_jitHeap->sweep();
+    g_jitGcThreshold = std::max(1024, g_jitHeap->allocCount * 2);
+}
+}
+
+// ── #228: Ref opcode trampolinleri ──────────────────────────────────────────
+//
+// array/struct nesneleri JIT heap'inde tahsis edilir ve shadow stack üzerinden
+// GC'ye görünür kılınır. Semantik VM ile birebir (interpreter.cpp ARRAY_*/
+// FIELD_* dalları); eleman erişimi src/data/array.cpp'deki tek kaynaktan gelir.
+
+extern "C" void rt_jit_shadow_set(int64_t index, void* obj) {
+    jitShadowStack().set((int)index, static_cast<Object*>(obj));
+}
+
+extern "C" void* rt_jit_array_new(int64_t capacity, int64_t elemKind) {
+    if (!g_jitHeap) return nullptr;
+    jitMaybeCollect();
+    auto ek  = (ArrayElemKind)elemKind;
+    auto* arr = g_jitHeap->allocArray((int)capacity, ek);
+    switch (ek) {
+        case ArrayElemKind::Ref:     arr->elements.resize((size_t)capacity, Value::fromInt(0)); break;
+        case ArrayElemKind::Byte:    arr->bytes.resize((size_t)capacity, 0);    break;
+        case ArrayElemKind::Int:     arr->ints.resize((size_t)capacity, 0);     break;
+        case ArrayElemKind::LongInt: arr->longs.resize((size_t)capacity, 0);    break;
+        case ArrayElemKind::Float32: arr->f32s.resize((size_t)capacity, 0.0f);  break;
+        case ArrayElemKind::Float64: arr->f64s.resize((size_t)capacity, 0.0);   break;
+        case ArrayElemKind::Decimal: arr->decimals.resize((size_t)capacity);    break;
+    }
+    return arr;
+}
+
+extern "C" int64_t rt_jit_array_len(void* a) {
+    if (!a) return 0;
+    return dataArraySize(static_cast<ArrayObject*>(a));
+}
+
+// Sınır dışı erişim VM'de yakalanabilir bir Error'dur; JIT'te try/catch yok
+// (ENTER_TRY desteklenmiyor) → uncaught throw ile aynı: program durur.
+static void jitBoundsFail(const char* what, int64_t idx, int64_t len) {
+    std::cerr << "runtime error: " << what << " index " << idx
+              << " out of bounds (length " << len << ")" << std::endl;
+    std::exit(70);
+}
+
+extern "C" int64_t rt_jit_array_get_i(void* a, int64_t idx) {
+    auto* arr = static_cast<ArrayObject*>(a);
+    if (!arr) jitBoundsFail("array", idx, 0);
+    int64_t len = dataArraySize(arr);
+    if (idx < 0 || idx >= len) jitBoundsFail("array", idx, len);
+    return dataArrayElemAt(arr, (int)idx).asI64();
+}
+
+extern "C" double rt_jit_array_get_d(void* a, int64_t idx) {
+    auto* arr = static_cast<ArrayObject*>(a);
+    if (!arr) jitBoundsFail("array", idx, 0);
+    int64_t len = dataArraySize(arr);
+    if (idx < 0 || idx >= len) jitBoundsFail("array", idx, len);
+    return dataArrayElemAt(arr, (int)idx).asDouble();
+}
+
+extern "C" void* rt_jit_array_get_p(void* a, int64_t idx) {
+    auto* arr = static_cast<ArrayObject*>(a);
+    if (!arr) jitBoundsFail("array", idx, 0);
+    int64_t len = dataArraySize(arr);
+    if (idx < 0 || idx >= len) jitBoundsFail("array", idx, len);
+    return dataArrayElemAt(arr, (int)idx).ref;
+}
+
+static void jitArraySet(ArrayObject* arr, int64_t idx, const Value& v) {
+    if (!arr) jitBoundsFail("array", idx, 0);
+    int64_t len = dataArraySize(arr);
+    if (idx < 0 || idx >= len) jitBoundsFail("array", idx, len);
+    size_t i = (size_t)idx;
+    switch (arr->elemKind) {
+        case ArrayElemKind::Ref:     arr->elements[i] = v; break;
+        case ArrayElemKind::Byte:    arr->bytes[i]    = (uint8_t)v.asI64(); break;
+        case ArrayElemKind::Int:     arr->ints[i]     = (int32_t)v.asI64(); break;
+        case ArrayElemKind::LongInt: arr->longs[i]    = v.asI64(); break;
+        case ArrayElemKind::Float32: arr->f32s[i]     = (float)v.asDouble(); break;
+        case ArrayElemKind::Float64: arr->f64s[i]     = v.asDouble(); break;
+        case ArrayElemKind::Decimal: arr->decimals[i] = v.decimalValue; break;
+    }
+}
+
+extern "C" void rt_jit_array_set_i(void* a, int64_t idx, int64_t v) {
+    jitArraySet(static_cast<ArrayObject*>(a), idx, Value::fromLongInt(v));
+}
+extern "C" void rt_jit_array_set_d(void* a, int64_t idx, double v) {
+    jitArraySet(static_cast<ArrayObject*>(a), idx, Value::fromFloat(v));
+}
+extern "C" void rt_jit_array_set_p(void* a, int64_t idx, void* v) {
+    jitArraySet(static_cast<ArrayObject*>(a), idx, Value::fromRef(static_cast<Object*>(v)));
+}
+
+extern "C" void* rt_jit_struct_new(int64_t fieldCount) {
+    if (!g_jitHeap) return nullptr;
+    jitMaybeCollect();
+    return g_jitHeap->allocStruct((int)fieldCount);
+}
+
+static Value* jitFieldAt(void* o, int64_t idx) {
+    auto* obj = static_cast<StructObject*>(o);
+    if (!obj || idx < 0 || idx >= (int64_t)obj->fields.size()) {
+        std::cerr << "runtime error: invalid struct field index " << idx << std::endl;
+        std::exit(70);
+    }
+    return &obj->fields[(size_t)idx];
+}
+
+extern "C" int64_t rt_jit_field_get_i(void* o, int64_t idx) { return jitFieldAt(o, idx)->asI64(); }
+extern "C" double  rt_jit_field_get_d(void* o, int64_t idx) { return jitFieldAt(o, idx)->asDouble(); }
+extern "C" void*   rt_jit_field_get_p(void* o, int64_t idx) { return jitFieldAt(o, idx)->ref; }
+
+extern "C" void rt_jit_field_set_i(void* o, int64_t idx, int64_t v) {
+    *jitFieldAt(o, idx) = Value::fromLongInt(v);
+}
+extern "C" void rt_jit_field_set_d(void* o, int64_t idx, double v) {
+    *jitFieldAt(o, idx) = Value::fromFloat(v);
+}
+extern "C" void rt_jit_field_set_p(void* o, int64_t idx, void* v) {
+    *jitFieldAt(o, idx) = Value::fromRef(static_cast<Object*>(v));
+}
 
 // ── #227: birleşik host çağrı trampolini ────────────────────────────────────
 //
@@ -136,16 +279,26 @@ extern "C" void rt_jit_print_str(void* strObj) {
 // bunlar program-ömrü boyunca birikir ve tryCompileAndRunProgram sonunda toplu
 // silinir (leak değil, ama döngüde çok concat = çok nesne — GC gelince çözülür).
 // Tek-iş-parçacıklı varsayım (MIRPLAN §9: ileride thread-local). ──────────────
+// #228: JIT nesneleri artık VM heap'inde ve GC'ye görünür (shadow stack).
+// Öncesinde unique_ptr havuzunda süresiz birikiyorlardı — 200k concat'te
+// JIT 21,8 MB / VM 6,8 MB (ölçüldü).
 namespace {
-std::vector<std::unique_ptr<StringObject>> g_jitRuntimeStrings;
+StringObject* jitNewString(std::string v) {
+    if (g_jitHeap) { jitMaybeCollect(); return g_jitHeap->allocString(std::move(v)); }
+    // Heap bağlı değilse (test/izole kullanım) sızdırmadan çalış.
+    static std::vector<std::unique_ptr<StringObject>> fallback;
+    fallback.push_back(std::make_unique<StringObject>(std::move(v)));
+    return fallback.back().get();
 }
+}
+
+void jitSetHeap(Heap* h) { g_jitHeap = h; }
 
 // ── STRING_CONCAT trampolini — yeni (immutable, ADR-024) string üretir. ──────
 extern "C" void* rt_jit_string_concat(void* a, void* b) {
     const std::string& sa = static_cast<StringObject*>(a)->data;
     const std::string& sb = static_cast<StringObject*>(b)->data;
-    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(sa + sb));
-    return g_jitRuntimeStrings.back().get();
+    return jitNewString(sa + sb);
 }
 
 // ── string ==/!= trampolini — ADR-023 istisnası: string eşitliği İÇERİK.
@@ -167,29 +320,24 @@ extern "C" void rt_jit_cast_error(const char* what) {
     std::exit(kJitRuntimeErrorExit);
 }
 extern "C" void* rt_jit_int_to_str(int64_t v) {
-    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(std::to_string(v)));
-    return g_jitRuntimeStrings.back().get();
+    return jitNewString(std::to_string(v));
 }
 extern "C" void* rt_jit_float_to_str(double v) {
     // #114: biçim tek kaynaktan (core/float_format.hpp) — VM cast sözleşmesi
-    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(formatDoubleCast(v)));
-    return g_jitRuntimeStrings.back().get();
+    return jitNewString(formatDoubleCast(v));
 }
 extern "C" void* rt_jit_bool_to_str(int64_t v) {
-    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(v ? "true" : "false"));
-    return g_jitRuntimeStrings.back().get();
+    return jitNewString(v ? "true" : "false");
 }
 // ADR-040: longint (int64) → string. VM CAST_LONG_TO_STR ile birebir (to_string).
 extern "C" void* rt_jit_long_to_str(int64_t v) {
-    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(std::to_string(v)));
-    return g_jitRuntimeStrings.back().get();
+    return jitNewString(std::to_string(v));
 }
 // ADR-040: float32 → string. VM CAST_FLOAT32_TO_STR ile birebir (setprecision 9).
 // Argüman gerçek single (MIR_T_F) — F2D genişletmesi olmadan doğrudan.
 extern "C" void* rt_jit_float32_to_str(float v) {
     // #114: biçim tek kaynaktan (core/float_format.hpp) — VM cast sözleşmesi
-    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(formatFloat32Cast(v)));
-    return g_jitRuntimeStrings.back().get();
+    return jitNewString(formatFloat32Cast(v));
 }
 extern "C" int64_t rt_jit_str_to_int(void* s) {
     const std::string& str = static_cast<StringObject*>(s)->data;
@@ -274,11 +422,12 @@ extern "C" int64_t rt_jit_float_to_long_checked(double fv) {
 // g_jitDecimals havuzunda (program sonunda toplu silinir). Hata mesajları VM'in
 // D* / CAST_*_DECIMAL dallarıyla birebir. ────────────────────────────────────
 namespace {
-std::vector<std::unique_ptr<DecimalObject>> g_jitDecimals;
 DecimalValue& jitDV(void* p) { return static_cast<DecimalObject*>(p)->val; }
 DecimalObject* jitBoxDecimal(const DecimalValue& v) {
-    g_jitDecimals.push_back(std::make_unique<DecimalObject>(v));
-    return g_jitDecimals.back().get();
+    if (g_jitHeap) return g_jitHeap->allocDecimal(v);
+    static std::vector<std::unique_ptr<DecimalObject>> fallback;
+    fallback.push_back(std::make_unique<DecimalObject>(v));
+    return fallback.back().get();
 }
 }
 extern "C" void* rt_jit_decimal_add(void* a, void* b) {
@@ -323,8 +472,7 @@ extern "C" void* rt_jit_decimal_neg(void* a) { return jitBoxDecimal(DecimalValue
 extern "C" void* rt_jit_int_to_decimal(int64_t v)   { return jitBoxDecimal(DecimalValue::fromInt(v)); }
 extern "C" void* rt_jit_float_to_decimal(double v)  { return jitBoxDecimal(DecimalValue::fromDouble(v)); }
 extern "C" void* rt_jit_decimal_to_str(void* d) {
-    g_jitRuntimeStrings.push_back(std::make_unique<StringObject>(jitDV(d).toString()));
-    return g_jitRuntimeStrings.back().get();
+    return jitNewString(jitDV(d).toString());
 }
 extern "C" int64_t rt_jit_decimal_to_int(void* d) {
     DecimalValue t = DecimalValue::truncate(jitDV(d));
@@ -402,9 +550,6 @@ bool isSupportedCallhost(const Instruction& instr, const std::vector<bool>& fnNu
     if ((int)instr.argSlots.size() > kMaxHostArgs) return false;
     const HostEntry* he = hostEntryAt(instr.intValue);
     if (!he || !he->thunk) return false;
-    // Heap tahsisi GC kökü ister; JIT register'ları shadow stack olmadan
-    // taranamaz (Ref dilimi önkoşulu).
-    if (he->flags & HOST_NEEDS_HEAP) return false;
     // JIT'in HostEnv'i VM'inkinden ayrı bir caps kümesi taşır: caps::has()
     // VM'de 1, JIT'te 0 dönerdi (ölçüldü: golden/caps/drop_and_has).
     if (he->flags & (HOST_NEEDS_CAPS | HOST_NEEDS_ARGS)) return false;
@@ -522,9 +667,12 @@ bool wholeProgramSupported(IRProgram& program, UnsupportedReason& outReason) {
         for (SlotType st : fn.slotTypes) {
             // Int/LongInt/Float/Float32 register-skaler; Str/Decimal kutulu
             // pointer (I64, ADR-037). Ref hâlâ sonraki dilimde (shadow stack).
+            // #228: Ref artık destekleniyor — shadow stack GC görünürlüğünü
+            // sağlıyor. Date hâlâ dışarıda (register temsili tanımlı değil).
             if (st != SlotType::Int && st != SlotType::LongInt &&
                 st != SlotType::Float && st != SlotType::Float32 &&
-                st != SlotType::Str && st != SlotType::Decimal) {
+                st != SlotType::Str && st != SlotType::Decimal &&
+                st != SlotType::Ref) {
                 outReason.functionName = name;
                 outReason.opcodeName =
                     std::string("<desteklenmeyen slot turu: ") + slotTypeName(st) + ">";
@@ -550,13 +698,19 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
 
     // Host çağrılarının ortamı. Heap YOK: heap gerektiren kayıtlar
     // wholeProgramSupported'da zaten reddedilir.
+    // #228: JIT'in kendi heap'i. VM çalışmadığı için onun heap'i kullanılamaz;
+    // GC görünürlüğü shadow stack üzerinden sağlanır (jitShadowStack).
+    static Heap                     jitHeap;
+    g_jitGcThreshold = 1024;
     static std::set<Capability>     jitCaps;
     static std::vector<std::string> jitArgs;
     static HostEnv                  jitEnv;
     jitEnv.caps        = &jitCaps;
     jitEnv.programArgs = &jitArgs;
-    jitEnv.heap        = nullptr;
+    jitEnv.heap        = &jitHeap;
     jitSetHostEnv(&jitEnv);
+    jitSetHeap(&jitHeap);
+    jitShadowStack().clear();
 
     if (program.findFunction("main") == nullptr) {
         outReason.functionName = "main";
@@ -645,6 +799,47 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t decF2DImport    = MIR_new_import(ctx, "rt_jit_float_to_decimal");
     MIR_item_t decToFProto     = MIR_new_proto(ctx, "dec_tof_proto", 1, &dRet, 1, MIR_T_I64, "v");
     MIR_item_t decToFImport    = MIR_new_import(ctx, "rt_jit_decimal_to_float");
+    MIR_var_t  ssVars[2]       = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "o", 0}};
+    MIR_item_t ssProto         = MIR_new_proto_arr(ctx, "ss_proto", 0, nullptr, 2, ssVars);
+    MIR_item_t ssImport        = MIR_new_import(ctx, "rt_jit_shadow_set");
+    MIR_var_t  anewVars[2]     = {{MIR_T_I64, "c", 0}, {MIR_T_I64, "k", 0}};
+    MIR_item_t anewProto       = MIR_new_proto_arr(ctx, "anew_proto", 1, &i64Ret, 2, anewVars);
+    MIR_item_t anewImport      = MIR_new_import(ctx, "rt_jit_array_new");
+    MIR_item_t alenProto       = MIR_new_proto(ctx, "alen_proto", 1, &i64Ret, 1, MIR_T_I64, "a");
+    MIR_item_t alenImport      = MIR_new_import(ctx, "rt_jit_array_len");
+    MIR_var_t  agetVars[2]     = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "i", 0}};
+    MIR_item_t agetIProto      = MIR_new_proto_arr(ctx, "agi_proto", 1, &i64Ret, 2, agetVars);
+    MIR_item_t agetIImport     = MIR_new_import(ctx, "rt_jit_array_get_i");
+    MIR_item_t agetDProto      = MIR_new_proto_arr(ctx, "agd_proto", 1, &dRet, 2, agetVars);
+    MIR_item_t agetDImport     = MIR_new_import(ctx, "rt_jit_array_get_d");
+    MIR_item_t agetPProto      = MIR_new_proto_arr(ctx, "agp_proto", 1, &i64Ret, 2, agetVars);
+    MIR_item_t agetPImport     = MIR_new_import(ctx, "rt_jit_array_get_p");
+    MIR_var_t  asetIVars[3]    = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "i", 0}, {MIR_T_I64, "v", 0}};
+    MIR_item_t asetIProto      = MIR_new_proto_arr(ctx, "asi_proto", 0, nullptr, 3, asetIVars);
+    MIR_item_t asetIImport     = MIR_new_import(ctx, "rt_jit_array_set_i");
+    MIR_var_t  asetDVars[3]    = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "i", 0}, {MIR_T_D, "v", 0}};
+    MIR_item_t asetDProto      = MIR_new_proto_arr(ctx, "asd_proto", 0, nullptr, 3, asetDVars);
+    MIR_item_t asetDImport     = MIR_new_import(ctx, "rt_jit_array_set_d");
+    MIR_item_t asetPProto      = MIR_new_proto_arr(ctx, "asp_proto", 0, nullptr, 3, asetIVars);
+    MIR_item_t asetPImport     = MIR_new_import(ctx, "rt_jit_array_set_p");
+    MIR_item_t snewProto       = MIR_new_proto(ctx, "snew_proto", 1, &i64Ret, 1, MIR_T_I64, "n");
+    MIR_item_t snewImport      = MIR_new_import(ctx, "rt_jit_struct_new");
+    MIR_var_t  fgetVars[2]     = {{MIR_T_I64, "o", 0}, {MIR_T_I64, "i", 0}};
+    MIR_item_t fgetIProto      = MIR_new_proto_arr(ctx, "fgi_proto", 1, &i64Ret, 2, fgetVars);
+    MIR_item_t fgetIImport     = MIR_new_import(ctx, "rt_jit_field_get_i");
+    MIR_item_t fgetDProto      = MIR_new_proto_arr(ctx, "fgd_proto", 1, &dRet, 2, fgetVars);
+    MIR_item_t fgetDImport     = MIR_new_import(ctx, "rt_jit_field_get_d");
+    MIR_item_t fgetPProto      = MIR_new_proto_arr(ctx, "fgp_proto", 1, &i64Ret, 2, fgetVars);
+    MIR_item_t fgetPImport     = MIR_new_import(ctx, "rt_jit_field_get_p");
+    MIR_var_t  fsetIVars[3]    = {{MIR_T_I64, "o", 0}, {MIR_T_I64, "i", 0}, {MIR_T_I64, "v", 0}};
+    MIR_item_t fsetIProto      = MIR_new_proto_arr(ctx, "fsi_proto", 0, nullptr, 3, fsetIVars);
+    MIR_item_t fsetIImport     = MIR_new_import(ctx, "rt_jit_field_set_i");
+    MIR_var_t  fsetDVars[3]    = {{MIR_T_I64, "o", 0}, {MIR_T_I64, "i", 0}, {MIR_T_D, "v", 0}};
+    MIR_item_t fsetDProto      = MIR_new_proto_arr(ctx, "fsd_proto", 0, nullptr, 3, fsetDVars);
+    MIR_item_t fsetDImport     = MIR_new_import(ctx, "rt_jit_field_set_d");
+    MIR_item_t fsetPProto      = MIR_new_proto_arr(ctx, "fsp_proto", 0, nullptr, 3, fsetIVars);
+    MIR_item_t fsetPImport     = MIR_new_import(ctx, "rt_jit_field_set_p");
+
     MIR_var_t  hostArgIVars[3] = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "k", 0}, {MIR_T_I64, "v", 0}};
     MIR_item_t hostArgIProto   = MIR_new_proto_arr(ctx, "host_arg_i_proto", 0, nullptr, 3, hostArgIVars);
     MIR_item_t hostArgIImport  = MIR_new_import(ctx, "rt_jit_host_arg_i");
@@ -892,6 +1087,17 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             if (negate)  // NOT_EQUAL: eşitliğin tersi
                 MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_XOR,
                     R(in.dest), R(in.dest), MIR_new_int_op(ctx, 1)));
+        };
+
+        // #228: bir slot'taki referansı GC'ye görünür kıl. Slot indeksi shadow
+        // stack indeksi olarak kullanılır — fonksiyon başına ayrı taban yok
+        // çünkü JIT'te iç içe saQut çağrısı sırasında GC tetiklenmez (host
+        // çağrıları tek tampon kullanır ve dönüşte biter).
+        auto emitShadowSet = [&](int slot) {
+            if (slot < 0) return;
+            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                MIR_new_ref_op(ctx, ssProto), MIR_new_ref_op(ctx, ssImport),
+                MIR_new_int_op(ctx, (int64_t)slot), R(slot)));
         };
 
         for (size_t i = 0; i < instrN; i++) {
@@ -1329,6 +1535,76 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_insn_arr(ctx, MIR_CALL, ops.size(), ops.data()));
                     break;
                 }
+                case Opcode::ARRAY_NEW: {
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
+                        MIR_new_ref_op(ctx, anewProto), MIR_new_ref_op(ctx, anewImport),
+                        R(instr.dest),
+                        MIR_new_int_op(ctx, instr.intValue),
+                        MIR_new_int_op(ctx, (int64_t)instr.arrayElemKind)));
+                    emitShadowSet(instr.dest);
+                    break;
+                }
+                case Opcode::ARRAY_LEN:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                        MIR_new_ref_op(ctx, alenProto), MIR_new_ref_op(ctx, alenImport),
+                        R(instr.dest), R(instr.src)));
+                    break;
+                case Opcode::ARRAY_GET: {
+                    SlotType vt = instr.valueType;
+                    bool isD = (vt == SlotType::Float || vt == SlotType::Float32);
+                    bool isP = (vt == SlotType::Ref || vt == SlotType::Str ||
+                                vt == SlotType::Decimal);
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
+                        MIR_new_ref_op(ctx, isD ? agetDProto : (isP ? agetPProto : agetIProto)),
+                        MIR_new_ref_op(ctx, isD ? agetDImport : (isP ? agetPImport : agetIImport)),
+                        R(instr.dest), R(instr.left), R(instr.right)));
+                    if (isP) emitShadowSet(instr.dest);
+                    break;
+                }
+                case Opcode::ARRAY_SET: {
+                    SlotType vt = slotKindOf(fn, instr.right);
+                    bool isD = (vt == SlotType::Float || vt == SlotType::Float32);
+                    bool isP = (vt == SlotType::Ref || vt == SlotType::Str ||
+                                vt == SlotType::Decimal);
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
+                        MIR_new_ref_op(ctx, isD ? asetDProto : (isP ? asetPProto : asetIProto)),
+                        MIR_new_ref_op(ctx, isD ? asetDImport : (isP ? asetPImport : asetIImport)),
+                        R(instr.dest), R(instr.left),
+                        isD ? asDoubleOperand(instr.right) : R(instr.right)));
+                    break;
+                }
+                case Opcode::STRUCT_NEW: {
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                        MIR_new_ref_op(ctx, snewProto), MIR_new_ref_op(ctx, snewImport),
+                        R(instr.dest), MIR_new_int_op(ctx, instr.intValue)));
+                    emitShadowSet(instr.dest);
+                    break;
+                }
+                case Opcode::FIELD_GET: {
+                    SlotType vt = instr.valueType;
+                    bool isD = (vt == SlotType::Float || vt == SlotType::Float32);
+                    bool isP = (vt == SlotType::Ref || vt == SlotType::Str ||
+                                vt == SlotType::Decimal);
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
+                        MIR_new_ref_op(ctx, isD ? fgetDProto : (isP ? fgetPProto : fgetIProto)),
+                        MIR_new_ref_op(ctx, isD ? fgetDImport : (isP ? fgetPImport : fgetIImport)),
+                        R(instr.dest), R(instr.src),
+                        MIR_new_int_op(ctx, instr.intValue)));
+                    if (isP) emitShadowSet(instr.dest);
+                    break;
+                }
+                case Opcode::FIELD_SET: {
+                    SlotType vt = slotKindOf(fn, instr.right);
+                    bool isD = (vt == SlotType::Float || vt == SlotType::Float32);
+                    bool isP = (vt == SlotType::Ref || vt == SlotType::Str ||
+                                vt == SlotType::Decimal);
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
+                        MIR_new_ref_op(ctx, isD ? fsetDProto : (isP ? fsetPProto : fsetIProto)),
+                        MIR_new_ref_op(ctx, isD ? fsetDImport : (isP ? fsetPImport : fsetIImport)),
+                        R(instr.dest), MIR_new_int_op(ctx, instr.intValue),
+                        isD ? asDoubleOperand(instr.right) : R(instr.right)));
+                    break;
+                }
                 case Opcode::CALLHOST: {
                     for (size_t ai = 0; ai < instr.argSlots.size(); ++ai) {
                         int      as  = instr.argSlots[ai];
@@ -1424,6 +1700,22 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
 
     MIR_finish_module(ctx);
     MIR_load_module(ctx, mod);
+    MIR_load_external(ctx, "rt_jit_shadow_set",  reinterpret_cast<void*>(rt_jit_shadow_set));
+    MIR_load_external(ctx, "rt_jit_array_new",   reinterpret_cast<void*>(rt_jit_array_new));
+    MIR_load_external(ctx, "rt_jit_array_len",   reinterpret_cast<void*>(rt_jit_array_len));
+    MIR_load_external(ctx, "rt_jit_array_get_i", reinterpret_cast<void*>(rt_jit_array_get_i));
+    MIR_load_external(ctx, "rt_jit_array_get_d", reinterpret_cast<void*>(rt_jit_array_get_d));
+    MIR_load_external(ctx, "rt_jit_array_get_p", reinterpret_cast<void*>(rt_jit_array_get_p));
+    MIR_load_external(ctx, "rt_jit_array_set_i", reinterpret_cast<void*>(rt_jit_array_set_i));
+    MIR_load_external(ctx, "rt_jit_array_set_d", reinterpret_cast<void*>(rt_jit_array_set_d));
+    MIR_load_external(ctx, "rt_jit_array_set_p", reinterpret_cast<void*>(rt_jit_array_set_p));
+    MIR_load_external(ctx, "rt_jit_struct_new",  reinterpret_cast<void*>(rt_jit_struct_new));
+    MIR_load_external(ctx, "rt_jit_field_get_i", reinterpret_cast<void*>(rt_jit_field_get_i));
+    MIR_load_external(ctx, "rt_jit_field_get_d", reinterpret_cast<void*>(rt_jit_field_get_d));
+    MIR_load_external(ctx, "rt_jit_field_get_p", reinterpret_cast<void*>(rt_jit_field_get_p));
+    MIR_load_external(ctx, "rt_jit_field_set_i", reinterpret_cast<void*>(rt_jit_field_set_i));
+    MIR_load_external(ctx, "rt_jit_field_set_d", reinterpret_cast<void*>(rt_jit_field_set_d));
+    MIR_load_external(ctx, "rt_jit_field_set_p", reinterpret_cast<void*>(rt_jit_field_set_p));
     MIR_load_external(ctx, "rt_jit_host_arg_i",  reinterpret_cast<void*>(rt_jit_host_arg_i));
     MIR_load_external(ctx, "rt_jit_host_arg_d",  reinterpret_cast<void*>(rt_jit_host_arg_d));
     MIR_load_external(ctx, "rt_jit_host_call",   reinterpret_cast<void*>(rt_jit_host_call));
@@ -1494,8 +1786,6 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
 
     // Çalışma-zamanı üretilen string/decimal nesnelerini topla — native kod bitti,
     // pointer'lara artık erişilmiyor (GC Dilim 2/§8'e kadar elle temizlik).
-    g_jitRuntimeStrings.clear();
-    g_jitDecimals.clear();
 
     outExitCode = static_cast<int>(nativeResult);
     return true;

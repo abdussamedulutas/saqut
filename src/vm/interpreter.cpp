@@ -17,6 +17,7 @@
 #include "bench/profile.hpp"
 #include "ffi/host_functions.hpp"
 #include "ffi/host_registry.hpp"
+#include "vm/shadow_stack.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
@@ -330,6 +331,10 @@ void Interpreter::maybeCollect() {
         heap_.markSlots(frame.slots);
     if (pendingThrow_)
         heap_.markValue(*pendingThrow_);
+    // #228: JIT register'larındaki referanslar. VM callStack'i JIT çalışırken
+    // boştur; bu dizi olmadan JIT'in ürettiği nesneler canlıyken silinirdi.
+    for (Object* o : jitShadowStack().slots)
+        if (o) heap_.markValue(Value::fromRef(o));
 
     gcCycleActive_ = true;
 

@@ -1,0 +1,5 @@
+{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"processId": null, "rootUri": null, "capabilities": {}}}
+{"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {"textDocument": {"uri": "file://%FIXDIR%/hover_field.sqt", "languageId": "sqt", "version": 1, "text": "struct Stack {\n    int[] data;\n    int top;\n}\n\nvoid push(Stack s, int val) {\n    s.data[s.top] = val;\n    s.top = s.top + 1;\n}\n\nint pop(Stack s) {\n    s.top = s.top - 1;\n    return s.data[s.top];\n}\n\nint main() {\n    Stack s;\n    s.data = [0, 0];\n    push(s, 10);\n    return pop(s);\n}\n"}}}
+{"jsonrpc": "2.0", "id": 2, "method": "textDocument/hover", "params": {"textDocument": {"uri": "file://%FIXDIR%/hover_field.sqt"}, "position": {"line": 7, "character": 6}}}
+{"jsonrpc": "2.0", "id": 3, "method": "textDocument/hover", "params": {"textDocument": {"uri": "file://%FIXDIR%/hover_field.sqt"}, "position": {"line": 6, "character": 6}}}
+{"jsonrpc": "2.0", "id": 4, "method": "textDocument/hover", "params": {"textDocument": {"uri": "file://%FIXDIR%/hover_field.sqt"}, "position": {"line": 16, "character": 4}}}

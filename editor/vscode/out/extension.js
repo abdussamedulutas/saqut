@@ -17806,11 +17806,53 @@ __export(extension_exports, {
 });
 module.exports = __toCommonJS(extension_exports);
 var vscode = __toESM(require("vscode"));
+var import_child_process = require("child_process");
 var import_node = __toESM(require_node3());
 var client;
+function saqutBinary() {
+  const cfg = vscode.workspace.getConfiguration("saqut");
+  return cfg.get("path", "saqut");
+}
+function getSaqutVersion(bin) {
+  return new Promise((resolve) => {
+    (0, import_child_process.execFile)(
+      bin,
+      ["--version"],
+      { timeout: 5e3 },
+      (err, stdout) => {
+        if (err) {
+          resolve(null);
+          return;
+        }
+        const m = /saQut\s+(\d+\.\d+\.\d+)/.exec(stdout);
+        resolve(m ? m[1] : null);
+      }
+    );
+  });
+}
+function versionAtLeast(ver) {
+  if (!ver) return false;
+  const [major, minor] = ver.split(".").map(Number);
+  return major > 0 || major === 0 && minor >= 9;
+}
+async function checkSaqutVersion(bin) {
+  const ver = await getSaqutVersion(bin);
+  if (ver === null) {
+    vscode.window.showErrorMessage(
+      `saQut: '${bin}' bulunamad\u0131 veya --version \xE7al\u0131\u015Fm\u0131yor. Derleyici PATH'te de\u011Filse 'saqut.path' ayar\u0131n\u0131 mutlak yola ayarlay\u0131n.`
+    );
+    return;
+  }
+  if (!versionAtLeast(ver)) {
+    vscode.window.showWarningMessage(
+      `saQut: bulunan derleyici ${ver} \u2014 bu uzant\u0131 0.9.x+ gerektirir. 'saqut.path' ile ba\u015Fka bir binary se\xE7in.`
+    );
+  }
+}
 function activate(ctx) {
+  const bin = saqutBinary();
   const serverOptions = {
-    command: "saqut",
+    command: bin,
     args: ["lsp"]
   };
   const clientOptions = {
@@ -17824,16 +17866,26 @@ function activate(ctx) {
     serverOptions,
     clientOptions
   );
+  const trace = vscode.workspace.getConfiguration("saqut").get("trace.server", "off");
+  client.start().then(() => {
+    if (trace === "verbose") client.setTrace(import_node.Trace.Verbose);
+  });
+  ctx.subscriptions.push(client);
+  ctx.subscriptions.push(
+    vscode.commands.registerCommand("saqut.restartLanguageServer", async () => {
+      await client.restart();
+      vscode.window.showInformationMessage("saQut: Language Server yeniden ba\u015Flat\u0131ld\u0131.");
+    })
+  );
   const debugFactory = {
     createDebugAdapterDescriptor(_session) {
-      return new vscode.DebugAdapterExecutable("saqut", ["dap"]);
+      return new vscode.DebugAdapterExecutable(bin, ["dap"]);
     }
   };
-  client.start().then(() => client.setTrace(import_node.Trace.Verbose));
-  ctx.subscriptions.push(client);
   ctx.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory("sqt", debugFactory)
   );
+  checkSaqutVersion(bin);
 }
 function deactivate() {
   return client?.stop();

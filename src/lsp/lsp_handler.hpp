@@ -61,6 +61,11 @@ private:
     // Faz 5 (#84): imleci saran çağrının imzası (kullanıcı fonksiyonu + builtin).
     nlohmann::json handleSignatureHelp(const nlohmann::json& id,
                                        const nlohmann::json& params);
+    // Faz 6: semantic tokens (textDocument/semanticTokens/full). Sınıflandırma
+    // grammar regex'i yerine derleyicinin sembol tablosundan gelir — builtin
+    // fonksiyonlar (Symbol::isBuiltin), kullanıcı tipleri, değişkenler.
+    nlohmann::json handleSemanticTokens(const nlohmann::json& id,
+                                        const nlohmann::json& params);
 
     // Faz 3: state.diagnostics'i loc.filePath'e göre gruplar, her dosya için
     // ayrı bir publishDiagnostics bildirimi gönderir (kök neden #4 — import
@@ -72,6 +77,11 @@ private:
     // indeksi — isim-uzunluğu aralık eşleştirmesi ve allSymbols lineer
     // taraması yok (kök neden #3).
     Symbol* findSymbolAt(DocumentState& state, int line, int character);
+
+    // Konumdaki identifier token'ını bul (findSymbolAt ve üye erişimi
+    // hover'ının ortak araması). Bulunamazsa veya token identifier değilse
+    // nullptr — dönen token'a sahip olunmaz, state.tokens içindeki pointer'tır.
+    Token* identifierTokenAt(DocumentState& state, int line, int character) const;
 
     // Faz 3 pozisyon-dönüşüm yardımcıları (src/lsp/position.hpp'yi sarar) —
     // tüm handler'lar konum çevirisini buradan geçirir.

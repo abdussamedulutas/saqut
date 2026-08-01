@@ -121,6 +121,9 @@ nlohmann::json LspHandler::dispatch(const nlohmann::json& msg) {
     if (method == "textDocument/signatureHelp")
         return handleSignatureHelp(id, params);
 
+    if (method == "textDocument/semanticTokens/full")
+        return handleSemanticTokens(id, params);
+
     // Bilinmeyen metod — null döndür (notification) veya boş cevap
     if (!id.is_null())
         return JsonRpc::makeError(id, -32601, "Method not found: " + method);
@@ -164,6 +167,16 @@ nlohmann::json LspHandler::handleInitialize(const nlohmann::json& id,
         {"renameProvider",            true},
         {"signatureHelpProvider", {
             {"triggerCharacters", nlohmann::json::array({"(", ","})}
+        }},
+        {"semanticTokensProvider", {
+            {"legend", {
+                {"tokenTypes", {
+                    "keyword", "type", "function", "builtin",
+                    "parameter", "variable", "string", "number"
+                }},
+                {"tokenModifiers", nlohmann::json::array()}
+            }},
+            {"full", true}
         }},
     };
     nlohmann::json result = {
@@ -308,7 +321,7 @@ std::string LspHandler::contentForLoc(DocumentState& state, const SourceLocation
 // 4) Token'ın başlangıç offset'i state.symbolByOffset'te varsa, scope-doğru
 //    çözülmüş sembolü döndür (runPipeline'da SymbolCollector'ın resolvedSymbol
 //    ataması sırasında toplanan referans/definition offsetlerinden kurulur).
-Symbol* LspHandler::findSymbolAt(DocumentState& state, int line, int character) {
+Token* LspHandler::identifierTokenAt(DocumentState& state, int line, int character) const {
     int byteCol = toByteColumn(state.content, line, character);
     int offset  = lspLineStartOffset(state.content, line) + (byteCol - 1);
 
@@ -319,6 +332,12 @@ Symbol* LspHandler::findSymbolAt(DocumentState& state, int line, int character) 
     Token* tok = *std::prev(it);
     if (offset < tok->start || offset >= tok->end) return nullptr;
     if (tok->gettype() != "identifier") return nullptr;
+    return tok;
+}
+
+Symbol* LspHandler::findSymbolAt(DocumentState& state, int line, int character) {
+    Token* tok = identifierTokenAt(state, line, character);
+    if (!tok) return nullptr;
 
     auto found = state.symbolByOffset.find(tok->start);
     return (found != state.symbolByOffset.end()) ? found->second : nullptr;
@@ -362,10 +381,48 @@ nlohmann::json LspHandler::handleHover(const nlohmann::json& id,
     if (!state) return JsonRpc::makeResponse(id, nullptr);
 
     Symbol* sym = findSymbolAt(*state, line, ch);
-    if (!sym) return JsonRpc::makeResponse(id, nullptr);
 
     std::string content;
-    if (sym->kind == SymbolKind::Function && sym->type.isFunction()) {
+    if (!sym) {
+        // Üye erişimi hover'ı: struct field'ları Symbol nesnesi DEĞİLDİR —
+        // SymbolCollector bunları tabloya kaydetmez, structLayouts haritasında
+        // yaşar (symbol_table.hpp::structLayouts). "s.top" gibi zincirleri
+        // token'lar üzerinden yürütürüz: en soldaki identifier sembol
+        // indeksinden çözülür, kalan alanlar derleyicinin getFieldType
+        // API'siyle tipe indirgenir (örn. "int top").
+        Token* memberTok = identifierTokenAt(*state, line, ch);
+        if (memberTok) {
+            const auto& toks = state->tokens;
+            int idx = static_cast<int>(std::upper_bound(toks.begin(), toks.end(),
+                memberTok->start, [](int off, Token* t) { return off < t->start; })
+                - toks.begin()) - 1;
+            if (idx >= 0 && toks[idx] == memberTok) {
+                // Desen: ... ident . ident . ident — zincirin en soluna yürü.
+                int root = idx;
+                while (root >= 2 && toks[root - 1]->token == "." &&
+                       toks[root - 2]->gettype() == "identifier")
+                    root -= 2;
+                if (root != idx) {
+                    auto found = state->symbolByOffset.find(toks[root]->start);
+                    if (found != state->symbolByOffset.end()) {
+                        Type cur = found->second->type;
+                        bool ok  = true;
+                        for (int i = root + 2; i <= idx && ok; i += 2) {
+                            if (!cur.isStruct()) { ok = false; break; }
+                            cur = state->symbolTable.getFieldType(cur.structName,
+                                                                  toks[i]->token);
+                            if (cur.isError()) { ok = false; break; }
+                        }
+                        if (ok)
+                            content = "```sqt\n" + cur.toString() + " " +
+                                      memberTok->token + "\n```";
+                    }
+                }
+            }
+        }
+        if (content.empty())
+            return JsonRpc::makeResponse(id, nullptr);
+    } else if (sym->kind == SymbolKind::Function && sym->type.isFunction()) {
         // "int gcd(int a, int b)"
         std::string ret = sym->type.returnType ? sym->type.returnType->toString() : "void";
         std::string sig = ret + " " + sym->name + "(";
@@ -475,6 +532,10 @@ nlohmann::json LspHandler::handleDocumentSymbol(const nlohmann::json& id,
         // Parametre ve alan sembollerini gizle — gürültü yapar
         if (sym->kind == SymbolKind::Parameter) continue;
         if (sym->kind == SymbolKind::Field)     continue;
+        // Boş isimli sembol (syntax-error recovery'de oluşabilir) VS Code
+        // istemcisinin DocumentSymbol dönüştürücüsünü düşürür ("name must not
+        // be falsy") — outline'da da işe yaramaz, atla.
+        if (sym->name.empty())                  continue;
         if (!sym->definitionLoc.isValid())      continue;
         // Faz 3: symbolTable tüm modül grafiğini kapsar (import edilen
         // dosyaların sembolleri de içinde) — yalnızca BU belgeye ait olanları
@@ -1327,4 +1388,113 @@ nlohmann::json LspHandler::handleSignatureHelp(const nlohmann::json& id,
         {"activeSignature", 0},
         {"activeParameter", ctx.activeParam}
     });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// semanticTokens — textDocument/semanticTokens/full
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Sınıflandırma GRAMMAR regex'inden değil derleyicinin sembol tablosundan
+// gelir: builtin'ler Symbol::isBuiltin ile işaretlidir (symbol_collector,
+// BUILTIN_ID), kullanıcı tipleri SymbolKind::Struct/Enum'dır. Böylece builtin
+// listesi LSP'de elle tutulmaz — derleyicinin kaydı tek kaynaktır.
+//
+// İki kademeli çözüm:
+//   1. symbolByOffset — çözülmüş referans/tanım konumları (çağrılar, değişken
+//      kullanımları). `print(...)` gibi builtin çağrıları buraya düşer.
+//   2. isim tabanlı resolve — tip konumları (örn. `Stack s;` bildirimindeki
+//      Stack) sembol indeksine girmez; isimle tablodan çözülür.
+//
+// LSP kuralı: delta kodlama (deltaLine, deltaStartChar, length, type, mods),
+// UTF-16 karakter birimi — positionEncoding anlaşması byteColToLspAt ile
+// uygulanır.
+nlohmann::json LspHandler::handleSemanticTokens(const nlohmann::json& id,
+                                                 const nlohmann::json& params) {
+    std::string uri = params["textDocument"]["uri"].get<std::string>();
+    DocumentState* state = store_.get(uri);
+    if (!state) return JsonRpc::makeResponse(id, nullptr);
+
+    // Legend indeksleri — initialize'daki tokenTypes sırasıyla birebir.
+    enum : int {
+        T_KEYWORD = 0, T_TYPE = 1, T_FUNCTION = 2, T_BUILTIN = 3,
+        T_PARAMETER = 4, T_VARIABLE = 5, T_STRING = 6, T_NUMBER = 7
+    };
+
+    std::vector<int> data;
+    int prevLine = 0, prevChar = 0;
+    auto emit = [&](int line, int ch, int len, int type) {
+        data.push_back(line - prevLine);
+        data.push_back(line == prevLine ? ch - prevChar : ch);
+        data.push_back(len);
+        data.push_back(type);
+        data.push_back(0); // tokenModifiers — boş legend
+        prevLine = line;
+        prevChar = ch;
+    };
+
+    const auto& toks   = state->tokens;
+    const auto& starts = state->lineStarts;
+    for (Token* tok : toks) {
+        const std::string& kind = tok->gettype();
+        int type = -1;
+
+        if (kind == "keyword") {
+            type = T_KEYWORD;
+        } else if (kind == "string") {
+            type = T_STRING;
+        } else if (kind == "number") {
+            type = T_NUMBER;
+        } else if (kind == "identifier") {
+            Symbol* sym = nullptr;
+            auto found = state->symbolByOffset.find(tok->start);
+            if (found != state->symbolByOffset.end()) {
+                sym = found->second;
+                // Symbol::definitionLoc bildirimin BAŞINA işaret eder
+                // (document_store.hpp): "Stack s;" içindeki Stack konumu, s
+                // değişkeninin tanımı sanılır. İsim eşleşmiyorsa konum bir
+                // TİP ADIDIR (Stack, MyType) — tablodan tip olarak çöz.
+                if (sym->kind == SymbolKind::Variable ||
+                    sym->kind == SymbolKind::Parameter ||
+                    sym->kind == SymbolKind::Field ||
+                    sym->kind == SymbolKind::EnumValue) {
+                    if (sym->name != tok->token)
+                        sym = state->symbolTable.resolve(tok->token);
+                }
+            } else {
+                // Tip konumları (parametre tipleri, fonksiyon dönüş tipleri)
+                // hiçbir sembole bağlanmaz; isim tabanlı çözümle sınıflandır.
+                sym = state->symbolTable.resolve(tok->token);
+            }
+            if (sym) {
+                switch (sym->kind) {
+                    case SymbolKind::Function:
+                        type = sym->isBuiltin ? T_BUILTIN : T_FUNCTION;
+                        break;
+                    case SymbolKind::Struct:
+                    case SymbolKind::Enum:
+                        type = T_TYPE;
+                        break;
+                    case SymbolKind::Parameter:
+                        type = T_PARAMETER;
+                        break;
+                    case SymbolKind::Variable:
+                    case SymbolKind::Field:
+                    case SymbolKind::EnumValue:
+                        type = T_VARIABLE;
+                        break;
+                }
+            }
+        }
+        if (type < 0) continue;
+
+        // byte offset → (satır, LSP karakter) — utf-16/utf-8 anlaşması.
+        auto it = std::upper_bound(starts.begin(), starts.end(), tok->start);
+        int line = static_cast<int>(it - starts.begin()) - 1;
+        if (line < 0) continue;
+        int colByte = tok->start - starts[line] + 1; // 1-bazlı byte kolon
+        int ch = byteColToLspAt(state->content, starts, line, colByte);
+        emit(line, ch, tok->end - tok->start, type);
+    }
+
+    return JsonRpc::makeResponse(id, nlohmann::json{{"data", data}});
 }

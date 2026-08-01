@@ -41,8 +41,20 @@
       "match": "\\b(if|else|for|while|do|return|break|continue|switch|case|default|try|catch|throw)\\b"
     },
     "keywords_type": {
-      "name": "storage.type.sqt",
-      "match": "\\b(int|float|double|bool|string|void|decimal|char|auto)\\b"
+      "patterns": [
+        {
+          "name": "storage.type.sqt",
+          "match": "\\b(int|longint|float|double|decimal|byte|date|char|string|bool|void|auto)[ \\t]*\\?"
+        },
+        {
+          "name": "storage.type.sqt",
+          "match": "\\b(int|longint|float|double|decimal|byte|date|char|string|bool|void|auto)[ \\t]*\\[\\]"
+        },
+        {
+          "name": "storage.type.sqt",
+          "match": "\\b(int|longint|float|double|decimal|byte|date|char|string|bool|void|auto)\\b"
+        }
+      ]
     },
     "keywords_module": {
       "name": "keyword.other.sqt",

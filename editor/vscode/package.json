@@ -2,7 +2,7 @@
   "name": "saqut",
   "displayName": "saQut Language",
   "description": "saQut dil desteği: sözdizimi renklendirme, LSP ve DAP entegrasyonu",
-  "version": "0.4.0",
+  "version": "0.9.2",
   "publisher": "saqut",
   "engines": {
     "vscode": "^1.75.0"
@@ -35,6 +35,32 @@
         "path": "./syntaxes/sqt.tmLanguage.json"
       }
     ],
+    "commands": [
+      {
+        "command": "saqut.restartLanguageServer",
+        "title": "saQut: Language Server'ı Yeniden Başlat",
+        "category": "saQut"
+      }
+    ],
+    "configuration": {
+      "title": "saQut",
+      "properties": {
+        "saqut.path": {
+          "type": "string",
+          "default": "saqut",
+          "description": "saqut derleyici binary'sinin yolu. PATH'te değilse mutlak yol verin. Değişiklikten sonra 'saQut: Language Server'ı Yeniden Başlat' komutunu çalıştırın."
+        },
+        "saqut.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "LSP iletişimini 'saQut LSP Trace' kanalına yaz (verbose). Sorun ayıklarken açın."
+        }
+      }
+    },
     "breakpoints": [
       {
         "language": "sqt"
@@ -90,6 +116,15 @@
             }
           }
         ]
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "scopes": {
+          "builtin": [
+            "keyword.operator"
+          ]
+        }
       }
     ]
   },

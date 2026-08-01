@@ -14,6 +14,7 @@
 
 #include "ffi/host_abi.hpp"
 #include "ffi/host_bridge.hpp"
+#include "ffi/host_registry.hpp"
 
 int main() {
     // 1) Boyut ve kopyalanabilirlik sözleşmesi.
@@ -123,6 +124,50 @@ int main() {
         assert(scratch.strings.size() == 100);
         scratch.reset();
         assert(scratch.strings.empty());
+    }
+
+    // 8) rt_host_call — TEK giriş noktası gerçekten çalışıyor mu?
+    //    Adım 2'nin asıl iddiası bu: eski gövdeler yeni ABI üzerinden
+    //    çağrılabiliyor ve aynı sonucu veriyor.
+    {
+        HostRetOwner  owner;
+        HostEnv       env;
+        HostCallFrame f;
+        f.retOwner = &owner;
+        f.env      = &env;
+
+        // MATH_ABS(-5) → 5
+        int32_t id = hostEntryIndex("MATH_ABS");
+        assert(id != kHostIdInvalid);
+        HostSlot a[1] = { HostSlot::fromInt(-5) };
+        f.args = a; f.argc = 1;
+        assert(rt_host_call(id, &f) == 0);
+        assert(!f.err.failed());
+        assert(fromHostSlot(f.ret).intValue == 5);
+
+        // MATH_SQRT(9.0) → 3.0  (float yolu)
+        f.reset();
+        id = hostEntryIndex("MATH_SQRT");
+        HostSlot b[1] = { HostSlot::fromFloat(9.0) };
+        f.args = b; f.argc = 1;
+        assert(rt_host_call(id, &f) == 0);
+        assert(fromHostSlot(f.ret).floatValue == 3.0);
+
+        // CORE_VERSION() → string dönüşü; ömür sahibi üzerinden geçmeli
+        f.reset();
+        id = hostEntryIndex("CORE_VERSION");
+        f.args = nullptr; f.argc = 0;
+        assert(rt_host_call(id, &f) == 0);
+        assert(f.ret.kind == HostKind::Str);
+        assert(!hostAsString(f.ret).empty());
+
+        // Bilinmeyen sembolik ad → drift yakalanmalı (sessiz yanlış dispatch yok)
+        assert(hostEntryIndex("BOYLE_BIR_SEY_YOK") == kHostIdInvalid);
+
+        // Bağlanmamış blok → açık hata, sessiz başarı DEĞİL
+        f.reset();
+        assert(rt_host_call(kBuiltinBase, &f) != 0);
+        assert(f.err.failed());
     }
 
     std::printf("test_host_abi: TUM TESTLER GECTI\n");

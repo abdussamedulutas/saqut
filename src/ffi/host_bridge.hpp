@@ -43,6 +43,8 @@
 // string inline'dır — pointer verecek bir nesne yok. Bu tampon çağrı süresince
 // o nesneleri barındırır.
 // ----------------------------------------------------------------------------
+struct HostRetOwner;  // aşağıda tanımlı
+
 struct HostCallScratch {
     std::vector<HostSlot>                      slots;
     std::vector<std::unique_ptr<StringObject>> strings;
@@ -54,6 +56,57 @@ struct HostCallScratch {
         decimals.clear();
     }
 };
+
+// ----------------------------------------------------------------------------
+// HostRetOwner — dönüş değerinin ömür sahibi (HostCallFrame::retOwner).
+//
+// ret.p bir pointer'dır (Str/Decimal). Thunk yeni bir string ürettiğinde
+// (sys::env, date::format, string metodları) o nesne thunk döndükten SONRA
+// da yaşamalı — çağıran okuyup Value'ya kopyalayana dek.
+//
+// host_abi.hpp bu tipi bilmez (backend-nötr kalmalı, StringObject bir VM
+// tipidir); frame yalnızca void* taşır ve buradan bağlanır.
+//
+// NEDEN GC DEĞİL: GC-yönetimli string doğru nihai çözümdür, ama JIT
+// register'larındaki referanslar bugün kök gösterilemiyor (shadow stack yok,
+// bkz. Heap::allocString TODO'su). Tek-çağrılık ömür o gelene dek hem güvenli
+// hem sızıntısızdır.
+// ----------------------------------------------------------------------------
+struct HostRetOwner {
+    StringObject string;
+    DecimalValue decimal;
+};
+
+// Thunk'ların dönüş kurma yardımcıları — ret.p'yi elle yazmak sarkan pointer
+// riskidir, sahiplik tek yerde bağlanır.
+inline void hostSetRetString(HostCallFrame& f, std::string s) {
+    auto* owner = static_cast<HostRetOwner*>(f.retOwner);
+    owner->string.data = std::move(s);
+    f.ret = HostSlot::fromStr(&owner->string);
+}
+
+inline void hostSetRetDecimal(HostCallFrame& f, const DecimalValue& d) {
+    auto* owner = static_cast<HostRetOwner*>(f.retOwner);
+    owner->decimal = d;
+    f.ret = HostSlot::fromDecimal(&owner->decimal);
+}
+
+// Value dönüşünü frame'e yerleştir — sahiplik gerektiren türleri owner'a
+// kopyalar, skalerleri doğrudan yazar. Adım 2 sarmalayıcısı bunu kullanır.
+inline void hostSetRetValue(HostCallFrame& f, const Value& v) {
+    switch (v.kind) {
+        case ValueKind::String:  hostSetRetString(f, v.stringValue); return;
+        case ValueKind::Decimal: hostSetRetDecimal(f, v.decimalValue); return;
+        case ValueKind::Int:     f.ret = HostSlot::fromInt(v.intValue); return;
+        case ValueKind::LongInt: f.ret = HostSlot::fromLong(v.int64Value); return;
+        case ValueKind::Date:    f.ret = HostSlot::fromDate(v.int64Value); return;
+        case ValueKind::Float:   f.ret = HostSlot::fromFloat(v.floatValue); return;
+        case ValueKind::Float32: f.ret = HostSlot::fromFloat32(v.floatValue); return;
+        case ValueKind::Ref:     f.ret = HostSlot::fromRef(v.ref); return;
+        case ValueKind::Null:    f.ret = HostSlot::null(); return;
+    }
+    f.ret = HostSlot::null();
+}
 
 // ----------------------------------------------------------------------------
 // toHostSlot — VM Value → sınır temsili.

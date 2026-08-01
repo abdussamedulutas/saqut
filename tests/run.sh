@@ -17,7 +17,9 @@ for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg 
     # sınır temsili string'i pointer olarak taşır (#222).
     extra=""
     [ "$t" = "test_cfg" ] && extra="$ROOT/src/ir/ir_cfg.cpp"
-    [ "$t" = "test_host_abi" ] && extra="$ROOT/src/vm/object.cpp"
+    # test_host_abi gerçek registry'yi çağırır (rt_host_call) — host gövdeleri
+    # ve object.cpp gerekir. SAQUT_VERSION normalde CMake'ten gelir.
+    [ "$t" = "test_host_abi" ] && extra="$ROOT/src/vm/object.cpp $ROOT/src/ffi/host_registry.cpp $ROOT/src/ffi/host_functions.cpp -DSAQUT_VERSION=\"test\""
     "$CXX" "${FLAGS[@]}" "$ROOT/tests/$t.cpp" $extra -o "/tmp/saqut_$t"
     "/tmp/saqut_$t"
 done

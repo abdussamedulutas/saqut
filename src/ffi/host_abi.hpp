@@ -165,6 +165,37 @@ struct HostCallFrame {
     HostSlot   ret;              // thunk doldurur; Void ise yok sayılır
     HostEnv*   env  = nullptr;   // caps/heap/args gerektiren thunk'lar okur
     HostError  err;              // thunk sıfır-dışı dönerse dolu
+
+    // ── Dönüş değeri sahipliği ───────────────────────────────────────────
+    //
+    // ret.p bir POINTER'dır (Str/Decimal/Ref). Thunk yeni bir string ürettiğinde
+    // (sys::env, date::format, string metodları) o nesnenin thunk döndükten
+    // SONRA da yaşaması gerekir — çağıran onu okuyup Value'ya kopyalayana dek.
+    //
+    // Bu iki tampon o ömrü sağlar: thunk üretilen nesneyi buraya koyar,
+    // ret.p ona işaret eder. Çağıran değeri okuduktan sonra frame'i reset
+    // eder ve nesne ölür. Tek çağrılık ömür — sahiplik belirsizliği yok.
+    //
+    // NEDEN GC DEĞİL: GC-yönetimli string doğru nihai çözümdür, fakat JIT
+    // register'larındaki referanslar bugün kök gösterilemiyor (shadow stack
+    // yok) — bkz. Heap::allocString TODO'su. Bu tampon o gelene kadar
+    // güvenli ve sızıntısız ara çözümdür.
+    // Dönüş tamponu OPAK tutulur: host_abi.hpp backend-nötr kalmalı ve
+    // StringObject/DecimalValue (VM tipleri) buraya sızmamalı. Tamponu
+    // host_bridge.hpp sahiplenir ve bu pointer üzerinden bağlar.
+    //
+    // Sözleşme: retOwner, çağrı boyunca ret.p'nin işaret ettiği nesnelerin
+    // ömrünü garanti eden nesnedir. Çağıran sahiplenir; thunk yalnızca
+    // hostSetRetString()/hostSetRetDecimal() üzerinden doldurur.
+    void* retOwner = nullptr;
+
+    // retOwner KASITLI olarak sıfırlanmaz: sahibi çağırandır ve çağrılar
+    // arasında yeniden kullanılır (çağrı başına tahsis yapmamanın yolu).
+    void reset() {
+        argc = 0;
+        ret  = HostSlot::null();
+        err.clear();
+    }
 };
 
 // ----------------------------------------------------------------------------

@@ -119,6 +119,13 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
             parseAllowedCapabilities(args, argv[++i]);
             continue;
         }
+        // Golden test harness'ı .flags satırını tek argv olarak geçirebilir:
+        // "--allow fs". Normal shell kullanımı olan `--allow fs` ile aynı
+        // whitelist davranışını koru.
+        if (arg.compare(0, 8, "--allow ") == 0) {
+            parseAllowedCapabilities(args, arg.substr(8));
+            continue;
+        }
         if (arg == "--allow-fs" || arg == "--allow-net" || arg == "--allow-sys") {
             std::cerr << "error: capability syntax changed; use --allow fs,net,sys\n";
             exit(saqut::exit_code::kUsageError);

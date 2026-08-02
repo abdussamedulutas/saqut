@@ -78,6 +78,34 @@ struct ArrayObject : Object {
     std::vector<double>       f64s;       // elemKind == Float64
     std::vector<DecimalValue> decimals;   // elemKind == Decimal
 
+    // JIT direct-memory view (non-owning). MIR, std::vector::data()'ı
+    // çağıramaz; bu alanlar scalar buffer'ın güncel adresini/length'ini
+    // sabit offset'ten yüklemesi için tutulur. GC tarafından taranmaz —
+    // canonical elements/fields GC hakikat kaynağıdır (markChildren DEĞİŞMEZ).
+    void*          jitData     = nullptr;
+    int64_t        jitLength   = 0;
+    ArrayElemKind  jitElemKind = ArrayElemKind::Ref;
+
+    // Scalar buffer'a işaret eden view'ı vector'ün güncel durumundan
+    // senkronize eder. Çağrı sırası zorunlu: allocArray(reserve) → resize()
+    // → syncJitView(). allocArray içine konulmaz — reserve aşamasında
+    // data() geçerli bir eleman buffer'ı göstermeyebilir.
+    void syncJitView() {
+        jitElemKind = elemKind;
+        switch (elemKind) {
+            case ArrayElemKind::Byte:    jitData = bytes.data();    jitLength = (int64_t)bytes.size();    break;
+            case ArrayElemKind::Int:     jitData = ints.data();     jitLength = (int64_t)ints.size();     break;
+            case ArrayElemKind::LongInt: jitData = longs.data();    jitLength = (int64_t)longs.size();    break;
+            case ArrayElemKind::Float32: jitData = f32s.data();     jitLength = (int64_t)f32s.size();     break;
+            case ArrayElemKind::Float64: jitData = f64s.data();     jitLength = (int64_t)f64s.size();     break;
+            case ArrayElemKind::Decimal: jitData = decimals.data(); jitLength = (int64_t)decimals.size(); break;
+            default:
+                // Ref array: vector<Value> adresi — pointer elemanlar için
+                // doğrudan lowering yok (Aşama 4); view yine de senkron tutulur.
+                jitData = elements.data(); jitLength = (int64_t)elements.size(); break;
+        }
+    }
+
     explicit ArrayObject(int capacity = 0, ArrayElemKind k = ArrayElemKind::Ref) : elemKind(k) {
         type = ObjectType::Array;
         // reserve kullan — resize DEĞİL. #206: slice/push builtin'leri push_back

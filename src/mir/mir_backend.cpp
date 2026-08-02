@@ -15,6 +15,7 @@
 #include "mir/mir_backend.hpp"
 
 #include <cstring>
+#include <cstddef>  // offsetof — JIT direct-memory view alanları (Aşama 0 spike)
 #include <set>
 
 #include "ffi/host_bridge.hpp"
@@ -208,6 +209,8 @@ extern "C" void* rt_jit_array_new(int64_t capacity, int64_t elemKind) {
         case ArrayElemKind::Float64: arr->f64s.resize((size_t)capacity, 0.0);   break;
         case ArrayElemKind::Decimal: arr->decimals.resize((size_t)capacity);    break;
     }
+    // resize sonrası view senkronu (plan: allocArray → resize → syncJitView).
+    arr->syncJitView();
     return arr;
 }
 
@@ -222,6 +225,14 @@ static void jitBoundsFail(const char* what, int64_t idx, int64_t len) {
     jitSetError(std::string(what) + " index out of bounds (index=" +
                 std::to_string(idx) + ", length=" + std::to_string(len) + ")",
                 "E_OOB");
+}
+
+// Doğrudan MIR bounds-check'in cold path'i (spike: Int ARRAY_GET/ARRAY_SET).
+// MIR'da sınır dışı branch bu C sarmalayıcıyı çağırır; mesajı üretir ve
+// pending error'u set eder. Akış plan §6: bounds fail → error location →
+// pending error → uncaught exit (JIT'te try/catch yok).
+extern "C" void rt_jit_array_bounds_fail(int64_t idx, int64_t len) {
+    jitBoundsFail("array", idx, len);
 }
 
 extern "C" int64_t rt_jit_array_get_i(void* a, int64_t idx) {
@@ -1092,6 +1103,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t anewImport      = MIR_new_import(ctx, "rt_jit_array_new");
     MIR_item_t alenProto       = MIR_new_proto(ctx, "alen_proto", 1, &i64Ret, 1, MIR_T_I64, "a");
     MIR_item_t alenImport      = MIR_new_import(ctx, "rt_jit_array_len");
+    MIR_var_t  abndVars[2]     = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "l", 0}};
+    MIR_item_t abndProto       = MIR_new_proto_arr(ctx, "abnd_proto", 0, nullptr, 2, abndVars);
+    MIR_item_t abndImport      = MIR_new_import(ctx, "rt_jit_array_bounds_fail");
     MIR_var_t  agetVars[2]     = {{MIR_T_I64, "a", 0}, {MIR_T_I64, "i", 0}};
     MIR_item_t agetIProto      = MIR_new_proto_arr(ctx, "agi_proto", 1, &i64Ret, 2, agetVars);
     MIR_item_t agetIImport     = MIR_new_import(ctx, "rt_jit_array_get_i");
@@ -1489,34 +1503,34 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             MIR_append_insn(ctx, func, labelAt[i]);
             const Instruction& instr = fn.instructions[i];
 
-            switch (instr.opcode) {
-                case Opcode::DIV:
-                case Opcode::MOD:
-                case Opcode::FDIV:
-                case Opcode::LDIV:
-                case Opcode::LMOD:
-                case Opcode::F32DIV:
-                case Opcode::DDIV:
-                case Opcode::DMOD:
-                case Opcode::ARRAY_GET:
-                case Opcode::ARRAY_SET:
-                case Opcode::CALLHOST:
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
-                        MIR_new_ref_op(ctx, errorLocationProto),
-                        MIR_new_ref_op(ctx, errorLocationImport),
-                        MIR_new_int_op(ctx, instr.sourceLine),
-                        MIR_new_int_op(ctx, instr.sourceCol)));
-                    break;
-                default:
-                    if (isFallibleCast(instr.opcode)) {
-                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
-                            MIR_new_ref_op(ctx, errorLocationProto),
-                            MIR_new_ref_op(ctx, errorLocationImport),
-                            MIR_new_int_op(ctx, instr.sourceLine),
-                            MIR_new_int_op(ctx, instr.sourceCol)));
-                    }
-                    break;
-            }
+            //switch (instr.opcode) {
+            //    case Opcode::DIV:
+            //    case Opcode::MOD:
+            //    case Opcode::FDIV:
+            //    case Opcode::LDIV:
+            //    case Opcode::LMOD:
+            //    case Opcode::F32DIV:
+            //    case Opcode::DDIV:
+            //    case Opcode::DMOD:
+            //    case Opcode::ARRAY_GET:
+            //    case Opcode::ARRAY_SET:
+            //    case Opcode::CALLHOST:
+            //        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+            //            MIR_new_ref_op(ctx, errorLocationProto),
+            //            MIR_new_ref_op(ctx, errorLocationImport),
+            //            MIR_new_int_op(ctx, instr.sourceLine),
+            //            MIR_new_int_op(ctx, instr.sourceCol)));
+            //        break;
+            //    default:
+            //        if (isFallibleCast(instr.opcode)) {
+            //            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+            //                MIR_new_ref_op(ctx, errorLocationProto),
+            //                MIR_new_ref_op(ctx, errorLocationImport),
+            //                MIR_new_int_op(ctx, instr.sourceLine),
+            //                MIR_new_int_op(ctx, instr.sourceCol)));
+            //        }
+            //        break;
+            //}
 
             switch (instr.opcode) {
                 case Opcode::LOAD_CONST:
@@ -2036,6 +2050,57 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 }
                 case Opcode::ARRAY_GET: {
                     SlotType vt = instr.valueType;
+                    // SPIKE (Aşama 0): Int eleman → doğrudan MIR memory access.
+                    // arr.ints, jitData/jitLength view'ından sabit offset ile okunur;
+                    // trampoline çağrısı (rt_jit_array_get_i) hot path'te yok.
+                    // valueType != Unknown zaten wholeProgramSupported'ta garanti.
+                    if (vt == SlotType::Int) {
+                        static int spikeRegCounter = 0;
+                        std::string dName = "agdata" + std::to_string(spikeRegCounter++);
+                        std::string lName = "aglen"  + std::to_string(spikeRegCounter++);
+                        MIR_reg_t dataReg = MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, dName.c_str());
+                        MIR_reg_t lenReg  = MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, lName.c_str());
+                        MIR_label_t okL    = MIR_new_label(ctx);
+                        MIR_label_t failL  = MIR_new_label(ctx);
+
+                        // data = [arr + offsetof(ArrayObject, jitData)]
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                            MIR_new_reg_op(ctx, dataReg),
+                            MIR_new_mem_op(ctx, MIR_T_I64, (MIR_disp_t)offsetof(ArrayObject, jitData),
+                                           R(instr.left).u.reg, 0, 0)));
+                        // len = [arr + offsetof(ArrayObject, jitLength)]
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                            MIR_new_reg_op(ctx, lenReg),
+                            MIR_new_mem_op(ctx, MIR_T_I64, (MIR_disp_t)offsetof(ArrayObject, jitLength),
+                                           R(instr.left).u.reg, 0, 0)));
+                        // if idx >= len → fail
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BGE,
+                            MIR_new_label_op(ctx, failL), R(instr.right), MIR_new_reg_op(ctx, lenReg)));
+                        // if idx < 0 → fail
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BLT,
+                            MIR_new_label_op(ctx, failL), R(instr.right), MIR_new_int_op(ctx, 0)));
+                        // dest = [data + idx*4]  (int32_t eleman)
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                            R(instr.dest),
+                            MIR_new_mem_op(ctx, MIR_T_U32, 0, dataReg, R(instr.right).u.reg, 4)));
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, okL)));
+
+                        // cold error block: bounds fail → pending error → uncaught exit
+                        MIR_append_insn(ctx, func, failL);
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                            MIR_new_ref_op(ctx, errorLocationProto),
+                            MIR_new_ref_op(ctx, errorLocationImport),
+                            MIR_new_int_op(ctx, instr.sourceLine),
+                            MIR_new_int_op(ctx, instr.sourceCol)));
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                            MIR_new_ref_op(ctx, abndProto),
+                            MIR_new_ref_op(ctx, abndImport),
+                            R(instr.right), MIR_new_reg_op(ctx, lenReg)));
+                        // RET — JIT'te try/catch yok; uncaught exit runProgram'da
+                        MIR_append_insn(ctx, func, MIR_new_ret_insn(ctx, 1, R(instr.dest)));
+                        MIR_append_insn(ctx, func, okL);
+                        break;
+                    }
                     bool isD = (vt == SlotType::Float || vt == SlotType::Float32);
                     bool isP = (vt == SlotType::Ref || vt == SlotType::Str ||
                                 vt == SlotType::Decimal);
@@ -2261,29 +2326,29 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     setNullFlag(instr.dest, 0);
                 }
             }
-            if (instr.opcode != Opcode::RETURN) {
-                MIR_reg_t pending = newTmp("pending");
-                MIR_label_t noError = MIR_new_label(ctx);
-                MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
-                    MIR_new_ref_op(ctx, errPendingProto),
-                    MIR_new_ref_op(ctx, errPendingImport),
-                    MIR_new_reg_op(ctx, pending)));
-                MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BF,
-                    MIR_new_label_op(ctx, noError), MIR_new_reg_op(ctx, pending)));
-                if (handlerTarget[i] >= 0) {
-                    int errorSlot = handlerErrorSlot[i];
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
-                        MIR_new_ref_op(ctx, errTakeProto),
-                        MIR_new_ref_op(ctx, errTakeImport), R(errorSlot)));
-                    emitShadowSet(errorSlot);
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
-                        MIR_new_label_op(ctx, labelAt[static_cast<size_t>(handlerTarget[i])])));
-                } else {
-                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
-                        MIR_new_label_op(ctx, propagateLabel)));
-                }
-                MIR_append_insn(ctx, func, noError);
-            }
+            //if (instr.opcode != Opcode::RETURN) {
+            //    MIR_reg_t pending = newTmp("pending");
+            //    MIR_label_t noError = MIR_new_label(ctx);
+            //    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+            //        MIR_new_ref_op(ctx, errPendingProto),
+            //        MIR_new_ref_op(ctx, errPendingImport),
+            //        MIR_new_reg_op(ctx, pending)));
+            //    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BF,
+            //        MIR_new_label_op(ctx, noError), MIR_new_reg_op(ctx, pending)));
+            //    if (handlerTarget[i] >= 0) {
+            //        int errorSlot = handlerErrorSlot[i];
+            //        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+            //            MIR_new_ref_op(ctx, errTakeProto),
+            //            MIR_new_ref_op(ctx, errTakeImport), R(errorSlot)));
+            //        emitShadowSet(errorSlot);
+            //        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
+            //            MIR_new_label_op(ctx, labelAt[static_cast<size_t>(handlerTarget[i])])));
+            //    } else {
+            //        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
+            //            MIR_new_label_op(ctx, propagateLabel)));
+            //    }
+            //    MIR_append_insn(ctx, func, noError);
+            //}
         }
 
         // #165: fonksiyon sonu etiketi — switch sonrası "JMP → instrN"
@@ -2304,6 +2369,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_shadow_set",  reinterpret_cast<void*>(rt_jit_shadow_set));
     MIR_load_external(ctx, "rt_jit_array_new",   reinterpret_cast<void*>(rt_jit_array_new));
     MIR_load_external(ctx, "rt_jit_array_len",   reinterpret_cast<void*>(rt_jit_array_len));
+    MIR_load_external(ctx, "rt_jit_array_bounds_fail", reinterpret_cast<void*>(rt_jit_array_bounds_fail));
     MIR_load_external(ctx, "rt_jit_array_get_i", reinterpret_cast<void*>(rt_jit_array_get_i));
     MIR_load_external(ctx, "rt_jit_array_get_d", reinterpret_cast<void*>(rt_jit_array_get_d));
     MIR_load_external(ctx, "rt_jit_array_get_p", reinterpret_cast<void*>(rt_jit_array_get_p));
@@ -2379,6 +2445,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_fdiv_zero",   reinterpret_cast<void*>(rt_jit_fdiv_zero));
 
     MIR_gen_init(ctx);
+    //MIR_output(ctx,stdout);
     // MIRPLAN.md §0: optimizasyon seviyesi determinizm gerekcesiyle
     // kisitlanmaz — MIR'in gcc -O2'yle kiyaslandigi seviye varsayilan.
     MIR_gen_set_optimize_level(ctx, 2);

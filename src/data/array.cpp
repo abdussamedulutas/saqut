@@ -95,6 +95,8 @@ void pushElem(ArrayObject* arr, const Value& v) {
         case ArrayElemKind::Float64: arr->f64s.push_back(v.asDouble()); break;
         case ArrayElemKind::Decimal: arr->decimals.push_back(v.decimalValue); break;
     }
+    // push_back reallocation yapabilir → JIT view pointer'ı eskimiş olabilir.
+    arr->syncJitView();
 }
 
 void insertElem(ArrayObject* arr, int idx, const Value& v) {
@@ -107,6 +109,7 @@ void insertElem(ArrayObject* arr, int idx, const Value& v) {
         case ArrayElemKind::Float64: arr->f64s.insert(arr->f64s.begin() + idx, v.asDouble()); break;
         case ArrayElemKind::Decimal: arr->decimals.insert(arr->decimals.begin() + idx, v.decimalValue); break;
     }
+    arr->syncJitView();
 }
 
 void eraseAt(ArrayObject* arr, int idx) {
@@ -119,6 +122,7 @@ void eraseAt(ArrayObject* arr, int idx) {
         case ArrayElemKind::Float64: arr->f64s.erase(arr->f64s.begin() + idx); break;
         case ArrayElemKind::Decimal: arr->decimals.erase(arr->decimals.begin() + idx); break;
     }
+    arr->syncJitView();
 }
 
 void reverseElems(ArrayObject* arr) {

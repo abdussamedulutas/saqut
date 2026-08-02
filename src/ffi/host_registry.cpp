@@ -78,7 +78,7 @@ const HostMeta kHostMeta[] = {
     // date — saf hesap (date_calc.hpp), epoch-ms üzerinde
     {"DATE_NOW",           HostKind::Date,    HOST_PURE},
     {"DATE_FROM_EPOCH_MS", HostKind::Date,    HOST_PURE},
-    {"DATE_TO_EPOCH_MS",   HostKind::Int,     HOST_PURE},
+    {"DATE_TO_EPOCH_MS",   HostKind::LongInt, HOST_PURE},
     {"DATE_ADD_DAYS",      HostKind::Date,    HOST_PURE},
     {"DATE_ADD_HOURS",     HostKind::Date,    HOST_PURE},
     {"DATE_ADD_MINUTES",   HostKind::Date,    HOST_PURE},
@@ -89,7 +89,7 @@ const HostMeta kHostMeta[] = {
     {"DATE_HOUR",          HostKind::Int,     HOST_PURE},
     {"DATE_MINUTE",        HostKind::Int,     HOST_PURE},
     {"DATE_SECOND",        HostKind::Int,     HOST_PURE},
-    {"DATE_DIFF_MS",       HostKind::Int,     HOST_PURE},
+    {"DATE_DIFF_MS",       HostKind::LongInt, HOST_PURE},
     // parse başarısızlıkta null döner (date?) — hata DEĞİL, ADR-021
     {"DATE_PARSE",         HostKind::Date,    HOST_PURE},
     {"DATE_FORMAT",        HostKind::Str,     HOST_PURE},

@@ -42,8 +42,7 @@ static int date_fromEpochMillis(HostCallFrame* f) {
 }
 
 static int date_toEpochMillis(HostCallFrame* f) {
-    // root.sqt'te dönüş `int` — daraltma KASITLI ve eski davranışla birebir.
-    f->ret = HostSlot::fromInt((int)hostAsI64(f->args[0]));
+    f->ret = HostSlot::fromLong(hostAsI64(f->args[0]));
     return 0;
 }
 
@@ -98,8 +97,7 @@ static int date_second(HostCallFrame* f) {
 }
 
 static int date_diffMillis(HostCallFrame* f) {
-    // root.sqt dönüşü `int` — daraltma eski davranışla birebir korunur.
-    f->ret = HostSlot::fromInt((int)(hostAsI64(f->args[0]) - hostAsI64(f->args[1])));
+    f->ret = HostSlot::fromLong(hostAsI64(f->args[0]) - hostAsI64(f->args[1]));
     return 0;
 }
 

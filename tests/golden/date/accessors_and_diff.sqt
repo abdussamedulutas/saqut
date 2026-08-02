@@ -15,7 +15,8 @@ void main() {
     if (a != null) {
         date? b = parse("2026-01-01T00:00:05Z");
         if (b != null) {
-            print(diffMillis(b, a));
+        longint delta = diffMillis(b, a);
+        print(delta);
         }
     }
 }

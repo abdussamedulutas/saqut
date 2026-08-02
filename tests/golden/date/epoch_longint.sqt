@@ -1,0 +1,10 @@
+import {parse, fromEpochMillis, toEpochMillis} from date;
+
+void main() {
+    date? parsed = parse("2026-01-01T00:00:00Z");
+    if (parsed != null) {
+        longint epoch = toEpochMillis(parsed);
+        print(epoch);
+        print(toEpochMillis(fromEpochMillis(epoch)) == epoch);
+    }
+}

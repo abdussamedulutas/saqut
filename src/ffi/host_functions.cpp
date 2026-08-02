@@ -2,7 +2,7 @@
 // saQut FFI — Host Fonksiyon Registry Gerçeklemesi
 // ============================================================================
 //
-// math modülü (ADR-034, #107; issue #89): saf hesap, capability'siz.
+// math modülü (ADR-034, #107; issue #89): saf hesap.
 // Overload YOK → int/float ayrımı isimle (abs/absf, min/minf, max/maxf).
 // IEEE754 korunur: sqrt(-1) NaN döner, Error FIRLATMAZ (#89).
 // ============================================================================
@@ -89,29 +89,8 @@ static int math_E(HostCallFrame* f) {
     return 0;
 }
 
-// ── caps implementasyonları (#91, ADR-035) ──────────────────────────────────
-// drop/has caps::drop kendisi capability istemez (izin düşürmek her zaman
-// serbest); VM'nin gerçek caps_ kümesine ctx.caps üzerinden dokunur.
-
-static int caps_drop(HostCallFrame* f) {
-    const std::string& name = hostAsString(f->args[0]);
-    auto cap = capabilityFromName(name);
-    if (!cap) { f->err.set("unknown capability '" + name + "'", "E_FFI"); return 1; }
-    if (f->env && f->env->caps) f->env->caps->erase(*cap);
-    f->ret = HostSlot::voidVal();
-    return 0;
-}
-static int caps_has(HostCallFrame* f) {
-    const std::string& name = hostAsString(f->args[0]);
-    auto cap = capabilityFromName(name);
-    if (!cap) { f->err.set("unknown capability '" + name + "'", "E_FFI"); return 1; }
-    bool has = f->env && f->env->caps && f->env->caps->find(*cap) != f->env->caps->end();
-    f->ret = HostSlot::fromInt(has ? 1 : 0);
-    return 0;
-}
-
 // ── fs implementasyonları (#87) ─────────────────────────────────────────────
-// v1: yol güvenliği yok (hepsi-ya-hiçbir-şey, --allow-fs). Handle/descriptor
+// v1: yol güvenliği yok (hepsi-ya-hiçbir-şey). Handle/descriptor
 // YOK — tek atımlık read/write (record-replay v1.2.0 önkoşulu, ADR-034 §5).
 
 static int fs_readFile(HostCallFrame* fr) {
@@ -184,7 +163,7 @@ static int fs_remove(HostCallFrame* f) {
 }
 
 // ── sys implementasyonları (#90) ────────────────────────────────────────────
-// Non-deterministik/dış-durum-okuyan — --allow-sys. Kaynak: OS CSPRNG
+// Non-deterministik/dış-durum-okuyan. Kaynak: OS CSPRNG
 // (std::random_device), rand() DEĞİL.
 
 static int sys_random(HostCallFrame* f) {
@@ -196,8 +175,7 @@ static int sys_random(HostCallFrame* f) {
     //
     // NOT (#227): bildirim ile gövde arasındaki bu uyumsuzluk gerçektir ve
     // JIT'te MIR tip hatasına yol açar ('dge': Got float, expected double).
-    // Bugün SYS_RANDOM zaten capability gerektirdiği için JIT dışında;
-    // düzeltilirse ikisi birlikte ele alınmalı.
+    // Bugün SYS_RANDOM zaten JIT dışında; düzeltilirse birlikte ele alınmalı.
     f->ret = HostSlot::fromFloat(dist(gen));
     return 0;
 }
@@ -248,12 +226,12 @@ static int sys_args(HostCallFrame* f) {
 // Kalan 15 date fonksiyonu SAF hesaptır ve src/data/date.cpp'ye taşındı.
 // now() FFI'da kalır çünkü sistem saati gerçekten ortamdan gelen bilgidir.
 //
-// ── date implementasyonları (#88, ADR-035) ──────────────────────────────────
-// Yalnızca now() capability ister (--allow-sys); geri kalan saf hesap.
+// ── date implementasyonları (#88) ───────────────────────────────────────────
+// Yalnızca now() dış-durum-okuyan; geri kalan saf hesap.
 // ⚠️ v1 kısıtı: saQut'ta 64-bit int yok — fromEpochMillis/toEpochMillis
 // `int` (32-bit) taşır, epoch-ms günümüz tarihleri için bunu aşar (bilinen
-// sınır, ADR-035'te belgelenir). date DEĞERİNİN kendisi (Value::int64Value)
-// tam hassasiyetlidir; year/month/day/addX/diffMillis bu yüzden güvenlidir.
+// sınır). date DEĞERİNİN kendisi (Value::int64Value) tam hassasiyetlidir;
+// year/month/day/addX/diffMillis bu yüzden güvenlidir.
 
 static int date_now(HostCallFrame* f) {
     auto now = std::chrono::system_clock::now();
@@ -311,8 +289,6 @@ const std::vector<HostFn>& hostFnTable() {
         { "MATH_ROUND", 1, math_round },
         { "MATH_PI", 0, math_PI },
         { "MATH_E", 0, math_E },
-        { "CAPS_DROP", 1, caps_drop },
-        { "CAPS_HAS", 1, caps_has },
         { "FS_READ_FILE", 1, fs_readFile },
         { "FS_WRITE_FILE", 2, fs_writeFile },
         { "FS_APPEND", 2, fs_append },

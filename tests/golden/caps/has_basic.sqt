@@ -1,6 +1,0 @@
-import {has} from caps;
-
-void main() {
-    print(has("fs"));
-    print(has("sys"));
-}

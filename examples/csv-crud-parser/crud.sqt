@@ -1,0 +1,95 @@
+// ============================================================================
+// CSV-CRUD demosu — CRUD işlemleri (crud.sqt)
+// ============================================================================
+//
+// Array parametreleri mutating olarak kullanılır (saQut'ta diziler referans
+// semantiğine sahiptir — ADR-023; çağıranın dizisi değişir). Her işlem, null
+// dönen arama ile birleştirilir; `indexOf` array/için null döner.
+// ============================================================================
+
+import {Field, Record} from "csv_types.sqt";
+import {valueOf, setValue} from "csv_parser.sqt";
+
+// Kayıt sayısının 1 fazlasını yeni id olarak önerir (max+1, dolgu yok).
+int nextId(Record[] recs) {
+    int maxId = 0;
+    int i = 0;
+    while (i < recs.length()) {
+        if (recs[i].id > maxId) { maxId = recs[i].id; }
+        i = i + 1;
+    }
+    return maxId + 1;
+}
+
+// Yeni kayıt ekler; name/city/score alanlarını doldurur. Yeni id'yi döndürür.
+export int addRecord(Record[] recs, string name, string city, string score) {
+    int id = nextId(recs);
+    Record rec;
+    rec.id = id;
+    // fields'ı local'de doldurup geri ata (struct-içinde-array .push deseni).
+    Field[] fields;
+    Field fn; fn.name = "name"; fn.value = name;   fields.push(fn);
+    Field fc; fc.name = "city"; fc.value = city;   fields.push(fc);
+    Field fs; fs.name = "score"; fs.value = score; fields.push(fs);
+    rec.fields = fields;
+    recs.push(rec);
+    return id;
+}
+
+// id'li kaydı siler. Bulunduysa true.
+export bool deleteRecord(Record[] recs, int id) {
+    // indexOf array'de elemanı karşılaştırır; id'yi Record.id'den bulamayız,
+    // bu yüzden elle ararız.
+    int i = 0;
+    while (i < recs.length()) {
+        if (recs[i].id == id) {
+            recs.remove(i);
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+// id'li kaydın verilen alanını günceller. Bulunduysa true.
+export bool updateField(Record[] recs, int id, string fieldName, string value) {
+    int i = 0;
+    while (i < recs.length()) {
+        if (recs[i].id == id) {
+            setValue(recs[i], fieldName, value);
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+// id'li kaydın dizi içindeki indeksini döndürür; yoksa null.
+export int? findById(Record[] recs, int id) {
+    int i = 0;
+    while (i < recs.length()) {
+        if (recs[i].id == id) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return null;
+}
+
+// Tüm kayıtları satır satır yazdırır (bakım/ergonomi için basit döküm).
+export void printRecords(Record[] recs) {
+    print("--- " + (recs.length() as string) + " kayit ---");
+    int i = 0;
+    while (i < recs.length()) {
+        Record rec = recs[i];
+        string? nm  = valueOf(rec, "name");
+        string? cy  = valueOf(rec, "city");
+        string? sc  = valueOf(rec, "score");
+        string name = "?"; string city = "?"; string score = "?";
+        if (nm != null) name = nm;
+        if (cy != null) city = cy;
+        if (sc != null) score = sc;
+        print("# " + (rec.id as string) + " | " + name + " | " + city + " | " + score);
+        i = i + 1;
+    }
+}

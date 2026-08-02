@@ -6,7 +6,7 @@
 // KATMAN:  FFI — VM ve tüm backend'lerin ORTAK host çağrı sözleşmesi
 //
 // AMAÇ (#222, docs/plan-0.9.3-host-abi.md):
-//   Host fonksiyonları (math/date/fs/sys/caps) ve built-in metodlar
+//   Host fonksiyonları (math/date/fs/sys) ve built-in metodlar
 //   (array/string/struct) bugün ÜÇ ayrı çağrı sözleşmesiyle çağrılıyor:
 //
 //     "__ffi__"             → callHostFn(id, vector<Value>, HostContext&)
@@ -45,11 +45,8 @@
 #define SAQUT_FFI_HOST_ABI
 
 #include <cstdint>
-#include <set>
 #include <string>
 #include <vector>
-
-#include "core/capability.hpp"
 
 struct Object;
 struct Heap;
@@ -126,7 +123,7 @@ struct HostError {
     // std::string burada güvenli çünkü HostError JIT register'ında taşınmaz,
     // yalnızca HostCallFrame içinden pointer'la erişilir.
     std::string message;
-    std::string code;     // "E_FFI" | "E_BUILTIN" | "E_CAP_MISSING"
+    std::string code;     // "E_FFI" | "E_BUILTIN"
 
     bool failed() const { return !message.empty(); }
     void clear() { message.clear(); code.clear(); }
@@ -143,11 +140,9 @@ struct HostError {
 // heap ve print'in ihtiyaç duyduğu çıktı yönlendirmesi. Böylece ÜÇ ayrı
 // bağlam tipi (HostContext / Heap& / hiçbiri) tek yapıda birleşir.
 //
-// Pointer'lar Interpreter'ın gerçek üyelerine işaret eder — caps mutasyonu
-// (caps::drop) doğrudan VM durumunu etkiler.
+// Pointer'lar Interpreter'ın gerçek üyelerine işaret eder.
 // ----------------------------------------------------------------------------
 struct HostEnv {
-    std::set<Capability>*           caps        = nullptr;
     const std::vector<std::string>* programArgs = nullptr;
     Heap*                           heap        = nullptr;
     // #105 (DAP): print çıktısı protokol stdout'una çıplak sızmamalı.
@@ -165,7 +160,7 @@ struct HostCallFrame {
     HostSlot*  args = nullptr;   // argc uzunluğunda, çağıranın belleği
     int32_t    argc = 0;
     HostSlot   ret;              // thunk doldurur; Void ise yok sayılır
-    HostEnv*   env  = nullptr;   // caps/heap/args gerektiren thunk'lar okur
+    HostEnv*   env  = nullptr;   // heap/args gerektiren thunk'lar okur
     HostError  err;              // thunk sıfır-dışı dönerse dolu
 
     // ── Dönüş değeri sahipliği ───────────────────────────────────────────
@@ -225,7 +220,6 @@ using HostThunk = int (*)(HostCallFrame* f);
 enum : uint8_t {
     HOST_PURE       = 0,       // HostEnv gerekmez, heap'e dokunmaz → JIT safepoint istemez
     HOST_NEEDS_HEAP = 1u << 0, // env->heap kullanır (tahsis yapabilir → GC tetikleyebilir)
-    HOST_NEEDS_CAPS = 1u << 1, // env->caps okur/değiştirir
     HOST_NEEDS_ARGS = 1u << 2, // env->programArgs okur
     HOST_MUTATING   = 1u << 3, // receiver'ı yerinde değiştirir (built-in metod)
     HOST_CAN_FAIL   = 1u << 4, // hata döndürebilir (eski gövdelerde: throw)

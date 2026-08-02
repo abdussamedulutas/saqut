@@ -24,7 +24,6 @@
 #include <vector>
 #include "vm/value.hpp"
 #include "vm/object.hpp"
-#include "core/capability.hpp"
 #include "ffi/host_abi.hpp"
 
 // Tek bir host fonksiyon kaydı.

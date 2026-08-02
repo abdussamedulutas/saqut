@@ -1,0 +1,284 @@
+// ============================================================================
+// CSV-CRUD demosu — parser/serializer (csv_parser.sqt)
+// ============================================================================
+//
+// Saf, capability'siz fonksiyonlar (dünyaya dokunmaz — dosyayı main okur).
+// CSV biçimi RFC-4180 yaklaşımı: ilk satır başlık, sonraki satırlar veri.
+//
+// Bu sürüm karakter düzeyinde TEK GEÇİŞTE parser'dır (quoted destekli):
+//   - `"..."` alıntılı hücreler: içinde virgül ve YENİ SATIR taşıyabilir
+//   - `""` çift tırnak → alıntı içinde tek tırnak (escape)
+//   - boş hücreler, `\r\n` / `\n` satır sonları
+//   - virgül, quote, kıvır yalnız ASCII tek-bayt; UTF-8 içerik karakter index'iyle
+//     güvenle dilimlenir (substring/charAt/length code-point uzayında; ADR-024)
+//
+// NOT (struct-içinde-array): `rec.fields` üzerinde .push() runtime'da çalışmaz;
+// alan dizisi local'de doldurulup `rec.fields = dizi` ile geri atanır.
+// ============================================================================
+
+import {Field, Record} from "csv_types.sqt";
+
+// ─── Karakter yordamları ────────────────────────────────────────────────────
+bool isQuote(string c) { return c == "\""; }
+bool isComma(string c) { return c == ","; }
+bool isNewline(string c) { return c == "\n"; }
+bool isCarriage(string c) { return c == "\r"; }
+
+// DİL NOTU: `string[] b = a;` değer değil REFERANS atamasıdır (ADR-023 diziler
+// paylaşımlıdır) — `b.clear()`/`b.push()` aynı diziyi değiştirir, a'yı da etkiler.
+// Bu yüzden başlık gibi yan-alınan dizilerin KOPYASI zorunludur.
+string[] copyStrings(string[] src) {
+    string[] dst;
+    int i = 0;
+    while (i < src.length()) {
+        dst.push(src[i]);
+        i = i + 1;
+    }
+    return dst;
+}
+
+// ─── Tek geçişli parse ───────────────────────────────────────────────────────
+// RFC-4180: quoted alanlar çok satırlı olabilir → satıra göre değil karakter
+// düzeyinde taranır. Dönüş: Record[] (ilk kayıt = başlık hücreleri değil;
+// başlık ayrı yakalanır ve her veri satırının sütunlarını adlandırır).
+export Record[] parseCsv(string csv) {
+    Record[] records;
+    if (csv.length() == 0) return records;
+
+    // İlk geçiş: başlık satırını çıkar (quote-aware).
+    string[] headers;
+    bool headerDone = false;
+
+    // Ana tarama değişkenleri.
+    int i = 0;            // mutlak karakter index'i
+    int len = csv.length();
+
+    // Mevcut satır tamponları (inQuotes çok satırlı alanı birleştirir).
+    string[] rowCells;
+    string cell = "";
+
+    bool inQuotes = false;
+
+    // Hücre tamponu string birleştirmeyle büyür (bol GC baskısı — istenen).
+    while (i < len) {
+        string c = csv.charAt(i);
+
+        if (isQuote(c)) {
+            if (inQuotes && i + 1 < len && isQuote(csv.charAt(i + 1))) {
+                cell = cell + "\"";
+                i = i + 2;   // çift tırnak escape'i tek tırnak olarak al
+                continue;
+            }
+            inQuotes = !inQuotes;
+            i = i + 1;
+            continue;
+        }
+
+        if (!inQuotes && isComma(c)) {
+            rowCells.push(cell);
+            cell = "";
+            i = i + 1;
+            continue;
+        }
+
+        if (!inQuotes && isNewline(c)) {
+            // \n öncesi \r'ı hücreden ayıkla
+            if (cell.length() > 0 && isCarriage(cell.charAt(cell.length() - 1))) {
+                cell = cell.substring(0, cell.length() - 1);
+            }
+            rowCells.push(cell);
+            cell = "";
+
+            if (!headerDone) {
+                headers = copyStrings(rowCells);
+                headerDone = true;
+            } else {
+                // Boş satırı atla (trailing newline vb.)
+                if (rowCells.length() > 0 && !(rowCells.length() == 1 && rowCells[0].length() == 0)) {
+                    Record rec = buildRecord(recordIdIs(rowCells), headers, rowCells);
+                    records.push(rec);
+                }
+            }
+            rowCells.clear();
+            i = i + 1;
+            continue;
+        }
+
+        // \r (karşılığı \n değilse) hücreye gelebilir ama tek başına yok say.
+        if (!inQuotes && isCarriage(c) && !(i + 1 < len && isNewline(csv.charAt(i + 1)))) {
+            i = i + 1;
+            continue;
+        }
+        if (!inQuotes && isCarriage(c)) {
+            // \r\n çifti: yeni satır bölmesine düşer (üstteki dal işler).
+            cell = cell + c;
+            i = i + 1;
+            continue;
+        }
+
+        cell = cell + c;
+        i = i + 1;
+    }
+
+    // Dosya \n ile bitmiyorsa son satır.
+    if (cell.length() > 0 || rowCells.length() > 0) {
+        if (cell.length() > 0 && isCarriage(cell.charAt(cell.length() - 1))) {
+            cell = cell.substring(0, cell.length() - 1);
+        }
+        rowCells.push(cell);
+        if (headerDone) {
+            if (rowCells.length() > 0 && !(rowCells.length() == 1 && rowCells[0].length() == 0)) {
+                Record rec = buildRecord(recordIdIs(rowCells), headers, rowCells);
+                records.push(rec);
+            }
+        }
+    }
+    return records;
+}
+
+// Satırın ilk hücresini int'e çevirir (id); çevrilemezse 0.
+int recordIdIs(string[] cells) {
+    if (cells.length() == 0) return 0;
+    int? v = cells[0].trim() as int?;
+    if (v == null) return 0;
+    return v;
+}
+
+// Bir veri satırını (hücreler) başlıklarla eşleştirip Record üretir.
+// 0. sütun (genellikle id) Record.id; kalanlar başlık adıyla Field[].
+Record buildRecord(int id, string[] headers, string[] cells) {
+    Record rec;
+    rec.id = id;
+    Field[] fields;
+
+    // id sütunu ayrı; 1. sütundan itibaren field'ları başlıkla adlandır.
+    // id başlığını da field olarak eklemek istemeyiz — atla.
+    int start = 0;
+    if (headers.length() > 0 && headers[0].trim() == "id") {
+        start = 1;
+    }
+    int j = start;
+    while (j < headers.length()) {
+        Field f;
+        f.name = headers[j].trim();
+        string val = "";
+        int cellIdx = j;
+        if (j >= cells.length()) { cellIdx = -1; }
+        if (cellIdx >= 0) {
+            val = cells[cellIdx];
+        }
+        f.value = val;
+        fields.push(f);
+        j = j + 1;
+    }
+    rec.fields = fields;
+    return rec;
+}
+
+// Bir Record'un adı verilen alanının değerini döndürür; yoksa null.
+export string? valueOf(Record rec, string fieldName) {
+    int i = 0;
+    while (i < rec.fields.length()) {
+        if (rec.fields[i].name == fieldName) {
+            return rec.fields[i].value;
+        }
+        i = i + 1;
+    }
+    return null;
+}
+
+// Alan değerini günceller; alan yoksa sona ekler. Local-dizi + geri atama.
+export void setValue(Record rec, string fieldName, string value) {
+    Field[] fields = rec.fields;
+    int i = 0;
+    bool found = false;
+    while (i < fields.length()) {
+        if (fields[i].name == fieldName) {
+            fields[i].value = value;
+            found = true;
+            break;
+        }
+        i = i + 1;
+    }
+    if (!found) {
+        Field nf;
+        nf.name = fieldName;
+        nf.value = value;
+        fields.push(nf);
+    }
+    rec.fields = fields;
+}
+
+// ─── Serializer ─────────────────────────────────────────────────────────────
+// RFC-4180: virgül/quote/yeni satır içeren hücreleri tırnaklayıp gömer.
+string escapeCell(string v) {
+    // Herhangi bir özel karakter var mı?
+    bool needs = false;
+    int i = 0;
+    while (i < v.length()) {
+        string c = v.charAt(i);
+        if (c == "\"" || c == "," || c == "\n" || c == "\r") { needs = true; break; }
+        i = i + 1;
+    }
+    if (!needs) return v;
+    // Tırnakla sarmala, içteki tırnakları çiftle.
+    string out = "\"";
+    i = 0;
+    while (i < v.length()) {
+        string c = v.charAt(i);
+        if (c == "\"") { out = out + "\"\""; }
+        else { out = out + c; }
+        i = i + 1;
+    }
+    out = out + "\"";
+    return out;
+}
+
+string[] collectHeaders(Record[] records) {
+    string[] headers;
+    headers.push("id");
+    int r = 0;
+    while (r < records.length()) {
+        int f = 0;
+        while (f < records[r].fields.length()) {
+            string nm = records[r].fields[f].name;
+            if (headers.indexOf(nm) == null) {
+                headers.push(nm);
+            }
+            f = f + 1;
+        }
+        r = r + 1;
+    }
+    return headers;
+}
+
+export string recordsToCsv(Record[] records) {
+    if (records.length() == 0) return "";
+    string[] headers = collectHeaders(records);
+
+    string out = "";
+    out = out + escapeCell(headers[0]);
+    int h = 1;
+    while (h < headers.length()) {
+        out = out + "," + escapeCell(headers[h]);
+        h = h + 1;
+    }
+    out = out + "\n";
+
+    int r = 0;
+    while (r < records.length()) {
+        Record rec = records[r];
+        out = out + (rec.id as string);
+        int c = 1;
+        while (c < headers.length()) {
+            string? v = valueOf(rec, headers[c]);
+            string cellv = "";
+            if (v != null) { cellv = v; }
+            out = out + "," + escapeCell(cellv);
+            c = c + 1;
+        }
+        if (r < records.length() - 1) out = out + "\n";
+        r = r + 1;
+    }
+    return out;
+}

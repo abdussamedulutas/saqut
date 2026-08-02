@@ -1,7 +1,0 @@
-import {has, drop} from caps;
-
-void main() {
-    print(has("sys"));
-    drop("sys");
-    print(has("sys"));
-}

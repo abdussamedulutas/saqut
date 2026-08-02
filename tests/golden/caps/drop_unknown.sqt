@@ -1,5 +1,0 @@
-import {drop} from caps;
-
-void main() {
-    drop("bogus");
-}

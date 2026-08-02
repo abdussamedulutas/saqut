@@ -75,7 +75,6 @@ public:
         std::cout << "Options:\n";
         std::cout << "  -h, --help                 Display this help message\n";
         std::cout << "  -V, --version              Display the compiler version\n";
-        std::cout << "      --allow <list>         Enable capabilities (fs,net,sys)\n";
         std::cout << "      --jit                  Run supported programs with MIR JIT\n";
         std::cout << "      --verbose              Print stage progress\n";
         std::cout << "\nCommands:\n";

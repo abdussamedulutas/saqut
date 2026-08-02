@@ -121,7 +121,7 @@ inline int cmdExec(const CliArgs& args) {
     }
 
     SymbolTable symbolTable;
-    SymbolCollector(symbolTable, diag, args.allowedCaps).collect(ast);
+    SymbolCollector(symbolTable, diag).collect(ast);
 
     if (!diag.hasErrors()) {
         TypeChecker(symbolTable, diag).check(ast);
@@ -155,7 +155,6 @@ inline int cmdExec(const CliArgs& args) {
             }
         } else {
             Interpreter vm(program);
-            vm.setCapabilities(args.allowedCaps);
             vm.setProgramArgs(args.programArgs);
             exitCode = vm.run();
         }

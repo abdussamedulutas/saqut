@@ -1,0 +1,112 @@
+// ============================================================================
+// CSV-CRUD demosu — istatistik ve sıralama modülü (csv_stats.sqt)
+// ============================================================================
+//
+// Record[] üzerinde agregat hesaplar ve sıralama yapar. Byte[]/string
+// manipulation'dan ziyade array+struct+farklı modülden import edilen
+// fonksiyonlarla (valueOf) çalışır — modül zincirini ve dizilerin referans
+// semantiğini (ADR-023) kuvvetli kullanır.
+//
+// DİL NOTU: `Record[]` parametresi referanstır — sort fonksiyonu in-place
+// çalışır (çağıranın dizisini değiştirir). İstenmeyen taraflar için ayrı
+// `copyRecords` helper'i vardır.
+// ============================================================================
+
+import {Field, Record} from "csv_types.sqt";
+import {valueOf, setValue} from "csv_parser.sqt";
+
+// sayısal bir alanın int değerini döndürür; yoksa/geçersizse 0.
+int fieldInt(Record rec, string field) {
+    string? v = valueOf(rec, field);
+    if (v == null) return 0;
+    int? n = v as int?;
+    if (n == null) return 0;
+    return n;
+}
+
+// kayıt toplamı.
+export int countRecords(Record[] recs) {
+    return recs.length();
+}
+
+// sayısal alanın toplamı.
+export int sumIntField(Record[] recs, string field) {
+    int total = 0;
+    int i = 0;
+    while (i < recs.length()) {
+        total = total + fieldInt(recs[i], field);
+        i = i + 1;
+    }
+    return total;
+}
+
+// sayısal alanın ortalaması (kayıt yoksa 0).
+export int averageIntField(Record[] recs, string field) {
+    int n = recs.length();
+    if (n == 0) return 0;
+    return sumIntField(recs, field) / n;
+}
+
+// belirli alanı verilen değere eşit kayıt sayısı.
+export int countByFieldValue(Record[] recs, string field, string value) {
+    int c = 0;
+    int i = 0;
+    while (i < recs.length()) {
+        string? v = valueOf(recs[i], field);
+        bool eq = (v != null) && (v == value);
+        if (eq) { c = c + 1; }
+        i = i + 1;
+    }
+    return c;
+}
+
+// alandaki tüm benzersiz string değerleri döndürür (boş değerler hariç).
+export string[] distinctValues(Record[] recs, string field) {
+    string[] out;
+    int i = 0;
+    while (i < recs.length()) {
+        string? v = valueOf(recs[i], field);
+        if (v != null) {
+            if (v.length() > 0 && out.indexOf(v) == null) {
+                out.push(v);
+            }
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// Record[] derin kopyası (diziler referans olduğundan in-place sort taraflarını
+// izole etmek için).
+export Record[] copyRecords(Record[] src) {
+    Record[] dst;
+    int i = 0;
+    while (i < src.length()) {
+        dst.push(src[i]);
+        i = i + 1;
+    }
+    return dst;
+}
+
+// sayısal alana göre in-place bubble sort. desc=true → azalan.
+export void sortByIntField(Record[] recs, string field, bool desc) {
+    int n = recs.length();
+    int a = 0;
+    while (a < n - 1) {
+        int b = 0;
+        while (b < n - a - 1) {
+            bool swap = false;
+            int l = fieldInt(recs[b], field);
+            int r = fieldInt(recs[b + 1], field);
+            if (desc) { if (l < r) swap = true; }
+            else      { if (l > r) swap = true; }
+            if (swap) {
+                Record t = recs[b];
+                recs[b] = recs[b + 1];
+                recs[b + 1] = t;
+            }
+            b = b + 1;
+        }
+        a = a + 1;
+    }
+}

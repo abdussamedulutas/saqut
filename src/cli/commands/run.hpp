@@ -53,7 +53,7 @@ inline int cmdRun(const CliArgs& args) {
 
     // ── Aşama 2: 3-geçiş sembol toplama + import doğrulama ───────────────
     SymbolTable symbolTable;
-    SymbolCollector collector(symbolTable, diag, args.allowedCaps);
+    SymbolCollector collector(symbolTable, diag);
     collector.collectModuleGraph(graph);
 
     if (diag.hasErrors()) {
@@ -142,7 +142,6 @@ inline int cmdRun(const CliArgs& args) {
         Interpreter vm(program);
         // GC (#77): --gc-threshold=N eşiği ezer (negatif = otomatik GC kapalı)
         if (args.gcThreshold != 0) vm.setGCThreshold(args.gcThreshold);
-        vm.setCapabilities(args.allowedCaps);
         vm.setProgramArgs(args.programArgs);
         // "vm-warmup" (initForDebug — frame/global kurulumu) ve "vm-exec"
         // (runUntilEvent'in ana döngüsü) Interpreter TARAFINDAN ayrı ayrı

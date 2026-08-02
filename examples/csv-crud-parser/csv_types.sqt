@@ -1,0 +1,28 @@
+// ============================================================================
+// CSV-CRUD demosu — veri modeli (csv_types.sqt)
+// ============================================================================
+//
+// Dinamik kayıt modeli: CSV sütun adları bilinmediğinden her satır, adı/değeri
+// çapı olan Field'ların listesi olarak tutulur. `id` özel alandır ve Record.id
+// içinde ayrı taşınır; diğer tüm sütunlar fields[] içinde Field olur.
+//
+//   CSV              →  Record[]
+//   id,name,city     →  { id }<name><city>
+//   1,ali,ankara     →  {1, [Field("name","ali"), Field("city","ankara")]}
+//
+// NOT (struct-içinde-array): `rec.fields` üzerinde `.push()` gibi mutating
+// metotlar runtime'da "expected array" ile düşer — struct alanının kendisini
+// receiver olarak metoda geçirmek desteklenmiyor. Bu yüzden alan dizisi her
+// yerde önce local bir değişkende doldurulup `rec.fields = dizi` ile geri
+// atanır (atama + okuma sağlıklı). CSV parser ve crud bu desene uyar.
+// ============================================================================
+
+export struct Field {
+    string name;
+    string value;
+}
+
+export struct Record {
+    int id;
+    Field[] fields;
+}

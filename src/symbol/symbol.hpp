@@ -15,12 +15,10 @@
 #ifndef SAQUT_SYMBOL_SYMBOL
 #define SAQUT_SYMBOL_SYMBOL
 
-#include <optional>
 #include <string>
 #include <vector>
 #include "core/type.hpp"
 #include "core/location.hpp"
-#include "core/capability.hpp"
 
 enum class SymbolKind { Variable, Function, Parameter, Struct, Field, Enum, EnumValue };
 
@@ -54,8 +52,6 @@ struct Symbol {
     int                         hostFnId = -1;
     // FFI sembolünün ait olduğu gömülü modül adı ("math"); import çözümü için.
     std::string                 ffiModule;
-    // ADR-035 (#76): FFI bildirimindeki `requires <cap>` — boşsa capability'siz.
-    std::optional<Capability>   requiredCap;
 };
 
 #endif // SAQUT_SYMBOL_SYMBOL

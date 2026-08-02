@@ -33,7 +33,6 @@
 static ArrayElemKind arrayElemKindFromTypeName(const std::string& t);
 static ArrayElemKind arrayElemKindFromPrim(PrimitiveKind p);
 static ArrayElemKind arrayElemKindFromType(const Type& t);
-static void finalizeCapRequirements(IRFunction* fn);
 
 // Error struct alan sırası (ADR-025): makeError için IR tarafından bilinir
 // 0=line, 1=col, 2=message, 3=trace, 4=code
@@ -118,7 +117,6 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
             generateFunction(child);
             currentFunction_->slotCount = nextSlot_;
             finalizeSlotTypes(currentFunction_, fnDecl);
-            finalizeCapRequirements(currentFunction_);
         }
     }
     return program;
@@ -190,7 +188,6 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
             generateFunction(child);
             currentFunction_->slotCount = nextSlot_;
             finalizeSlotTypes(currentFunction_, fnDecl);
-            finalizeCapRequirements(currentFunction_);
         }
     }
 
@@ -1086,7 +1083,6 @@ int IRGenerator::generateExpression(ASTNode* node) {
         int ffiHostId = -1;
         bool ffiReturnsVoid = false;
         const Type* ffiReturnType = nullptr;
-        std::optional<Capability> ffiRequiredCap;
 
         if (call->callee && call->callee->kind == ASTKind::Identifier) {
             auto* calleeId = (IdentifierNode*) call->callee;
@@ -1103,7 +1099,6 @@ int IRGenerator::generateExpression(ASTNode* node) {
                 ffiReturnsVoid = calleeId->resolvedSymbol->type.returnType &&
                                  calleeId->resolvedSymbol->type.returnType->isVoid();
                 ffiReturnType = calleeId->resolvedSymbol->type.returnType.get();
-                ffiRequiredCap = calleeId->resolvedSymbol->requiredCap;
             }
         }
 
@@ -1125,7 +1120,6 @@ int IRGenerator::generateExpression(ASTNode* node) {
             ins.intValue = kHostFnBase + ffiHostId;
             ins.dest = destSlot;
             ins.argSlots = argSlots;
-            ins.requiredCap = ffiRequiredCap;
             if (!ffiReturnsVoid && ffiReturnType) {
                 ins.valueType = slotTypeFromType(*ffiReturnType);
                 ins.valueNullable = ffiReturnType->nullable;
@@ -1209,6 +1203,22 @@ int IRGenerator::generateExpression(ASTNode* node) {
             emitBinaryOp(Opcode::ADD, newSlot, operandSlot, oneSlot);
         } else {
             emitBinaryOp(Opcode::SUB, newSlot, operandSlot, oneSlot);
+        }
+
+        // #??: GLOBAL postfix artırımı — `counter++` operand'ı bir global ise
+        // generateExpression LOAD_GLOBAL ile değeri GEÇİCİ bir slot'a yükler;
+        // emitLoadSlot(operandSlot, ...) o geçici slotu günceller ama global
+        // belleğe GERİ YAZMAZ. Böylece global asla artmaz (VM'de `/5 5 5/`
+        // jambonlu davranış → kullanıcı "global değişken kullanılmaz, state
+        // parametreyle taşınır" diye telafi ediyordu). Basit atama (`=`) ve
+        // birleşik atama (`+=`) case'lerindeki isGlobal kontrolü gibi, global
+        // operand için sonucu emitStoreGlobal ile global'e geri yaz.
+        if (pf->operand && pf->operand->kind == ASTKind::Identifier) {
+            auto* pid = (IdentifierNode*) pf->operand;
+            const std::string& pname =
+                pid->parserToken.token ? pid->parserToken.token->token : "";
+            if (isGlobal(pname))
+                emitStoreGlobal(newSlot, getGlobalIndex(pname));
         }
         emitLoadSlot(operandSlot, newSlot); // orijinal değişkeni güncelle
         return resultSlot; // artırmadan önceki değer
@@ -1713,19 +1723,6 @@ SlotType IRGenerator::slotTypeFromTypeName(const std::string& t) const {
         return SlotType::Ref;
     // enum → int değeri; void/bilinmeyen → Int (nötr varsayılan).
     return SlotType::Int;
-}
-
-// #76/ADR-035: CALLHOST(__ffi__) requiredCap'lerini Instruction'ların SABİT
-// indeksleriyle IRFunction::capRequirements'a taşır. VM'in runtime capability
-// backstop'u (interpreter.cpp, B modeli) bu map'ten okur; map doldurulmazsa
-// backstop sessizce devre dışı kalır (#218'de map'e geçildi ama population
-// unutulmuştu). Talimat vektörü IR üretimi SONRASI değişmez (optimizasyon
-// AST'te çalışır), bu yüzden indeksler kalıcıdır.
-static void finalizeCapRequirements(IRFunction* fn) {
-    for (size_t i = 0; i < fn->instructions.size(); ++i) {
-        if (fn->instructions[i].requiredCap)
-            fn->capRequirements[static_cast<int>(i)] = *fn->instructions[i].requiredCap;
-    }
 }
 
 void IRGenerator::finalizeSlotTypes(IRFunction* fn, FunctionDeclNode* decl) {

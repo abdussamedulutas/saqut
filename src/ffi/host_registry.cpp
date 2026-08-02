@@ -56,22 +56,18 @@ const HostMeta kHostMeta[] = {
     {"MATH_ROUND",         HostKind::Float,   HOST_PURE},
     {"MATH_PI",            HostKind::Float,   HOST_PURE},
     {"MATH_E",             HostKind::Float,   HOST_PURE},
-    // caps — VM capability kümesini okur/değiştirir (ADR-035)
-    {"CAPS_DROP",          HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
-    {"CAPS_HAS",           HostKind::Int,     HOST_NEEDS_CAPS | HOST_CAN_FAIL},
     // fs — dosya içeriği her zaman byte[] olarak taşınır
-    {"FS_READ_FILE",       HostKind::Ref,     HOST_NEEDS_CAPS | HOST_NEEDS_HEAP | HOST_CAN_FAIL},
-    {"FS_WRITE_FILE",      HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
-    {"FS_APPEND",          HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
-    {"FS_EXISTS",          HostKind::Int,     HOST_NEEDS_CAPS},
-    {"FS_REMOVE",          HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
-    // sys / fs — capability gerektirir (ADR-035). JIT'in HostEnv'i VM'inkinden
-    // ayrı bir caps kümesi taşıdığı için bu aile JIT dışında kalır
-    // (isSupportedCallhost: HOST_NEEDS_CAPS reddi).
-    {"SYS_RANDOM",         HostKind::Float,   HOST_NEEDS_CAPS},
-    {"SYS_RANDOM_INT",     HostKind::Int,     HOST_NEEDS_CAPS | HOST_CAN_FAIL},
-    {"SYS_ENV",            HostKind::Str,     HOST_NEEDS_CAPS},
-    {"SYS_SLEEP",          HostKind::Void,    HOST_NEEDS_CAPS},
+    {"FS_READ_FILE",       HostKind::Ref,     HOST_NEEDS_HEAP | HOST_CAN_FAIL},
+    {"FS_WRITE_FILE",      HostKind::Void,    HOST_CAN_FAIL},
+    {"FS_APPEND",          HostKind::Void,    HOST_CAN_FAIL},
+    {"FS_EXISTS",          HostKind::Int,     0},
+    {"FS_REMOVE",          HostKind::Void,    HOST_CAN_FAIL},
+    // sys / fs — determinizmi bozan / dış-durum-okuyan aile. JIT'in HostEnv'i
+    // VM'inkinden ayrı bir durum taşıdığı için bu aile JIT dışında kalır.
+    {"SYS_RANDOM",         HostKind::Float,   0},
+    {"SYS_RANDOM_INT",     HostKind::Int,     HOST_CAN_FAIL},
+    {"SYS_ENV",            HostKind::Str,     0},
+    {"SYS_SLEEP",          HostKind::Void,    0},
     {"SYS_ARGS",           HostKind::Ref,     HOST_NEEDS_HEAP | HOST_NEEDS_ARGS},
     // date — saf hesap (date_calc.hpp), epoch-ms üzerinde
     {"DATE_NOW",           HostKind::Date,    HOST_PURE},
@@ -104,7 +100,7 @@ uint8_t hostFlagsFor(const char* symbolicId) {
     // Metadata eksikse KORUMACI davran: env gerekebilir + hata verebilir.
     // Yanlış yönde hata yapmak (gereksiz safepoint) sessiz bozulmadan iyidir.
     return m ? m->flags
-             : (uint8_t)(HOST_NEEDS_HEAP | HOST_NEEDS_CAPS | HOST_NEEDS_ARGS | HOST_CAN_FAIL);
+             : (uint8_t)(HOST_NEEDS_HEAP | HOST_NEEDS_ARGS | HOST_CAN_FAIL);
 }
 
 HostKind hostRetKindFor(const char* symbolicId) {

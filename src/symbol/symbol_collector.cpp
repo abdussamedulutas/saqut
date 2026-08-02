@@ -419,15 +419,6 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
             continue;
         }
 
-        // Capability import sırasında kontrol edilmez. Import yalnızca sembolü
-        // çözer ve gerekli capability bilgisini sembole taşır. Gerçek kontrol
-        // CALLHOST kullanımı sırasında, o anki caps kümesiyle yapılır; böylece
-        // caps::drop("fs") gibi dinamik değişiklikler doğru çalışır.
-        std::optional<Capability> reqCap;
-        if (!decl->requiresCap.empty()) {
-            reqCap = capabilityFromName(decl->requiresCap);
-        }
-
         if (table_.resolve(name)) continue; // zaten tanımlı (tekrar import vb.)
 
         std::vector<Type> paramTypes;
@@ -445,7 +436,6 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
         s->paramNames  = paramNames;
         s->hostFnId    = hostId;
         s->ffiModule   = imp->sourcePath;
-        s->requiredCap = reqCap;
     }
 }
 

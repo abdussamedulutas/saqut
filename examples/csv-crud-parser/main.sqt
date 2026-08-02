@@ -1,0 +1,112 @@
+// ============================================================================
+// CSV-CRUD demosu — ana giriş (main.sqt)
+// ============================================================================
+//
+// Modül zinciri: main → crud → parser → types
+// Veri akışı:    CSV dosyası → readFile → byte[] → toString → parseCsv →
+//                Record[] → CRUD (add/update/delete/list) → recordsToCsv →
+//                writeFile ile geri yaz.
+//
+// Çalıştırma:    ./build/saqut run --allow fs examples/csv-crud-parser/main.sqt
+// Dönüş:         0 = başarılı; 70 = capability/host hatası; 65 = derleme hatası
+// ============================================================================
+
+import {Field, Record} from "csv_types.sqt";
+import {parseCsv, valueOf, setValue, recordsToCsv} from "csv_parser.sqt";
+import {addRecord, deleteRecord, updateField, findById, printRecords}
+       from "crud.sqt";
+import {countRecords, sumIntField, averageIntField, sortByIntField,
+        distinctValues, copyRecords} from "csv_stats.sqt";
+import {readFile, writeFile} from fs;
+
+// Ternary `? :` bu dil sürümünde çözümlenmiyor (bool tipi hatası). Onun
+// yerine kullanılan küçük yardımcılar — normal if/return dönüşleri çalışır.
+string boolStr(bool b) {
+    if (b) { return "true"; }
+    return "false";
+}
+
+string orNull(string? v) {
+    if (v == null) { return "null"; }
+    return v;
+}
+
+void main() {
+    string path = "examples/csv-crud-parser/data.csv";
+
+    // 1) Dosyadan oku (byte[] → UTF-8 string).
+    byte[] raw = readFile(path);
+    string csv = raw.toString();
+
+    print("== ham CSV (ilk satirlar) ==");
+    string[] headLines = csv.split("\n");
+    int li = 0;
+    while (li < headLines.length() && li < 4) {
+        print("  " + headLines[li]);
+        li = li + 1;
+    }
+
+    // 2) Parse → Record[].
+    Record[] recs = parseCsv(csv);
+    print("== parse ==");
+    print("kayit sayisi = " + (recs.length() as string));
+    if (recs.length() > 0) {
+        string? c0 = valueOf(recs[0], "name");
+        print("ilk kayit name = " + orNull(c0));
+    }
+
+    // 3) CREATE: yeni kayıt ekle.
+    print("== add ==");
+    int newId = addRecord(recs, "Zeynep", "bursa", "92");
+    print("eklenen id = " + (newId as string));
+
+    // 4) READ: id ile bul, field oku.
+    print("== find ==");
+    int? f = findById(recs, newId);
+    if (f != null) {
+        string? nm = valueOf(recs[f], "name");
+        print("bulunan: id=" + (recs[f].id as string) +
+              " name=" + orNull(nm));
+    }
+
+    // 5) UPDATE: score alanını değiştir.
+    print("== update ==");
+    bool ok = updateField(recs, newId, "score", "99");
+    print("guncelleme = " + boolStr(ok));
+
+    // 6) DELETE: eski bir kaydı sil.
+    print("== delete ==");
+    bool del = deleteRecord(recs, 2);
+    print("silme(2) = " + boolStr(del));
+
+    // 7) İstatistik + sıralama (csv_stats modülü).
+    print("== istatistik ==");
+    print("kayit = " + (countRecords(recs) as string));
+    print("score toplam = " + (sumIntField(recs, "score") as string));
+    print("score ortalama = " + (averageIntField(recs, "score") as string));
+    string[] sehirler = distinctValues(recs, "city");
+    print("farkli sehir sayisi = " + (sehirler.length() as string));
+
+    // Sıralamayı kopya üzerinde yap — asıl recs'in (yazılacak) sırası bozulmasın.
+    Record[] sortlu = copyRecords(recs);
+    sortByIntField(sortlu, "score", true);
+    print("== score'a gore azalan ==");
+    int si = 0;
+    while (si < sortlu.length()) {
+        string? sn = valueOf(sortlu[si], "name");
+        string snm = "?";
+        if (sn != null) { snm = sn; }
+        string? sc = valueOf(sortlu[si], "score");
+        string scs = "?";
+        if (sc != null) { scs = sc; }
+        print("  " + snm + " " + scs);
+        si = si + 1;
+    }
+
+    // 8) Liste + serialize + geri yaz.
+    printRecords(recs);
+    string out = recordsToCsv(recs);
+    writeFile(path, out.toBuffer());
+    print("== yazildi ==");
+    print("yeni csv boyut = " + (out.length() as string));
+}

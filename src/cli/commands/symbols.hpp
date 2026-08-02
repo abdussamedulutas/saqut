@@ -54,7 +54,7 @@ inline int cmdSymbols(const CliArgs& args) {
 
     SymbolTable table;
     if (ast) {
-        SymbolCollector(table, diag, args.allowedCaps).collect(ast);
+        SymbolCollector(table, diag).collect(ast);
     } else if (!diag.hasErrors()) {
         diag.report("E000", SourceLocation{}, "failed to build AST");
     }

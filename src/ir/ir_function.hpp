@@ -24,7 +24,6 @@
 #include <unordered_map>
 #include "ir/instruction.hpp"
 #include "ir/ir_cfg.hpp"
-#include "core/capability.hpp"
 #include "core/module_registry.hpp"
 
 // SlotType tanımı instruction.hpp'ye taşındı (Instruction::valueType için gerekli,
@@ -65,8 +64,6 @@ struct IRFunction {
     // sırasında VM bu maskeyi okuyup nullable alanları Int(0) yerine null ile
     // başlatır — aksi halde `s.f == null` sessizce false döner.
     std::unordered_map<std::string, std::vector<bool>> structFieldNullable;
-    // #218: capability gereksinimleri (Instruction'dan tasındı)
-    std::unordered_map<int, Capability> capRequirements;
 
     IRFunction(std::string name, int paramCount)
         : name(std::move(name)), paramCount(paramCount), slotCount(0) {}

@@ -1,6 +1,0 @@
-import {now} from date;
-
-void main() {
-    date d = now();
-    print(d);
-}

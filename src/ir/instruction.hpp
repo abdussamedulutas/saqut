@@ -29,12 +29,10 @@
 #ifndef SAQUT_IR_INSTRUCTION
 #define SAQUT_IR_INSTRUCTION
 
-#include <optional>
 #include <string>
 #include <vector>
 #include "core/array_elem_kind.hpp"
 #include "core/decimal.hpp"
-#include "core/capability.hpp"
 
 // ----------------------------------------------------------------------------
 // SlotType — bir slot'un statik değer türü (ADR-020: slot çalışma zamanında tip
@@ -76,7 +74,7 @@ inline const char* slotTypeName(SlotType t) {
 //                    operand sayılır
 //                  - ARRAY_NEW'de arrayElemKind (packed eleman tipi) bir
 //                    operand sayılır
-//                  - IR-metadata (valueType, fieldNames, source*, requiredCap)
+//                  - IR-metadata (valueType, fieldNames, source*)
 //                    SAYILMAZ
 //     BACKENDS : destekleyen backend bayrakları (OP_VM | OP_JIT). VM
 //                normatif backend'dir ve TÜM opcode'ları çalıştırır; JIT
@@ -331,11 +329,6 @@ struct Instruction {
     int         sourceLine = 0;
     int         sourceCol  = 0;
     std::string sourceFile;
-
-    // ADR-035 (#76): CALLHOST("__ffi__") için gereken capability — yoksa
-    // nullopt. VM'de runtime backstop (B), `saqut ir --capabilities`'te
-    // statik raporlama için kullanılır.
-    std::optional<Capability> requiredCap;
 
     explicit Instruction(Opcode op) : opcode(op) {}
 };

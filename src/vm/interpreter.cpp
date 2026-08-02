@@ -1338,7 +1338,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 for (int s : instr.argSlots)
                     hostScratch_.slots.push_back(toHostSlot(frame.slots[s], hostScratch_));
 
-                HostEnv benv{&caps_, &programArgs_, &heap_, nullptr};
+                HostEnv benv{&programArgs_, &heap_, nullptr};
                 HostCallFrame& bf = hostFrame_;
                 bf.reset();
                 bf.args     = hostScratch_.slots.data();
@@ -1355,21 +1355,6 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 }
             } else if (instr.functionName == "__ffi__") {
                 // ADR-034 (#107): sayısal host id ile FFI dispatch
-                // ADR-035 (#76): runtime capability backstop (A+B modelinin B'si)
-                {
-                    // #218: requiredCap IRFunction metadata'dan alınır
-                    const auto& fn = *callStack_.back().function;
-                    auto capIt = fn.capRequirements.find((int)(&instr - fn.instructions.data()));
-                    std::optional<Capability> requiredCap = (capIt != fn.capRequirements.end())
-                        ? std::optional<Capability>(capIt->second) : std::nullopt;
-                    if (requiredCap && caps_.find(*requiredCap) == caps_.end()) {
-                        pendingThrow_ = makeErrorValue(
-                            std::string("requires --allow-") + capabilityName(*requiredCap) +
-                            " capability",
-                        "E_CAP_MISSING", instr.sourceLine, instr.sourceCol);
-                        break;
-                    }
-                }
                 // #222: tek giriş noktası (rt_host_call). Exception artık
                 // sınırı geçmiyor — hata f.err üzerinden dönüyor. VM ve her
                 // backend aynı yolu kullanır.
@@ -1378,7 +1363,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 for (int s : instr.argSlots)
                     hostScratch_.slots.push_back(toHostSlot(frame.slots[s], hostScratch_));
 
-                HostEnv env{&caps_, &programArgs_, &heap_, nullptr};
+                HostEnv env{&programArgs_, &heap_, nullptr};
                 HostCallFrame& f = hostFrame_;
                 f.reset();
                 f.args     = hostScratch_.slots.data();

@@ -1,5 +1,0 @@
-import {readFile} from fs;
-
-void main() {
-    print(readFile("/tmp/whatever.txt").toString());
-}

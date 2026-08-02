@@ -438,6 +438,13 @@ extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
         auto* d = static_cast<DecimalObject*>(g_jitHostFrame.ret.p);
         g_jitHostFrame.ret = HostSlot::fromDecimal(
             jitBoxDecimal(d ? d->val : DecimalValue{}));
+    } else if (g_jitHostFrame.ret.kind == HostKind::Ref) {
+        // Ref (array/byte[] vb.) host dönüşü: host gövdesi zaten JIT heap'inde
+        // (jitEnv.heap) tahsis etti — pointer'ı register'a ilet. Kirli bir int
+        // yorumu yerine net Ref taşıma; GC kökü için markValue ile işaretle.
+        auto* o = static_cast<Object*>(g_jitHostFrame.ret.p);
+        if (o && g_jitHeap) g_jitHeap->markValue(Value::fromRef(o));
+        g_jitHostFrame.ret = HostSlot::fromRef(g_jitHostFrame.ret.p);
     }
     return g_jitHostFrame.ret.i;
 }
@@ -772,9 +779,10 @@ bool isSupportedCallhost(const Instruction& instr, const std::vector<bool>&) {
     if ((int)instr.argSlots.size() > kMaxHostArgs) return false;
     const HostEntry* he = hostEntryAt(instr.intValue);
     if (!he || !he->thunk) return false;
-    // JIT'in HostEnv'i VM'inkinden ayrı bir caps kümesi taşır: caps::has()
-    // VM'de 1, JIT'te 0 dönerdi (ölçüldü: golden/caps/drop_and_has).
-    if (he->flags & HOST_NEEDS_CAPS) return false;
+    // Capability (HOST_NEEDS_CAPS) host çağrılarını JIT'te ARTIK reddetmeyiz:
+    // JIT kendi HostEnv'i (jitCaps/jitHeap) üzerinden host gövdesini çalıştırır.
+    // Capability modeli ayrı bir karar alanıdır (Adım 3); burada fs/sys host'ları
+    // JIT köprüsüne açılır.
     // Dönüş türü ELEMAN TİPİNE bağlı olan metodlar reddedilir: registry'nin
     // retKind'i statik bir değerdir (Int), oysa gerçek tür receiver'ın eleman
     // tipidir. Trampolin ham 64-bit taşıdığı için float/string elemanlı bir
@@ -989,9 +997,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     // GC görünürlüğü shadow stack üzerinden sağlanır (jitShadowStack).
     static Heap                     jitHeap;
     g_jitGcThreshold = 1024;
-    static std::set<Capability>     jitCaps;
     static HostEnv                  jitEnv;
-    jitEnv.caps        = &jitCaps;
     jitEnv.programArgs = &programArgs;
     jitEnv.heap        = &jitHeap;
     jitSetHostEnv(&jitEnv);

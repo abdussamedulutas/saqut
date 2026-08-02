@@ -73,4 +73,38 @@ std::string substring(std::string_view text, size_t start, size_t length) {
     return std::string(text.substr(begin, offset - begin));
 }
 
+namespace {
+
+std::string mapCase(std::string_view text, bool toUpper) {
+    std::string result;
+    result.reserve(text.size());
+    for (size_t offset = 0; offset < text.size();) {
+        const size_t length = codePointBytes(text, offset);
+        const std::string_view cp = text.substr(offset, length);
+        if (length == 1) {
+            unsigned char c = static_cast<unsigned char>(cp[0]);
+            if (toUpper && c >= 'a' && c <= 'z') c = static_cast<unsigned char>(c - 32);
+            if (!toUpper && c >= 'A' && c <= 'Z') c = static_cast<unsigned char>(c + 32);
+            result.push_back(static_cast<char>(c));
+        } else if (cp == "Ç" || cp == "ç") result += toUpper ? "Ç" : "ç";
+        else if (cp == "Ğ" || cp == "ğ") result += toUpper ? "Ğ" : "ğ";
+        else if (cp == "İ") result += toUpper ? "İ" : "i";
+        else if (cp == "i" || cp == "I" || cp == "ı") result += toUpper ? "I" : "i";
+        else if (cp == "Ö" || cp == "ö") result += toUpper ? "Ö" : "ö";
+        else if (cp == "Ş" || cp == "ş") result += toUpper ? "Ş" : "ş";
+        else if (cp == "Ü" || cp == "ü") result += toUpper ? "Ü" : "ü";
+        else if (cp == "Ä" || cp == "ä") result += toUpper ? "Ä" : "ä";
+        else if (cp == "Ë" || cp == "ë") result += toUpper ? "Ë" : "ë";
+        else if (cp == "Ï" || cp == "ï") result += toUpper ? "Ï" : "ï";
+        else result.append(cp);
+        offset += length;
+    }
+    return result;
+}
+
+}  // namespace
+
+std::string lower(std::string_view text) { return mapCase(text, false); }
+std::string upper(std::string_view text) { return mapCase(text, true); }
+
 }  // namespace utf8

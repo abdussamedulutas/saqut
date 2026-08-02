@@ -3,6 +3,9 @@ int main() {
     print(s.length());
     print(s.charAt(0));
     print(s.substring(0, 2));
+    print(s.lower());
+    print(" ");
+    print(s.lower().upper());
     print("\n");
     return 0;
 }

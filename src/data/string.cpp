@@ -64,17 +64,13 @@ int str_length(HostCallFrame* f) {
 
 int str_upper(HostCallFrame* f) {
     if (!wantStr(f, 0, "upper")) return 1;
-    std::string s = hostAsString(f->args[0]);
-    for (char& c : s) c = (char)std::toupper((unsigned char)c);
-    hostSetRetString(*f, std::move(s));
+    hostSetRetString(*f, utf8::upper(hostAsString(f->args[0])));
     return 0;
 }
 
 int str_lower(HostCallFrame* f) {
     if (!wantStr(f, 0, "lower")) return 1;
-    std::string s = hostAsString(f->args[0]);
-    for (char& c : s) c = (char)std::tolower((unsigned char)c);
-    hostSetRetString(*f, std::move(s));
+    hostSetRetString(*f, utf8::lower(hostAsString(f->args[0])));
     return 0;
 }
 

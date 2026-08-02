@@ -26,6 +26,7 @@
 
 #include <string>
 #include <vector>
+#include <functional>
 #include "ir/ir_program.hpp"
 #include "profiling/stage_timer.hpp"
 
@@ -58,7 +59,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                               UnsupportedReason& outReason,
                               const std::vector<std::string>& programArgs,
                               profiling::StageTimer* profiler = nullptr,
-                              JitCallCounters* counters = nullptr);
+                              JitCallCounters* counters = nullptr,
+                              int executionRuns = 1,
+                              std::vector<long long>* executionSamplesUs = nullptr,
+                              const std::function<void(int, int)>& executionProgress = {});
 
 }  // namespace mir_backend
 

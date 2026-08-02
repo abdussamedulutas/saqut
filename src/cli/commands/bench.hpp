@@ -18,6 +18,7 @@
 #define SAQUT_CLI_BENCH
 
 #include <algorithm>
+#include <numeric>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -179,6 +180,7 @@ static const char* opcodeNameBridge(int op) {
 struct PipelineTimes {
     BMicros tokUs = 0, parseUs = 0, symUs = 0, tcUs = 0, irUs = 0, vmUs = 0;
     BMicros jitWarmupUs = 0;  // yalnızca JIT modunda: IR→MIR+native derleme süresi
+    std::vector<BMicros> jitExecSamples;
 };
 
 static bool runPipeline(
@@ -188,7 +190,8 @@ static bool runPipeline(
     const std::vector<std::string>& programArgs,
     PipelineTimes& out,
     BenchProfile*  profile,   // null = timing modu, non-null = profil modu
-    bool verbose = false)
+    bool verbose = false,
+    int jitExecutionRuns = 1)
 {
     size_t fileCount = fileSources.size();
 
@@ -286,14 +289,26 @@ static bool runPipeline(
             auto ta = BClock::now();
             bool jitOk = mir_backend::tryCompileAndRunProgram(
                 program, jitResult, reason, programArgs, &stageTimer,
-                profile ? &counters : nullptr);
+                profile ? &counters : nullptr,
+                jitExecutionRuns, &out.jitExecSamples,
+                (profile == nullptr && jitExecutionRuns > 1)
+                    ? std::function<void(int, int)>([](int run, int total) {
+                          std::cerr << "\r[bench] timing " << run << "/" << total
+                                    << "  " << std::flush;
+                      })
+                    : std::function<void(int, int)>{});
             auto tb = BClock::now();
             // Warmup (derleme) süresi ayrı tutulur — timing tablosundaki
             // jit-execute yalnızca native çalıştırmayı göstersin (VM'deki
             // vm-execute ile adil kıyas). ScopedStage overhead'i ns
             // seviyesindedir; µs seviyesindeki ölçümü etkilemez.
             out.jitWarmupUs = stageTimer.microsecondsFor("jit-warmup");
-            out.vmUs = elapsed_us_b(ta, tb) - out.jitWarmupUs;
+            out.vmUs = out.jitExecSamples.empty()
+                ? elapsed_us_b(ta, tb) - out.jitWarmupUs
+                : (BMicros)std::accumulate(out.jitExecSamples.begin(),
+                                           out.jitExecSamples.end(), BMicros{0});
+            if (out.jitExecSamples.size() > 1)
+                out.vmUs /= (BMicros)out.jitExecSamples.size();
             if (out.vmUs < 0) out.vmUs = 0;
             if (verbose) std::cerr << "  jit       " << out.vmUs/1000 << " ms"
                                    << " (+warmup " << out.jitWarmupUs/1000 << " ms)\n";
@@ -384,7 +399,22 @@ inline int cmdBench(const CliArgs& args) {
     PhaseResult rWarm {"jit-warmup",     {}};  // yalnızca JIT modunda doldurulur
     PhaseResult rExec {execLabel,        {}};
 
-    for (int run = 0; run < N; run++) {
+    if (useJit && !compileOnly) {
+        // JIT timing contract: compile/native warmup exactly once, then reuse
+        // the same native function for all N execution samples.
+        PipelineTimes pt;
+        if (!runPipeline(fileSources, false, true, programArgs, pt, nullptr,
+                         verbose, N))
+            return 1;
+        rTok.samples.push_back(pt.tokUs);
+        rPar.samples.push_back(pt.parseUs);
+        rSym.samples.push_back(pt.symUs);
+        rTc.samples.push_back(pt.tcUs);
+        rIr.samples.push_back(pt.irUs);
+        rWarm.samples.push_back(pt.jitWarmupUs);
+        for (BMicros sample : pt.jitExecSamples)
+            rExec.samples.push_back(sample);
+    } else for (int run = 0; run < N; run++) {
         if (verbose) std::cerr << "[run " << (run+1) << "/" << N << "]\n";
         PipelineTimes pt;
         if (!runPipeline(fileSources, compileOnly, useJit, programArgs,

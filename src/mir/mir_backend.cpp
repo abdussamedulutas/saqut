@@ -16,6 +16,8 @@
 
 #include <cstring>
 #include <cstddef>  // offsetof — JIT direct-memory view alanları (Aşama 0 spike)
+#include <chrono>
+#include <algorithm>
 #include <set>
 
 #include "ffi/host_bridge.hpp"
@@ -967,7 +969,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                               UnsupportedReason& outReason,
                               const std::vector<std::string>& programArgs,
                               profiling::StageTimer* profiler,
-                              JitCallCounters* counters) {
+                              JitCallCounters* counters,
+                              int executionRuns,
+                              std::vector<long long>* executionSamplesUs,
+                              const std::function<void(int, int)>& executionProgress) {
     if (!wholeProgramSupported(program, outReason)) return false;
 
     // Bench sayaçlarını aktif et (profiler ile bağımsız — sayaçlar profil
@@ -2054,7 +2059,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     // arr.ints, jitData/jitLength view'ından sabit offset ile okunur;
                     // trampoline çağrısı (rt_jit_array_get_i) hot path'te yok.
                     // valueType != Unknown zaten wholeProgramSupported'ta garanti.
-                    if (vt == SlotType::Int) {
+                    const bool directInt = vt == SlotType::Int &&
+                                           instr.arrayElemKind == ArrayElemKind::Int;
+                    const bool directByte = instr.arrayElemKind == ArrayElemKind::Byte;
+                    if (directInt || directByte) {
                         static int spikeRegCounter = 0;
                         std::string dName = "agdata" + std::to_string(spikeRegCounter++);
                         std::string lName = "aglen"  + std::to_string(spikeRegCounter++);
@@ -2079,10 +2087,15 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         // if idx < 0 → fail
                         MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BLT,
                             MIR_new_label_op(ctx, failL), R(instr.right), MIR_new_int_op(ctx, 0)));
-                        // dest = [data + idx*4]  (int32_t eleman)
+                        // dest = [data + idx*4]  (int32_t eleman).
+                        // Signed load is required: ARRAY_GET must preserve
+                        // negative int values when the slot is i64-backed.
+                        const MIR_type_t loadType = directByte ? MIR_T_U8 : MIR_T_I32;
+                        const int elementSize = directByte ? 1 : 4;
                         MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
                             R(instr.dest),
-                            MIR_new_mem_op(ctx, MIR_T_U32, 0, dataReg, R(instr.right).u.reg, 4)));
+                            MIR_new_mem_op(ctx, loadType, 0, dataReg,
+                                           R(instr.right).u.reg, elementSize)));
                         MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, okL)));
 
                         // cold error block: bounds fail → pending error → uncaught exit
@@ -2113,6 +2126,58 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 }
                 case Opcode::ARRAY_SET: {
                     SlotType vt = slotKindOf(fn, instr.right);
+                    const bool directInt = vt == SlotType::Int &&
+                                           instr.arrayElemKind == ArrayElemKind::Int;
+                    const bool directByte = instr.arrayElemKind == ArrayElemKind::Byte;
+                    if (directInt || directByte) {
+                        static int spikeSetRegCounter = 0;
+                        std::string dName = "asdata" + std::to_string(spikeSetRegCounter++);
+                        std::string lName = "aslen"  + std::to_string(spikeSetRegCounter++);
+                        MIR_reg_t dataReg = MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, dName.c_str());
+                        MIR_reg_t lenReg  = MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, lName.c_str());
+                        MIR_label_t okL   = MIR_new_label(ctx);
+                        MIR_label_t failL = MIR_new_label(ctx);
+
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                            MIR_new_reg_op(ctx, dataReg),
+                            MIR_new_mem_op(ctx, MIR_T_I64, (MIR_disp_t)offsetof(ArrayObject, jitData),
+                                           R(instr.dest).u.reg, 0, 0)));
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                            MIR_new_reg_op(ctx, lenReg),
+                            MIR_new_mem_op(ctx, MIR_T_I64, (MIR_disp_t)offsetof(ArrayObject, jitLength),
+                                           R(instr.dest).u.reg, 0, 0)));
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BGE,
+                            MIR_new_label_op(ctx, failL), R(instr.left), MIR_new_reg_op(ctx, lenReg)));
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BLT,
+                            MIR_new_label_op(ctx, failL), R(instr.left), MIR_new_int_op(ctx, 0)));
+
+                        // ARRAY_SET stores the VM payload width; the source slot
+                        // is i64-backed and is truncated to the array element.
+                        const MIR_type_t storeType = directByte ? MIR_T_U8 : MIR_T_I32;
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                            MIR_new_mem_op(ctx, storeType, 0, dataReg,
+                                           R(instr.left).u.reg, directByte ? 1 : 4),
+                            R(instr.right)));
+                        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
+                            MIR_new_label_op(ctx, okL)));
+
+                        MIR_append_insn(ctx, func, failL);
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                            MIR_new_ref_op(ctx, errorLocationProto),
+                            MIR_new_ref_op(ctx, errorLocationImport),
+                            MIR_new_int_op(ctx, instr.sourceLine),
+                            MIR_new_int_op(ctx, instr.sourceCol)));
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                            MIR_new_ref_op(ctx, abndProto),
+                            MIR_new_ref_op(ctx, abndImport),
+                            R(instr.left), MIR_new_reg_op(ctx, lenReg)));
+                        // The generated function has an i64 return ABI even for
+                        // statement-like opcodes. Match ARRAY_GET's error exit
+                        // shape instead of emitting a zero-operand RET.
+                        MIR_append_insn(ctx, func, MIR_new_ret_insn(ctx, 1, R(instr.dest)));
+                        MIR_append_insn(ctx, func, okL);
+                        break;
+                    }
                     bool isD = (vt == SlotType::Float || vt == SlotType::Float32);
                     bool isP = (vt == SlotType::Ref || vt == SlotType::Str ||
                                 vt == SlotType::Decimal);
@@ -2463,10 +2528,23 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
 
     using SaqutMainFn = int64_t (*)(void);
     auto    compiled = reinterpret_cast<SaqutMainFn>(mainPtr);
-    int64_t nativeResult;
-    {
-        profiling::StageTimer::ScopedStage profExec(profiler, "jit-exec");
-        nativeResult = compiled();
+    int64_t nativeResult = 0;
+    const int runs = std::max(1, executionRuns);
+    if (executionSamplesUs)
+        executionSamplesUs->clear();
+    for (int run = 0; run < runs; ++run) {
+        auto execStart = std::chrono::steady_clock::now();
+        {
+            profiling::StageTimer::ScopedStage profExec(profiler, "jit-exec");
+            nativeResult = compiled();
+        }
+        auto execEnd = std::chrono::steady_clock::now();
+        if (executionSamplesUs) {
+            executionSamplesUs->push_back(std::chrono::duration_cast<std::chrono::microseconds>(
+                execEnd - execStart).count());
+        }
+        if (executionProgress)
+            executionProgress(run + 1, runs);
     }
 
     std::string uncaughtMessage;

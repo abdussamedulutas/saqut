@@ -468,9 +468,21 @@ ASTNode* Parser::parseNullDenotation() {
         if (currentToken().type == TokenType::LPAREN)
             nextToken(); // tüket: (
         if (currentToken().type != TokenType::RPAREN) {
-            sc->arguments.push_back(parseExpression(0));
-            while (currentToken().type == TokenType::COMMA) {
+            if (currentToken().type == TokenType::COMMA) {
+                reportError(currentToken().token ? currentToken().token->loc : sc->loc,
+                            "E904", "expected expression before ','");
                 nextToken();
+            } else {
+                sc->arguments.push_back(parseExpression(0));
+            }
+            while (currentToken().type == TokenType::COMMA) {
+                auto comma = currentToken();
+                nextToken();
+                if (currentToken().type == TokenType::COMMA || currentToken().type == TokenType::RPAREN) {
+                    reportError(comma.token ? comma.token->loc : sc->loc,
+                                "E904", "expected expression after ','");
+                    continue;
+                }
                 sc->arguments.push_back(parseExpression(0));
             }
         }
@@ -597,9 +609,21 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
         left->parent = call;
 
         if (currentToken().type != TokenType::RPAREN) {
-            call->arguments.push_back(parseExpression(0));
-            while (currentToken().type == TokenType::COMMA) {
+            if (currentToken().type == TokenType::COMMA) {
+                reportError(currentToken().token ? currentToken().token->loc : call->loc,
+                            "E904", "expected expression before ','");
                 nextToken();
+            } else {
+                call->arguments.push_back(parseExpression(0));
+            }
+            while (currentToken().type == TokenType::COMMA) {
+                auto comma = currentToken();
+                nextToken();
+                if (currentToken().type == TokenType::COMMA || currentToken().type == TokenType::RPAREN) {
+                    reportError(comma.token ? comma.token->loc : call->loc,
+                                "E904", "expected expression after ','");
+                    continue;
+                }
                 call->arguments.push_back(parseExpression(0));
             }
         }
@@ -687,9 +711,21 @@ ASTNode* Parser::parseLeftDenotation(ASTNode* left) {
 
             nextToken(); // tüket: (
             if (currentToken().type != TokenType::RPAREN) {
-                sc->arguments.push_back(parseExpression(0));
-                while (currentToken().type == TokenType::COMMA) {
+                if (currentToken().type == TokenType::COMMA) {
+                    reportError(currentToken().token ? currentToken().token->loc : sc->loc,
+                                "E904", "expected expression before ','");
                     nextToken();
+                } else {
+                    sc->arguments.push_back(parseExpression(0));
+                }
+                while (currentToken().type == TokenType::COMMA) {
+                    auto comma = currentToken();
+                    nextToken();
+                    if (currentToken().type == TokenType::COMMA || currentToken().type == TokenType::RPAREN) {
+                        reportError(comma.token ? comma.token->loc : sc->loc,
+                                    "E904", "expected expression after ','");
+                        continue;
+                    }
                     sc->arguments.push_back(parseExpression(0));
                 }
             }

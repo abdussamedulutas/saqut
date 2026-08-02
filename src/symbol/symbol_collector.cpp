@@ -419,16 +419,13 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
             continue;
         }
 
-        // ADR-035 (#76): `requires <cap>` — A+B modelinin "A" yarısı (derleme
-        // zamanı tanı). B yarısı (runtime backstop) VM CALLHOST'ta uygulanır.
+        // Capability import sırasında kontrol edilmez. Import yalnızca sembolü
+        // çözer ve gerekli capability bilgisini sembole taşır. Gerçek kontrol
+        // CALLHOST kullanımı sırasında, o anki caps kümesiyle yapılır; böylece
+        // caps::drop("fs") gibi dinamik değişiklikler doğru çalışır.
         std::optional<Capability> reqCap;
         if (!decl->requiresCap.empty()) {
             reqCap = capabilityFromName(decl->requiresCap);
-            if (reqCap && allowedCaps_.find(*reqCap) == allowedCaps_.end()) {
-                diag_.report("E_CAP_MISSING", imp->loc,
-                    "'" + name + "' requires --allow-" + decl->requiresCap + " capability",
-                    "run with --allow-" + decl->requiresCap);
-            }
         }
 
         if (table_.resolve(name)) continue; // zaten tanımlı (tekrar import vb.)

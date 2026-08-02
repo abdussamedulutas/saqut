@@ -30,6 +30,7 @@
 #include <cctype>
 #include <string>
 
+#include "core/utf8.hpp"
 #include "ffi/host_bridge.hpp"
 #include "vm/object.hpp"
 
@@ -57,7 +58,7 @@ bool wantStr(HostCallFrame* f, int idx, const char* method) {
 
 int str_length(HostCallFrame* f) {
     if (!wantStr(f, 0, "length")) return 1;
-    f->ret = HostSlot::fromInt((int)hostAsString(f->args[0]).size());
+    f->ret = HostSlot::fromInt((int)utf8::codePointCount(hostAsString(f->args[0])));
     return 0;
 }
 
@@ -120,12 +121,12 @@ int str_substring(HostCallFrame* f) {
     const std::string& s = hostAsString(f->args[0]);
     int from = (int)hostAsI64(f->args[1]);
     int len  = (int)hostAsI64(f->args[2]);
-    if (from < 0 || from > (int)s.size()) {
+    if (from < 0 || from > (int)utf8::codePointCount(s)) {
         f->err.set("string::substring — index out of bounds", "E_BUILTIN");
         return 1;
     }
     if (len < 0) len = 0;
-    hostSetRetString(*f, s.substr(from, len));
+    hostSetRetString(*f, utf8::substring(s, (size_t)from, (size_t)len));
     return 0;
 }
 
@@ -163,11 +164,11 @@ int str_charAt(HostCallFrame* f) {
     if (!wantStr(f, 0, "charAt")) return 1;
     const std::string& s = hostAsString(f->args[0]);
     int idx = (int)hostAsI64(f->args[1]);
-    if (idx < 0 || idx >= (int)s.size()) {
+    if (idx < 0 || idx >= (int)utf8::codePointCount(s)) {
         f->err.set("string::charAt — index out of bounds", "E_BUILTIN");
         return 1;
     }
-    hostSetRetString(*f, std::string(1, s[idx]));
+    hostSetRetString(*f, utf8::charAt(s, (size_t)idx));
     return 0;
 }
 

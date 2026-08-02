@@ -1,0 +1,8 @@
+int main() {
+    string s = "ŞEYTAN";
+    print(s.length());
+    print(s.charAt(0));
+    print(s.substring(0, 2));
+    print("\n");
+    return 0;
+}

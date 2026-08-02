@@ -237,6 +237,13 @@ edilmez.
 - Parser başarısı semantic/IR/runtime başarısı sayılmaz.
 - Kaynakta fonksiyon bulunması CLI'dan erişilebilir olduğunu kanıtlamaz.
 - VM davranışı JIT davranışını, JIT davranışı VM davranışını kanıtlamaz.
+- **JIT hata-yakalama kapsamı bilinçli eksiktir:** MIR JIT backend'inin
+  exception/`throw`/`try-catch`/yakalanabilir runtime error ("division by zero",
+  out-of-range vb.) dilimleri, 0.9.x ve 1.0.0 için bilinçli olarak kapsam
+  dışındadır. VM (normatif) bu dilimi doğru işler; JIT bu programlarda ya
+  farklı davranır ya da ret eder. VM≡JIT parity suite'inde bu dilimlere ait
+  FAIL'lar regresyon değil, beklenen kapsam-bozukluğudur; ayrı issue'a
+  taşınmadan "şu an bozuk" diye denetlenmez ve rapor edilmez.
 - "Embedded runtime" AOT değildir.
 - Capability kontrolü process sandbox değildir.
 - Mark-sweep kodunun varlığı kök doğruluğu, leak-free çalışma veya bounded

@@ -1310,6 +1310,14 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         }
 
         const DataMethod* bm = dataLookupMethod(lookupName, sc->methodName, isStruct, isReceiverArray);
+        if (bm && sc->methodName == "toString" &&
+            (!recvType.isArray() || !recvType.elementType || !recvType.elementType->isByte())) {
+            diag_.report("E003", sc->loc,
+                         "byte[]::toString requires a byte[] receiver",
+                         "use `data.toString()` only for byte arrays");
+            result = Type::error();
+            break;
+        }
         if (!bm) {
             // Hata mesajında hangi tiplerin bu metodu desteklediğini söyle
             std::string typeDesc = sc->dotCall ? recvType.toString() : sc->leftTypeName;

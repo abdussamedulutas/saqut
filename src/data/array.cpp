@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <string>
 
+#include "core/utf8.hpp"
 #include "ffi/host_bridge.hpp"
 #include "vm/object.hpp"
 
@@ -50,6 +51,18 @@ ArrayObject* asArray(HostCallFrame* f, int idx, const char* method) {
         return nullptr;
     }
     return static_cast<ArrayObject*>(s.p);
+}
+
+int arr_toString(HostCallFrame* f) {
+    auto* arr = asArray(f, 0, "toString");
+    if (!arr) return 1;
+    if (arr->elemKind != ArrayElemKind::Byte) {
+        f->err.set("byte[]::toString — expected byte[]", "E_BUILTIN");
+        return 1;
+    }
+    hostSetRetString(*f, utf8::fromBytes(std::string_view(
+        reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size())));
+    return 0;
 }
 
 // ── Packed eleman erişimi — dallanma YALNIZCA burada ─────────────────────────
@@ -345,6 +358,8 @@ const std::vector<DataMethod>& dataArrayMethods() {
          drFixed(Type::Int().asNullable()), false, HostKind::Int, HOST_PURE, arr_indexOf},
         {"clear",    DataMethodCategory::Array, {dpElemArray()},
          drFixed(Type::Void()), true, HostKind::Void, HOST_MUTATING, arr_clear},
+        {"toString", DataMethodCategory::Array, {dpElemArray()},
+         drFixed(Type::String()), false, HostKind::Str, HOST_PURE, arr_toString},
     };
     return methods;
 }

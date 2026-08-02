@@ -3,5 +3,5 @@ import {readFile} from fs;
 
 void main() {
     drop("fs");
-    print(readFile("/tmp/whatever_never_exists_xyz.txt"));
+    print(readFile("/tmp/whatever_never_exists_xyz.txt").toString());
 }

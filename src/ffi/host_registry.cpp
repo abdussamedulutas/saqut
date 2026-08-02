@@ -59,11 +59,9 @@ const HostMeta kHostMeta[] = {
     // caps — VM capability kümesini okur/değiştirir (ADR-035)
     {"CAPS_DROP",          HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
     {"CAPS_HAS",           HostKind::Int,     HOST_NEEDS_CAPS | HOST_CAN_FAIL},
-    // fs — byte[] döndüren readBytes heap'te array tahsis eder
-    {"FS_READ_FILE",       HostKind::Str,     HOST_NEEDS_CAPS | HOST_CAN_FAIL},
-    {"FS_READ_BYTES",      HostKind::Ref,     HOST_NEEDS_HEAP | HOST_CAN_FAIL},
+    // fs — dosya içeriği her zaman byte[] olarak taşınır
+    {"FS_READ_FILE",       HostKind::Ref,     HOST_NEEDS_CAPS | HOST_NEEDS_HEAP | HOST_CAN_FAIL},
     {"FS_WRITE_FILE",      HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
-    {"FS_WRITE_BYTES",     HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
     {"FS_APPEND",          HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},
     {"FS_EXISTS",          HostKind::Int,     HOST_NEEDS_CAPS},
     {"FS_REMOVE",          HostKind::Void,    HOST_NEEDS_CAPS | HOST_CAN_FAIL},

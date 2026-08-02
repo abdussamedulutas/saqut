@@ -1,13 +1,16 @@
-import {writeBytes, readBytes, remove} from fs;
+import {writeFile, readFile, remove} from fs;
 
 void main() {
     byte[] data = [72, 73, 33];
     string path = "/tmp/saqut_fs_test_bytes.bin";
-    writeBytes(path, data);
-    byte[] back = readBytes(path);
+    writeFile(path, data);
+    byte[] back = readFile(path);
     print(back.length());
     print(back[0]);
     print(back[1]);
     print(back[2]);
+    byte[] invalid = [195, 40];
+    print(invalid.toString());
+    print("\n");
     remove(path);
 }

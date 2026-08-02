@@ -1,7 +1,7 @@
 import {writeFile, readFile, remove} from fs;
 
 void main() {
-    writeFile("/tmp/saqut_fs_test_write_read.txt", "merhaba");
-    print(readFile("/tmp/saqut_fs_test_write_read.txt"));
+    writeFile("/tmp/saqut_fs_test_write_read.txt", "merhaba".toBuffer());
+    print(readFile("/tmp/saqut_fs_test_write_read.txt").toString());
     remove("/tmp/saqut_fs_test_write_read.txt");
 }

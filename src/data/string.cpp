@@ -97,9 +97,14 @@ int str_split(HostCallFrame* f) {
 
     auto* arr = f->env->heap->allocArray();
     if (sep.empty()) {
-        // Boş ayraç: her karakter ayrı eleman (eski davranışla birebir).
-        for (char c : src)
-            arr->elements.push_back(Value::fromString(std::string(1, c)));
+        // Boş ayraç: her kod noktası ayrı eleman. UTF-8'de çok baytlı
+        // karakterleri byte düzeyinde kırmamak için codePointBytes ile
+        // ilerleriz (ADI-024 karakter indeksiyle tutarlı).
+        for (size_t offset = 0; offset < src.size();) {
+            const size_t cpLen = utf8::codePointBytes(src, offset);
+            arr->elements.push_back(Value::fromString(src.substr(offset, cpLen)));
+            offset += cpLen;
+        }
     } else {
         size_t pos = 0, found;
         while ((found = src.find(sep, pos)) != std::string::npos) {
@@ -170,7 +175,9 @@ int str_charAt(HostCallFrame* f) {
 
 int str_indexOf(HostCallFrame* f) {
     if (!wantStr(f, 0, "indexOf") || !wantStr(f, 1, "indexOf")) return 1;
-    size_t pos = hostAsString(f->args[0]).find(hostAsString(f->args[1]));
+    // Code-point index döner (ADR-024): substring/charAt ile aynı uzayda
+    // olduğundan sonucu doğrudan onlara beslemek tutarlıdır.
+    size_t pos = utf8::indexOf(hostAsString(f->args[0]), hostAsString(f->args[1]));
     // Bulunamazsa null döner (dönüş tipi `int?`) — HATA DEĞİL, ADR-021.
     if (pos == std::string::npos) f->ret = HostSlot::null();
     else                          f->ret = HostSlot::fromInt((int)pos);
@@ -199,6 +206,19 @@ int str_endsWith(HostCallFrame* f) {
     const std::string& p = hostAsString(f->args[1]);
     bool ok = s.size() >= p.size() && s.compare(s.size() - p.size(), p.size(), p) == 0;
     f->ret = HostSlot::fromInt(ok ? 1 : 0);
+    return 0;
+}
+
+int str_toBuffer(HostCallFrame* f) {
+    if (!wantStr(f, 0, "toBuffer")) return 1;
+    if (!f->env || !f->env->heap) {
+        f->err.set("string::toBuffer — heap yok", "E_BUILTIN");
+        return 1;
+    }
+    const std::string& text = hostAsString(f->args[0]);
+    auto* arr = f->env->heap->allocArray((int)text.size(), ArrayElemKind::Byte);
+    arr->bytes.assign(text.begin(), text.end());
+    f->ret = HostSlot::fromRef(arr);
     return 0;
 }
 
@@ -244,6 +264,8 @@ const std::vector<DataMethod>& dataStringMethods() {
          drFixed(Type::Bool()), false, HostKind::Int, HOST_PURE, str_startsWith},
         {"endsWith",   DataMethodCategory::StringVal, {dpString(), dpFixed(Type::String())},
          drFixed(Type::Bool()), false, HostKind::Int, HOST_PURE, str_endsWith},
+        {"toBuffer",   DataMethodCategory::StringVal, {dpString()},
+         drFixed(Type::array(Type::Byte())), false, HostKind::Ref, HOST_NEEDS_HEAP, str_toBuffer},
     };
     return methods;
 }

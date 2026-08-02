@@ -73,6 +73,20 @@ std::string substring(std::string_view text, size_t start, size_t length) {
     return std::string(text.substr(begin, offset - begin));
 }
 
+size_t indexOf(std::string_view text, std::string_view needle) {
+    if (needle.empty()) return 0;
+    const size_t bytePos = text.find(needle);
+    if (bytePos == std::string::npos) return std::string::npos;
+    // Byte konumuna karşılık gelen code-point index'i: dizinin başından
+    // bytePos'e kadar olan kod noktalarını say (ADR-024 "karakter indeksi").
+    size_t index = 0;
+    for (size_t offset = 0; offset < bytePos;) {
+        offset += codePointBytes(text, offset);
+        ++index;
+    }
+    return index;
+}
+
 namespace {
 
 std::string mapCase(std::string_view text, bool toUpper) {
@@ -89,7 +103,8 @@ std::string mapCase(std::string_view text, bool toUpper) {
         } else if (cp == "Ç" || cp == "ç") result += toUpper ? "Ç" : "ç";
         else if (cp == "Ğ" || cp == "ğ") result += toUpper ? "Ğ" : "ğ";
         else if (cp == "İ") result += toUpper ? "İ" : "i";
-        else if (cp == "i" || cp == "I" || cp == "ı") result += toUpper ? "I" : "i";
+        else if (cp == "I" || cp == "i") result += toUpper ? "I" : "i";
+        else if (cp == "ı") result += toUpper ? "I" : "ı";
         else if (cp == "Ö" || cp == "ö") result += toUpper ? "Ö" : "ö";
         else if (cp == "Ş" || cp == "ş") result += toUpper ? "Ş" : "ş";
         else if (cp == "Ü" || cp == "ü") result += toUpper ? "Ü" : "ü";
@@ -106,5 +121,18 @@ std::string mapCase(std::string_view text, bool toUpper) {
 
 std::string lower(std::string_view text) { return mapCase(text, false); }
 std::string upper(std::string_view text) { return mapCase(text, true); }
+
+std::string fromBytes(std::string_view bytes) {
+    std::string result;
+    result.reserve(bytes.size());
+    for (size_t offset = 0; offset < bytes.size();) {
+        const size_t length = codePointBytes(bytes, offset);
+        const unsigned char first = static_cast<unsigned char>(bytes[offset]);
+        if (length == 1 && first >= 0x80u) result += "�";
+        else result.append(bytes.substr(offset, length));
+        offset += length;
+    }
+    return result;
+}
 
 }  // namespace utf8

@@ -120,7 +120,15 @@ static int fs_readFile(HostCallFrame* fr) {
     if (!f.is_open()) { fr->err.set("cannot open file '" + path + "'", "E_FFI"); return 1; }
     std::ostringstream ss;
     ss << f.rdbuf();
-    hostSetRetString(*fr, ss.str());
+    if (!fr->env || !fr->env->heap) {
+        fr->err.set("readFile: heap yok", "E_FFI");
+        return 1;
+    }
+    const std::string bytes = ss.str();
+    ArrayObject* arr = fr->env->heap->allocArray((int)bytes.size(), ArrayElemKind::Byte);
+    arr->bytes.resize(bytes.size());
+    for (size_t i = 0; i < bytes.size(); ++i) arr->bytes[i] = (uint8_t)bytes[i];
+    fr->ret = HostSlot::fromRef(arr);
     return 0;
 }
 
@@ -128,7 +136,16 @@ static int fs_writeFile(HostCallFrame* fr) {
     const std::string& path = hostAsString(fr->args[0]);
     std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
     if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
-    f << hostAsString(fr->args[1]);
+    if (fr->args[1].kind != HostKind::Ref || !fr->args[1].p) {
+        fr->err.set("writeFile: expected byte[]", "E_FFI");
+        return 1;
+    }
+    auto* arr = static_cast<ArrayObject*>(fr->args[1].p);
+    if (arr->elemKind != ArrayElemKind::Byte) {
+        fr->err.set("writeFile: expected byte[]", "E_FFI");
+        return 1;
+    }
+    f.write(reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size());
     fr->ret = HostSlot::voidVal();
     return 0;
 }
@@ -137,46 +154,16 @@ static int fs_append(HostCallFrame* fr) {
     const std::string& path = hostAsString(fr->args[0]);
     std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::app);
     if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
-    f << hostAsString(fr->args[1]);
-    fr->ret = HostSlot::voidVal();
-    return 0;
-}
-
-static int fs_readBytes(HostCallFrame* fr) {
-    const std::string& path = hostAsString(fr->args[0]);
-    std::ifstream f(path, std::ios::in | std::ios::binary);
-    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "'", "E_FFI"); return 1; }
-    std::ostringstream ss;
-    ss << f.rdbuf();
-    std::string bytes = ss.str();
-
-    if (!fr->env || !fr->env->heap) {
-        fr->err.set("readBytes: heap yok", "E_FFI");
-        return 1;
-    }
-    ArrayObject* arr = fr->env->heap->allocArray((int)bytes.size(), ArrayElemKind::Byte);
-    arr->bytes.resize(bytes.size());
-    for (size_t i = 0; i < bytes.size(); ++i)
-        arr->bytes[i] = (uint8_t)bytes[i];
-    fr->ret = HostSlot::fromRef(arr);
-    return 0;
-}
-
-static int fs_writeBytes(HostCallFrame* fr) {
     if (fr->args[1].kind != HostKind::Ref || !fr->args[1].p) {
-        fr->err.set("writeBytes: expected byte[]", "E_FFI");
+        fr->err.set("append: expected byte[]", "E_FFI");
         return 1;
     }
     auto* arr = static_cast<ArrayObject*>(fr->args[1].p);
-    const std::string& path = hostAsString(fr->args[0]);
-    std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
-    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
-    if (arr->elemKind == ArrayElemKind::Byte) {
-        f.write(reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size());
-    } else {
-        for (const Value& v : arr->elements)
-            f.put(static_cast<char>(v.intValue & 0xFF));
+    if (arr->elemKind != ArrayElemKind::Byte) {
+        fr->err.set("append: expected byte[]", "E_FFI");
+        return 1;
     }
+    f.write(reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size());
     fr->ret = HostSlot::voidVal();
     return 0;
 }
@@ -329,8 +316,6 @@ const std::vector<HostFn>& hostFnTable() {
         { "FS_READ_FILE", 1, fs_readFile },
         { "FS_WRITE_FILE", 2, fs_writeFile },
         { "FS_APPEND", 2, fs_append },
-        { "FS_READ_BYTES", 1, fs_readBytes },
-        { "FS_WRITE_BYTES", 2, fs_writeBytes },
         { "FS_EXISTS", 1, fs_exists },
         { "FS_REMOVE", 1, fs_remove },
         { "SYS_RANDOM", 0, sys_random },
@@ -372,4 +357,3 @@ int hostFnIndex(const std::string& symbolicId) {
     auto it = index.find(symbolicId);
     return it != index.end() ? it->second : -1;
 }
-

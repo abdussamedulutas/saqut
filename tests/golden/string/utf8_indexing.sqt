@@ -1,0 +1,24 @@
+// UTF-8 çok baytlı karakterlerle index semantiği tutarlılığı (ADR-024).
+// indexOf code-point index döndürür → substring/charAt ile aynı uzayda;
+// split("") her kod noktasını ayrı elemana böler (byte kırmaz).
+
+void main() {
+    string s = "abçdef";   // ç = U+00E7 (2 bayt), kod noktaları: a b ç d e f
+    print(s.length());     // 6
+    int? ci = s.indexOf("ç");
+    if (ci != null) print(ci);                  // 2 (code-point)
+    int? di = s.indexOf("d");
+    if (di != null) print(s.substring(di, 2));  // "de"
+    if (di != null) print(s.charAt(di));        // "d"
+    string[] p = s.split("");
+    print(p.length());                          // 6 (kod noktası, byte değil)
+    print(p[2]);                                // "ç" (tam kod noktası)
+
+    // case: ı (U+0131) zaten küçük → lower'da kendisi kalır
+    print("ı".lower());
+    print("ı".upper());                         // "I"
+
+    string a = "araba";
+    int? ai = a.indexOf("ba");
+    if (ai != null) print(ai);                  // 2
+}

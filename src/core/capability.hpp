@@ -9,7 +9,8 @@
 //   Dış dünyaya açılan FFI host fonksiyonlarının bağlı olduğu izin
 //   kategorisi. Varsayılan her şey kapalı; CLI bayrağıyla (--allow-fs vb.)
 //   açıkça açılır. `ffi ... requires <cap>;` bildirimindeki string ile bu
-//   enum arasındaki köprü capabilityFromName()'dir.
+//   enum arasındaki köprü capabilityFromName()'dir. CLI'da --allow verilmezse
+//   tüm capability'ler açıktır; --allow verilirse liste whitelist olur.
 //
 // ============================================================================
 

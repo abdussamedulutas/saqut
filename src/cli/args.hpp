@@ -10,7 +10,7 @@
 //   2. Kaynak dosya okuma (tüm komutlar tarafından paylaşılır)
 //
 // DESTEKLENEN FORMATLAR:
-//   saqut <komut> [dosya] [-o çıktı] [--format json] [--help]
+//   saqut <komut> [dosya] [-o çıktı] [--allow fs,net,sys] [--help]
 //   saqut run file:source.sqt           (eski sözdizimi)
 //   saqut -                             (stdin — TODO)
 //
@@ -56,12 +56,45 @@ struct CliArgs {
     // aşamalarını ayrı ayrı ölçüp stderr'e yazdırır (saqut run).
     bool profile = false;
 
-    // ADR-035 (#76): --allow-fs/--allow-net/--allow-sys — varsayılan hepsi kapalı.
+    // Capability politikası: --allow verilmezse tüm capability'ler açık;
+    // --allow verilirse yalnızca listelenen capability'ler açık.
     std::set<Capability> allowedCaps;
+    bool capabilitiesExplicit = false;
     bool showCapabilities = false; // --capabilities: kullanılan cap'leri raporla (saqut ir)
     // `--` sonrası argümanlar — sys::args() ile programa geçilir.
     std::vector<std::string> programArgs;
 };
+
+inline void parseAllowedCapabilities(CliArgs& args, const std::string& list) {
+    if (list.empty()) {
+        std::cerr << "error: --allow requires a comma-separated capability list (fs,net,sys)\n";
+        exit(saqut::exit_code::kUsageError);
+    }
+
+    if (!args.capabilitiesExplicit) {
+        args.allowedCaps.clear();
+        args.capabilitiesExplicit = true;
+    }
+
+    size_t begin = 0;
+    while (begin <= list.size()) {
+        size_t end = list.find(',', begin);
+        std::string name = list.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+        if (name.empty()) {
+            std::cerr << "error: --allow contains an empty capability; use fs,net,sys\n";
+            exit(saqut::exit_code::kUsageError);
+        }
+        auto capability = capabilityFromName(name);
+        if (!capability) {
+            std::cerr << "error: unknown capability '" << name
+                      << "'; available capabilities: fs,net,sys\n";
+            exit(saqut::exit_code::kUsageError);
+        }
+        args.allowedCaps.insert(*capability);
+        if (end == std::string::npos) break;
+        begin = end + 1;
+    }
+}
 
 // ============================================================================
 // parseArgs
@@ -78,9 +111,18 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
                 args.programArgs.push_back(argv[j]);
             break;
         }
-        if (arg == "--allow-fs")  { args.allowedCaps.insert(Capability::Fs);  continue; }
-        if (arg == "--allow-net") { args.allowedCaps.insert(Capability::Net); continue; }
-        if (arg == "--allow-sys") { args.allowedCaps.insert(Capability::Sys); continue; }
+        if (arg == "--allow") {
+            if (i + 1 >= argc) {
+                std::cerr << "error: --allow requires a comma-separated capability list (fs,net,sys)\n";
+                exit(saqut::exit_code::kUsageError);
+            }
+            parseAllowedCapabilities(args, argv[++i]);
+            continue;
+        }
+        if (arg == "--allow-fs" || arg == "--allow-net" || arg == "--allow-sys") {
+            std::cerr << "error: capability syntax changed; use --allow fs,net,sys\n";
+            exit(saqut::exit_code::kUsageError);
+        }
         if (arg == "--capabilities") { args.showCapabilities = true; continue; }
 
         if (arg == "-") {
@@ -190,6 +232,10 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
     if (args.command.empty()) args.command = "run";
     if (args.positional.empty() && !args.stdinMode)
         args.positional.push_back("source.sqt");
+
+    if (!args.capabilitiesExplicit) {
+        args.allowedCaps = {Capability::Fs, Capability::Net, Capability::Sys};
+    }
 
     return args;
 }

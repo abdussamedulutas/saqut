@@ -71,30 +71,34 @@ public:
     }
 
     void printHelp() const {
-        std::cout << "saQut Compiler — Language-Independent Compiler Toolbox\n\n";
-        std::cout << "USAGE:\n";
-        std::cout << "  saqut <command> [file] [options]\n";
-        std::cout << "  saqut -                          (stdin mode — TODO)\n\n";
-        std::cout << "COMMANDS:\n";
+        std::cout << "saqut <command> [options]\n\n";
 
         for (auto& cmd : commands) {
             if (cmd.hidden) continue;
-            std::cout << "  " << cmd.name;
-            // 12 karaktere hizala
-            size_t pad = cmd.name.size() < 11 ? 11 - cmd.name.size() : 1;
-            std::cout << std::string(pad, ' ') << cmd.description << "\n";
+            std::cout << "  " << cmd.name << " ----- " << commandUsage(cmd.name) << "\n";
         }
 
-        std::cout << "\nOPTIONS:\n";
-        std::cout << "  -o, --output <file>    Output file\n";
-        std::cout << "  -h, --help             Show this help\n\n";
-        std::cout << "EXAMPLES:\n";
-        std::cout << "  saqut run source.sqt\n";
-        std::cout << "  saqut tokens source.sqt\n";
-        std::cout << "  saqut symbols source.sqt\n";
+        std::cout << "\n  options ----- saqut [--help] [--version] [--allow fs,net,sys]\n";
     }
 
 private:
+    static std::string commandUsage(const std::string& command) {
+        if (command == "run")     return "saqut run <file> [--jit]";
+        if (command == "tokens")  return "saqut tokens <file>";
+        if (command == "ast")     return "saqut ast <file> [--json]";
+        if (command == "symbols") return "saqut symbols <file> [--jsonl]";
+        if (command == "check")   return "saqut check <file>";
+        if (command == "ir")      return "saqut ir <file> [--optimized] [--cfg]";
+        if (command == "exec")    return "saqut exec \"<expression>\" [--jit]";
+        if (command == "lsp")     return "saqut lsp";
+        if (command == "dap")     return "saqut dap";
+        if (command == "bench")   return "saqut bench <file> [--jit] --runs=<iterations>";
+        if (command == "compile") return "saqut compile <file>";
+        if (command == "parse")   return "saqut parse <file>";
+        if (command == "transpile") return "saqut transpile <file>";
+        return "saqut " + command;
+    }
+
     std::vector<CliCommand> commands;
 };
 

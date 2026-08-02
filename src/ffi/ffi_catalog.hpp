@@ -17,7 +17,9 @@
 #define SAQUT_FFI_CATALOG
 
 #include <string>
+#include <algorithm>
 #include <unordered_map>
+#include <vector>
 #include "ffi/root_sqt.hpp"
 #include "parser/nodes/declarations.hpp"
 #include "tokenizer/tokenizer.hpp"
@@ -44,6 +46,22 @@ public:
         if (m == byModule_.end()) return nullptr;
         auto n = m->second.find(name);
         return n != m->second.end() ? n->second : nullptr;
+    }
+
+    std::vector<std::string> modules() const {
+        std::vector<std::string> result;
+        for (const auto& [module, _] : byModule_) result.push_back(module);
+        std::sort(result.begin(), result.end());
+        return result;
+    }
+
+    std::vector<std::string> names(const std::string& module) const {
+        std::vector<std::string> result;
+        auto it = byModule_.find(module);
+        if (it == byModule_.end()) return result;
+        for (const auto& [name, _] : it->second) result.push_back(name);
+        std::sort(result.begin(), result.end());
+        return result;
     }
 
 private:

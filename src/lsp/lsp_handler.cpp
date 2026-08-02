@@ -1,4 +1,5 @@
 #include "lsp/lsp_handler.hpp"
+#include "ffi/ffi_catalog.hpp"
 #include "symbol/symbol_table.hpp"
 #include "symbol/symbol.hpp"
 #include "core/type.hpp"
@@ -258,10 +259,27 @@ void LspHandler::publishDiagnosticsGrouped(DocumentState& state) {
         }
         LspPosition pos = toLspPos(*content, *starts, d.loc);
 
+        // Geçici UX kuralı: AST düğümleri henüz güvenilir end-offset taşımadığı
+        // için tek karakterlik tanı yerine ilgili satırın tamamını vurgula.
+        // Özellikle `return void` ve `b as int` hatalarında tek karakter
+        // seçmek kullanıcıya yanlış konum hissi veriyordu.
+        int lineEndOffset = static_cast<int>(content->size());
+        if (pos.line + 1 < static_cast<int>(starts->size()))
+            lineEndOffset = (*starts)[static_cast<size_t>(pos.line + 1)];
+        int lineStartOffset = (*starts)[static_cast<size_t>(std::max(0, pos.line))];
+        if (lineEndOffset > lineStartOffset && (*content)[lineEndOffset - 1] == '\n')
+            --lineEndOffset;
+        std::string lineText = content->substr(static_cast<size_t>(lineStartOffset),
+                                               static_cast<size_t>(std::max(lineStartOffset,
+                                                                            lineEndOffset) - lineStartOffset));
+        int lineCharacterEnd = positionEncoding_ == "utf-16"
+            ? byteOffsetToUtf16(lineText, static_cast<int>(lineText.size()))
+            : static_cast<int>(lineText.size());
+
         nlohmann::json item;
         item["range"] = {
-            {"start", {{"line", pos.line}, {"character", pos.character}}},
-            {"end",   {{"line", pos.line}, {"character", pos.character + d.tokenLength}}}
+            {"start", {{"line", pos.line}, {"character", 0}}},
+            {"end",   {{"line", pos.line}, {"character", lineCharacterEnd}}}
         };
         item["severity"] = (d.level == DiagLevel::Error) ? 1 : 2;
         item["code"]     = d.code;
@@ -759,11 +777,12 @@ static Type resolveChainType(DocumentState& state, const std::vector<std::string
 // ── Token-tabanlı bağlam çıkarma ────────────────────────────────────────────
 
 struct CompletionCtx {
-    enum Kind { Normal, Dot, Scope };
+    enum Kind { Normal, Dot, Scope, ImportModule, ImportSymbol };
     Kind kind = Normal;
     std::vector<std::string> chain;  // Dot: zincirdeki tanımlayıcılar (sıralı)
     std::string target;              // Scope: :: solundaki ifade
     std::string prefix;              // Normal: kısmî tanımlayıcı metni
+    std::string importModule;        // ImportSymbol: `from <module>` bağlamı
 };
 
 // İmleç öncesi token dizisinden completion bağlamını çıkarır.
@@ -790,6 +809,34 @@ static CompletionCtx analyzeContext(DocumentState& state, int byteOffset) {
 
     if (left.empty()) return ctx;
     Token* nearest = left[0];
+
+    // `import|` / `import m|` — gömülü FFI modül adları.
+    if (nearest->token == "import" ||
+        (nearest->gettype() == "identifier" && left.size() > 1 &&
+         left[1]->token == "import")) {
+        ctx.kind = CompletionCtx::ImportModule;
+        if (nearest->token != "import")
+            ctx.prefix = nearest->token.substr(0, std::max(0, byteOffset - nearest->start));
+        return ctx;
+    }
+
+    // `import { | } from math` — math kataloğundaki FFI isimleri.
+    if (nearest->token == "{" && left.size() > 1 && left[1]->token == "import") {
+        ctx.kind = CompletionCtx::ImportSymbol;
+        size_t lineStart = state.content.rfind('\n', static_cast<size_t>(byteOffset));
+        lineStart = lineStart == std::string::npos ? 0 : lineStart + 1;
+        size_t from = state.content.find("from", static_cast<size_t>(byteOffset));
+        size_t lineEnd = state.content.find('\n', static_cast<size_t>(byteOffset));
+        if (from != std::string::npos && (lineEnd == std::string::npos || from < lineEnd)) {
+            size_t p = from + 4;
+            while (p < state.content.size() && std::isspace((unsigned char)state.content[p])) ++p;
+            size_t e = p;
+            while (e < state.content.size() &&
+                   (std::isalnum((unsigned char)state.content[e]) || state.content[e] == '_')) ++e;
+            ctx.importModule = state.content.substr(p, e - p);
+        }
+        return ctx;
+    }
 
     // ── "." zinciri: a.b.c.| ──────────────────────────────────────────────
     if (nearest->token == ".") {
@@ -935,6 +982,33 @@ nlohmann::json LspHandler::handleCompletion(const nlohmann::json& id,
 
     // Token dizisinden bağlam çıkar
     CompletionCtx ctx = analyzeContext(*state, byteOff);
+
+    if (ctx.kind == CompletionCtx::ImportModule) {
+        const auto modules = FfiCatalog::instance().modules();
+        for (const auto& module : modules) {
+            if (!ctx.prefix.empty() && module.rfind(ctx.prefix, 0) != 0) continue;
+            items.push_back({
+                {"label", module}, {"kind", 9},
+                {"detail", "embedded FFI module"},
+                // `import|` + Enter → `import { } from module`.
+                // $0 imleci boş import listesinin içine yerleştirir.
+                {"insertText", " { $0 } from " + module},
+                {"insertTextFormat", 2}
+            });
+        }
+        return JsonRpc::makeResponse(id, items);
+    }
+
+    if (ctx.kind == CompletionCtx::ImportSymbol) {
+        for (const auto& name : FfiCatalog::instance().names(ctx.importModule)) {
+            items.push_back({
+                {"label", name}, {"kind", 3},
+                {"detail", ctx.importModule + " FFI"},
+                {"insertText", name}
+            });
+        }
+        return JsonRpc::makeResponse(id, items);
+    }
 
     // ── "." zinciri: a.b.c.| → alan tamamlama ──────────────────────────────
     if (ctx.kind == CompletionCtx::Dot) {

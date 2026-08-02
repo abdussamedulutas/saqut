@@ -1053,6 +1053,11 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
 
         // Check argument types
         for (size_t i = 0; i < call->arguments.size(); ++i) {
+            // Parser error recovery may leave a missing argument as nullptr
+            // (for example: randomInt(,)). The diagnostic path must continue
+            // without dereferencing that hole.
+            if (!call->arguments[i])
+                continue;
             Type paramType =
                 (i < calleeType.paramTypes.size()) ? calleeType.paramTypes[i] : Type::error();
             Type argType = checkExpr(call->arguments[i], paramType);

@@ -71,14 +71,26 @@ public:
     }
 
     void printHelp() const {
-        std::cout << "saqut <command> [options]\n\n";
+        std::cout << "Usage: saqut [options] <command> [arguments]\n\n";
+        std::cout << "Options:\n";
+        std::cout << "  -h, --help                 Display this help message\n";
+        std::cout << "  -V, --version              Display the compiler version\n";
+        std::cout << "      --allow <list>         Enable capabilities (fs,net,sys)\n";
+        std::cout << "      --jit                  Run supported programs with MIR JIT\n";
+        std::cout << "      --verbose              Print stage progress\n";
+        std::cout << "\nCommands:\n";
 
         for (auto& cmd : commands) {
             if (cmd.hidden) continue;
-            std::cout << "  " << cmd.name << " ----- " << commandUsage(cmd.name) << "\n";
+            std::cout << "  " << commandUsage(cmd.name);
+            if (commandUsage(cmd.name).size() < 30)
+                std::cout << std::string(30 - commandUsage(cmd.name).size(), ' ');
+            else
+                std::cout << " ";
+            std::cout << cmd.description << "\n";
         }
 
-        std::cout << "\n  options ----- saqut [--help] [--version] [--allow fs,net,sys]\n";
+        std::cout << "\nUse 'saqut --help' to display this message again.\n";
     }
 
 private:

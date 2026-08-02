@@ -222,9 +222,7 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
             if (arg == "run"    || arg == "tokens"  || arg == "ast" ||
                 arg == "symbols" || arg == "check"   || arg == "ir"      ||
                 arg == "exec"    || arg == "lsp"     || arg == "dap"     ||
-                arg == "bench"   ||
-                arg == "compile" || arg == "parse"   || arg == "transpile" ||
-                arg == "interpret") {
+                arg == "bench") {
                 args.command = arg;
                 continue;
             }

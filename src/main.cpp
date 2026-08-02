@@ -78,31 +78,6 @@ int main(int argc, char* argv[]) {
         "phase-level benchmark (tokenize|parse|symbol|typecheck|ir|vm)",
         false, cmdBench});
 
-    // --- Future commands (TODO) ---
-    cli.registerCommand({"compile",
-        "TODO: compile source to binary",
-        false, [](const CliArgs&) {
-            std::cerr << "TODO: compile command not yet implemented\n"; return 1;
-        }});
-
-    cli.registerCommand({"parse",
-        "TODO: generate IR",
-        false, [](const CliArgs&) {
-            std::cerr << "TODO: parse command not yet implemented\n"; return 1;
-        }});
-
-    cli.registerCommand({"transpile",
-        "TODO: transpile to C code",
-        false, [](const CliArgs&) {
-            std::cerr << "TODO: transpile command not yet implemented\n"; return 1;
-        }});
-
-    cli.registerCommand({"interpret",
-        "TODO: interpreter mode",
-        true, [](const CliArgs&) {
-            std::cerr << "TODO: interpret command not yet implemented\n"; return 1;
-        }});
-
     // Argümanları ayrıştır
     CliArgs args = parseArgs(argc, argv);
 

@@ -105,9 +105,6 @@ private:
         if (command == "lsp")     return "saqut lsp";
         if (command == "dap")     return "saqut dap";
         if (command == "bench")   return "saqut bench <file> [--jit] --runs=<iterations>";
-        if (command == "compile") return "saqut compile <file>";
-        if (command == "parse")   return "saqut parse <file>";
-        if (command == "transpile") return "saqut transpile <file>";
         return "saqut " + command;
     }
 

@@ -1,0 +1,4 @@
+void main() {
+    longint value = 0x10000000000000000;
+    print(value);
+}

@@ -677,10 +677,17 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             // sığmadı" demektir ve hangi bağlamda olursa olsun aralık dışıdır.
             long long v        = 0;
             bool      overflow = false;
+            std::uint64_t bits = 0;
+            bool hasUnsignedBits = false;
             if (lit->hasDirectValue) {
                 v = lit->directIntValue;
             } else if (lit->parserToken.token) {
                 try {
+                    if (lit->literalBase == 16 || lit->literalBase == 2) {
+                        bits = parseUnsignedIntegerLiteral(lit->parserToken.token->token,
+                                                            lit->literalBase);
+                        hasUnsignedBits = true;
+                    }
                     v = parseIntegerLiteral(lit->parserToken.token->token, lit->literalBase);
                 } catch (...) {
                     overflow = true;
@@ -709,7 +716,7 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
 
             // byte bağlamı (#86): 0-255 aralık denetimi — sessiz kırpma YOK.
             if (!expected.isError() && expected.isByte()) {
-                if (overflow || v < 0 || v > 255)
+                if (overflow || (hasUnsignedBits ? bits > 255 : (v < 0 || v > 255)))
                     rejectRange("byte", "0-255",
                                 "byte holds 0-255; use int for larger values or a value in range");
                 else
@@ -739,7 +746,8 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             // #219 A1: int32 bağlamı. Önceden aralık denetimi hiç yoktu —
             // 2147483648 sessizce -2147483648, 4294967296 sessizce 0,
             // 99999999999999999999 sessizce 0 oluyordu (ADR-040 int32 sözleşmesi).
-            else if (overflow || v < INT32_MIN || v > intMax)
+            else if (overflow || (hasUnsignedBits ? bits > static_cast<std::uint64_t>(intMax)
+                                                   : (v < INT32_MIN || v > intMax)))
                 rejectRange("int", "-2147483648 to 2147483647",
                             "int is 32-bit (ADR-040); use longint for larger values "
                             "or a value in range");

@@ -1,0 +1,12 @@
+// 64-bit hexadecimal literals are interpreted as longint bit patterns.
+void main() {
+    longint all = 0xffffffffffffffff;
+    longint min = 0x8000000000000000;
+    longint max = 0x7fffffffffffffff;
+
+    print(all);
+    print(min);
+    print(max);
+    print(all + 1);
+    print(all & 0xff);
+}

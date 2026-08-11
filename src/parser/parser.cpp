@@ -362,6 +362,12 @@ ASTNode* Parser::parseDeclaration() {
     if (ct.type == TokenType::KW_STRUCT)
         return parseStructDecl();
 
+    // enum top-level bildirimdir; E013 son-dalına (statement) düşmemeli.
+    // Not: enum daha önce yalnızca parseStatement'ten parse ediliyordu —
+    // bu da declaration/statement ayrımını bozuyordu.
+    if (ct.type == TokenType::KW_ENUM)
+        return parseEnumDecl();
+
     // Kullanıcı tanımlı tip adı (struct tipi) ile değişken/fonksiyon bildirimi
     if (ct.type == TokenType::IDENTIFIER) {
         auto la1 = lookahead(1);
@@ -372,6 +378,10 @@ ASTNode* Parser::parseDeclaration() {
             auto la3 = lookahead(3);
             if (la2.type == TokenType::IDENTIFIER && la3.type == TokenType::LPAREN)
                 return parseFunctionDecl();
+            // `Inner? name;` — nullable struct-tipli değişken/alan (ADR-021).
+            // la3 LPAREN değilse bu bir bildirimdir; son-dala (E013) düşmesin.
+            if (la2.type == TokenType::IDENTIFIER)
+                return parseVariableDecl();
         }
         if (la1.type == TokenType::IDENTIFIER)
             return parseVariableDecl();
@@ -393,7 +403,19 @@ ASTNode* Parser::parseDeclaration() {
         }
     }
 
-    return parseStatement();
+    // Top-level'da statement yasak (E013, "globalde hesaplama yapılmaz" —
+    // C++ ile aynı: modül kapsamında yalnız bildirimler olabilir). IR generator
+    // bu statement'ları sessizce atlıyordu (a=5; a+=1; a.push(...); fn(); hepsi
+    // no-op — kullanıcı "global değişken kullanılmaz" diye telafi ediyordu).
+    // Şimdi açık hata: parse edip discard et (döngü ilerlesin), program'a EKLEME.
+    {
+        auto loc = currentToken().token ? currentToken().token->loc : SourceLocation{};
+        reportError(loc, "E013", "statements are not allowed at module scope");
+        ASTNode* discarded = parseStatement();
+        (void)discarded;  // bilinçli: hata zaten raporlandı, node atılıyor
+        delete discarded;
+        return nullptr;
+    }
 }
 
 ASTNode* Parser::parseExpression() {

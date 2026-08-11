@@ -128,6 +128,7 @@ inline const std::vector<DiagInfo>& diagnosticCatalog() {
         {"E010", DiagLevel::Error,   "Recursive/cyclic struct definition", "recursive struct definition: '{0}'"},
         {"E011", DiagLevel::Error,   "struct/function declaration inside a function body", "declaration inside a function body"},
         {"E012", DiagLevel::Error,   "Type does not support [index] access", "type '{0}' does not support [index] access"},
+        {"E013", DiagLevel::Error,   "Statement at module (global) scope", "statements are not allowed at module scope; move it inside a function (e.g. main)"},
         {"W001", DiagLevel::Warning, "Unused variable", "'{0}' is never used"},
         {"W002", DiagLevel::Warning, "Division by zero (constant expression)", "division by zero in constant expression"},
         {"W003", DiagLevel::Warning, "Unreachable (dead) code", "unreachable code"},

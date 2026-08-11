@@ -1,7 +1,7 @@
 # 0.9.3 Planı — Merkezi Host Çağrı ABI'si
 
 **Durum:** Taslak, ürün sahibi onayı bekliyor.
-**Bağlam:** `OPCODE-IR.md` §4 ve §3.
+**Bağlam:** `docs/opcode-ir.md` §4 ve §3.
 
 ---
 
@@ -204,7 +204,7 @@ Her adım kendi başına yeşil test bırakır.
    birebir; §1'deki FFI mikro-benchmark'ı ile hız regresyonu olmadığı gösterilir.
 
 Adım 1–2 geri alınabilir ve risksiz. Adım 3–4 mekanik ama geniş. Adım 5 IR
-biçimini değiştirir — `saqut ir` çıktısı ve `OPCODE-IR.md` güncellenir.
+biçimini değiştirir — `saqut ir` çıktısı ve `docs/opcode-ir.md` güncellenir.
 
 ---
 

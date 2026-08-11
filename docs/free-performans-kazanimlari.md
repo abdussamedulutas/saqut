@@ -1,4 +1,4 @@
-# FREE.md — Bedava Performans Kazanımları
+# Bedava Performans Kazanımları
 
 **Bedava** = kullanıcının karşısına çıkmadan, dil sözleşmesini değiştirmeden,
 gözlenebilir davranışı bozmadan yapılabilen kazanımlar.

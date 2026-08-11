@@ -1,5 +1,12 @@
 # saQut IR — Opcode Referansı
 
+> ⚠️ **BAYAT / ESKİ (0.9.3 başlangıcı):** Bu belge güncel değil. Opcode
+> sayısı, JIT destek durumu ve davranış açıklamaları zaman içinde değişti.
+> **Tek doğru kaynak `src/ir/instruction.hpp` → `OPCODE_LIST` makrosudur;**
+> bu belge yalnızca tarihsel bağlam için korunur. Yeni opcode eklemek =
+> `OPCODE_LIST`'e bir satır eklemek; `enum`, `opcodeName()`,
+> `opcodeArity()`, `opcodeBackends()` ve JIT temel filtresi oradan türetilir.
+
 **Kaynak:** `src/ir/instruction.hpp` → `OPCODE_LIST` makrosu.
 Bu belgedeki tablo o makrodan mekanik olarak üretilmiştir; elle düzenlenmez.
 Yeni opcode eklemek = `OPCODE_LIST`'e bir satır eklemek; `enum`, `opcodeName()`,

@@ -37,7 +37,7 @@ Yeni bir oturum, değişiklik yapmadan önce:
 
 1. Bu `AGENTS.md` dosyasını tamamen okur.
 2. `knowledge-base/` altındaki bütün dosyaları okur.
-3. `saQut-compiler-audit-metodolojisi.md` dosyasını okur (§4'ün uzun formu,
+3. `docs/saqut-compiler-audit-metodolojisi.md` dosyasını okur (§4'ün uzun formu,
    somut vaka çalışmalarıyla).
 4. §1'deki dört bağlayıcı kapsam belgesini okur.
 5. `git status --short` ve `git rev-parse HEAD` ile çalışma ağacını kaydeder.
@@ -76,7 +76,7 @@ yeni kayıt neyin yerini aldığını açıkça söyler.
 ## 4. Çalışma yöntemi — şüpheci denetim
 
 Bu bölüm zorunlu çalışma yöntemidir. Uzun formu, somut vaka çalışmaları ve
-faz tabloları `saQut-compiler-audit-metodolojisi.md` dosyasındadır.
+faz tabloları `docs/saqut-compiler-audit-metodolojisi.md` dosyasındadır.
 
 ### 4.1 Sıra
 

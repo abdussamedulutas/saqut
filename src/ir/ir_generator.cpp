@@ -2258,6 +2258,12 @@ void IRGenerator::emitArrayLen(int destSlot, int arrSlot, const SourceLocation& 
 //   doğrudan ya da dolaylı içeremez (aksi halde sonsuz boyutlu bir değer
 //   olurdu) — o yüzden ayrıca derinlik sayacı gerekmez. Yine de yanlış bir
 //   layout'a karşı savunma olarak ziyaret zinciri takip edilir.
+//
+// NON-NULLABLE ARRAY ALANI → boş dizi örneklenir (#184/#226): local
+// `T[] a;` bildirimi boş diziyle başlar; struct alanı da aynı semantiği
+// izler. Aksi halde alan Value{} (= Int 0) kalır ve `s.items.push(x)`
+// check'ten geçip runtime'da "push — expected array" ile patlar —
+// sessiz-derleme/çatırdayan-çalışma asimetrisi tam olarak buydu.
 void IRGenerator::initNestedStructFields(int destSlot, const std::string& structType,
                                          const SourceLocation& loc,
                                          std::vector<std::string>* activeChain) {
@@ -2277,9 +2283,18 @@ void IRGenerator::initNestedStructFields(int destSlot, const std::string& struct
 
     for (int i = 0; i < (int) it->second.size(); i++) {
         const auto& [fieldName, fieldType] = it->second[i];
-        if (!fieldType.isStruct() || fieldType.structName.empty())
-            continue;
         if (fieldType.nullable)     // `T? alan` → null kalır, örneklenmez
+            continue;
+        if (fieldType.isArray()) {
+            // #184/#226: non-nullable array alanı boş diziyle başlar —
+            // local `T[] a;` ile aynı sözleşme. elemKind layout Type'ından
+            // çözülür (arrayElemKindFromType), capacity=0.
+            int arrSlot = freshSlot();
+            emitArrayNew(arrSlot, 0, arrayElemKindFromType(fieldType), loc);
+            emitFieldSet(destSlot, i, arrSlot, loc.line, loc.column);
+            continue;
+        }
+        if (!fieldType.isStruct() || fieldType.structName.empty())
             continue;
         if (!structLayouts_.count(fieldType.structName))
             continue;

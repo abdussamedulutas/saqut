@@ -1,0 +1,47 @@
+// #184/#226: non-nullable array alanı boş diziyle başlar (local `T[] a;`
+// ile aynı sözleşme); nullable array alanı null kalır (ADR-021).
+// Düzeltmeden önce: `r.fields.push(f)` check'ten geçip runtime'da
+// "push — expected array" ile patlıyordu (alan Value{} = Int 0 kalıyordu).
+
+struct Field { string name; string value; }
+struct Record { int id; Field[] fields; }
+struct Packed { int[] ints; byte[] raw; }
+struct Inner { int[] nums; }
+struct Outer { Inner in; }
+struct Opt { int[]? maybe; int[] def; }
+
+int main() {
+    Record r;
+    Field f; f.name = "a"; f.value = "1";
+    r.fields.push(f);
+    print(r.fields.length());
+    print(r.fields[0].name);
+
+    Packed p;
+    p.ints.push(22);
+    p.raw.push(200);
+    print(p.ints[0]);
+    print(p.raw[0]);
+
+    Outer o;
+    o.in.nums.push(7);
+    print(o.in.nums[0]);
+
+    // ADR-020 referans paylaşımı: kopya üzerinden push orijinali de büyütür
+    Outer q = o;
+    q.in.nums.push(9);
+    print(o.in.nums.length());
+
+    // Atama üzerine yazar: alan yeni diziyi gösterir
+    int[] fresh;
+    fresh.push(5);
+    p.ints = fresh;
+    print(p.ints.length());
+    print(p.ints[0]);
+
+    Opt s;
+    print(s.maybe == null);
+    print(s.def.length());
+
+    return 0;
+}

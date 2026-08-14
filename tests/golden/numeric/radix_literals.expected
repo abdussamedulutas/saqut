@@ -1,0 +1,1 @@
+hexA(expect 99)=99hexB(expect 160)=160binA(expect 10)=10octA(expect 511)=511lng(expect 16)=16flt(expect 16.0)=16dbl(expect 32.0)=32negHex(expect -16)=-162147483647264887910-50

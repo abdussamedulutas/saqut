@@ -1,0 +1,31 @@
+// #199: 0x/0b/öncü-sıfır-oktal literal'ler doğru değere çözülmeli
+// (eski semptom: sessizce 0 ya da decimal okunuyordu). Karışık önek
+// büyük/küçük harf, negatif önekli literal ve int32 sınırı dahil.
+// 0xFFFFFFFF int'te E003 ile reddedilir (ADR-040) — ayrı compile_error
+// fixture'larında (hex_literal_overflow, literal_range_int_overflow).
+
+int main() {
+    int hexA = 0x63;
+    int hexB = 0xA0;
+    int binA = 0b1010;
+    int octA = 0777;
+    longint lng = 0x10;
+    float flt = 0x10;
+    double dbl = 0x20;
+    int negHex = -0x10;
+    print("hexA(expect 99)=" + (hexA as string));
+    print("hexB(expect 160)=" + (hexB as string));
+    print("binA(expect 10)=" + (binA as string));
+    print("octA(expect 511)=" + (octA as string));
+    print("lng(expect 16)=" + (lng as string));
+    print("flt(expect 16.0)=" + (flt as string));
+    print("dbl(expect 32.0)=" + (dbl as string));
+    print("negHex(expect -16)=" + (negHex as string));
+    print(0x7FFFFFFF as string);
+    print(0X1a as string);
+    print(0xBEEF as string);
+    print(0B1010 as string);
+    print(-0b101 as string);
+    print(00 as string);
+    return 0;
+}

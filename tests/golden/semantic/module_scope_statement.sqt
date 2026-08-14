@@ -1,0 +1,28 @@
+// E013: modül kapsamında statement yasak — yalnızca bildirimler olabilir.
+// Hata SINIFI: IR generator top-level statement'ları sessizce atlıyordu
+// (a=5; fn(); if/while hepsi no-op). Sessiz yanlış cevap yerine açık red.
+// Bu fixture'ın geçtiği yerde: geçerli global BİLDİRİMLER hâlâ çalışmalı
+// (bkz. tests/golden/global/init_expr.sqt — false-reject koruması).
+
+int g = 10;
+
+g = 5;
+g += 1;
+changeGlobal();
+
+if (g > 3) {
+    g = 1;
+}
+
+while (g < 0) {
+    g = g + 1;
+}
+
+int changeGlobal() {
+    g = 20;
+    return 0;
+}
+
+int main() {
+    return 0;
+}

@@ -48,13 +48,73 @@ while IFS= read -r -d '' sqt; do
     dir=$(dirname "$sqt")
     base=$(basename "$sqt" .sqt)
     exp="$dir/$base.expected"
-    [ -f "$exp" ] || continue
+    cerr="$dir/$base.compile_error"
+    rerr="$dir/$base.runtime_error"
+    xexit="$dir/$base.expected_exit"
+    if [ ! -f "$exp" ] && [ ! -f "$cerr" ] && [ ! -f "$rerr" ] && [ ! -f "$xexit" ]; then
+        continue
+    fi
 
     # ADR-036 (#76): BASE.flags — --allow-fs vb. gerektiren testler.
     extra_flags=()
     flags_file="$dir/$base.flags"
     if [ -f "$flags_file" ]; then
         mapfile -t extra_flags < "$flags_file"
+    fi
+
+    if [ -f "$cerr" ]; then
+        # Derleme-hatası fixture'ı: program derlenMEMELİ. stderr beklenen
+        # tanıyı içermeli (E-kodu `[$want]` biçiminde ya da sabit mesaj
+        # parçası) ve exit code sıfırdan farklı olmalı (.expected_exit
+        # varsa tam değeriyle). Sessiz-kabul sınıfını yakalar.
+        want=$(cat "$cerr")
+        set +e
+        err=$("$SAQUT" run "${extra_flags[@]}" "$sqt" 2>&1 >/dev/null)
+        rc=$?
+        set -e
+        if [[ "$want" =~ ^E[0-9]+$ ]]; then
+            echo "$err" | grep -q "\[$want\]" && found=1 || found=0
+        else
+            echo "$err" | grep -qF "$want" && found=1 || found=0
+        fi
+        if [ -f "$xexit" ]; then
+            want_rc=$(cat "$xexit")
+            rc_ok=$([ "$rc" -eq "$want_rc" ] && echo 1 || echo 0)
+        else
+            rc_ok=$([ "$rc" -ne 0 ] && echo 1 || echo 0)
+        fi
+        if [ "$found" -eq 1 ] && [ "$rc_ok" -eq 1 ]; then
+            PASS=$((PASS + 1))
+        else
+            echo "  FAIL (compile_error): ${sqt#"$ROOT"/}"
+            echo "    beklenen : derleme hatası [$want], exit=${want_rc:-nonzero}"
+            echo "    gerçek   : exit=$rc, ilk satır: $(echo "$err" | head -1)"
+            FAIL=$((FAIL + 1))
+        fi
+        continue
+    fi
+
+    if [ -f "$rerr" ]; then
+        # Runtime-hata fixture'ı: program koşar ama tanımlı runtime hatasıyla
+        # sonlanır. exit code .expected_exit ile (yoksa 70), stderr
+        # .runtime_error regex'iyle eşleşmeli. Sessiz-yanlış-sonuç sınıfını
+        # yakalar (ör. sıfıra bölme 0 dönmemeli).
+        want_rc=$( [ -f "$xexit" ] && cat "$xexit" || echo 70 )
+        want_re=$(cat "$rerr")
+        set +e
+        out=$("$SAQUT" run "${extra_flags[@]}" "$sqt" 2>/tmp/saqut_rerr)
+        rc=$?
+        set -e
+        err=$(cat /tmp/saqut_rerr)
+        if [ "$rc" -eq "$want_rc" ] && echo "$err" | grep -Eq "$want_re"; then
+            PASS=$((PASS + 1))
+        else
+            echo "  FAIL (runtime_error): ${sqt#"$ROOT"/}"
+            echo "    beklenen : exit=$want_rc, stderr ~ /$want_re/"
+            echo "    gerçek   : exit=$rc, stderr: $(echo "$err" | head -1)"
+            FAIL=$((FAIL + 1))
+        fi
+        continue
     fi
 
     actual=$("$SAQUT" run "${extra_flags[@]}" "$sqt" 2>/dev/null) || true

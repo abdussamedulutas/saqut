@@ -237,13 +237,15 @@ edilmez.
 - Parser başarısı semantic/IR/runtime başarısı sayılmaz.
 - Kaynakta fonksiyon bulunması CLI'dan erişilebilir olduğunu kanıtlamaz.
 - VM davranışı JIT davranışını, JIT davranışı VM davranışını kanıtlamaz.
-- **JIT hata-yakalama kapsamı bilinçli eksiktir:** MIR JIT backend'inin
-  exception/`throw`/`try-catch`/yakalanabilir runtime error ("division by zero",
-  out-of-range vb.) dilimleri, 0.9.x ve 1.0.0 için bilinçli olarak kapsam
-  dışındadır. VM (normatif) bu dilimi doğru işler; JIT bu programlarda ya
-  farklı davranır ya da ret eder. VM≡JIT parity suite'inde bu dilimlere ait
-  FAIL'lar regresyon değil, beklenen kapsam-bozukluğudur; ayrı issue'a
-  taşınmadan "şu an bozuk" diye denetlenmez ve rapor edilmez.
+- **JIT hata-yakalama kapsamı artık kapalıdır:** MIR JIT backend'i
+  `try/catch`/`throw`/yakalanabilir runtime error ("division by zero", cast,
+  array out-of-range) dilimini 0.9.4'ten itibaren uygulamaya başladı (MIRPLAN
+  §7/Dilim 5, iş #110). VM davranışı bu dilimde normatif kalır; JIT bunu
+  VM ile aynı stdout/exit ile vermek zorundadır ve diferansiyel (VM≡JIT)
+  suite'inde bu dilimdeki eşitsizlik artık regresyon sayılır. Hâlâ geçerli
+  kısıt: JIT `[EXPERIMENTAL]`dır ve deterministik stacktrace alanı (ADL-025
+  `trace`) diferansiyel fixture'larda gözlemlenmiyor — tam satır-düzeyi iz
+  paritesi bu doğrulamanın dışındadır.
 - "Embedded runtime" AOT değildir.
 - Capability kontrolü process sandbox değildir.
 - Mark-sweep kodunun varlığı kök doğruluğu, leak-free çalışma veya bounded

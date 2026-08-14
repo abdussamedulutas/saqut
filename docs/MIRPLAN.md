@@ -349,6 +349,18 @@ sürece maliyet yalnızca try bloklarına yereldir, program geneline yayılmaz. 
 birleştirme (Dilim 5 = Dilim 6/§11 mekanizmasını devralır) uygulama sırasına
 yazıldı (§10).
 
+> **Uygulama durumu (2026-08-14, #110):** Dilim 5 uygulandı —
+> `ENTER_TRY`/`LEAVE_TRY`/`THROW` ve yakalanabilir runtime hataları (div/0,
+> cast, array OOB) artık JIT'te VM ile aynı stdout+exit üretiyor; altı
+> `*.jit_known_broken` marker'ı silindi ve diferansiyel suite 0 FAIL / 0 SKIP.
+> **Önemli sapma:** §7'nin aday (1) setjmp/longjmp köprüsü, setjmp'in DÖNEN bir
+> fonksiyon çerçevesinde kurulamayacağı (C11 7.13.2.1) için kullanılmadı —
+> try gövdesi JIT kodunda çalışırken `rt_try_push` çoktan dönmüştür. Bunun
+> yerine "her hata-üretebilen talimat sonrası pending kontrolü + JMP" (projenin
+> kendi 1367d88 tasarımı) kullanıldı; §7.1'in sıfır-maliyet şartı, yalnızca
+> `canRaise` (doğrudan hata üretebilen ya da böyle bir fonksiyonu çağıran)
+> fonksiyonlara kontrol emit edilerek korundu.
+
 ## 8. GC — shadow stack somutlaştırma
 
 ADR-032 §3'te taslak: "JIT'lenmiş fonksiyon girişte N slot açar, referans

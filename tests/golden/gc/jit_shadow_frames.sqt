@@ -1,0 +1,39 @@
+// JIT shadow-stack çerçeve koruması: recursive/mutual çağrılarda her
+// çerçevenin canlı ref'leri KENDI taban+slot bölgesine yazılır; çağrılan
+// çerçeve üsttekini ezemez. Düz mutlak indeksli eski modelde üst çerçevenin
+// GC kökü kaybolup nesnesi süpürülüyordu: varsayılan ayarda "invalid
+// struct field index" (exit 70), --gc-threshold düşükken segfault.
+// Bu fixture'a eşlik eden .gc_stress notu: --gc-threshold=50 ile de aynı
+// çıktı üretilmelidir (tests/run.sh gc bölümündeki liveness deseni).
+
+struct Item { int v; }
+
+int a(int n) {
+    int[] keep = [n, n + 1, n + 2];
+    if (n <= 0) { return keep[2]; }
+    return b(n - 1) + keep[0];
+}
+
+int b(int n) {
+    int[] keep = [n * 10, n * 20];
+    if (n <= 0) { return keep[1]; }
+    return a(n - 1) + keep[1];
+}
+
+string build(int n) {
+    if (n == 0) { return ""; }
+    return build(n - 1) + "xy";
+}
+
+int recurse(int depth) {
+    if (depth == 0) { return 0; }
+    Item it; it.v = depth;
+    return recurse(depth - 1) + it.v;
+}
+
+int main() {
+    print(recurse(2000));
+    print(a(500));
+    print(build(300).length());
+    return 0;
+}

@@ -193,9 +193,17 @@ void jitMaybeCollect() {
 // GC'ye görünür kılınır. Semantik VM ile birebir (interpreter.cpp ARRAY_*/
 // FIELD_* dalları); eleman erişimi src/data/array.cpp'deki tek kaynaktan gelir.
 
-extern "C" void rt_jit_shadow_set(int64_t index, void* obj) {
-    jitShadowStack().set((int)index, static_cast<Object*>(obj));
+extern "C" void rt_jit_shadow_set(int64_t base, int64_t slot, void* obj) {
+    // Çerçeve-göreli indeks: base bu fonksiyonun girişinde alınan taban
+    // (rt_jit_shadow_enter). Düz mutlak indeks yazımı recursive çağrıda ÜST
+    // çerçevenin köklerini eziyordu — canlı nesne süpürülüp use-after-free
+    // ("invalid struct field index" / segfault) üretiyordu.
+    jitShadowStack().set((int)base + (int)slot, static_cast<Object*>(obj));
 }
+
+extern "C" int64_t rt_jit_shadow_enter() { return jitShadowStack().enter(); }
+
+extern "C" void rt_jit_shadow_leave(int64_t base) { jitShadowStack().leave((int)base); }
 
 extern "C" void* rt_jit_array_new(int64_t capacity, int64_t elemKind) {
     if (!g_jitHeap) return nullptr;
@@ -1106,9 +1114,13 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_item_t decF2DImport    = MIR_new_import(ctx, "rt_jit_float_to_decimal");
     MIR_item_t decToFProto     = MIR_new_proto(ctx, "dec_tof_proto", 1, &dRet, 1, MIR_T_I64, "v");
     MIR_item_t decToFImport    = MIR_new_import(ctx, "rt_jit_decimal_to_float");
-    MIR_var_t  ssVars[2]       = {{MIR_T_I64, "i", 0}, {MIR_T_I64, "o", 0}};
-    MIR_item_t ssProto         = MIR_new_proto_arr(ctx, "ss_proto", 0, nullptr, 2, ssVars);
-    MIR_item_t ssImport        = MIR_new_import(ctx, "rt_jit_shadow_set");
+        MIR_var_t  ssVars[3]       = {{MIR_T_I64, "b", 0}, {MIR_T_I64, "i", 0}, {MIR_T_I64, "o", 0}};
+        MIR_item_t ssProto         = MIR_new_proto_arr(ctx, "ss_proto", 0, nullptr, 3, ssVars);
+        MIR_item_t ssImport        = MIR_new_import(ctx, "rt_jit_shadow_set");
+        MIR_item_t ssEnterProto    = MIR_new_proto(ctx, "ss_enter_proto", 1, &i64Ret, 0);
+        MIR_item_t ssEnterImport   = MIR_new_import(ctx, "rt_jit_shadow_enter");
+        MIR_item_t ssLeaveProto    = MIR_new_proto(ctx, "ss_leave_proto", 0, nullptr, 1, MIR_T_I64, "b");
+        MIR_item_t ssLeaveImport   = MIR_new_import(ctx, "rt_jit_shadow_leave");
     MIR_var_t  anewVars[2]     = {{MIR_T_I64, "c", 0}, {MIR_T_I64, "k", 0}};
     MIR_item_t anewProto       = MIR_new_proto_arr(ctx, "anew_proto", 1, &i64Ret, 2, anewVars);
     MIR_item_t anewImport      = MIR_new_import(ctx, "rt_jit_array_new");
@@ -1329,6 +1341,28 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
         for (size_t i = 0; i <= instrN; i++) labelAt[i] = MIR_new_label(ctx);
         MIR_label_t propagateLabel = MIR_new_label(ctx);
 
+        // Shadow-stack çerçevesi (shadow_stack.hpp enter/leave protokolü):
+        // fonksiyon girişinde taban alınır, her çıkışta geri sarılır. Yalnızca
+        // ref taşıyabilen slot'u (Ref/Str/Decimal) olan fonksiyonlarda —
+        // salt-skaler fonksiyonlar (fibonacci gibi sıcak yollar) sıfır ek
+        // yükle çalışır. Düz mutlak indeksli eski model recursive çağrıda
+        // üst çerçevenin GC köklerini eziyordu (use-after-free).
+        bool needsShadowFrame = false;
+        for (int i = 0; i < fn.slotCount; i++) {
+            SlotType st = slotKindOf(fn, i);
+            if (st == SlotType::Ref || st == SlotType::Str || st == SlotType::Decimal) {
+                needsShadowFrame = true;
+                break;
+            }
+        }
+        MIR_reg_t ssBaseReg = 0;
+        if (needsShadowFrame) {
+            ssBaseReg = MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, "ssbase");
+            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                MIR_new_ref_op(ctx, ssEnterProto), MIR_new_ref_op(ctx, ssEnterImport),
+                MIR_new_reg_op(ctx, ssBaseReg)));
+        }
+
         auto R = [&](int slot) { return MIR_new_reg_op(ctx, regs[static_cast<size_t>(slot)]); };
 
         // #221: nullable slot'un isNull bayrağını ayarla. `v` sabiti 0 (değer
@@ -1462,15 +1496,14 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     R(in.dest), R(in.dest), MIR_new_int_op(ctx, 1)));
         };
 
-        // #228: bir slot'taki referansı GC'ye görünür kıl. Slot indeksi shadow
-        // stack indeksi olarak kullanılır — fonksiyon başına ayrı taban yok
-        // çünkü JIT'te iç içe saQut çağrısı sırasında GC tetiklenmez (host
-        // çağrıları tek tampon kullanır ve dönüşte biter).
+        // #228: bir slot'taki referansı GC'ye görünür kıl. İndeks TABAN+slot
+        // olarak yazılır — düz slot indeksi recursive çağrıda çerçeveler
+        // arası çakışır, üst çerçevenin kökleri ezilir (use-after-free).
         auto emitShadowSet = [&](int slot) {
-            if (slot < 0) return;
-            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+            if (slot < 0 || !needsShadowFrame) return;
+            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
                 MIR_new_ref_op(ctx, ssProto), MIR_new_ref_op(ctx, ssImport),
-                MIR_new_int_op(ctx, (int64_t)slot), R(slot)));
+                MIR_new_reg_op(ctx, ssBaseReg), MIR_new_int_op(ctx, (int64_t)slot), R(slot)));
         };
         auto emitCastBegin = [&](const Instruction& in) {
             MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
@@ -2351,6 +2384,10 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_insn(ctx, MIR_MOV, R(instr.dest), MIR_new_int_op(ctx, 0)));
                     break;
                 case Opcode::RETURN:
+                    if (needsShadowFrame)
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                            MIR_new_ref_op(ctx, ssLeaveProto), MIR_new_ref_op(ctx, ssLeaveImport),
+                            MIR_new_reg_op(ctx, ssBaseReg)));
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
                         MIR_new_ref_op(ctx, callRetNullSetProto),
                         MIR_new_ref_op(ctx, callRetNullSetImport),
@@ -2427,6 +2464,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
         // yürütülmez ama JIT'in geçerli bir hedefi olmalı.
         MIR_append_insn(ctx, func, labelAt[instrN]);
         MIR_append_insn(ctx, func, propagateLabel);
+        // Fonksiyon-sonu çıkış yolu (sentinel/propagate) — RETURN opcode'u
+        // olmadan buraya düşen akış için çerçeve burada geri sarılır.
+        if (needsShadowFrame)
+            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                MIR_new_ref_op(ctx, ssLeaveProto), MIR_new_ref_op(ctx, ssLeaveImport),
+                MIR_new_reg_op(ctx, ssBaseReg)));
         MIR_op_t zeroRet = ret == MIR_T_D ? MIR_new_double_op(ctx, 0.0)
                            : ret == MIR_T_F ? MIR_new_float_op(ctx, 0.0f)
                                             : MIR_new_int_op(ctx, 0);
@@ -2438,6 +2481,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_finish_module(ctx);
     MIR_load_module(ctx, mod);
     MIR_load_external(ctx, "rt_jit_shadow_set",  reinterpret_cast<void*>(rt_jit_shadow_set));
+    MIR_load_external(ctx, "rt_jit_shadow_enter", reinterpret_cast<void*>(rt_jit_shadow_enter));
+    MIR_load_external(ctx, "rt_jit_shadow_leave", reinterpret_cast<void*>(rt_jit_shadow_leave));
     MIR_load_external(ctx, "rt_jit_array_new",   reinterpret_cast<void*>(rt_jit_array_new));
     MIR_load_external(ctx, "rt_jit_array_len",   reinterpret_cast<void*>(rt_jit_array_len));
     MIR_load_external(ctx, "rt_jit_array_bounds_fail", reinterpret_cast<void*>(rt_jit_array_bounds_fail));

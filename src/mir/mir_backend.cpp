@@ -70,6 +70,63 @@ JitCallCounters* g_jitBenchCounters = nullptr;
 StringObject*  jitNewString(std::string v);
 DecimalObject* jitBoxDecimal(const DecimalValue& v);
 
+// ── try/catch hata yayılımı (#110, MIRPLAN §7) ──────────────────────────────
+//
+// Mekanizma KARARI: yakalanabilir hata, ilk taslaktaki (MIRPLAN §7 aday 1)
+// setjmp/longjmp köprüsüyle değil, "her hata-üretebilen instruction sonrası
+// pending kontrolü" (proje kendi 1367d88 tasarımı) ile yayılır. Gerekçe:
+// setjmp, DÖNEN bir fonksiyon çerçevesinde kurulamaz (C11 7.13.2.1) — try
+// gövdesi JIT kodunda çalışırken rt_try_push çoktan dönmüştür; longjmp çöp
+// kareye döner. Bu, uzun-atlama yeniden-giriş (resume trampolini + JMPI)
+// denemesiyle de SEGFAULT üretti (catch gövdesi fonksiyon prolog'u olmadan
+// ortadan girilip RETURN'de bozuk kareye döner). Ölçülen kanıt geridedir.
+//
+// g_jitPendingError VM'in pendingThrow_ karşılığıdır: hata tek bayrakta
+// durur. JIT codegen her hata-üretebilen / CALL instruction'ından SONRA
+// rt_jit_error_pending kontrol eder; doluysa ya yerel handler'a (catch) JMP
+// eder ya da propagateLabel üzerinden çağırana döner (hata bayrakta kalır).
+// Catch girişi rt_jit_error_take ile hatayı error slot'una bağlar.
+//
+// İz (trace) yığını ADR-025 deterministik stacktrace içindir; yalnızca try
+// içeren fonksiyonlarda tutulur (MIRPLAN §7.1: try'sız yollar sıfır ek yük).
+namespace {
+struct JitTraceFrame {
+    std::string name;
+    std::string file;
+    int         line = 0;
+    int         col  = 0;
+};
+std::vector<JitTraceFrame> g_jitTraceStack;
+
+// En içten dışa (VM Interpreter::buildTrace ile aynı sıra ve biçim).
+std::string jitBuildTrace() {
+    std::string result;
+    for (int i = (int)g_jitTraceStack.size() - 1; i >= 0; --i) {
+        const auto& f = g_jitTraceStack[i];
+        if (f.line > 0) {
+            result += f.name + " (" + f.file + ":" + std::to_string(f.line) +
+                      ":" + std::to_string(f.col) + ")\n";
+        } else {
+            result += f.name + " (?)\n";
+        }
+    }
+    return result;
+}
+}  // namespace
+
+extern "C" void rt_jit_trace_enter(const char* name, const char* file) {
+    g_jitTraceStack.push_back(JitTraceFrame{ name ? name : "", file ? file : "", 0, 0 });
+}
+extern "C" void rt_jit_trace_leave() {
+    if (!g_jitTraceStack.empty()) g_jitTraceStack.pop_back();
+}
+extern "C" void rt_jit_trace_line(int64_t line, int64_t col) {
+    if (!g_jitTraceStack.empty()) {
+        g_jitTraceStack.back().line = (int)line;
+        g_jitTraceStack.back().col  = (int)col;
+    }
+}
+
 static StructObject* jitMakeError(std::string message, std::string code,
                                   int64_t line, int64_t col) {
     if (!g_jitHeap) return nullptr;
@@ -82,12 +139,19 @@ static StructObject* jitMakeError(std::string message, std::string code,
     return err;
 }
 
+// Hatayı g_jitPendingError'a bağlar (ilk hata kazanır — VM pendingThrow_
+// üzerine yazmaz) ve trace alanını doldurur. Yakalama/catch codegen'in
+// per-instruction kontrolünde gerçekleşir; burada longjmp YOKTUR.
 static void jitSetError(std::string message, std::string code,
                         int64_t line = 0, int64_t col = 0) {
     if (line == 0) line = g_jitErrorLine;
     if (col == 0) col = g_jitErrorCol;
-    if (!g_jitPendingError)
-        g_jitPendingError = jitMakeError(std::move(message), std::move(code), line, col);
+    if (!g_jitPendingError) {
+        auto* err = jitMakeError(std::move(message), std::move(code), line, col);
+        if (err)
+            err->fields[3] = Value::fromString(jitBuildTrace());
+        g_jitPendingError = err;
+    }
 }
 
 extern "C" void rt_jit_error_location(int64_t line, int64_t col) {
@@ -108,15 +172,20 @@ extern "C" int64_t rt_jit_error_take() {
 extern "C" void rt_jit_throw_p(void* value, int64_t kind,
                                 int64_t line, int64_t col) {
     if ((SlotType)kind == SlotType::Ref) {
-        g_jitPendingError = static_cast<StructObject*>(value);
+        // Kullanıcı Error struct'ı throw etti — VM'deki gibi trace alanı
+        // (fields[3]) doldurulur; message/code aynen korunur (ADR-025).
+        auto* err = static_cast<StructObject*>(value);
+        if (err && err->fields.size() >= 4)
+            err->fields[3] = Value::fromString(jitBuildTrace());
+        g_jitPendingError = err;
         return;
     }
     if ((SlotType)kind == SlotType::Str) {
         auto* s = static_cast<StringObject*>(value);
         jitSetError(s ? s->data : std::string{}, "", line, col);
-        return;
+    } else {
+        jitSetError("throw", "", line, col);
     }
-    jitSetError("throw", "", line, col);
 }
 
 extern "C" void rt_jit_call_arg_null_set(int64_t index, int64_t value) {
@@ -1022,6 +1091,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     g_jitErrorCol = 0;
     jitShadowStack().clear();
     g_jitStructMeta.clear();
+    g_jitTraceStack.clear();
 
     if (program.findFunction("main") == nullptr) {
         outReason.functionName = "main";
@@ -1230,6 +1300,14 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                                {MIR_T_I64, "l", 0}, {MIR_T_I64, "c", 0}};
     MIR_item_t throwPProto = MIR_new_proto_arr(ctx, "throw_p_proto", 0, nullptr, 4, throwPVars);
     MIR_item_t throwPImport = MIR_new_import(ctx, "rt_jit_throw_p");
+    // İz (trace) çağrı trampolinleri: yalnızca try içeren fonksiyonlarda
+    // (MIRPLAN §7.1) fonksiyon giriş/çıkışında çağrılır — deterministik
+    // stacktrace'in fonksiyon zinciri (ADR-025).
+    MIR_var_t  traceEnterVars[2] = {{MIR_T_I64, "n", 0}, {MIR_T_I64, "f", 0}};
+    MIR_item_t traceEnterProto = MIR_new_proto_arr(ctx, "trace_enter_proto", 0, nullptr, 2, traceEnterVars);
+    MIR_item_t traceEnterImport = MIR_new_import(ctx, "rt_jit_trace_enter");
+    MIR_item_t traceLeaveProto = MIR_new_proto(ctx, "trace_leave_proto", 0, nullptr, 0);
+    MIR_item_t traceLeaveImport = MIR_new_import(ctx, "rt_jit_trace_leave");
 
     // ── String sabit havuzu (Dilim 3, ADR-037). LOAD_STRING derleme zamanında
     // string'i kutular; StringObject* pointer'ı native koda int sabiti olarak
@@ -1269,6 +1347,68 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
         MIR_item_t forward = MIR_new_forward(ctx, name.c_str());
 
         funcMap[name] = FuncEntry{forward, proto, fn.paramCount};
+    }
+
+    // ── Aşama 1.5: "canRaise" sabit-nokta analizi (#110, §7.1 sıfır-maliyet).
+    // Bir fonksiyon ya doğrudan hata üretebilen bir talimat içerir ya da böyle
+    // bir fonksiyonu çağırır → bu durumda hata onun ÇERÇEVESİNDEN de taşar ve
+    // per-instruction pending kontrolü gerekir. Salt-skaler sıcak yol
+    // (fibonacci gibi: yalnız ADD/SUB/CMP/CALL(kendine)/RETURN) canRaise=false
+    // kalır → MIRPLAN §7.1 gereği ZERO ek talimat taşır.
+    std::unordered_map<std::string, bool> canRaise;
+    auto errorCapable = [](Opcode op) {
+        switch (op) {
+            case Opcode::DIV: case Opcode::MOD: case Opcode::FDIV:
+            case Opcode::LDIV: case Opcode::LMOD: case Opcode::F32DIV:
+            case Opcode::DDIV: case Opcode::DMOD:
+            case Opcode::ARRAY_GET: case Opcode::ARRAY_SET:
+            case Opcode::CALLHOST: case Opcode::THROW:
+                return true;
+            default:
+                return false;
+        }
+    };
+    auto fallibleCastOp = [](Opcode op) {
+        switch (op) {
+            case Opcode::CAST_STR_TO_INT: case Opcode::CAST_STR_TO_FLOAT:
+            case Opcode::CAST_FLOAT_TO_INT_CHECKED: case Opcode::CAST_INT_TO_BYTE_CHECKED:
+            case Opcode::CAST_STR_TO_LONG: case Opcode::CAST_STR_TO_FLOAT32:
+            case Opcode::CAST_FLOAT_TO_LONG_CHECKED: case Opcode::LONG_TO_INT_CHECKED:
+            case Opcode::CAST_DECIMAL_TO_INT: case Opcode::CAST_STR_TO_DECIMAL:
+                return true;
+            default:
+                return false;
+        }
+    };
+    for (auto& name : program.functionOrder)
+        canRaise[name] = false;
+    for (auto& name : program.functionOrder) {
+        const IRFunction& fn = program.functions.at(name);
+        for (const auto& in : fn.instructions) {
+            if (errorCapable(in.opcode) || fallibleCastOp(in.opcode)) {
+                canRaise[name] = true;
+                break;
+            }
+        }
+    }
+    // Sabit nokta: çağrılan fonksiyon canRaise ise çağıran da canRaise.
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (auto& name : program.functionOrder) {
+            if (canRaise[name]) continue;
+            const IRFunction& fn = program.functions.at(name);
+            for (const auto& in : fn.instructions) {
+                if (in.opcode == Opcode::CALL) {
+                    auto it = canRaise.find(in.functionName);
+                    if (it != canRaise.end() && it->second) {
+                        canRaise[name] = true;
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     // ── Aşama 2: her fonksiyonun gerçek gövdesini aç/doldur/kapat ────────
@@ -1361,6 +1501,23 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
                 MIR_new_ref_op(ctx, ssEnterProto), MIR_new_ref_op(ctx, ssEnterImport),
                 MIR_new_reg_op(ctx, ssBaseReg)));
+        }
+
+        // #110 iz (trace) çerçevesi: deterministik stacktrace (§4) için çağrı
+        // zinciri. §7.1 gereği YALNIZCA try (ENTER_TRY) içeren fonksiyonlara
+        // eklenir — try'sız sıcak yollar (fibonacci vb.) sıfır ek yük taşır.
+        // İz yığını ayrı bir bookkeeping'dir (GC shadow stack'ten bağımsız,
+        // MIRPLAN §7 kararı); satır bilgisi THROW/error sitesinde doldurulur.
+        bool fnHasTry = false;
+        for (const auto& ins : fn.instructions)
+            if (ins.opcode == Opcode::ENTER_TRY) { fnHasTry = true; break; }
+        if (fnHasTry) {
+            const std::string& file =
+                program.moduleRegistry.filePath(fn.moduleId);
+            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                MIR_new_ref_op(ctx, traceEnterProto), MIR_new_ref_op(ctx, traceEnterImport),
+                MIR_new_int_op(ctx, reinterpret_cast<int64_t>(fn.name.c_str())),
+                MIR_new_int_op(ctx, reinterpret_cast<int64_t>(file.c_str()))));
         }
 
         auto R = [&](int slot) { return MIR_new_reg_op(ctx, regs[static_cast<size_t>(slot)]); };
@@ -1547,34 +1704,38 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             MIR_append_insn(ctx, func, labelAt[i]);
             const Instruction& instr = fn.instructions[i];
 
-            //switch (instr.opcode) {
-            //    case Opcode::DIV:
-            //    case Opcode::MOD:
-            //    case Opcode::FDIV:
-            //    case Opcode::LDIV:
-            //    case Opcode::LMOD:
-            //    case Opcode::F32DIV:
-            //    case Opcode::DDIV:
-            //    case Opcode::DMOD:
-            //    case Opcode::ARRAY_GET:
-            //    case Opcode::ARRAY_SET:
-            //    case Opcode::CALLHOST:
-            //        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
-            //            MIR_new_ref_op(ctx, errorLocationProto),
-            //            MIR_new_ref_op(ctx, errorLocationImport),
-            //            MIR_new_int_op(ctx, instr.sourceLine),
-            //            MIR_new_int_op(ctx, instr.sourceCol)));
-            //        break;
-            //    default:
-            //        if (isFallibleCast(instr.opcode)) {
-            //            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
-            //                MIR_new_ref_op(ctx, errorLocationProto),
-            //                MIR_new_ref_op(ctx, errorLocationImport),
-            //                MIR_new_int_op(ctx, instr.sourceLine),
-            //                MIR_new_int_op(ctx, instr.sourceCol)));
-            //        }
-            //        break;
-            //}
+            // Hata konumu: yakalanabilir hata üretebilen opcode'dan ÖNCE
+            // g_jitErrorLine/Col'u doldur — jitSetError defaults olarak bu
+            // değerleri kullanır (VM'in instr.sourceLine/sourceCol kullanımıyla
+            // birebir, ADR-025). Bir önceki instruction'ın konumu sızmasın.
+            switch (instr.opcode) {
+                case Opcode::DIV:
+                case Opcode::MOD:
+                case Opcode::FDIV:
+                case Opcode::LDIV:
+                case Opcode::LMOD:
+                case Opcode::F32DIV:
+                case Opcode::DDIV:
+                case Opcode::DMOD:
+                case Opcode::ARRAY_GET:
+                case Opcode::ARRAY_SET:
+                case Opcode::CALLHOST:
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                        MIR_new_ref_op(ctx, errorLocationProto),
+                        MIR_new_ref_op(ctx, errorLocationImport),
+                        MIR_new_int_op(ctx, instr.sourceLine),
+                        MIR_new_int_op(ctx, instr.sourceCol)));
+                    break;
+                default:
+                    if (isFallibleCast(instr.opcode)) {
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                            MIR_new_ref_op(ctx, errorLocationProto),
+                            MIR_new_ref_op(ctx, errorLocationImport),
+                            MIR_new_int_op(ctx, instr.sourceLine),
+                            MIR_new_int_op(ctx, instr.sourceCol)));
+                    }
+                    break;
+            }
 
             switch (instr.opcode) {
                 case Opcode::LOAD_CONST:
@@ -2282,6 +2443,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 }
                 case Opcode::ENTER_TRY:
                 case Opcode::LEAVE_TRY:
+                    // #110: catch hedefi/slotu STATİK olarak handlerTarget[] ve
+                    // handlerErrorSlot[] üzerinden bilinir (aşağıdaki
+                    // per-instruction kontrol). Runtime'da çerçeve açma/kapama
+                    // gerekmez — VM'de TryFrame yığını yalnızca unwind sınırını
+                    // tutar; JIT'te unwind propagateLabel üzerinden doğal akışla
+                    // gerçekleşir (her fonksiyon kendi shadow çerçevesini sarar).
                     break;
                 case Opcode::THROW: {
                     SlotType st = slotKindOf(fn, instr.src);
@@ -2388,6 +2555,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
                             MIR_new_ref_op(ctx, ssLeaveProto), MIR_new_ref_op(ctx, ssLeaveImport),
                             MIR_new_reg_op(ctx, ssBaseReg)));
+                    if (fnHasTry)
+                        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 2,
+                            MIR_new_ref_op(ctx, traceLeaveProto), MIR_new_ref_op(ctx, traceLeaveImport)));
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
                         MIR_new_ref_op(ctx, callRetNullSetProto),
                         MIR_new_ref_op(ctx, callRetNullSetImport),
@@ -2434,29 +2604,34 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     setNullFlag(instr.dest, 0);
                 }
             }
-            //if (instr.opcode != Opcode::RETURN) {
-            //    MIR_reg_t pending = newTmp("pending");
-            //    MIR_label_t noError = MIR_new_label(ctx);
-            //    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
-            //        MIR_new_ref_op(ctx, errPendingProto),
-            //        MIR_new_ref_op(ctx, errPendingImport),
-            //        MIR_new_reg_op(ctx, pending)));
-            //    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BF,
-            //        MIR_new_label_op(ctx, noError), MIR_new_reg_op(ctx, pending)));
-            //    if (handlerTarget[i] >= 0) {
-            //        int errorSlot = handlerErrorSlot[i];
-            //        MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
-            //            MIR_new_ref_op(ctx, errTakeProto),
-            //            MIR_new_ref_op(ctx, errTakeImport), R(errorSlot)));
-            //        emitShadowSet(errorSlot);
-            //        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
-            //            MIR_new_label_op(ctx, labelAt[static_cast<size_t>(handlerTarget[i])])));
-            //    } else {
-            //        MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
-            //            MIR_new_label_op(ctx, propagateLabel)));
-            //    }
-            //    MIR_append_insn(ctx, func, noError);
-            //}
+            // #110: hata yayılımı — (RETURN dışı) talimatın ardından
+            // g_jitPendingError kontrolü. YALNIZCA bu fonksiyon hata taşıyabilir
+            // (canRaise) veya talimat bir try içindeyse (handlerTarget>=0) emit
+            // edilir; salt-skaler try'sız sıcak yollar (§7.1) sıfır ek yük taşır.
+            if (instr.opcode != Opcode::RETURN &&
+                (canRaise[name] || handlerTarget[i] >= 0)) {
+                MIR_reg_t pending = newTmp("pending");
+                MIR_label_t noError = MIR_new_label(ctx);
+                MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                    MIR_new_ref_op(ctx, errPendingProto),
+                    MIR_new_ref_op(ctx, errPendingImport),
+                    MIR_new_reg_op(ctx, pending)));
+                MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BF,
+                    MIR_new_label_op(ctx, noError), MIR_new_reg_op(ctx, pending)));
+                if (handlerTarget[i] >= 0) {
+                    int errorSlot = handlerErrorSlot[i];
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
+                        MIR_new_ref_op(ctx, errTakeProto),
+                        MIR_new_ref_op(ctx, errTakeImport), R(errorSlot)));
+                    emitShadowSet(errorSlot);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
+                        MIR_new_label_op(ctx, labelAt[static_cast<size_t>(handlerTarget[i])])));
+                } else {
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
+                        MIR_new_label_op(ctx, propagateLabel)));
+                }
+                MIR_append_insn(ctx, func, noError);
+            }
         }
 
         // #165: fonksiyon sonu etiketi — switch sonrası "JMP → instrN"
@@ -2470,6 +2645,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
                 MIR_new_ref_op(ctx, ssLeaveProto), MIR_new_ref_op(ctx, ssLeaveImport),
                 MIR_new_reg_op(ctx, ssBaseReg)));
+        if (fnHasTry)
+            MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 2,
+                MIR_new_ref_op(ctx, traceLeaveProto), MIR_new_ref_op(ctx, traceLeaveImport)));
         MIR_op_t zeroRet = ret == MIR_T_D ? MIR_new_double_op(ctx, 0.0)
                            : ret == MIR_T_F ? MIR_new_float_op(ctx, 0.0f)
                                             : MIR_new_int_op(ctx, 0);
@@ -2515,6 +2693,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     MIR_load_external(ctx, "rt_jit_error_pending", reinterpret_cast<void*>(rt_jit_error_pending));
     MIR_load_external(ctx, "rt_jit_error_take", reinterpret_cast<void*>(rt_jit_error_take));
     MIR_load_external(ctx, "rt_jit_throw_p", reinterpret_cast<void*>(rt_jit_throw_p));
+    MIR_load_external(ctx, "rt_jit_trace_enter", reinterpret_cast<void*>(rt_jit_trace_enter));
+    MIR_load_external(ctx, "rt_jit_trace_leave", reinterpret_cast<void*>(rt_jit_trace_leave));
     MIR_load_external(ctx, "rt_jit_global_load_i", reinterpret_cast<void*>(rt_jit_global_load_i));
     MIR_load_external(ctx, "rt_jit_global_store_i", reinterpret_cast<void*>(rt_jit_global_store_i));
     MIR_load_external(ctx, "rt_jit_global_load_d", reinterpret_cast<void*>(rt_jit_global_load_d));

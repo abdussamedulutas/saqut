@@ -60,7 +60,7 @@ saqutcompiler/
 │   │       ├── program.cpp/hpp
 │   │       ├── declarations.cpp/hpp    # FunctionDecl, VariableDecl
 │   │       ├── statements.cpp/hpp      # If, While, Return, etc.
-│   │       ├── expressions.cpp/hpp     # ArrayLiteral, Cast, Ternary
+│   │       ├── expressions.cpp/hpp     # ArrayLiteral, Cast
 │   │       ├── binary_expr.cpp/hpp
 │   │       ├── identifier.cpp/hpp
 │   │       ├── literal.cpp/hpp
@@ -250,13 +250,14 @@ The Pratt parser handles operator precedence elegantly:
 - Prefix parsing (literals, identifiers, unary operators)
 - Infix parsing (binary operators, member access, index, calls)
 - Each operator has a binding power (precedence level)
-- Expression grammar: `literal | identifier | unary | binary | member | index | call | cast | ternary`
+- Expression grammar: `literal | identifier | unary | binary | member | index | call | cast`
+  (`?` bir ifade operatörü değildir; yalnızca nullable tip işaretidir — `int?`)
 
 **AST** — Typed node hierarchy rooted in `ASTNode` (tagged union via `ASTKind` enum).
 - ~20 AST kinds: Program, FunctionDecl, VariableDecl, Block, IfStatement,
   WhileStatement, ReturnStatement, Break, Continue, BinaryExpression,
   LiteralNode, IdentifierNode, CallExpression, MemberAccess,
-  IndexExpression, ArrayLiteral, CastExpression, TernaryExpression, etc.
+  IndexExpression, ArrayLiteral, CastExpression, etc.
 - Each node is allocated on the heap (raw `new`), owned by parent/function.
 - `resolvedType` field on ExpressionNode (set by type checker).
 

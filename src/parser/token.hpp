@@ -18,7 +18,7 @@
 //   4. OPERATOR_MAP_REV:   TokenType → string  (log çıktısı için ters harita)
 //   5. OPERATOR_MAP_STRREV: TokenType → string (enum ismi, debug için)
 //   6. TokenPrecedence():  Öncelik tablosu (18 seviye, Pratt parser'ın kalbi)
-//   7. RightAssociative(): Sağ birleşme kontrolü (atama, üs, ternary)
+//   7. RightAssociative(): Sağ birleşme kontrolü (atama, üs)
 //   8. ParserToken:        Parser'ın kullandığı token yapısı (Token* + TokenType)
 //
 // TASARIM KARARLARI (ADR-002):
@@ -241,8 +241,8 @@ enum class TokenType : uint16_t {
      * Seviye 7:              Bitsel VEYA |
      * Seviye 6:              Mantıksal VE &&
      * Seviye 5:              Mantıksal VEYA ||
-     * Seviye 4:              Ternary ?
-     * Seviye 3:              Ternary else :
+     * Seviye 4:              `?` (nullable tip işareti; ternary YOK)
+     * Seviye 3:              `:` (etiket; ternary else YOK)
      * Seviye 2:              Atama = += -= vb.
      * Seviye 1 (en düşük):  Virgül ,
      * ================================================================ */
@@ -345,13 +345,13 @@ enum class TokenType : uint16_t {
                      //   Kısa devre: a true ise b değerlendirilmez.
                      //   Öncelik 5.
 
-    // Seviye 4: Üçlü koşul (ternary) — Sağ birleşmeli
-    TERNARY,         // ? (ternary if) — a ? b : c
-                     //   Öncelik 4. Sağ birleşmeli.
-                     //   a ? b : c ? d : e = a ? b : (c ? d : e)
-    COLON,           // : (ternary else / etiket) — ternary'in ikinci kısmı
-                     //   Ternary'de öncelik 3 (0 değil!).
-                     //   Ayrıca switch/case etiketleri için de kullanılır.
+    // Seviye 4: `?` — ternary DESTEKLENMİYOR (ürün kararı, 2026-08-14).
+    //   `?` bugün yalnızca nullable tip işaretidir (`int?`, `Point?` —
+    //   parser isNullable kontrolü); ifade konumunda kullanılamaz.
+    TERNARY,         // ? — nullable tip işareti (a ? b : c sözdizimi YOK)
+                     //   Token sınıfı öncelik tablosunda 4 seviyesinde
+                     //   kalır; dilde bu önceliği kullanan kural yoktur.
+    COLON,           // : (etiket) — ternary else DEĞİL (ternary yok)
 
     // Seviye 2: Atama — Sağ birleşmeli
     EQUAL,           // = (basit atama) — a = b
@@ -750,8 +750,8 @@ inline const std::unordered_map<TokenType, std::string_view> OPERATOR_MAP_STRREV
 //    7: Bitsel VEYA       |
 //    6: Mantıksal VE      &&
 //    5: Mantıksal VEYA    ||
-//    4: Ternary           ?
-//    3: Ternary else      :
+//    4: `?`               ? (ternary YOK — nullable tip işareti)
+//    3: `:`               : (ternary else YOK — etiket)
 //    2: Atama             = += -= vb.      — Sağ birleşmeli
 //    1: Virgül            ,
 //    0: Önceliksiz        (değerler, EOF, bilinmeyen)

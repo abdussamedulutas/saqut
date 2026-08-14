@@ -1,4 +1,0 @@
-# VM≡JIT parity bilinçli kapsam-bozukluğu (AGENTS.md §8): yakalanabilir
-# hata dilimi (try/catch/throw, div-by-zero, cast-range). JIT Dilim 5
-# (issue #110 — setjmp/longjmp) tamamlanınca bu marker SİLİNİR ve parity
-# yeniden zorunlu olur. O zamana kadar FAIL değil SKIP sayılır.

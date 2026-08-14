@@ -1136,6 +1136,31 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
                         "' struct definition — use `saqut symbols <file>` to see available fields",
                     (int) ma->member.size());
         } else {
+            // #224: string/array gibi builtin tiplerde parantezssiz üye erişimi
+            // (s.length, arr.push) bir METOT adıdır, alan değildir. Eskiden
+            // burası sessizce Type::error() döndürüyordu: tanı üretilmiyor,
+            // IR de düğüm için hiçbir talimat üretmiyordu ve sonuç slotu hiç
+            // yazılmadan kalıp Int 0 okunuyordu — print(s.length) sessizce 0.
+            std::string lookupName;
+            if (objType.isString())
+                lookupName = "string";
+            else if (objType.isArray())
+                lookupName = "array";
+            const DataMethod* bm =
+                lookupName.empty()
+                    ? nullptr
+                    : dataLookupMethod(lookupName, ma->member, false, objType.isArray());
+            if (bm) {
+                diag_.report(
+                    "E001", node->loc,
+                    "'" + ma->member + "' is a method, not a field — it must be called",
+                    "write <expression>." + ma->member + "()");
+            } else {
+                diag_.report(
+                    "E001", node->loc,
+                    "type '" + objType.toString() + "' has no member '" + ma->member + "'",
+                    "member access with '.' is defined for struct fields and enum members only");
+            }
             result = Type::error();
         }
         break;

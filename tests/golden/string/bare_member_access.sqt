@@ -1,0 +1,10 @@
+// #224: builtin tip üzerinde parantezssiz üye erişimi sessizce Int 0
+// basıyordu (tanı yok + IR talimatsız → slot yazılmadan okunuyordu).
+// Hata SINIFI: sessiz-yanlış-değer — bu fixture reddi yakalar; çağrılı
+// formlar (s.length()) golden/string'in diğer testlerinde çalışır.
+
+int main() {
+    string s = "abc";
+    print(s.length);
+    return 0;
+}

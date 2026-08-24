@@ -110,10 +110,19 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
                     if (gv->initExpr) {
                         int initSlot = generateExpression(gv->initExpr);
                         emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
+                    } else if (!gv->varType.empty() && gv->varType.back() == '?') {
+                        // ADR-021 null kapısı: init'siz nullable global null
+                        // başlar (local emitLoadNull ile aynı sözleşme). Aksi
+                        // halde slot Value{} (= Int 0) kalır ve `q == null`
+                        // hiç atanmamış değer için sessizce false döner —
+                        // null kapısının kendisi yalan söyler.
+                        int initSlot = freshSlot();
+                        emitLoadNull(initSlot, SourceLocation{});
+                        emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
                     } else if (gv->varType == "string") {
                         // #184 ürün kararı: init'siz non-nullable global
                         // string "" başlar (Int 0 değil) — local/alan ile
-                        // aynı sözleşme. `string?` null kalır (kapsam dışı).
+                        // aynı sözleşme. `string?` yukarıda null alır.
                         int initSlot = freshSlot();
                         emitLoadString(initSlot, "", SourceLocation{});
                         emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
@@ -188,10 +197,16 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
                     if (gv->initExpr) {
                         int initSlot = generateExpression(gv->initExpr);
                         emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
+                    } else if (!gv->varType.empty() && gv->varType.back() == '?') {
+                        // ADR-021 null kapısı: init'siz nullable global null
+                        // başlar (local emitLoadNull ile aynı sözleşme).
+                        int initSlot = freshSlot();
+                        emitLoadNull(initSlot, SourceLocation{});
+                        emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
                     } else if (gv->varType == "string") {
                         // #184 ürün kararı: init'siz non-nullable global
-                        // string "" başlar (Int 0 değil) — local/alan ile
-                        // aynı sözleşme. `string?` null kalır (kapsam dışı).
+                        // string "" başlar (Int 0 değil). `string?` yukarıda
+                        // null alır.
                         int initSlot = freshSlot();
                         emitLoadString(initSlot, "", SourceLocation{});
                         emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);

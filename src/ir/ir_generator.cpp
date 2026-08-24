@@ -110,6 +110,13 @@ IRProgram IRGenerator::generateModuleGraph(ModuleGraph& graph, SymbolTable& symb
                     if (gv->initExpr) {
                         int initSlot = generateExpression(gv->initExpr);
                         emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
+                    } else if (gv->varType == "string") {
+                        // #184 ürün kararı: init'siz non-nullable global
+                        // string "" başlar (Int 0 değil) — local/alan ile
+                        // aynı sözleşme. `string?` null kalır (kapsam dışı).
+                        int initSlot = freshSlot();
+                        emitLoadString(initSlot, "", SourceLocation{});
+                        emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
                     }
                 }
             }
@@ -180,6 +187,13 @@ IRProgram IRGenerator::generate(ASTNode* programNode, SymbolTable& symbolTable,
                 for (VariableDeclNode* gv : globalVars) {
                     if (gv->initExpr) {
                         int initSlot = generateExpression(gv->initExpr);
+                        emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
+                    } else if (gv->varType == "string") {
+                        // #184 ürün kararı: init'siz non-nullable global
+                        // string "" başlar (Int 0 değil) — local/alan ile
+                        // aynı sözleşme. `string?` null kalır (kapsam dışı).
+                        int initSlot = freshSlot();
+                        emitLoadString(initSlot, "", SourceLocation{});
                         emitStoreGlobal(initSlot, nameToGlobal_[gv->name]);
                     }
                 }
@@ -350,6 +364,11 @@ void IRGenerator::generateStatement(ASTNode* node) {
             // varType nullable'ı sonundaki '?' ile taşır (AST: "int?").
             if (!vd->varType.empty() && vd->varType.back() == '?')
                 emitLoadNull(varSlot, vd->loc);
+            // #184 ürün kararı: non-nullable `string` zero-init "" başlar.
+            // Aksi halde Value{} (= Int 0) kalır; print "0" basar, length
+            // "expected string" ile patlar. `string?` yukarıda null alır.
+            else if (vd->varType == "string")
+                emitLoadString(varSlot, "", vd->loc);
         }
 
         // Sibling VariableDecl'ler: int a, b; → children'da diğer VariableDecl'ler
@@ -2101,6 +2120,18 @@ void IRGenerator::emitLoadNull(int destSlot, const SourceLocation& loc) {
     currentFunction_->instructions.push_back(std::move(ins));
 }
 
+void IRGenerator::emitLoadString(int destSlot, std::string value,
+                                 const SourceLocation& loc) {
+    Instruction ins(Opcode::LOAD_STRING);
+    ins.dest = destSlot;
+    ins.stringValue = std::move(value);
+    auto el = effectiveLoc(loc);
+    ins.sourceLine = el.line;
+    ins.sourceCol = el.column;
+    ins.sourceFile = el.filePath();
+    currentFunction_->instructions.push_back(std::move(ins));
+}
+
 void IRGenerator::emitStructNew(int destSlot, const std::string& structType, int fieldCount,
                                 const SourceLocation& loc) {
     Instruction ins(Opcode::STRUCT_NEW);
@@ -2285,6 +2316,16 @@ void IRGenerator::initNestedStructFields(int destSlot, const std::string& struct
         const auto& [fieldName, fieldType] = it->second[i];
         if (fieldType.nullable)     // `T? alan` → null kalır, örneklenmez
             continue;
+        if (fieldType.isString()) {
+            // #184 ürün kararı: non-nullable string alanı "" ile başlar.
+            // Aksi halde alan Value{} (= Int 0) kalır ve s.name.length()
+            // "expected string" ile patlar; local `string s;` ile aynı
+            // sözleşme (b9f5c62'nin array dalıyla aynı desen).
+            int strSlot = freshSlot();
+            emitLoadString(strSlot, "", loc);
+            emitFieldSet(destSlot, i, strSlot, loc.line, loc.column);
+            continue;
+        }
         if (fieldType.isArray()) {
             // #184/#226: non-nullable array alanı boş diziyle başlar —
             // local `T[] a;` ile aynı sözleşme. elemKind layout Type'ından

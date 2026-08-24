@@ -96,6 +96,9 @@ private:
                          const SourceLocation& loc = {});
     // ADR-021 zero-init: `T?` slot'u Int(0) değil null başlar.
     void emitLoadNull(int destSlot, const SourceLocation& loc = {});
+    // #184 kararı: non-nullable `string` zero-init "" başlar (Int 0 değil).
+    void emitLoadString(int destSlot, std::string value,
+                        const SourceLocation& loc = {});
     void emitStructNew(int destSlot, const std::string& structType,
                        int fieldCount, const SourceLocation& loc = {});
     void emitFieldGet(int destSlot, int objSlot, int fieldIdx,

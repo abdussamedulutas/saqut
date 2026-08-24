@@ -1,0 +1,9 @@
+// Karar: sıralama karşılaştırması (<, >, <=, >=) nullable operandla
+// derlenemez (E003) — null'un payload'ı (0) karşılaştırmaya katılır,
+// `null < 26` → true (ölçüldü, VM≡JIT). Eşitlik (==/!=) kapının kendisi
+// olduğundan dokunulmadı; legal kapı nested/guard daraltmasıdır.
+int main() {
+    int? a;
+    if (a < 26) { print(1); }
+    return 0;
+}

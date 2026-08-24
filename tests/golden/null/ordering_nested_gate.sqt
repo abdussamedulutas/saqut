@@ -1,0 +1,26 @@
+// Karar: sıralama nullable operandla derlenemez (E003). Legal kapı
+// nested-if daraltmasıdır: if (a != null) { if (a < 26) ... } — içeride
+// a non-null, karşılaştırma ve atama güvenli.
+int main() {
+    int? a;
+    a = 10;
+    if (a != null) {
+        if (a < 26) { print("kucuk"); }
+        if (a >= 26) { print("buyuk"); }
+        int x = a;
+        print(x);
+    }
+
+    a = 30;
+    if (a != null) {
+        if (a < 26) { print("kucuk"); }
+        if (a >= 26) { print("buyuk"); }
+    }
+
+    // Guard deseni: == null ise erken çık, sonrası non-null
+    a = 5;
+    if (a == null) { return 0; }
+    if (a <= 5) { print("guard-ok"); }
+
+    return 0;
+}

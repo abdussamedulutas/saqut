@@ -1,0 +1,32 @@
+// ADR-021 null kapısı: init'siz nullable global null başlar (local ile aynı
+// sözleşme). Düzeltme öncesi (ölçüldü): `q == null` hiç atanmamış değer için
+// FALSE dönerdi (slot Value{} = Int 0) — kapının kendisi yalan söylüyordu.
+//
+// JIT notu: nullable global YAZMA JIT'te "STORE_GLOBAL <nullable operand>"
+// ile reddediliyor (önceden var olan wholeProgramSupported kapısı) — bu
+// fixture diferansiyelde SKIP; VM (normatif) golden'da doğrular.
+
+int? a;
+string? q;
+longint? l;
+int plain;
+string sp;
+
+int main() {
+    // Dokunulmamış nullable global: == null true olmalı
+    if (a == null) { print("a-null"); } else { print("a-dolu"); }
+    if (q == null) { print("q-null"); } else { print("q-dolu"); }
+    if (l == null) { print("l-null"); } else { print("l-dolu"); }
+
+    // Non-nullable global'ler değişmedi: int 0, string ""
+    print(plain);
+    print("["); print(sp); print("]");
+
+    // Atama sonrası yeniden kontrol: null değil
+    a = 42;
+    if (a == null) { print("hala-null"); } else { print("a-42"); }
+    q = "merhaba";
+    print(q);
+
+    return 0;
+}

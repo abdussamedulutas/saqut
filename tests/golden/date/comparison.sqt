@@ -3,10 +3,15 @@ import {parse} from date;
 void main() {
     date? a = parse("2026-01-01T00:00:00Z");
     date? b = parse("2026-06-01T00:00:00Z");
-    if (a != null && b != null) {
-        print(a < b);
-        print(a > b);
-        print(a == a);
-        print(a != b);
+    // Legal kapı: nested-if daraltması — compound `&&` yalnız sağ operandını
+    // daraltır, gövdeye taşmaz (bilinen sınır, açık soru kaydı). Sıralama
+    // nullable operandla derlenemez (E003 kararı).
+    if (a != null) {
+        if (b != null) {
+            print(a < b);
+            print(a > b);
+            print(a == a);
+            print(a != b);
+        }
     }
 }

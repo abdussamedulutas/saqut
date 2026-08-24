@@ -1,0 +1,19 @@
+// #110 kilit: try gövdesinde DEĞİŞTİRİLMİŞ local catch içinde okunur.
+// setjmp/longjmp tasarımlarında register-çöpü riski burada patlardı; uygulanan
+// per-instruction pending-check aynı çerçeve içinde JMP eder — local tutarlı.
+// VM≡JIT ödeşliği bu fixture ile regresyon korumasına alınır.
+int main() {
+    int x = 0;
+    try {
+        x = 42;
+        int y = 1;
+        int z = 0;
+        int w = y / z;
+        print(w);
+    } catch (Error e) {
+        print(x);
+        print(e.line > 0);
+        print(e.code);
+    }
+    return 0;
+}

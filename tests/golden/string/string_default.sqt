@@ -1,0 +1,51 @@
+// #184 ürün kararı: non-nullable `string` zero-init "" başlar (Int 0 değil).
+// Üç bağlam da aynı sözleşmeyi izler: local, struct alanı (iç içe dahil) ve
+// global. `string?` null kalır (ADR-021 — kapsam dışı, davranış değişmedi).
+// Atama normal şekilde üzerine yazar.
+//
+// Düzeltmeden önce (ölçüldü): print(s) "0" basıyor, s.length() "expected
+// string" (exit 70) ile patlıyor, JIT concat'ta segfault (exit 139) üretiyordu.
+
+string g;                     // global default: ""
+
+struct Person { string name; }
+struct Deep { Person p; }
+
+int main() {
+    // (a) local default
+    string s;
+    print("["); print(s); print("]");
+    print(s.length());
+    print("[" + s + "]");
+
+    // (b) struct alanı default
+    Person x;
+    print("["); print(x.name); print("]");
+    print(x.name.length());
+    print("[" + x.name + "]");
+
+    // iç içe struct alanı default
+    Deep d;
+    print("["); print(d.p.name); print("]");
+    print(d.p.name.length());
+
+    // (c) global default
+    print("["); print(g); print("]");
+    print(g.length());
+    print("[" + g + "]");
+
+    // `string?` hâlâ null (ADR-021 — kapsam dışı)
+    string? maybe;
+    if (maybe == null) { print("null"); } else { print("dolu"); }
+
+    // Atama üzerine yazar (default üzerine)
+    s = "merhaba";
+    print(s);
+    print(s.length());
+    x.name = "ali";
+    print(x.name);
+    g = "global";
+    print(g);
+
+    return 0;
+}

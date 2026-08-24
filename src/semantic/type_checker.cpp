@@ -920,6 +920,20 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
             bin->Operator == TokenType::GREATER || bin->Operator == TokenType::GREATER_EQUAL) {
             if (leftType.isError() || rightType.isError()) {
                 result = Type::error(); // previous error, silent pass
+            } else if (leftType.nullable || rightType.nullable) {
+                // ADR-021 null kapısı: sıralama karşılaştırması nullable
+                // operandla DERLENEMEZ. Aksi halde null'un payload'ı (0)
+                // karşılaştırmaya katılır — `null < 26` → true, kapı yalan
+                // söyler (ölçüldü, VM≡JIT). Eşitlik (==/!=) kapının kendisi
+                // olduğundan dokunulmaz; daraltma (narrowing) bu kontrolü
+                // non-null kanıtında kaldırır. Arimetikteki strict-operand
+                // kuralıyla (aşağıdaki ADR-021 bloğu) aynı mesaj/hint.
+                diag_.report(
+                    "E003", bin->loc,
+                    "nullable operand: '" + leftType.toString() + "' and '" + rightType.toString() +
+                        "' — check for null or narrow",
+                    "if (variable != null) { /* here it is non-null, safe to use */ } or define the variable as non-null type");
+                result = Type::error();
             } else if (leftType.isNumeric() && rightType.isNumeric()) {
                 result = Type::Bool();
             } else if (leftType.isDate() && rightType.isDate()) {

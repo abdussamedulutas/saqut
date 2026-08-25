@@ -1,0 +1,22 @@
+// #229 hata birliği: rt_host_call sınırındaki tüm hatalar tek kodla akar —
+// E_HOST (E_BUILTIN/E_FFI ayrımı kalktı). İki aileden de birer hata:
+// boş int[] üzerinde pop (builtin) + olmayan dosya readFile (ffi) →
+// try-catch ile yakalanıp e.code basılır; ikisi de E_HOST.
+import {readFile} from fs;
+
+int main() {
+    try {
+        int[] a;
+        a.pop();
+    } catch (Error e) {
+        print(e.code);
+    }
+
+    try {
+        byte[] b = readFile("/olmayan/dosya-yok.sqt");
+        print(b.length());
+    } catch (Error e) {
+        print(e.code);
+    }
+    return 0;
+}

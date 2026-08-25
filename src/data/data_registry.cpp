@@ -20,11 +20,12 @@
 // SONUNA eklenir.
 //
 // Mevcut düzen (eski runtimeId sırasıyla birebir — id kayması yok):
-//   [0..10]  array   (length, push, pop, insert, remove, slice, reverse,
-//                     concat, contains, indexOf, clear)
-//   [11..23] string  (length, upper, lower, trim, split, substring, replace,
-//                     repeat, charAt, indexOf, contains, startsWith, endsWith)
-//   [24..25] struct  (toJson, dump)
+//   [0..11]  array   (12: length, push, pop, insert, remove, slice, reverse,
+//                     concat, contains, indexOf, clear, ...)
+//   [12..25] string  (14: length, upper, lower, trim, split, substring,
+//                     replace, repeat, charAt, indexOf, contains,
+//                     startsWith, endsWith, ...)
+//   [26..27] struct  (2: toJson, dump)
 const std::vector<DataMethod>& dataAllMethods() {
     static const std::vector<DataMethod> all = [] {
         std::vector<DataMethod> v;

@@ -173,9 +173,9 @@ static int sys_random(HostCallFrame* f) {
     // Eski davranış Value::fromFloat (double) — root.sqt `float` yazsa da
     // gözlemlenen çıktı double biçimidir, birebir korunur.
     //
-    // NOT (#227): bildirim ile gövde arasındaki bu uyumsuzluk gerçektir ve
-    // JIT'te MIR tip hatasına yol açar ('dge': Got float, expected double).
-    // Bugün SYS_RANDOM zaten JIT dışında; düzeltilirse birlikte ele alınmalı.
+    // NOT (#227): bildirim (`float`) ile gövde (double) arasındaki bu
+    // uyumsuzluk kayıtlıdır; JIT bu çağrıyı VM ile aynı çıktıyı vererek
+    // çalıştırır (ölçüldü). Tip düzeltmesi ayrı iş — burada yalnız kayıt.
     f->ret = HostSlot::fromFloat(dist(gen));
     return 0;
 }

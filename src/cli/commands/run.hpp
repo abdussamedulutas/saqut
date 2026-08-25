@@ -111,6 +111,13 @@ inline int cmdRun(const CliArgs& args) {
     // gerekiyor". Program.functions'daki HER fonksiyon Dilim 1'in
     // desteklediği opcode kümesinde değilse, HİÇBİR ŞEY çalıştırılmadan
     // açık bir hatayla çıkılır — VM devreye asla girmez.
+    //
+    // #229 minor: warning'ler run modunda da GÖRÜNMELİ (stderr), ama
+    // programı BLOKLAMAMALI. Hata yokken warning varsa stderr'e basılır;
+    // error varsa üstteki hasErrors blokları zaten printAll ile hepsini
+    // (error+warning) basmıştır. stdout'a dokunulmaz — golden etkilenmez.
+    if (diag.warningCount() > 0 && !diag.hasErrors())
+        diag.printAll(std::cerr);
     if (args.useJit) {
         int                             jitResult = 0;
         mir_backend::UnsupportedReason  reason;

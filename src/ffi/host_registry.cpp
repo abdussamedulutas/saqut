@@ -1,10 +1,11 @@
 // ============================================================================
 // saQut FFI — Birleşik Host Registry (gerçekleme)
 //
-// ADIM 2 KURALI (#222): mevcut gövdeler DEĞİŞMEZ. Bu dosya onları yeni ABI'ye
-// SARAR. Böylece adım 2'de davranış değişikliği olmaz ve golden testler
-// sarmalayıcının doğruluğunu kanıtlar. Gövdelerin kendisi adım 3–4'te
-// yeni imzaya taşınır.
+// #229 kayıt birliği: hostRegistry() yalnız BİRLEŞTİRİCİDİR — gömülü host
+// fonksiyonlarının (math/fs/sys/date_now/core) ve built-in metodların TEK
+// tanımı thunk'ının yanında tam HostEntry olarak kaynak tablolarında durur
+// (host_functions.cpp / data/date.cpp / data/*.cpp). Bu dosya onları tek
+// indeks uzayına yerleştirir ve rt_host_call tek giriş noktasını sağlar.
 // ============================================================================
 
 #include "ffi/host_registry.hpp"

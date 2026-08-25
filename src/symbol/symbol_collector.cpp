@@ -149,6 +149,20 @@ void SymbolCollector::pass1aRegisterNames(ASTNode* program, int moduleId) {
             break;
         }
 
+        case ASTKind::FfiDecl: {
+            // #229: requires grameri parse edilir (ADR-043 enforcement yok);
+            // kullanılırsa DERLEME ZAMANI uyarısı — capability'ler kaldırıldı,
+            // gereksinim yok sayılır. Runtime uyarısı yok (stdout kirlenmez).
+            auto* fd = static_cast<FfiDeclNode*>(child);
+            if (!fd->requiresCap.empty()) {
+                diag_.report("W007", fd->loc,
+                             "requires '" + fd->requiresCap +
+                                 "' is ignored — capabilities were removed (ADR-043)",
+                             "remove 'requires " + fd->requiresCap + "' from the declaration");
+            }
+            break;
+        }
+
         case ASTKind::FunctionDecl: {
             // Stub: placeholder tip — pass1b'de gerçek imzayla güncellenecek.
             // define sadece ismin varlığını tescillemek için çağrılır.

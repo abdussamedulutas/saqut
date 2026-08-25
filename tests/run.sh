@@ -237,4 +237,25 @@ if ! echo "$out" | grep -q "is a field of struct"; then
 fi
 echo "  2 geçti, 0 başarısız"
 
+# ── requires uyarısı (ADR-043, #229) ────────────────────────────────────────
+# requires <cap> grameri parse edilir; capability enforcement kaldırıldığı
+# için kullanım DERLEME ZAMANI uyarısıdır (W007) — program yine derlenir ve
+# çalışır. Yeni .expected_warning marker'ı yalnız bu fixture kullanır;
+# mevcut testler zayıflamaz.
+echo "=== requires uyarısı ==="
+RW_SQT="$ROOT/tests/golden/ffi/requires_warning.sqt"
+rw_want=$(cat "${RW_SQT%.sqt}.expected_warning")
+rw_out=$("$SAQUT" check "$RW_SQT" 2>&1)
+if ! echo "$rw_out" | grep -q "W007"; then
+    echo "  FAIL: requires uyarısı [$rw_want] görünmedi: $(echo "$rw_out" | head -1)"
+    exit 1
+fi
+rw_run=$("$SAQUT" run "$RW_SQT" 2>/dev/null)
+rw_exp=$(cat "${RW_SQT%.sqt}.expected")
+if [ "$rw_run" != "$rw_exp" ]; then
+    echo "  FAIL: requires fixture çıktısı farklı (beklenen: $rw_exp)"
+    exit 1
+fi
+echo "  1 geçti, 0 başarısız"
+
 echo "=== TUM TESTLER GECTI ==="

@@ -96,11 +96,11 @@ static int math_E(HostCallFrame* f) {
 static int fs_readFile(HostCallFrame* fr) {
     const std::string& path = hostAsString(fr->args[0]);
     std::ifstream f(path, std::ios::in | std::ios::binary);
-    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "'", "E_FFI"); return 1; }
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "'", "E_HOST"); return 1; }
     std::ostringstream ss;
     ss << f.rdbuf();
     if (!fr->env || !fr->env->heap) {
-        fr->err.set("readFile: heap yok", "E_FFI");
+        fr->err.set("readFile: heap yok", "E_HOST");
         return 1;
     }
     const std::string bytes = ss.str();
@@ -114,14 +114,14 @@ static int fs_readFile(HostCallFrame* fr) {
 static int fs_writeFile(HostCallFrame* fr) {
     const std::string& path = hostAsString(fr->args[0]);
     std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
-    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_HOST"); return 1; }
     if (fr->args[1].kind != HostKind::Ref || !fr->args[1].p) {
-        fr->err.set("writeFile: expected byte[]", "E_FFI");
+        fr->err.set("writeFile: expected byte[]", "E_HOST");
         return 1;
     }
     auto* arr = static_cast<ArrayObject*>(fr->args[1].p);
     if (arr->elemKind != ArrayElemKind::Byte) {
-        fr->err.set("writeFile: expected byte[]", "E_FFI");
+        fr->err.set("writeFile: expected byte[]", "E_HOST");
         return 1;
     }
     f.write(reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size());
@@ -132,14 +132,14 @@ static int fs_writeFile(HostCallFrame* fr) {
 static int fs_append(HostCallFrame* fr) {
     const std::string& path = hostAsString(fr->args[0]);
     std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::app);
-    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_HOST"); return 1; }
     if (fr->args[1].kind != HostKind::Ref || !fr->args[1].p) {
-        fr->err.set("append: expected byte[]", "E_FFI");
+        fr->err.set("append: expected byte[]", "E_HOST");
         return 1;
     }
     auto* arr = static_cast<ArrayObject*>(fr->args[1].p);
     if (arr->elemKind != ArrayElemKind::Byte) {
-        fr->err.set("append: expected byte[]", "E_FFI");
+        fr->err.set("append: expected byte[]", "E_HOST");
         return 1;
     }
     f.write(reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size());
@@ -156,8 +156,8 @@ static int fs_remove(HostCallFrame* f) {
     const std::string& path = hostAsString(f->args[0]);
     std::error_code ec;
     bool removed = std::filesystem::remove(path, ec);
-    if (ec)       { f->err.set("cannot remove '" + path + "': " + ec.message(), "E_FFI"); return 1; }
-    if (!removed) { f->err.set("file not found: '" + path + "'", "E_FFI"); return 1; }
+    if (ec)       { f->err.set("cannot remove '" + path + "': " + ec.message(), "E_HOST"); return 1; }
+    if (!removed) { f->err.set("file not found: '" + path + "'", "E_HOST"); return 1; }
     f->ret = HostSlot::voidVal();
     return 0;
 }
@@ -184,7 +184,7 @@ static int sys_randomInt(HostCallFrame* f) {
     int lo = (int)hostAsI64(f->args[0]), hi = (int)hostAsI64(f->args[1]);
     if (lo >= hi) {
         f->err.set("randomInt: invalid range [" + std::to_string(lo) +
-                   ", " + std::to_string(hi) + ")", "E_FFI");
+                   ", " + std::to_string(hi) + ")", "E_HOST");
         return 1;
     }
     static std::random_device rd;
@@ -209,7 +209,7 @@ static int sys_sleep(HostCallFrame* f) {
 }
 
 static int sys_args(HostCallFrame* f) {
-    if (!f->env || !f->env->heap) { f->err.set("args: heap yok", "E_FFI"); return 1; }
+    if (!f->env || !f->env->heap) { f->err.set("args: heap yok", "E_HOST"); return 1; }
     // Eski kod burada `ctx.programArgs ? *ctx.programArgs : std::vector{}`
     // yazıyordu — programArgs null iken GEÇİCİ bir vector'e referans bağlayan
     // sarkan referanstı. Boş tablo doğrudan ele alınır.

@@ -194,6 +194,6 @@ extern "C" int rt_host_call(int32_t entryId, HostCallFrame* f) {
     }
 
     // Bağlı olmayan bir id sessizce yanlış fonksiyona gitmez — açık hata döner.
-    f->err.set("host entry bagli degil: " + std::to_string(entryId), "E_FFI");
+    f->err.set("host entry bagli degil: " + std::to_string(entryId), "E_HOST");
     return 1;
 }

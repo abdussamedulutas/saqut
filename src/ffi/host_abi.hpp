@@ -123,7 +123,7 @@ struct HostError {
     // std::string burada güvenli çünkü HostError JIT register'ında taşınmaz,
     // yalnızca HostCallFrame içinden pointer'la erişilir.
     std::string message;
-    std::string code;     // "E_FFI" | "E_BUILTIN"
+    std::string code;     // "E_HOST"
 
     bool failed() const { return !message.empty(); }
     void clear() { message.clear(); code.clear(); }

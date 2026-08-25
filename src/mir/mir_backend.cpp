@@ -504,7 +504,7 @@ extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
     g_jitHostFrame.retOwner = &g_jitHostRetOwner;
     if (rt_host_call((int32_t)entryId, &g_jitHostFrame) != 0) {
         jitSetError(g_jitHostFrame.err.message,
-                    g_jitHostFrame.err.code.empty() ? "E_FFI" : g_jitHostFrame.err.code);
+                    g_jitHostFrame.err.code.empty() ? "E_HOST" : g_jitHostFrame.err.code);
         g_jitHostFrame.ret = HostSlot::null();
         return 0;
     }

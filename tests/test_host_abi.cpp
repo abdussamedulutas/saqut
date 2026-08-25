@@ -109,8 +109,8 @@ int main() {
     {
         HostError e;
         assert(!e.failed());
-        e.set("dosya bulunamadi", "E_FFI");
-        assert(e.failed() && e.code == "E_FFI");
+        e.set("dosya bulunamadi", "E_HOST");
+        assert(e.failed() && e.code == "E_HOST");
         e.clear();
         assert(!e.failed());
     }

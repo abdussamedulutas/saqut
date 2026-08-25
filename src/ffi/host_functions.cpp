@@ -276,37 +276,37 @@ static int core_version(HostCallFrame* f) {
 const std::vector<HostFn>& hostFnTable() {
     static const std::vector<HostFn> table = {
         // math — tamamı saf hesap (HOST_PURE; #89: IEEE754 korunur, throw yok)
-        { "MATH_ABS",   1, HostKind::Int,   HOST_PURE, math_abs },
-        { "MATH_ABSF",  1, HostKind::Float, HOST_PURE, math_absf },
-        { "MATH_MIN",   2, HostKind::Int,   HOST_PURE, math_min },
-        { "MATH_MAX",   2, HostKind::Int,   HOST_PURE, math_max },
-        { "MATH_MINF",  2, HostKind::Float, HOST_PURE, math_minf },
-        { "MATH_MAXF",  2, HostKind::Float, HOST_PURE, math_maxf },
-        { "MATH_SQRT",  1, HostKind::Float, HOST_PURE, math_sqrt },
-        { "MATH_POW",   2, HostKind::Float, HOST_PURE, math_pow },
-        { "MATH_FLOOR", 1, HostKind::Float, HOST_PURE, math_floor },
-        { "MATH_CEIL",  1, HostKind::Float, HOST_PURE, math_ceil },
-        { "MATH_ROUND", 1, HostKind::Float, HOST_PURE, math_round },
-        { "MATH_PI",    0, HostKind::Float, HOST_PURE, math_PI },
-        { "MATH_E",     0, HostKind::Float, HOST_PURE, math_E },
+        { "MATH_ABS", 1, HOST_PURE, HostKind::Int, math_abs },
+        { "MATH_ABSF", 1, HOST_PURE, HostKind::Float, math_absf },
+        { "MATH_MIN", 2, HOST_PURE, HostKind::Int, math_min },
+        { "MATH_MAX", 2, HOST_PURE, HostKind::Int, math_max },
+        { "MATH_MINF", 2, HOST_PURE, HostKind::Float, math_minf },
+        { "MATH_MAXF", 2, HOST_PURE, HostKind::Float, math_maxf },
+        { "MATH_SQRT", 1, HOST_PURE, HostKind::Float, math_sqrt },
+        { "MATH_POW", 2, HOST_PURE, HostKind::Float, math_pow },
+        { "MATH_FLOOR", 1, HOST_PURE, HostKind::Float, math_floor },
+        { "MATH_CEIL", 1, HOST_PURE, HostKind::Float, math_ceil },
+        { "MATH_ROUND", 1, HOST_PURE, HostKind::Float, math_round },
+        { "MATH_PI", 0, HOST_PURE, HostKind::Float, math_PI },
+        { "MATH_E", 0, HOST_PURE, HostKind::Float, math_E },
         // fs — dosya içeriği her zaman byte[] olarak taşınır
-        { "FS_READ_FILE",  1, HostKind::Ref,  HOST_NEEDS_HEAP | HOST_CAN_FAIL, fs_readFile },
-        { "FS_WRITE_FILE", 2, HostKind::Void, HOST_CAN_FAIL,                   fs_writeFile },
-        { "FS_APPEND",     2, HostKind::Void, HOST_CAN_FAIL,                   fs_append },
-        { "FS_EXISTS",     1, HostKind::Int,  0,                               fs_exists },
-        { "FS_REMOVE",     1, HostKind::Void, HOST_CAN_FAIL,                   fs_remove },
+        { "FS_READ_FILE", 1, HOST_NEEDS_HEAP | HOST_CAN_FAIL, HostKind::Ref, fs_readFile },
+        { "FS_WRITE_FILE", 2, HOST_CAN_FAIL, HostKind::Void, fs_writeFile },
+        { "FS_APPEND", 2, HOST_CAN_FAIL, HostKind::Void, fs_append },
+        { "FS_EXISTS",     1, 0, HostKind::Int, fs_exists },
+        { "FS_REMOVE", 1, HOST_CAN_FAIL, HostKind::Void, fs_remove },
         // sys — dış-durum-okuyan aile
-        { "SYS_RANDOM",     0, HostKind::Float, 0,                     sys_random },
-        { "SYS_RANDOM_INT", 2, HostKind::Int,   HOST_CAN_FAIL,          sys_randomInt },
-        { "SYS_ENV",        1, HostKind::Str,   0,                     sys_env },
-        { "SYS_SLEEP",      1, HostKind::Void,  0,                     sys_sleep },
-        { "SYS_ARGS",       0, HostKind::Ref,   HOST_NEEDS_HEAP | HOST_NEEDS_ARGS, sys_args },
+        { "SYS_RANDOM",     0, 0, HostKind::Float, sys_random },
+        { "SYS_RANDOM_INT", 2, HOST_CAN_FAIL, HostKind::Int, sys_randomInt },
+        { "SYS_ENV",        1, 0, HostKind::Str, sys_env },
+        { "SYS_SLEEP",      1, 0, HostKind::Void, sys_sleep },
+        { "SYS_ARGS", 0, HOST_NEEDS_HEAP | HOST_NEEDS_ARGS, HostKind::Ref, sys_args },
         // date — yalnız now() burada (#225); kalan 15 saf fonksiyon
         // src/data/date.cpp'de (aynı tam HostEntry biçimi).
-        { "DATE_NOW", 0, HostKind::Date, HOST_PURE, date_now },
+        { "DATE_NOW", 0, HOST_PURE, HostKind::Date, date_now },
         // core — blok 1 sonunda (CORE_VERSION/CORE_PRINT; kCoreBase boş kalır)
-        { "CORE_VERSION", 0, HostKind::Str,  HOST_PURE, core_version },
-        { "CORE_PRINT",   1, HostKind::Void, HOST_PURE, core_print },
+        { "CORE_VERSION", 0, HOST_PURE, HostKind::Str, core_version },
+        { "CORE_PRINT", 1, HOST_PURE, HostKind::Void, core_print },
     };
     return table;
 }

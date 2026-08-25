@@ -26,23 +26,23 @@
 #include "vm/object.hpp"
 #include "ffi/host_abi.hpp"
 
-// Tek bir host fonksiyon kaydı.
+// Tek bir host fonksiyon kaydı — thunk'ının yanında TAM HostEntry.
 //
-// #222: gövde artık HostThunk'tır — tüm host fonksiyonları ortak ABI'yi
-// kullanır (host_abi.hpp). Eski HostContext ve Value-tabanlı imza kaldırıldı;
-// VM durumuna erişim HostEnv üzerinden, hata dönüşü HostError üzerindendir.
+// #229: retKind ve flags artık kaydın KENDİSİNDE durur (kHostMeta çapraz
+// tablosu yok). HostEntry host_abi.hpp'de tanımlıdır: symbolicId, arity,
+// flags, retKind, thunk. Date fonksiyonları (15) ayrı tablodadır ve aynı
+// tamlıktadır (src/data/date.cpp).
 struct HostFn {
     const char* symbolicId;   // "MATH_SQRT" — root.sqt bu adı yazar
     int         arity;        // beklenen argüman sayısı
+    HostKind    retKind;
+    uint8_t     flags;
     HostThunk   thunk;        // ortak ABI gövdesi
 };
 
-// Tüm host fonksiyonların düz tablosu. Index = sayısal host id (root.sqt'e
-// gömülmez; hostFnIndex ile çözülür).
+// Tüm gömülü host fonksiyonların düz tablosu (math/fs/sys/date_now/core).
+// Index = sayısal host id; root.sqt'e gömülmez, hostEntryIndex ile çözülür.
 //
 const std::vector<HostFn>& hostFnTable();
-
-// Sembolik id → sayısal index. Bulunamazsa -1 (root.sqt ↔ C++ drift kontrolü).
-int hostFnIndex(const std::string& symbolicId);
 
 #endif // SAQUT_FFI_HOST_FUNCTIONS

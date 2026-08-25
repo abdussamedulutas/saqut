@@ -268,68 +268,45 @@ static int core_version(HostCallFrame* f) {
 }
 
 // ── Tablo (index = sayısal host id) ──────────────────────────────────────────
-// Sıra değişebilir; root.sqt sembolik ad kullandığı için etkilenmez.
+// Sıra değişebilir; root.sqt sembolik ad kullandığı için etkilenmez. #229:
+// kayıtlar TAM HostEntry'dir — retKind/flags thunk'ının yanında (kHostMeta
+// çapraz tablosu kalktı). Date fonksiyonları (15) src/data/date.cpp'de aynı
+// tamlıkta; bu tablo yalnız now()'u tutar.
 
 const std::vector<HostFn>& hostFnTable() {
     static const std::vector<HostFn> table = {
-        // #222: math ailesi natif thunk'a taşındı (hostNativeThunks). Eski
-        // tabloda impl == nullptr olarak DURUR — sembolik id ve arite tek
-        // kaynak olarak burada kalsın, indeksler kaymasın diye. Dispatch
-        // rt_host_call'da natif tabloya gider.
-        { "MATH_ABS", 1, math_abs },
-        { "MATH_ABSF", 1, math_absf },
-        { "MATH_MIN", 2, math_min },
-        { "MATH_MAX", 2, math_max },
-        { "MATH_MINF", 2, math_minf },
-        { "MATH_MAXF", 2, math_maxf },
-        { "MATH_SQRT", 1, math_sqrt },
-        { "MATH_POW", 2, math_pow },
-        { "MATH_FLOOR", 1, math_floor },
-        { "MATH_CEIL", 1, math_ceil },
-        { "MATH_ROUND", 1, math_round },
-        { "MATH_PI", 0, math_PI },
-        { "MATH_E", 0, math_E },
-        { "FS_READ_FILE", 1, fs_readFile },
-        { "FS_WRITE_FILE", 2, fs_writeFile },
-        { "FS_APPEND", 2, fs_append },
-        { "FS_EXISTS", 1, fs_exists },
-        { "FS_REMOVE", 1, fs_remove },
-        { "SYS_RANDOM", 0, sys_random },
-        { "SYS_RANDOM_INT", 2, sys_randomInt },
-        { "SYS_ENV", 1, sys_env },
-        { "SYS_SLEEP", 1, sys_sleep },
-        { "SYS_ARGS", 0, sys_args },
-        { "DATE_NOW", 0, date_now },
-        { "DATE_FROM_EPOCH_MS", 1, nullptr },
-        { "DATE_TO_EPOCH_MS", 1, nullptr },
-        { "DATE_ADD_DAYS", 2, nullptr },
-        { "DATE_ADD_HOURS", 2, nullptr },
-        { "DATE_ADD_MINUTES", 2, nullptr },
-        { "DATE_ADD_SECONDS", 2, nullptr },
-        { "DATE_YEAR", 1, nullptr },
-        { "DATE_MONTH", 1, nullptr },
-        { "DATE_DAY", 1, nullptr },
-        { "DATE_HOUR", 1, nullptr },
-        { "DATE_MINUTE", 1, nullptr },
-        { "DATE_SECOND", 1, nullptr },
-        { "DATE_DIFF_MS", 2, nullptr },
-        { "DATE_PARSE", 1, nullptr },
-        { "DATE_FORMAT", 2, nullptr },
-        { "CORE_VERSION", 0, core_version },
-        { "CORE_PRINT",   1, core_print   },
+        // math — tamamı saf hesap (HOST_PURE; #89: IEEE754 korunur, throw yok)
+        { "MATH_ABS",   1, HostKind::Int,   HOST_PURE, math_abs },
+        { "MATH_ABSF",  1, HostKind::Float, HOST_PURE, math_absf },
+        { "MATH_MIN",   2, HostKind::Int,   HOST_PURE, math_min },
+        { "MATH_MAX",   2, HostKind::Int,   HOST_PURE, math_max },
+        { "MATH_MINF",  2, HostKind::Float, HOST_PURE, math_minf },
+        { "MATH_MAXF",  2, HostKind::Float, HOST_PURE, math_maxf },
+        { "MATH_SQRT",  1, HostKind::Float, HOST_PURE, math_sqrt },
+        { "MATH_POW",   2, HostKind::Float, HOST_PURE, math_pow },
+        { "MATH_FLOOR", 1, HostKind::Float, HOST_PURE, math_floor },
+        { "MATH_CEIL",  1, HostKind::Float, HOST_PURE, math_ceil },
+        { "MATH_ROUND", 1, HostKind::Float, HOST_PURE, math_round },
+        { "MATH_PI",    0, HostKind::Float, HOST_PURE, math_PI },
+        { "MATH_E",     0, HostKind::Float, HOST_PURE, math_E },
+        // fs — dosya içeriği her zaman byte[] olarak taşınır
+        { "FS_READ_FILE",  1, HostKind::Ref,  HOST_NEEDS_HEAP | HOST_CAN_FAIL, fs_readFile },
+        { "FS_WRITE_FILE", 2, HostKind::Void, HOST_CAN_FAIL,                   fs_writeFile },
+        { "FS_APPEND",     2, HostKind::Void, HOST_CAN_FAIL,                   fs_append },
+        { "FS_EXISTS",     1, HostKind::Int,  0,                               fs_exists },
+        { "FS_REMOVE",     1, HostKind::Void, HOST_CAN_FAIL,                   fs_remove },
+        // sys — dış-durum-okuyan aile
+        { "SYS_RANDOM",     0, HostKind::Float, 0,                     sys_random },
+        { "SYS_RANDOM_INT", 2, HostKind::Int,   HOST_CAN_FAIL,          sys_randomInt },
+        { "SYS_ENV",        1, HostKind::Str,   0,                     sys_env },
+        { "SYS_SLEEP",      1, HostKind::Void,  0,                     sys_sleep },
+        { "SYS_ARGS",       0, HostKind::Ref,   HOST_NEEDS_HEAP | HOST_NEEDS_ARGS, sys_args },
+        // date — yalnız now() burada (#225); kalan 15 saf fonksiyon
+        // src/data/date.cpp'de (aynı tam HostEntry biçimi).
+        { "DATE_NOW", 0, HostKind::Date, HOST_PURE, date_now },
+        // core — blok 1 sonunda (CORE_VERSION/CORE_PRINT; kCoreBase boş kalır)
+        { "CORE_VERSION", 0, HostKind::Str,  HOST_PURE, core_version },
+        { "CORE_PRINT",   1, HostKind::Void, HOST_PURE, core_print },
     };
     return table;
-}
-
-
-
-int hostFnIndex(const std::string& symbolicId) {
-    static const std::unordered_map<std::string, int> index = [] {
-        std::unordered_map<std::string, int> m;
-        const auto& t = hostFnTable();
-        for (int i = 0; i < (int)t.size(); ++i) m[t[i].symbolicId] = i;
-        return m;
-    }();
-    auto it = index.find(symbolicId);
-    return it != index.end() ? it->second : -1;
 }

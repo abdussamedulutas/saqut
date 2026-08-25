@@ -15,6 +15,7 @@
 #include "ffi/host_abi.hpp"
 #include "ffi/host_bridge.hpp"
 #include "ffi/host_registry.hpp"
+#include <set>
 #include "data/data_registry.hpp"
 
 int main() {
@@ -198,17 +199,35 @@ int main() {
         }
     }
 
-    // 9) Metadata eksiksizliği. Bir host fonksiyonunun dönüş türü/bayrakları
-    //    bilinmiyorsa korumacı varsayılana düşer — çalışır ama JIT o çağrıyı
-    //    gereksiz yere pahalı sayar. Sessizce olmasın diye burada kırılır.
+    // 9) Kayıt tamlığı (#229). Kayıt birliği sonrası TEK tablo (hostRegistry):
+    //    her kaydın thunk'ı bağlı, arity/retKind geçerli olmalı; host
+    //    fonksiyonlarının (blok 1) symbolicId'si benzersiz olmalı. Builtin
+    //    adları tip başına benzersizdir (kategori ayrımı dataMethodId'de),
+    //    bu yüzden global benzersizlik yalnız host bloğunda aranır.
     {
-        auto missing = hostEntriesMissingMetadata();
-        if (!missing.empty()) {
-            std::printf("METADATA EKSIK:");
-            for (const auto& s : missing) std::printf(" %s", s.c_str());
-            std::printf("\n");
+        const auto& reg = hostRegistry();
+        std::set<std::string> seen;
+        int checked = 0;
+        for (const auto& e : reg) {
+            if (!e.symbolicId) continue;   // boş blok aralıkları
+            if (!e.thunk) {
+                std::printf("KAYIT THUNKSUZ: %s\n", e.symbolicId);
+                assert(false);
+            }
+            assert(e.arity >= 0);
+            assert(e.retKind >= HostKind::Int && e.retKind <= HostKind::Void);
+            if (hostEntryIndex(e.symbolicId) >= 0) {   // blok 1 üyesi
+                if (!seen.insert(e.symbolicId).second) {
+                    std::printf("KAYIT YINELI: %s\n", e.symbolicId);
+                    assert(false);
+                }
+            }
+            ++checked;
         }
-        assert(missing.empty());
+        // 41 host fonksiyonu (math 13 + fs 5 + sys 5 + date 16 + core 2) +
+        // 28 builtin metod (array 12 + string 14 + struct 2).
+        assert(checked == 41 + 28);
+        std::printf("kayit tamligi: %d kayit (41 host + 28 builtin)\n", checked);
     }
 
     std::printf("test_host_abi: TUM TESTLER GECTI\n");

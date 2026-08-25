@@ -21,7 +21,7 @@
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/identifier.hpp"
 #include "ffi/ffi_catalog.hpp"
-#include "ffi/host_functions.hpp"
+#include "ffi/host_registry.hpp"
 #include "core/module_registry.hpp"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -411,7 +411,7 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
             continue;
         }
 
-        int hostId = hostFnIndex(decl->hostId);
+        int32_t hostId = hostEntryIndex(decl->hostId);
         if (hostId < 0) {
             // root.sqt ↔ host_functions.cpp drift — geliştirici hatası.
             diag_.report("E_IMPORT_UNKNOWN", imp->loc,

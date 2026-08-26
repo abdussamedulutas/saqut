@@ -207,9 +207,12 @@ using HostThunk = int (*)(HostCallFrame* f);
 // ----------------------------------------------------------------------------
 // HostEntry — registry'deki tek kayıt.
 //
-// hostFnTable() (41 kayıt) ve dataAllMethods() (28 kayıt) bu tek tabloda
-// birleşir (#229: kHostMeta çapraz tablosu kalktı). CALLHOST artık
-// functionName string'ine bakmaz — intValue bu tablonun indeksidir.
+// hostFnTable() (gömülü host fonksiyonları) ve dataAllMethods() (builtin
+// metodlar) bu tek tabloda birleşir (#229: kHostMeta çapraz tablosu kalktı).
+// Kesin kayıt sayısı yoruma yazılmaz — her FFI eklenişinde bayatlardı;
+// gerçek sayı için host_registry içindeki birleştiriciye ya da
+// test_host_abi'nin tamlık doğrulamasına bak. CALLHOST artık functionName
+// string'ine bakmaz — intValue bu tablonun indeksidir.
 // ----------------------------------------------------------------------------
 // Bayrakların anlamı BACKEND'İN SORACAĞI soruya göre tanımlıdır, "fonksiyon
 // matematiksel olarak saf mı" sorusuna göre değil.

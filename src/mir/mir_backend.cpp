@@ -443,9 +443,10 @@ extern "C" void rt_jit_field_set_p(void* o, int64_t idx, void* v) {
 // ── #227: birleşik host çağrı trampolini ────────────────────────────────────
 //
 // JIT'in host çağrıları için bilmesi gereken TEK köprü. Öncesinde yalnızca
-// print destekleniyordu; 41 host fonksiyonu + 28 built-in metodu açmak 70
-// ayrı trampolin demekti. Artık yeni host fonksiyonu eklemek JIT'e hiç
-// dokunmaz (#229: kayıt birliği — hostRegistry tek tablo).
+// print destekleniyordu; host fonksiyonları + built-in metodları açmak 70
+// ayrı trampolin demekti (kesin sayılar değişkendir — yoruma yazılmaz).
+// Artık yeni host fonksiyonu eklemek JIT'e hiç dokunmaz (#229: kayıt
+// birliği — hostRegistry tek tablo).
 //
 // Argümanlar MIR'den tek tek geçirilemez (değişken arite), bu yüzden sabit bir
 // tampona yazılır. Tek iş parçacığı varsayımı (MIRPLAN §9), string

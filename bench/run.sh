@@ -45,11 +45,22 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/build/saqut"
+# Release binary tercih edilir (bench doğruluğu O1/O2+ ister): önce build-rel,
+# yoksa build/saqut (Debug olabilir). Sırayı env ile geçersiz kılabilirsin:
+#   SAQUT_BIN=/path/to/saqut bash bench/run.sh
+if [ -n "${SAQUT_BIN:-}" ] && [ -x "$SAQUT_BIN" ]; then
+    BIN="$SAQUT_BIN"
+elif [ -x "$ROOT/build-rel/saqut" ]; then
+    BIN="$ROOT/build-rel/saqut"
+else
+    BIN="$ROOT/build/saqut"
+fi
 MODE="${1:-all}"
 RUNS="${BENCH_RUNS:-1}"
 TMO="${BENCH_TIMEOUT:-300}"
 PERF_ENABLED="${BENCH_PERF:-1}"
+
+echo "# binary: $BIN"
 
 # Referans checksum'lar — değişim durumunda README'deki tablo da güncellenir.
 EXPECT_CPU=545460224

@@ -66,10 +66,19 @@ public:
     std::string toJson(int depth = 0) override;
 };
 
-// import {name1, name2} from "file.sqt";
+// import {name1 as local1, name2} from "file.sqt";
+// `as localN` isteğe bağlıdır: kaynak adının bu modülde GÖRÜNECEĞİ yerel ad.
+// Belirtilmezse yerel ad = kaynak adı (eski davranış). ADR-034 esneklik:
+// `import {exists as fileExists} from fs` — global isim çarpışmalarını
+// kullanıcı kendi import'unda çözer; derleyici isimlendirme dayatmaz.
 class ImportDeclNode : public ASTNode {
 public:
-    std::vector<std::string> importedNames;  // {"add", "Vector"}
+    // Çift vektör yerine tek vektör<ImportName>: her öğe kaynak adı + yerel ad.
+    struct ImportName {
+        std::string source;   // modülde/dosyada gerçek ad ("exists")
+        std::string local;    // bu birimde görünecek ad ("fileExists"); boşsa = source
+    };
+    std::vector<ImportName> importedNames;   // {"exists"→"fileExists", ...}
     std::string              sourcePath;     // "math.sqt" (dosya) veya "fs" (modül)
     // ADR-034 (#107): tırnaklı kaynak = dosya yolu; tırnaksız ad = gömülü/
     // çözümlenen modül. Parser bu ayrımı işaretler ki loader doğru çözsün.

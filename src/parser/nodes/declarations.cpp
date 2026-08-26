@@ -100,7 +100,10 @@ void ImportDeclNode::log(int indent) {
               << Color::SoftPembe << sourcePath << Color::Reset << "\": {";
     for (size_t i = 0; i < importedNames.size(); i++) {
         if (i) std::cout << Color::SoftGri << ", " << Color::Reset;
-        std::cout << Color::SoftYesil << importedNames[i] << Color::Reset;
+        const ImportName& n = importedNames[i];
+        std::cout << Color::SoftYesil << n.source << Color::Reset;
+        if (!n.local.empty() && n.local != n.source)
+            std::cout << Color::SoftGri << " as " << Color::SoftYesil << n.local;
     }
     std::cout << "}\n";
 }
@@ -111,7 +114,8 @@ std::string ImportDeclNode::toJson(int depth) {
     obj.add("isModuleName", isModuleName);
     obj.addArray("importedNames", [&]() {
         for (auto& n : importedNames)
-            obj.addItem("\"" + n + "\"");
+            obj.addItem("\"" + n.source + (n.local.empty() || n.local == n.source
+                                               ? std::string{} : " as " + n.local) + "\"");
     });
     obj.addRaw("location", loc.toJson());
     return obj.str();

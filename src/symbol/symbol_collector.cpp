@@ -296,8 +296,11 @@ void SymbolCollector::validateImports(ModuleGraph& graph) {
             // graph'ında aranmaz — FfiCatalog'a yönlendir.
             if (imp->isModuleName) {
                 resolveFfiImport(imp);
-                moduleImports_[unit.moduleId].insert(imp->importedNames.begin(),
-                                                      imp->importedNames.end());
+                // moduleImports_: BU BİRİMDE görünen (yerel) adlar — rename
+                // import sonrası kaynak ad değil, local kullanılır.
+                for (const auto& n : imp->importedNames)
+                    moduleImports_[unit.moduleId].insert(
+                        n.local.empty() ? n.source : n.local);
                 continue;
             }
 
@@ -330,8 +333,12 @@ void SymbolCollector::validateImports(ModuleGraph& graph) {
                 continue;
             }
 
-            // Her import edilen isim için doğrula
-            for (const auto& name : imp->importedNames) {
+            // Her import edilen isim için doğrula. Rename import: `name` yerine
+            // `n.source` (kaynak modülde export'u aranan ad), ekleme n.source
+            // ürünü yerel ad (n.local).
+            for (const auto& n : imp->importedNames) {
+                const std::string& name = n.source;
+                const std::string  localName = n.local.empty() ? n.source : n.local;
                 Symbol* sym = table_.resolve(name);
 
                 if (!sym) {
@@ -395,7 +402,8 @@ void SymbolCollector::validateImports(ModuleGraph& graph) {
                 }
 
                 // Başarılı: bu ismi import eden modülün erişim listesine ekle
-                moduleImports_[unit.moduleId].insert(name);
+                // (yerel ad — rename import ile source farklı olabilir).
+                moduleImports_[unit.moduleId].insert(localName);
             }
         }
     }
@@ -417,11 +425,15 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
         return;
     }
 
-    for (const auto& name : imp->importedNames) {
-        const FfiDeclNode* decl = catalog.lookup(imp->sourcePath, name);
+    for (const auto& en : imp->importedNames) {
+        // Rename import: kaynak ad katalogda aranır, yerel ad (boşsa kaynak)
+        // bu birimde görünecek semboldür.
+        const std::string& source = en.source;
+        std::string        local  = en.local.empty() ? en.source : en.local;
+        const FfiDeclNode* decl = catalog.lookup(imp->sourcePath, source);
         if (!decl) {
             diag_.report("E_IMPORT_UNKNOWN", imp->loc,
-                "'" + name + "' not found in module '" + imp->sourcePath + "'");
+                "'" + source + "' not found in module '" + imp->sourcePath + "'");
             continue;
         }
 
@@ -433,7 +445,7 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
             continue;
         }
 
-        if (table_.resolve(name)) continue; // zaten tanımlı (tekrar import vb.)
+        if (table_.resolve(local)) continue; // zaten tanımlı (tekrar import vb.)
 
         std::vector<Type> paramTypes;
         std::vector<std::string> paramNames;
@@ -443,7 +455,7 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
         }
         Type retType = typeFromName(decl->returnType, decl->loc);
 
-        Symbol* s = table_.define(name, SymbolKind::Function,
+        Symbol* s = table_.define(local, SymbolKind::Function,
                                   Type::function(retType, paramTypes),
                                   decl->loc, ModuleRegistry::BUILTIN_ID);
         if (!s) continue;

@@ -196,15 +196,31 @@ ASTNode* Parser::parseImportDecl() {
         return node;
     nextToken();
 
-    // virgülle ayrılmış isimler: { add, Vector, ... }
+    // virgülle ayrılmış isimler: { add, Vector as Vec, ... }
+    // İsteğe bağlı `as <yerelAd>`: `import {exists as fileExists} from fs`.
     // İlerleme garantisi: IDENTIFIER/COMMA olmayan bir token sonsuz döngüye
     // yol açardı (bkz. #170 — bu, 25 kapanış-delimiter site'inden AYRI,
     // bağımsız bulunmuş bir hang/DoS hatasıydı) — beklenmeyen token'da hata
     // basıp döngüden çık.
     while (!currentToken().is({TokenType::RBRACE, TokenType::SVR_VOID})) {
         if (currentToken().type == TokenType::IDENTIFIER) {
-            node->importedNames.push_back(currentToken().token->token);
+            ImportDeclNode::ImportName en;
+            en.source = currentToken().token->token;
             nextToken();
+            // `as <local>` — bağlamca güvenli: bu noktada zaten IDENTIFIER
+            // tükettik ve virgül/} bekliyoruz; `as` cast değil, import takma
+            // adı (aşırı yüklü keyword, TokenType::KW_AS).
+            if (currentToken().type == TokenType::KW_AS) {
+                nextToken();
+                if (currentToken().type == TokenType::IDENTIFIER) {
+                    en.local = currentToken().token->token;
+                    nextToken();
+                } else {
+                    reportError(currentToken().token ? currentToken().token->loc : node->loc,
+                                "E905", "expected local name after 'as' in import");
+                }
+            }
+            node->importedNames.push_back(std::move(en));
         } else {
             reportError(currentToken().token ? currentToken().token->loc : node->loc,
                         "E905", "expected identifier or '}' in import list");

@@ -1,0 +1,18 @@
+// read_range — readFile ofset/size (seek) API (#115 ürün kararı 2026-08-26)
+// readFile(path), readFile(path, seek), readFile(path, seek, size) üç form;
+// nullable trailing parametreler isteğe bağlı. İçerik "ABCDEFGHI" (9 bayt).
+import {writeFile, readFile, existsFile, removeFile} from fs;
+import {decode} from utf8;
+int main() {
+    string path = "/tmp/saqut_read_range.txt";
+    if (existsFile(path)) { removeFile(path); }
+    writeFile(path, [65,66,67,68,69,70,71,72,73]);
+    print(decode(readFile(path))); print("|");           // ABCDEFGHI
+    print(decode(readFile(path, 3))); print("|");        // DEFGHI
+    print(decode(readFile(path, 3, 2))); print("|");     // DE
+    print(decode(readFile(path, null, 2))); print("|");  // AB
+    print(decode(readFile(path, 100))); print("|");      // ofset taşması: boş
+    print(readFile(path, 0, 0).length()); print("\n");
+    removeFile(path);
+    return 0;
+}

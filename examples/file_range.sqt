@@ -1,0 +1,28 @@
+// file_range — büyük dosyada parça (slice) okuma (#115 seek isteği)
+// readFile(path, int? seek, int? size) ile TÜM dosyayı belleğe almadan yalnız
+// istenen dilimi okur. Kullanım: fileSize ile son-dilim hesapla, readFile ile
+// catch — örn. log dosyasının son 12 baytı (tail benzeri).
+import {readFile, writeFile, fileSize, existsFile, removeFile} from fs;
+import {decode} from utf8;
+
+string tail(string path, int n) {
+    longint fsz = fileSize(path);
+    if (fsz <= n) { return decode(readFile(path)); }        // tümü küçükse komple oku
+    return decode(readFile(path, (fsz - n) as int, n));              // son n bayt
+}
+
+int main() {
+    string path = "/tmp/saqut_file_range.txt";
+    if (existsFile(path)) { removeFile(path); }
+    // "0123456789abcdef" — 16 bayt
+    writeFile(path, [48,49,50,51,52,53,54,55,56,57,97,98,99,100,101,102]);
+
+    print(tail(path, 4));  print("|");   // "cdef"
+    print(tail(path, 100));print("|");   // tümü (16) "0123456789abcdef"
+    // ortadaki 4 bayt
+    print(decode(readFile(path, 6, 4))); print("|");   // "6789"
+    print(fileSize(path)); print("\n");                // 16
+
+    removeFile(path);
+    return 0;
+}

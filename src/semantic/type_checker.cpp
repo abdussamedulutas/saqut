@@ -1052,7 +1052,29 @@ Type TypeChecker::checkExpr(ASTNode* node, const Type& expected) {
         if (!calleeType.paramTypes.empty()) {
             size_t expected_count = calleeType.paramTypes.size();
             size_t got_count = call->arguments.size();
-            if (got_count != expected_count) {
+
+            // FFI fonksiyonlarında Kuyruk Nullable Parametreleri isteğe bağlıdır:
+            // `readFile(path, int? seek, int? size)` — `readFile(path)` ve
+            // `readFile(path, 1024)` geçerli; eksik olan kuyruktaki arg'lar thunk
+            // tarafında null kabul edilir (#115 seek isteği, ürün kararı
+            // 2026-08-26). Kural yalnız FFI'ya uygulanır (kullanıcı fonksiyonlarında
+            // davranış değişmez): sonda nullable parametrelerden daha az arg verilirse
+            // tolere et.
+            bool trailingNullableOk = false;
+            if (got_count < expected_count) {
+                if (auto* id = dynamic_cast<IdentifierNode*>(call->callee)) {
+                    Symbol* calleeSym = id->resolvedSymbol;
+                    if (calleeSym && calleeSym->hostFnId >= 0) {
+                        bool allSkippedNullable = true;
+                        for (size_t i = got_count; i < expected_count; ++i) {
+                            if (!calleeType.paramTypes[i].nullable) { allSkippedNullable = false; break; }
+                        }
+                        trailingNullableOk = allSkippedNullable;
+                    }
+                }
+            }
+
+            if (got_count != expected_count && !trailingNullableOk) {
                 diag_.report(
                     "E008", call->loc,
                     std::to_string(expected_count) + " argument(s) expected, " +

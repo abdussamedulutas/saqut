@@ -24,16 +24,40 @@ static int fs_readFile(HostCallFrame* fr) {
     const std::string& path = hostAsString(fr->args[0]);
     std::ifstream f(path, std::ios::in | std::ios::binary);
     if (!f.is_open()) { fr->err.set("cannot open file '" + path + "'", "E_HOST"); return 1; }
-    std::ostringstream ss;
-    ss << f.rdbuf();
     if (!fr->env || !fr->env->heap) {
         fr->err.set("readFile: heap yok", "E_HOST");
         return 1;
     }
-    const std::string bytes = ss.str();
-    ArrayObject* arr = fr->env->heap->allocArray((int)bytes.size(), ArrayElemKind::Byte);
-    arr->bytes.resize(bytes.size());
-    for (size_t i = 0; i < bytes.size(); ++i) arr->bytes[i] = (uint8_t)bytes[i];
+    // İsteğe bağlı seek/size: null/eksik → baştan okur / sonuna kadar okur.
+    // Büyük dosyalarda tümünü kopyalamadan doğrudan ArrayObject baytlarına
+    // yazarız (tek uygulanmış kopya, #115 seek isteği ürün kararı 2026-08-26).
+    int64_t offset = 0;
+    int64_t length = -1;   // -1 = sonuna kadar
+    if (fr->argc >= 2 && !fr->args[1].isNull())
+        offset = std::max<int64_t>(0, hostAsI64(fr->args[1]));
+    if (fr->argc >= 3 && !fr->args[2].isNull())
+        length = std::max<int64_t>(0, hostAsI64(fr->args[2]));
+
+    // Boyut üst sınırı: offset aşarsa boş dizin okunur; length seçilirse tam
+    // ofset+boyut aralığı okunur, aksi halde sona kadar. file_size başarısız
+    // olursa (bu aşamada dosya açıldığı için nadiren) sona-kadar oku.
+    std::error_code ec;
+    uintmax_t total = std::filesystem::file_size(path, ec);
+    uintmax_t totalValid = ec ? 0 : total;
+    if (f.good()) f.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+
+    const int64_t remaining =
+        static_cast<int64_t>(totalValid > static_cast<uintmax_t>(offset) ? totalValid - static_cast<uintmax_t>(offset) : 0);
+    int64_t n = (length >= 0) ? std::min(length, remaining) : remaining;
+    if (n < 0) n = 0;
+
+    ArrayObject* arr = fr->env->heap->allocArray(static_cast<int>(n), ArrayElemKind::Byte);
+    if (n > 0) {
+        arr->bytes.resize(static_cast<size_t>(n));
+        f.read(reinterpret_cast<char*>(arr->bytes.data()), n);
+        const std::streamsize got = f.gcount();
+        arr->bytes.resize(static_cast<size_t>(got));
+    }
     fr->ret = HostSlot::fromRef(arr);
     return 0;
 }
@@ -223,7 +247,7 @@ static int fs_modifiedTime(HostCallFrame* f) {
 // ── Tablo (fs alt kümesi) ───────────────────────────────────────────────────
 const std::vector<HostFn>& fsHostFunctions() {
     static const std::vector<HostFn> table = {
-        { "FS_READ_FILE", 1, HOST_NEEDS_HEAP | HOST_CAN_FAIL, HostKind::Ref, fs_readFile },
+        { "FS_READ_FILE", 3, HOST_NEEDS_HEAP | HOST_CAN_FAIL, HostKind::Ref, fs_readFile },
         { "FS_WRITE_FILE", 2, HOST_CAN_FAIL, HostKind::Void, fs_writeFile },
         { "FS_APPEND", 2, HOST_CAN_FAIL, HostKind::Void, fs_append },
         { "FS_EXISTS",     1, 0, HostKind::Int, fs_exists },

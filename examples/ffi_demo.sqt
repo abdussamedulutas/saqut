@@ -1,0 +1,39 @@
+// ffi_demo — #115 yeni FFI yüzeyi demo/testi (0.9.6)
+// Faz 1 CLI çekirdeği + izlenen Faz 2 (os/terminal). Tümü capability'siz
+// (ADR-043 capability kaldırıldı). Girdi: handle'sız tek atımlık.
+import {join, normalize, dirname, basename, extension, isAbsolute, separator} from path;
+import {encode, decode} from utf8;
+import {write as cout} from stdout;
+import {cwd, pid, exit} from process;
+import {osName, osCpuCount} from os;
+import {isTTY} from terminal;
+
+void report(bool b) { if (b) { print(1); } else { print(0); } }
+int main() {
+    // path — saf, deterministik
+    string[] parts = ["var", "lib", "x"];
+    print(join(parts)); print("|");
+    print(normalize("a//b/../c")); print("|");
+    print(dirname("/a/b/c.txt")); print("|");
+    print(basename("/a/b/c.txt")); print("|");
+    print(extension("/a/b/c.txt")); print("|");
+    print(isAbsolute("/abs")); print("|");
+    print(separator()); print("\n");
+    // utf8 — roundtrip
+    byte[] b = encode("çğııİşÜ");
+    print(b.length() > 0); print("|");
+    print(decode(b)); print("\n");
+    // stdout — print'ten bağımsız akış
+    cout("abc"); print("\n");
+    // process — dış durum (bool muadil)
+    print(cwd() != ""); print("|");
+    print(pid() > 0); print("\n");
+    // os/terminal — renk/çıktı kararı
+    print(osName()); print("|");
+    print(osCpuCount() > 0); print("|");
+    print(isTTY()); print("\n");
+    // exit — süreç çıkışı (aşağısı ulaşılamaz)
+    exit(0);
+    print("UNREACHABLE\n");
+    return 0;
+}

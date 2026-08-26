@@ -1,0 +1,36 @@
+// file_edit — dosya üzerinde oku → işle → tekrar yaz döngüsü (#115)
+// encode/decode (utf8) + readFile/writeFile (fs) birlikte: bir metin dosyasını
+// okuyup ham baytlara inerek içerikteyerine koyma yapıp disk'e geri yazar.
+import {readFile, writeFile, existsFile, removeFile} from fs;
+import {encode, decode} from utf8;
+
+// byte[] içinde hedef baytı (97='a') başka baytla (88='X') değiştirir.
+byte[] replaceByte(byte[] data, int from, int to) {
+    byte[] out = [];
+    for (int i = 0; i < data.length(); i++) {
+        if (data[i] == from) { out.push(to as byte); }
+        else { out.push(data[i]); }
+    }
+    return out;
+}
+
+int main() {
+    string path = "/tmp/saqut_file_edit.txt";
+    if (existsFile(path)) { removeFile(path); }
+
+    // 1) İlk içeriği yaz ("avi" içinde üç adet 'a' var)
+    writeFile(path, encode("bir avi ve bir avcavi"));
+    print(decode(readFile(path))); print("\n");   // orijinal
+
+    // 2) Oku → işle (tek tur içinde 4 'a' → 'X') → geri yaz
+    byte[] edited = replaceByte(readFile(path), 97, 88);
+    writeFile(path, edited);
+
+    // 3) Yeniden oku: 'a' kalmamalı
+    string after = decode(readFile(path));
+    print(after); print("\n");
+
+    // 4) Kayıt dışı temizlik
+    removeFile(path);
+    return 0;
+}

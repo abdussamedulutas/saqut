@@ -1,0 +1,26 @@
+// file_analyze — dosya meta-analizi (#115 yeni FFI yüzeyi)
+// fs::fileSize/readFile + path::basename/extension/dirname/isAbsolute + utf8::decode
+// bir dosyanın temel bilgilerini çıkarır — CLI araçlarında yaygın desen.
+import {createFile, writeFile, readFile, fileSize, existsFile, removeFile} from fs;
+import {basename, extension, dirname, isAbsolute} from path;
+import {decode} from utf8;
+
+int main() {
+    string path = "/tmp/saqut_analyze.txt";
+    if (existsFile(path)) { removeFile(path); }
+    createFile(path);
+
+    // iki satır: byte[] + '\n' ayracı (writeFile byte[] ister)
+    writeFile(path, [115, 97, 116, 105, 114, 49, 10, 115, 97, 116, 105, 114, 50, 10]);
+
+    print(basename(path)); print("|");   // saqut_analyze.txt
+    print(dirname(path));  print("|");   // /tmp
+    print(extension(path));print("|");   // .txt
+    print(isAbsolute(path));print("|");  // 1
+    print(fileSize(path));  print("|");  // 14 bayt
+    print(decode(readFile(path)));       // "satir1\nsatir2\n" roundtrip
+    print("\n");
+
+    removeFile(path);
+    return 0;
+}

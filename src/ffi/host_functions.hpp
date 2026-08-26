@@ -34,9 +34,27 @@
 // ve aynı tamlıktadır (src/data/date.cpp).
 using HostFn = HostEntry;
 
-// Tüm gömülü host fonksiyonların düz tablosu (math/fs/sys/date_now/core).
-// Index = sayısal host id; root.sqt'e gömülmez, hostEntryIndex ile çözülür.
-//
+// Alt küme tabloları (bölüm başına ayrı TU; src/ffi/functions/{math,fs,sys,date,core,
+// process,io,path,utf8,os}.cpp). Her biri kendi sabit tablosunu kurar (tek tanım,
+// §10.2). io.cpp stdin/stdout/stderr modüllerini birden barındırır; os.cpp
+// os + terminal modüllerini.
+const std::vector<HostFn>& mathHostFunctions();
+const std::vector<HostFn>& fsHostFunctions();
+const std::vector<HostFn>& sysHostFunctions();
+const std::vector<HostFn>& dateHostFunctions();
+const std::vector<HostFn>& coreHostFunctions();
+const std::vector<HostFn>& processHostFunctions();
+const std::vector<HostFn>& stdinHostFunctions();
+const std::vector<HostFn>& stdoutHostFunctions();
+const std::vector<HostFn>& stderrHostFunctions();
+const std::vector<HostFn>& pathHostFunctions();
+const std::vector<HostFn>& utf8HostFunctions();
+const std::vector<HostFn>& osHostFunctions();
+const std::vector<HostFn>& terminalHostFunctions();
+
+// Tüm gömülü host fonksiyonların düz tablosu (math/fs/sys/date_now/core/...
+// yeni modüller). Index = sayısal host id; root.sqt'e gömülmez, hostEntryIndex
+// ile çözülür. Alt küme tablolarını tek listede birleştirir (host_functions.cpp).
 const std::vector<HostFn>& hostFnTable();
 
 #endif // SAQUT_FFI_HOST_FUNCTIONS

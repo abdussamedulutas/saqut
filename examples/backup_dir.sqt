@@ -1,0 +1,42 @@
+// backup_dir — dizin-hiyerarşi üzerinde dosya işleme (#115)
+// createDirectory/list/walk/copyFile/isDirectory/removeDirectory: bir üretim
+// dizinini geçici bir yedek dizine kopyalayıp sonucu sayar, sonra temizler.
+// Determinizm için tamamı /tmp altında sabit adlarla (golden değil, gösterim).
+import {createDirectory, createFile, writeFile, copyFile, list, walk, isDirectory, removeDirectory, existsFile, removeFile} from fs;
+
+int main() {
+    string src = "/tmp/saqut_backup_src";
+    string dst = "/tmp/saqut_backup_dst";
+    // idempotent temizlik
+    clearDir(src);
+    clearDir(dst);
+
+    // kaynak hiyerarşi: 1 üst + 2 iç dosya + 1 alt dizinde 1 dosya
+    createDirectory(src);
+    createDirectory("/tmp/saqut_backup_src/sub");
+    writeFile("/tmp/saqut_backup_src/a.txt", [65, 66, 67]);       // "ABC"
+    writeFile("/tmp/saqut_backup_src/sub/b.txt", [49, 50, 51]);   // "123"
+
+    // kopyalama: üst + alt dosyaları (recursive değil, isimleriyle)
+    createDirectory(dst);
+    copyFile("/tmp/saqut_backup_src/a.txt", "/tmp/saqut_backup_dst/a.txt");
+    createDirectory("/tmp/saqut_backup_dst/sub");
+    copyFile("/tmp/saqut_backup_src/sub/b.txt", "/tmp/saqut_backup_dst/sub/b.txt");
+
+    string[] srcList = list(src);
+    string[] srcWalk = walk(src);
+    string[] dstList = list(dst);
+    print(srcList.length()); print("|");   // 2 (a.txt, sub)
+    print(srcWalk.length()); print("|");   // 3 (üst iki + alt dosya)
+    print(dstList.length()); print("|");   // 2
+    print(existsFile("/tmp/saqut_backup_dst/a.txt")); print("|");  // 1
+    print(isDirectory("/tmp/saqut_backup_dst/sub")); print("\n");   // 1
+
+    // temizlik
+    clearDir(src); clearDir(dst);
+    return 0;
+}
+
+void clearDir(string d) {
+    if (isDirectory(d)) { removeDirectory(d); }
+}

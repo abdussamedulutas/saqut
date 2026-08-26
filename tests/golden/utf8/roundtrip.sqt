@@ -1,0 +1,10 @@
+import {encode, decode} from utf8;
+int main() {
+    byte[] b = encode("çğııİşÜ");   // 7 çok baytlı + 1 ASCII noktası
+    print(b.length());               // bayt sayısı
+    string s = decode(b);
+    print("|");
+    print(s);
+    print("\n");
+    return 0;
+}

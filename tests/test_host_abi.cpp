@@ -224,10 +224,11 @@ int main() {
             }
             ++checked;
         }
-        // 47 host fonksiyonu (math 13 + fs 11 + sys 5 + date 16 + core 2) +
-        // 28 builtin metod (array 12 + string 14 + struct 2).
-        assert(checked == 47 + 28);
-        std::printf("kayit tamligi: %d kayit (47 host + 28 builtin)\n", checked);
+        // Kayıt tamlığı sabit toplamdır: gömülü host fonksiyonları (hostFnTable +
+        // dataDateFunctions) + builtin metodlar. Her FFI ekleyişinde güncellenir;
+        // toplam, 256 tabanının altında olduğu sürece blok çakışması olmaz.
+        assert(checked == 79 + 28);
+        std::printf("kayit tamligi: %d kayit (79 host + 28 builtin)\n", checked);
     }
 
     std::printf("test_host_abi: TUM TESTLER GECTI\n");

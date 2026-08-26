@@ -1,0 +1,12 @@
+import {join, normalize, dirname, basename, extension, isAbsolute, separator} from path;
+int main() {
+    string[] parts = ["a", "b", "c"];
+    print(join(parts)); print("|");
+    print(normalize("a//b/../c")); print("|");
+    print(dirname("/a/b/c.txt")); print("|");
+    print(basename("/a/b/c.txt")); print("|");
+    print(extension("/a/b/c.txt")); print("|");
+    print(isAbsolute("/abs")); print("|");
+    print(separator()); print("\n");
+    return 0;
+}

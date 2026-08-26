@@ -1,0 +1,9 @@
+import {write, writeBytes} from stdout;
+int main() {
+    write("merhaba");
+    byte[] b = [0x41, 0x42, 0x43];
+    writeBytes(b);
+    write("!");
+    print("\n");
+    return 0;
+}

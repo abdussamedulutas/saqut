@@ -84,3 +84,56 @@ ffi int     second(date d)                      : DATE_SECOND        from date;
 ffi longint diffMillis(date left, date right)   : DATE_DIFF_MS       from date;
 ffi date?   parse(string iso8601)               : DATE_PARSE         from date;
 ffi string  format(date d, string pattern)      : DATE_FORMAT        from date;
+
+// ── process modülü (süreç kontrolü — #115 Faz 1) ────────────────────────────
+ffi void   exit(int code)             : PROCESS_EXIT   from process;
+ffi string cwd()                      : PROCESS_CWD    from process;
+ffi int    pid()                      : PROCESS_PID    from process;
+ffi void   chdir(string path)         : PROCESS_CHDIR  from process;
+
+// ── stdin / stdout / stderr modülleri (#115 Faz 1) ──────────────────────────
+// Girdi: handle'sız tek atımlık (record-replay önkoşulu). Çıktı: capability'siz,
+// print ile aynı stream; stdout outputSink DAP yönlendirmesine uyar.
+ffi string? readLine()               : STDIN_READ_LINE  from stdin;
+ffi string  readAll()                : STDIN_READ_ALL   from stdin;
+ffi byte[]  readBytes()              : STDIN_READ_BYTES from stdin;
+ffi void    write(string text)       : STDOUT_WRITE       from stdout;
+ffi void    writeBytes(byte[] data)  : STDOUT_WRITE_BYTES from stdout;
+ffi void    write(string text)       : STDERR_WRITE       from stderr;
+ffi void    writeBytes(byte[] data)  : STDERR_WRITE_BYTES from stderr;
+
+// ── path modülü (saf yol işlemleri — #115 Faz 1) ────────────────────────────
+// capability'siz, deterministik. Değişken parametre YOK — join birden çok parça
+// için string[] alır (ürün kararı 2026-08-26). absolute/relative YOK (cwd'ye
+// bağımlı — dış durum; ihtiyaç olursa process::cwd() + join ile string düzeyinde).
+ffi string join(string[] parts)   : PATH_JOIN        from path;
+ffi string normalize(string path) : PATH_NORMALIZE   from path;
+ffi string dirname(string path)   : PATH_DIRNAME     from path;
+ffi string basename(string path)  : PATH_BASENAME    from path;
+ffi string extension(string path) : PATH_EXTENSION   from path;
+ffi bool   isAbsolute(string path): PATH_IS_ABSOLUTE from path;
+ffi string separator()            : PATH_SEPARATOR   from path;
+
+// ── utf8 modülü (saf dönüşüm — #115 Faz 1) ──────────────────────────────────
+ffi byte[] encode(string text) : UTF8_ENCODE from utf8;
+ffi string decode(byte[] data) : UTF8_DECODE from utf8;
+
+// ── fs modülü — dizin yönetimi tamamlaması (#115 Faz 1) ─────────────────────
+// move = renameFile (std::filesystem::rename zaten taşıma). list tek dizin adları
+// (sıralı, yalnız isimler); walk recursive tam yol; modifiedTime epoch-ms longint.
+ffi void      createDirectory(string path)  : FS_CREATE_DIRECTORY from fs;
+ffi void      removeDirectory(string path)  : FS_REMOVE_DIRECTORY from fs;
+ffi bool      isFile(string path)           : FS_IS_FILE          from fs;
+ffi string[]  list(string path)             : FS_LIST             from fs;
+ffi string[]  walk(string path)             : FS_WALK             from fs;
+ffi longint   modifiedTime(string path)     : FS_MODIFIED_TIME    from fs;
+
+// ── os + terminal modülleri (#115 Faz 2, izlenmiş) ──────────────────────────
+// Salt tanılama (name/arch/hostname/user/cpuCount); terminal::isTTY renk çıktısı
+// kararı için stdout'un gerçek terminale bağlı olup olmadığını sorar.
+ffi string osName()     : OS_NAME      from os;
+ffi string osArch()     : OS_ARCH      from os;
+ffi string osHostname() : OS_HOSTNAME  from os;
+ffi string? osUser()    : OS_USER      from os;
+ffi int    osCpuCount() : OS_CPU_COUNT from os;
+ffi bool   isTTY()      : TERMINAL_IS_TTY from terminal;

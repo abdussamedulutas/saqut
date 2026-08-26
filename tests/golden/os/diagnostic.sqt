@@ -1,0 +1,11 @@
+import {osName, osCpuCount} from os;
+import {isTTY} from terminal;
+int main() {
+    print(osName());          // gömülü platform adı ("linux")
+    print("|");
+    print(osCpuCount() > 0);  // pozitif mantıksal çekirdek
+    print("|");
+    print(isTTY());           // golden pipe'ta 0 (deterministik)
+    print("\n");
+    return 0;
+}

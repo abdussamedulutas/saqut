@@ -20,7 +20,8 @@ for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg 
     # test_host_abi gerçek registry'yi çağırır (rt_host_call) — host gövdeleri
     # ve object.cpp gerekir. SAQUT_VERSION normalde CMake'ten gelir.
     # #223: registry built-in metodları src/data/ modüllerinden alır.
-    [ "$t" = "test_host_abi" ] && extra="$ROOT/src/core/utf8.cpp $ROOT/src/vm/object.cpp $ROOT/src/ffi/host_registry.cpp $ROOT/src/ffi/host_functions.cpp $ROOT/src/data/data_registry.cpp $ROOT/src/data/string.cpp $ROOT/src/data/array.cpp $ROOT/src/data/struct.cpp $ROOT/src/data/date.cpp -DSAQUT_VERSION=\"test\""
+    # Host gövdeleri src/ffi/functions/ altında bölünmüştür (organizasyon, #115).
+    [ "$t" = "test_host_abi" ] && extra="$ROOT/src/core/utf8.cpp $ROOT/src/vm/object.cpp $ROOT/src/ffi/host_registry.cpp $ROOT/src/ffi/host_functions.cpp $ROOT/src/ffi/functions/math.cpp $ROOT/src/ffi/functions/fs.cpp $ROOT/src/ffi/functions/sys.cpp $ROOT/src/ffi/functions/date.cpp $ROOT/src/ffi/functions/core.cpp $ROOT/src/ffi/functions/process.cpp $ROOT/src/ffi/functions/io.cpp $ROOT/src/ffi/functions/path.cpp $ROOT/src/ffi/functions/utf8.cpp $ROOT/src/ffi/functions/os.cpp $ROOT/src/data/data_registry.cpp $ROOT/src/data/string.cpp $ROOT/src/data/array.cpp $ROOT/src/data/struct.cpp $ROOT/src/data/date.cpp -DSAQUT_VERSION=\"test\""
     "$CXX" "${FLAGS[@]}" "$ROOT/tests/$t.cpp" $extra -o "/tmp/saqut_$t"
     "/tmp/saqut_$t"
 done

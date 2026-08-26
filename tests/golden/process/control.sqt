@@ -1,0 +1,10 @@
+import {exit, cwd, pid, chdir} from process;
+int main() {
+    string wd = cwd();
+    print(wd != "");        // cwd dolu
+    print("|");
+    print(pid() > 0);       // pid pozitif
+    print("|");
+    print("\n");
+    return 0;
+}

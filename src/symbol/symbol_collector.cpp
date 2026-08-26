@@ -421,7 +421,7 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
     if (!catalog.hasModule(imp->sourcePath)) {
         diag_.report("E_IMPORT_UNKNOWN", imp->loc,
             "unknown module '" + imp->sourcePath + "'",
-            "known embedded modules: math, caps, fs, sys, date");
+            "known embedded modules: math, core, fs, sys, date, process, stdin, stdout, stderr, path, utf8, os, terminal");
         return;
     }
 

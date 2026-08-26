@@ -1,0 +1,30 @@
+import {createDirectory, isDirectory, isFile, list, walk, removeDirectory, createFile, removeFile, existsFile, modifiedTime} from fs;
+int main() {
+    string d = "/tmp/saqut_fsd_golden";
+    string sub = "/tmp/saqut_fsd_golden/sub";
+    string f1 = "/tmp/saqut_fsd_golden/a.txt";
+    string f2 = "/tmp/saqut_fsd_golden/sub/b.txt";
+    // önceki çalışmadan artık yoksa (idempotent temizlik)
+    if (isFile(f1)) { removeFile(f1); }
+    if (isFile(f2)) { removeFile(f2); }
+    if (isDirectory(sub)) { removeDirectory(sub); }
+    if (isDirectory(d)) { removeDirectory(d); }
+    createDirectory(d);
+    print(isDirectory(d));
+    createFile(f1);
+    print(isFile(f1));
+    createDirectory(sub);
+    createFile(f2);
+    print(existsFile(f2));
+    string[] l = list(d);
+    print(l.length());
+    string[] w = walk(d);
+    print(w.length());
+    print(modifiedTime(f1) > 0);
+    // temizlik
+    removeFile(f1); removeFile(f2);
+    removeDirectory(sub);
+    removeDirectory(d);
+    print("\n");
+    return 0;
+}

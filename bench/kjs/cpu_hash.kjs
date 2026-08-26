@@ -1,0 +1,45 @@
+// ============================================================================
+// bench/kjs/cpu_hash.kjs — CPU-yoğun FNV-1a benchmark (KJS / KDE JavaScript)
+//
+// saQut referansı: bench/sqt/cpu_hash.sqt ile birebir aynı algoritma.
+// KJS 5.96 (ES5 tabanlı, JavaScriptCore kökenli değil) şunları desteklemez:
+//   let/const (var gerekir), arrow fonksiyon, Int32Array/typed array,
+//   template literal, performance.now (Date.now kullanılır).
+// 32-bit wrap semantiği Math.imul + |0 ile sağlanır (Node sürümüyle aynı).
+// CHECKSUM signed int32'dir (saQut/Node çıktısıyla eşleşir).
+// KJS debug build olabilir — koşumda stderr (LEAK: ... ) yok sayılır.
+// ============================================================================
+
+var SIZE = 2048;
+var ROUNDS = 3000;
+var FNV_OFFSET = -2128831035;   // signed int32 karşılığı (= 2166136261)
+var FNV_PRIME = 16777619;
+
+function main() {
+    var buf = [];
+    var x = 123456789 | 0;
+    for (var i = 0; i < SIZE; i++) {
+        x = (Math.imul(x, 1103515245) + 12345) | 0;
+        buf.push(x);
+    }
+
+    var t0 = Date.now();
+    var acc = 0 | 0;
+    for (var r = 0; r < ROUNDS; r++) {
+        // basis değişkende tutulur — literal-XOR operand yolundaki saQut
+        // parser hatasından (#230) bağımsız tutmak için (Node sürümündeki
+        // yorumla aynı); KJS'te aynı form doğru çalışır.
+        var basis = -2128831035;
+        var h = (basis ^ r) | 0;
+        for (var i = 0; i < SIZE; i++) {
+            h = Math.imul(h ^ buf[i], FNV_PRIME);
+        }
+        acc = (acc ^ h) | 0;
+    }
+    var ms = Date.now() - t0;
+
+    print("CHECKSUM=" + acc);
+    print("ELAPSED_MS=" + ms);
+}
+
+main();

@@ -1,0 +1,73 @@
+// ============================================================================
+// saQut benchmark — bellek-yoğun: selection sort + tahsis churn (bench/sqt/)
+// ============================================================================
+//
+// Her turda yeni bir rastgele int[] tahsis edilir (GC baskısı yaratır,
+// --gc-stats ile gözlenebilir), optimize edilmemiş O(n²) selection sort
+// ile sıralanır ve atılır. Array index okuma/yazma + referans üzerinden
+// yerinde mutasyon + sürekli tahsis/atma deseni bellek yolunu zorlar.
+//
+// Selection sort bilinçli seçim: hız için optimize EDİLMEMIŞ, bol
+// karşılaştırma + rastgele konuma swap. Algoritma karmaşıklığı kasıtlıdır.
+//
+// Determinizm sözleşmesi (cross-language):
+//   - int = 32-bit, taşma tanımlı 2's-complement wrap (ADR-040).
+//   - Doldurma: LCG x = x*1103515245 + 12345, seed 987654321.
+//   - Selection sort `<` sıkı karşılaştırma ile İLK minimumu seçer —
+//     eşit elemanlarda bile tüm dillerde aynı sonucu üretir (stabil değil,
+//     deterministik).
+//   - CHECKSUM = her tur sonunda arr[0] ^ arr[n/2] ^ arr[n-1] birikimi.
+//
+// Parametre ayarı: size/rounds sabitleri. Timeout zorunlu (runner tarafı).
+// ============================================================================
+
+import {now, diffMillis} from date;
+
+int main() {
+    int size = 1200;
+    int rounds = 15;
+    int seed = 987654321;
+
+    date t0 = now();
+    int acc = 0;
+    for (int r = 0; r < rounds; r++) {
+
+        // ── Rastgele diziyi üret (her tur yeni tahsis) ──────────────────────
+        int[] arr = [];
+        for (int i = 0; i < size; i++) {
+            seed = seed * 1103515245 + 12345;
+            arr.push(seed);
+        }
+
+        // ── Selection sort (bilinçli olarak optimize edilmemiş) ─────────────
+        for (int i = 0; i < size - 1; i++) {
+            int minIdx = i;
+            for (int j = i + 1; j < size; j++) {
+                if (arr[j] < arr[minIdx]) {
+                    minIdx = j;
+                }
+            }
+            if (minIdx != i) {
+                int tmp = arr[i];
+                arr[i] = arr[minIdx];
+                arr[minIdx] = tmp;
+            }
+        }
+
+        // ── Sıralanmış uçlardan checksum katkısı ────────────────────────────
+        acc = acc ^ arr[0];
+        acc = acc ^ arr[size / 2];
+        acc = acc ^ arr[size - 1];
+    }
+    date t1 = now();
+
+    longint ms = diffMillis(t1, t0);
+
+    print("CHECKSUM=");
+    print(acc);
+    print("\n");
+    print("ELAPSED_MS=");
+    print(ms);
+    print("\n");
+    return 0;
+}

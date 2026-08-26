@@ -47,8 +47,9 @@ struct Symbol {
     Scope*                      scope    = nullptr;
     bool                        isBuiltin = false;
     std::vector<std::string>    paramNames; // Function: parametre isimleri (type.paramTypes ile sıra eşleşir)
-    // ADR-034 (#107): FFI host fonksiyonu ise sayısal host id (hostFnIndex),
-    // değilse -1. IRGen bunu CALLHOST'un sayısal dispatch'ine taşır.
+    // ADR-034 (#107): FFI host fonksiyonu ise sayısal host id
+    // (hostEntryIndex kHostFnBase toplamıyla, #229), değilse -1. IRGen bunu
+    // CALLHOST'un sayısal dispatch'ine taşır.
     int                         hostFnId = -1;
     // FFI sembolünün ait olduğu gömülü modül adı ("math"); import çözümü için.
     std::string                 ffiModule;

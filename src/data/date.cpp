@@ -150,22 +150,24 @@ static int date_format(HostCallFrame* f) {
 // bildirimleriyle eşleşir) — ama artık gövdeleri FFI katmanında değil, tipin
 // kendi modülünde durur. Registry sembolik id ile bağlar.
 const std::vector<DateFn>& dataDateFunctions() {
+    // #229: tam kayıt — arity/retKind/flags thunk'ının yanında (kHostMeta
+    // çapraz tablosu kalktı). Hepsi saf hesap (HOST_PURE).
     static const std::vector<DateFn> fns = {
-        {"DATE_FROM_EPOCH_MS",   date_fromEpochMillis},
-        {"DATE_TO_EPOCH_MS",     date_toEpochMillis},
-        {"DATE_ADD_DAYS",        date_addDays},
-        {"DATE_ADD_HOURS",       date_addHours},
-        {"DATE_ADD_MINUTES",     date_addMinutes},
-        {"DATE_ADD_SECONDS",     date_addSeconds},
-        {"DATE_YEAR",            date_year},
-        {"DATE_MONTH",           date_month},
-        {"DATE_DAY",             date_day},
-        {"DATE_HOUR",            date_hour},
-        {"DATE_MINUTE",          date_minute},
-        {"DATE_SECOND",          date_second},
-        {"DATE_DIFF_MS",         date_diffMillis},
-        {"DATE_PARSE",           date_parse},
-        {"DATE_FORMAT",          date_format},
+        {"DATE_FROM_EPOCH_MS",   1, HostKind::LongInt, HOST_PURE, date_fromEpochMillis},
+        {"DATE_TO_EPOCH_MS",     1, HostKind::Date,    HOST_PURE, date_toEpochMillis},
+        {"DATE_ADD_DAYS",        2, HostKind::Date,    HOST_PURE, date_addDays},
+        {"DATE_ADD_HOURS",       2, HostKind::Date,    HOST_PURE, date_addHours},
+        {"DATE_ADD_MINUTES",     2, HostKind::Date,    HOST_PURE, date_addMinutes},
+        {"DATE_ADD_SECONDS",     2, HostKind::Date,    HOST_PURE, date_addSeconds},
+        {"DATE_YEAR",            1, HostKind::Int,     HOST_PURE, date_year},
+        {"DATE_MONTH",           1, HostKind::Int,     HOST_PURE, date_month},
+        {"DATE_DAY",             1, HostKind::Int,     HOST_PURE, date_day},
+        {"DATE_HOUR",            1, HostKind::Int,     HOST_PURE, date_hour},
+        {"DATE_MINUTE",          1, HostKind::Int,     HOST_PURE, date_minute},
+        {"DATE_SECOND",          1, HostKind::Int,     HOST_PURE, date_second},
+        {"DATE_DIFF_MS",         2, HostKind::LongInt, HOST_PURE, date_diffMillis},
+        {"DATE_PARSE",           1, HostKind::Date,    HOST_PURE, date_parse},
+        {"DATE_FORMAT",          2, HostKind::Str,     HOST_PURE, date_format},
     };
     return fns;
 }

@@ -23,10 +23,15 @@
 
 #include "ffi/host_abi.hpp"
 
-// Bir date host fonksiyonu: sembolik id + gövde.
+// Bir date host fonksiyonu: thunk'ının yanında TAM kayıt.
+// #229: arity/retKind/flags burada durur (kHostMeta çapraz tablosu yok) —
+// host_functions.cpp'deki gömülü tabloyla aynı tamlık.
 // (Built-in metod DEĞİL — root.sqt'teki `ffi` bildirimleriyle eşleşir.)
 struct DateFn {
     const char* symbolicId;
+    int         arity;
+    HostKind    retKind;
+    uint8_t     flags;
     HostThunk   thunk;
 };
 

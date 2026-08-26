@@ -46,11 +46,11 @@ bool wantStr(HostCallFrame* f, int idx, const char* method) {
     // Tip denetleyici normalde engeller; ABI sözleşmesi backend'lere de açık
     // olduğu için burada da savunma var (sessiz bozulma yerine açık hata).
     if (idx >= f->argc || !f->args) {
-        f->err.set(std::string("string::") + method + " — eksik argüman", "E_BUILTIN");
+        f->err.set(std::string("string::") + method + " — eksik argüman", "E_HOST");
         return false;
     }
     if (f->args[idx].kind == HostKind::Str) return true;
-    f->err.set(std::string("string::") + method + " — expected string", "E_BUILTIN");
+    f->err.set(std::string("string::") + method + " — expected string", "E_HOST");
     return false;
 }
 
@@ -87,7 +87,7 @@ int str_trim(HostCallFrame* f) {
 int str_split(HostCallFrame* f) {
     if (!wantStr(f, 0, "split") || !wantStr(f, 1, "split")) return 1;
     if (!f->env || !f->env->heap) {
-        f->err.set("string::split — heap yok", "E_BUILTIN");
+        f->err.set("string::split — heap yok", "E_HOST");
         return 1;
     }
     // Kopya ZORUNLU: aşağıda receiver'dan parça üretirken heap tahsisi
@@ -123,7 +123,7 @@ int str_substring(HostCallFrame* f) {
     int from = (int)hostAsI64(f->args[1]);
     int len  = (int)hostAsI64(f->args[2]);
     if (from < 0 || from > (int)utf8::codePointCount(s)) {
-        f->err.set("string::substring — index out of bounds", "E_BUILTIN");
+        f->err.set("string::substring — index out of bounds", "E_HOST");
         return 1;
     }
     if (len < 0) len = 0;
@@ -166,7 +166,7 @@ int str_charAt(HostCallFrame* f) {
     const std::string& s = hostAsString(f->args[0]);
     int idx = (int)hostAsI64(f->args[1]);
     if (idx < 0 || idx >= (int)utf8::codePointCount(s)) {
-        f->err.set("string::charAt — index out of bounds", "E_BUILTIN");
+        f->err.set("string::charAt — index out of bounds", "E_HOST");
         return 1;
     }
     hostSetRetString(*f, utf8::charAt(s, (size_t)idx));
@@ -212,7 +212,7 @@ int str_endsWith(HostCallFrame* f) {
 int str_toBuffer(HostCallFrame* f) {
     if (!wantStr(f, 0, "toBuffer")) return 1;
     if (!f->env || !f->env->heap) {
-        f->err.set("string::toBuffer — heap yok", "E_BUILTIN");
+        f->err.set("string::toBuffer — heap yok", "E_HOST");
         return 1;
     }
     const std::string& text = hostAsString(f->args[0]);

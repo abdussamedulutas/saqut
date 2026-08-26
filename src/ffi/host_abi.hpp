@@ -123,7 +123,7 @@ struct HostError {
     // std::string burada güvenli çünkü HostError JIT register'ında taşınmaz,
     // yalnızca HostCallFrame içinden pointer'la erişilir.
     std::string message;
-    std::string code;     // "E_FFI" | "E_BUILTIN"
+    std::string code;     // "E_HOST"
 
     bool failed() const { return !message.empty(); }
     void clear() { message.clear(); code.clear(); }
@@ -173,10 +173,11 @@ struct HostCallFrame {
     // ret.p ona işaret eder. Çağıran değeri okuduktan sonra frame'i reset
     // eder ve nesne ölür. Tek çağrılık ömür — sahiplik belirsizliği yok.
     //
-    // NEDEN GC DEĞİL: GC-yönetimli string doğru nihai çözümdür, fakat JIT
-    // register'larındaki referanslar bugün kök gösterilemiyor (shadow stack
-    // yok) — bkz. Heap::allocString TODO'su. Bu tampon o gelene kadar
-    // güvenli ve sızıntısız ara çözümdür.
+    // NEDEN GC DEĞİL: GC-yönetimli string doğru nihai çözümdür; JIT tarafında
+    // shadow stack (#228) kökleri görünür kılar, VM tarafı heap'i kökler.
+    // Bu tampon yine de dönüş nesnesinin çağıran onu okuyana dek canlı
+    // kalmasını tek çağrılık sözleşmeyle garanti eder — sahiplik belirsizliği
+    // yok, çağrı başına tahsis yok.
     // Dönüş tamponu OPAK tutulur: host_abi.hpp backend-nötr kalmalı ve
     // StringObject/DecimalValue (VM tipleri) buraya sızmamalı. Tamponu
     // host_bridge.hpp sahiplenir ve bu pointer üzerinden bağlar.
@@ -206,9 +207,12 @@ using HostThunk = int (*)(HostCallFrame* f);
 // ----------------------------------------------------------------------------
 // HostEntry — registry'deki tek kayıt.
 //
-// hostFnTable() (44 kayıt) ve BuiltinMethodRegistry (26 kayıt) bu tek tabloda
-// birleşir. CALLHOST artık functionName string'ine bakmaz — intValue bu
-// tablonun indeksidir.
+// hostFnTable() (gömülü host fonksiyonları) ve dataAllMethods() (builtin
+// metodlar) bu tek tabloda birleşir (#229: kHostMeta çapraz tablosu kalktı).
+// Kesin kayıt sayısı yoruma yazılmaz — her FFI eklenişinde bayatlardı;
+// gerçek sayı için host_registry içindeki birleştiriciye ya da
+// test_host_abi'nin tamlık doğrulamasına bak. CALLHOST artık functionName
+// string'ine bakmaz — intValue bu tablonun indeksidir.
 // ----------------------------------------------------------------------------
 // Bayrakların anlamı BACKEND'İN SORACAĞI soruya göre tanımlıdır, "fonksiyon
 // matematiksel olarak saf mı" sorusuna göre değil.

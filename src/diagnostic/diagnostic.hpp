@@ -134,6 +134,7 @@ inline const std::vector<DiagInfo>& diagnosticCatalog() {
         {"W003", DiagLevel::Warning, "Unreachable (dead) code", "unreachable code"},
         {"W004", DiagLevel::Warning, "Implicit numeric widening", "implicit numeric widening from {0} to {1}"},
         {"W006", DiagLevel::Warning, "Deprecated builtin call syntax (ADR-033)", "deprecated builtin call syntax"},
+        {"W007", DiagLevel::Warning, "Deprecated capability requirement (ADR-043)", "requires '{0}' is ignored — capabilities were removed (ADR-043)"},
         {"E901", DiagLevel::Error,   "Syntax error: unexpected token", "unexpected token"},
         {"E902", DiagLevel::Error,   "Syntax error: expected type name after 'as'", "expected type name after 'as'"},
         {"E903", DiagLevel::Error,   "Syntax error: expected member name", "expected member name"},

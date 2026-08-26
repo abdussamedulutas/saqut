@@ -1,12 +1,12 @@
-import {writeFile, append, readFile, exists, remove} from fs;
+import {writeFile, appendFile, readFile, existsFile, removeFile} from fs;
 
 void main() {
     string path = "/tmp/saqut_fs_test_append.txt";
-    print(exists(path));
+    print(existsFile(path));
     writeFile(path, "a".toBuffer());
-    append(path, "b".toBuffer());
+    appendFile(path, "b".toBuffer());
     print(readFile(path).toString());
-    print(exists(path));
-    remove(path);
-    print(exists(path));
+    print(existsFile(path));
+    removeFile(path);
+    print(existsFile(path));
 }

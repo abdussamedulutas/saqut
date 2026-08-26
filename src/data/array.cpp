@@ -41,13 +41,13 @@ ArrayObject* asArray(HostCallFrame* f, int idx, const char* method) {
     // sınır dışıdır. Tip denetleyici bunu normalde engeller, ama ABI'nin
     // sözleşmesi backend'lere de açıktır — sessiz bellek hatası yerine açık hata.
     if (idx >= f->argc || !f->args) {
-        f->err.set(std::string(method) + " — eksik argüman", "E_BUILTIN");
+        f->err.set(std::string(method) + " — eksik argüman", "E_HOST");
         return nullptr;
     }
     const HostSlot& s = f->args[idx];
     if (s.kind != HostKind::Ref || !s.p ||
         static_cast<Object*>(s.p)->type != ObjectType::Array) {
-        f->err.set(std::string(method) + " — expected array", "E_BUILTIN");
+        f->err.set(std::string(method) + " — expected array", "E_HOST");
         return nullptr;
     }
     return static_cast<ArrayObject*>(s.p);
@@ -57,7 +57,7 @@ int arr_toString(HostCallFrame* f) {
     auto* arr = asArray(f, 0, "toString");
     if (!arr) return 1;
     if (arr->elemKind != ArrayElemKind::Byte) {
-        f->err.set("byte[]::toString — expected byte[]", "E_BUILTIN");
+        f->err.set("byte[]::toString — expected byte[]", "E_HOST");
         return 1;
     }
     hostSetRetString(*f, utf8::fromBytes(std::string_view(
@@ -201,7 +201,7 @@ int arr_pop(HostCallFrame* f) {
     if (!arr) return 1;
     int n = dataArraySize(arr);
     if (n == 0) {
-        f->err.set("pop on empty array", "E_BUILTIN");
+        f->err.set("pop on empty array", "E_HOST");
         return 1;
     }
     Value v = dataArrayElemAt(arr, n - 1);
@@ -214,12 +214,12 @@ int arr_insert(HostCallFrame* f) {
     auto* arr = asArray(f, 0, "insert");
     if (!arr) return 1;
     if (f->args[1].kind != HostKind::Int) {
-        f->err.set("insert — index must be int", "E_BUILTIN");
+        f->err.set("insert — index must be int", "E_HOST");
         return 1;
     }
     int idx = (int)hostAsI64(f->args[1]);
     if (idx < 0 || idx > dataArraySize(arr)) {
-        f->err.set("insert — index out of bounds", "E_BUILTIN");
+        f->err.set("insert — index out of bounds", "E_HOST");
         return 1;
     }
     insertElem(arr, idx, fromHostSlot(f->args[2]));
@@ -231,12 +231,12 @@ int arr_remove(HostCallFrame* f) {
     auto* arr = asArray(f, 0, "remove");
     if (!arr) return 1;
     if (f->args[1].kind != HostKind::Int) {
-        f->err.set("remove — index must be int", "E_BUILTIN");
+        f->err.set("remove — index must be int", "E_HOST");
         return 1;
     }
     int idx = (int)hostAsI64(f->args[1]);
     if (idx < 0 || idx >= dataArraySize(arr)) {
-        f->err.set("remove — index out of bounds", "E_BUILTIN");
+        f->err.set("remove — index out of bounds", "E_HOST");
         return 1;
     }
     Value v = dataArrayElemAt(arr, idx);
@@ -248,7 +248,7 @@ int arr_remove(HostCallFrame* f) {
 int arr_slice(HostCallFrame* f) {
     auto* arr = asArray(f, 0, "slice");
     if (!arr) return 1;
-    if (!f->env || !f->env->heap) { f->err.set("slice — heap yok", "E_BUILTIN"); return 1; }
+    if (!f->env || !f->env->heap) { f->err.set("slice — heap yok", "E_HOST"); return 1; }
 
     int n    = dataArraySize(arr);
     int from = (f->args[1].kind == HostKind::Int) ? (int)hostAsI64(f->args[1]) : 0;
@@ -276,10 +276,10 @@ int arr_concat(HostCallFrame* f) {
     auto* b = asArray(f, 1, "concat");
     if (!b) return 1;
     if (b->elemKind != a->elemKind) {
-        f->err.set("concat: element kind mismatch", "E_BUILTIN");
+        f->err.set("concat: element kind mismatch", "E_HOST");
         return 1;
     }
-    if (!f->env || !f->env->heap) { f->err.set("concat — heap yok", "E_BUILTIN"); return 1; }
+    if (!f->env || !f->env->heap) { f->err.set("concat — heap yok", "E_HOST"); return 1; }
 
     int na = dataArraySize(a), nb = dataArraySize(b);
     auto* dst = f->env->heap->allocArray(na + nb, a->elemKind);

@@ -1,0 +1,48 @@
+// fs_demo — yeni fs isim yüzeyi demo/testi (#115 ürün kararı 2026-08-25)
+// Fiil+özne isimlendirme: readFile/writeFile/appendFile/existsFile/removeFile/
+// createFile/copyFile/renameFile + meta sorguları isEmpty/isDirectory/fileSize.
+// Rename import örneği: `import {existsFile as varMi}` — kullanıcı takma adı.
+import {createFile, writeFile, readFile, existsFile, isEmpty, fileSize, copyFile, renameFile, isDirectory, removeFile} from fs;
+import {existsFile as varMi} from fs;
+
+void report(bool b) { if (b) { print(1); } else { print(0); } }
+
+int main() {
+    string path = "/tmp/saqut_fs_demo.txt";
+    if (existsFile(path)) { removeFile(path); }
+
+    createFile(path);
+    report(existsFile(path));   // 1
+    report(isEmpty(path));      // 1 (boş)
+    print(fileSize(path));      // 0
+
+    // string -> byte[] için: saQut byte[] string'in ham baytları. Yazma için
+    // byte[] serisi: örnek dosya içeriği ASCII baytlarıyla.
+    byte[] data = [104, 101, 108, 108, 111];  // "hello"
+    writeFile(path, data);
+    print(fileSize(path));      // 5
+    byte[] d = readFile(path);
+    print(d.length());          // 5
+
+    string path2 = "/tmp/saqut_fs_demo2.txt";
+    if (existsFile(path2)) { removeFile(path2); }
+    renameFile(path, path2);
+    report(!existsFile(path));  // 0 (eski gitti)
+    report(existsFile(path2));  // 1
+
+    string path3 = "/tmp/saqut_fs_demo3.txt";
+    if (existsFile(path3)) { removeFile(path3); }
+    copyFile(path2, path3);
+    report(!isEmpty(path2));    // 1 (dolu)
+    print(fileSize(path2));     // 5
+    print(fileSize(path3));     // 5 (kopya)
+
+    report(isDirectory("/tmp")); // 1
+    report(!isDirectory(path3)); // 1 (dosya)
+
+    report(varMi(path3));       // 1 (rename import takma adı)
+
+    removeFile(path2);
+    removeFile(path3);
+    return 0;
+}

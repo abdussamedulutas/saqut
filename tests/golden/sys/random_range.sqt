@@ -1,7 +1,7 @@
 import {random, randomInt} from sys;
 
 void main() {
-    float r = random();
+    double r = random();
     print(r >= 0.0 && r < 1.0);
     int i = randomInt(5, 10);
     print(i >= 5 && i < 10);

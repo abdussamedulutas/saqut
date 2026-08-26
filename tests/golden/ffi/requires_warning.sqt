@@ -1,0 +1,5 @@
+// ADR-043: capability enforcement kaldırıldı; requires grameri parse edilir
+// ve DERLEME ZAMANI uyarısı verir (W007) — program yine derlenir/çalışır.
+// Runtime uyarısı yok (stdout kirlenmez).
+ffi string version() : CORE_VERSION from core requires core;
+int main() { print(42); return 0; }

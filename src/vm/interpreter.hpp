@@ -179,12 +179,8 @@ private:
                          const std::string& code = "",
                          int line = 0, int col = 0);
 
-    // Host (C++) fonksiyon çağrısı — şu an sadece "print" destekli
-    void executeHostFunction(const std::string& name,
-                             const std::vector<Value>& slots,
-                             const std::vector<int>&   argSlots);
-
-    // Built-in metod dispatch — sabit runtimeId ile O(1) tablo lookup
+    // #229: legacy executeHostFunction silindi — tüm host çağrıları
+    // CALLHOST'un tek index-tabanlı yolundan rt_host_call'a gider.
 
     // Mevcut callStack_'i gezerek stacktrace string'i üretir.
     // pendingThrow_ set edilmeden ÖNCE çağrılmalı (unwind olmadan).

@@ -1327,59 +1327,38 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
 
         // ── FFI ───────────────────────────────────────────────────────────
         case Opcode::CALLHOST: {
-            if (vmTrace_) [[unlikely]] ++vmTrace_->vmFfiCalls;
-            if (instr.functionName == "__builtin_method__") {
-                if (vmTrace_) [[unlikely]] ++vmTrace_->vmBuiltinCalls;
-                // #223: built-in metodlar da host fonksiyonlarıyla AYNI yoldan
-                // çağrılır (rt_host_call). Ayrı bir dispatch mekanizması yok;
-                // gövdeler src/data/ modüllerinde, imzalarıyla aynı kayıtta.
-                hostScratch_.reset();
-                hostScratch_.slots.reserve(instr.argSlots.size());
-                for (int s : instr.argSlots)
-                    hostScratch_.slots.push_back(toHostSlot(frame.slots[s], hostScratch_));
+            // #229: TEK index-tabanlı yol — functionName (print/__ffi__/
+            // __builtin_method__) yalnız IR dump etiketidir, dispatch ona
+            // bakmaz. Her aile (host fonksiyonu, builtin metod, print) aynı
+            // rt_host_call girişinden geçer; hata da tek koddan akar (E_HOST).
+            if (vmTrace_) [[unlikely]] {
+                ++vmTrace_->vmFfiCalls;
+                // Bench ayrımı (JIT ile aynı blok mantığı): builtin aralığı.
+                if (instr.intValue >= kBuiltinBase && instr.intValue < kCoreBase)
+                    ++vmTrace_->vmBuiltinCalls;
+            }
+            hostScratch_.reset();
+            hostScratch_.slots.reserve(instr.argSlots.size());
+            for (int s : instr.argSlots)
+                hostScratch_.slots.push_back(toHostSlot(frame.slots[s], hostScratch_));
 
-                HostEnv benv{&programArgs_, &heap_, nullptr};
-                HostCallFrame& bf = hostFrame_;
-                bf.reset();
-                bf.args     = hostScratch_.slots.data();
-                bf.argc     = static_cast<int32_t>(hostScratch_.slots.size());
-                bf.env      = &benv;
-                bf.retOwner = &hostRetOwner_;
+            // #229 (DAP riski): CORE_PRINT thunk'ı env->outputSink'i kullanır.
+            // Bağlı değilse (boş sink) nullptr gider — thunk stdout'a yazar;
+            // bağlıysa (DAP) adres gider, çıktı protokole yönlenir.
+            HostEnv benv{&programArgs_, &heap_, outputSink_ ? &outputSink_ : nullptr};
+            HostCallFrame& bf = hostFrame_;
+            bf.reset();
+            bf.args     = hostScratch_.slots.data();
+            bf.argc     = static_cast<int32_t>(hostScratch_.slots.size());
+            bf.env      = &benv;
+            bf.retOwner = &hostRetOwner_;
 
-                if (rt_host_call(instr.intValue, &bf) != 0) {
-                    pendingThrow_ = makeErrorValue(bf.err.message,
-                                                   bf.err.code.empty() ? "E_BUILTIN" : bf.err.code,
-                                                   instr.sourceLine, instr.sourceCol);
-                } else if (instr.dest >= 0) {
-                    callStack_.back().slots[instr.dest] = fromHostSlot(bf.ret);
-                }
-            } else if (instr.functionName == "__ffi__") {
-                // ADR-034 (#107): sayısal host id ile FFI dispatch
-                // #222: tek giriş noktası (rt_host_call). Exception artık
-                // sınırı geçmiyor — hata f.err üzerinden dönüyor. VM ve her
-                // backend aynı yolu kullanır.
-                hostScratch_.reset();
-                hostScratch_.slots.reserve(instr.argSlots.size());
-                for (int s : instr.argSlots)
-                    hostScratch_.slots.push_back(toHostSlot(frame.slots[s], hostScratch_));
-
-                HostEnv env{&programArgs_, &heap_, nullptr};
-                HostCallFrame& f = hostFrame_;
-                f.reset();
-                f.args     = hostScratch_.slots.data();
-                f.argc     = static_cast<int32_t>(hostScratch_.slots.size());
-                f.env      = &env;
-                f.retOwner = &hostRetOwner_;
-
-                if (rt_host_call(instr.intValue, &f) != 0) {
-                    pendingThrow_ = makeErrorValue(f.err.message,
-                                                   f.err.code.empty() ? "E_FFI" : f.err.code,
-                                                   instr.sourceLine, instr.sourceCol);
-                } else if (instr.dest >= 0) {
-                    callStack_.back().slots[instr.dest] = fromHostSlot(f.ret);
-                }
-            } else {
-                executeHostFunction(instr.functionName, frame.slots, instr.argSlots);
+            if (rt_host_call(instr.intValue, &bf) != 0) {
+                pendingThrow_ = makeErrorValue(bf.err.message,
+                                               bf.err.code.empty() ? "E_HOST" : bf.err.code,
+                                               instr.sourceLine, instr.sourceCol);
+            } else if (instr.dest >= 0) {
+                callStack_.back().slots[instr.dest] = fromHostSlot(bf.ret);
             }
             break;
         }
@@ -1459,40 +1438,8 @@ int Interpreter::run() {
     return lastReturnValue_;
 }
 
-void Interpreter::executeHostFunction(const std::string&       name,
-                                       const std::vector<Value>& slots,
-                                       const std::vector<int>&   argSlots) {
-    if (name == "print") {
-        if (!argSlots.empty()) {
-            const Value& val = slots[argSlots[0]];
-            // Faz 7 (#105): DAP modunda çıktı sink üzerinden output event'ine
-            // gider — protokol stdout'una çıplak bayt sızmaz.
-            std::string text = val.toString();
-            if (outputSink_) outputSink_(text);
-            else             std::cout << text << std::flush;
-        }
-        return;
-    }
-    throw std::runtime_error("unknown host function '" + name + "'");
-}
-
-// ── Built-in Method Dispatch ─────────────────────────────────────────────────
-//
-// runtimeId, BuiltinMethodRegistry::init() içinde metodların tanımlanma sırasıyla
-// örtüşmeli. Sıra: length(0), push(1), pop(2), insert(3), remove(4), slice(5),
-// reverse(6), concat(7), contains(8), indexOf(9), clear(10),
-// sv:length(11), sv:upper(12), sv:lower(13), sv:trim(14), sv:split(15),
-// sv:substring(16), sv:replace(17), sv:repeat(18), sv:charAt(19),
-// sv:indexOf(20), sv:contains(21), sv:startsWith(22), sv:endsWith(23),
-// st:toJson(24), st:dump(25)
-//
-// Her handler: args[0] = receiver, args[1..] = diğer argümanlar.
-
-// #223: built-in metod gövdeleri src/data/ modüllerine taşındı.
-// Buradaki 398 satırlık switch, imzaları builtin_methods.hpp'de duran
-// metodların gövdelerini tutuyordu ve ikisi elle korunan bir runtimeId sıra
-// sözleşmesiyle bağlıydı. Artık her metodun id'si, imzası ve gövdesi tek
-// kayıtta (data/data_type.hpp: DataMethod) — ayrılamazlar.
-//
-// VM built-in metodları host fonksiyonlarıyla aynı yoldan çağırır:
-// rt_host_call(kBuiltinBase + id, frame).
+// #229: legacy executeHostFunction("print") yolu silindi — print artık
+// registry'de sıradan bir kayıttır (CORE_PRINT thunk'ı) ve CALLHOST'un tek
+// index-tabanlı yolundan geçer (yukarıdaki case Opcode::CALLHOST). Aynı
+// yol tüm host fonksiyonlarını ve built-in metodları taşır (rt_host_call,
+// kBuiltinBase + id); gövdeler src/data/ modüllerinde DataMethod kaydında.

@@ -1,10 +1,11 @@
 // ============================================================================
 // saQut FFI — Birleşik Host Registry (gerçekleme)
 //
-// ADIM 2 KURALI (#222): mevcut gövdeler DEĞİŞMEZ. Bu dosya onları yeni ABI'ye
-// SARAR. Böylece adım 2'de davranış değişikliği olmaz ve golden testler
-// sarmalayıcının doğruluğunu kanıtlar. Gövdelerin kendisi adım 3–4'te
-// yeni imzaya taşınır.
+// #229 kayıt birliği: hostRegistry() yalnız BİRLEŞTİRİCİDİR — gömülü host
+// fonksiyonlarının (math/fs/sys/date_now/core) ve built-in metodların TEK
+// tanımı thunk'ının yanında tam HostEntry olarak kaynak tablolarında durur
+// (host_functions.cpp / data/date.cpp / data/*.cpp). Bu dosya onları tek
+// indeks uzayına yerleştirir ve rt_host_call tek giriş noktasını sağlar.
 // ============================================================================
 
 #include "ffi/host_registry.hpp"
@@ -17,128 +18,43 @@
 #include "data/date.hpp"
 #include "ffi/host_functions.hpp"
 
-namespace {
-
-// ── Kayıt metadata'sı ────────────────────────────────────────────────────────
+// ── Birleştirici ─────────────────────────────────────────────────────────────
 //
-// Dönüş türü ve bayraklar. İkisi de gövdeden OTOMATİK türetilemez:
-//   - retKind: eski gövde Value döner, statik türü kaybolmuştur (fs::exists
-//     Value::fromInt döner ama root.sqt'te `bool`, sys::sleep `void`).
-//   - flags:   gövdenin HostEnv'e dokunup dokunmadığı ancak okunarak bilinir.
+// #229: kayıt birliği — çapraz metadata tablosu (kHostMeta) ve legacy şekil
+// yok. Host fonksiyonlarının TEK tanımı hostFnTable()'da (math/fs/sys/
+// date_now/core) ve dataDateFunctions()'da (date 15) durur; ikisi de thunk'ının
+// yanında TAM HostEntry taşır. Bu fonksiyon yalnızca onları tek indeks
+// uzayına YERLEŞTİRİR (assembler).
 //
-// Dönüş türleri root.sqt'teki `ffi` bildirimleriyle ÖRTÜŞMELİ — tek kaynak
-// orasıdır. test_host_abi bu tabloyu root.sqt'e karşı çapraz doğrular; drift
-// olursa test kırılır, sessiz yanlış dispatch olmaz.
-//
-// HOST_PURE burada "HostEnv gerekmez + heap'e dokunmaz" demektir; dış dünyayı
-// okumak (fs::exists, sys::env) bunu bozmaz — bkz. host_abi.hpp bayrak notu.
-struct HostMeta {
-    const char* symbolicId;
-    HostKind    retKind;
-    uint8_t     flags;
-};
-
-const HostMeta kHostMeta[] = {
-    // core
-    {"CORE_VERSION",       HostKind::Str,     HOST_PURE},
-    {"CORE_PRINT",         HostKind::Void,    HOST_PURE},
-    // math — tamamı saf hesap (#89: IEEE754 korunur, throw yok)
-    {"MATH_ABS",           HostKind::Int,     HOST_PURE},
-    {"MATH_ABSF",          HostKind::Float,   HOST_PURE},
-    {"MATH_MIN",           HostKind::Int,     HOST_PURE},
-    {"MATH_MAX",           HostKind::Int,     HOST_PURE},
-    {"MATH_MINF",          HostKind::Float,   HOST_PURE},
-    {"MATH_MAXF",          HostKind::Float,   HOST_PURE},
-    {"MATH_SQRT",          HostKind::Float,   HOST_PURE},
-    {"MATH_POW",           HostKind::Float,   HOST_PURE},
-    {"MATH_FLOOR",         HostKind::Float,   HOST_PURE},
-    {"MATH_CEIL",          HostKind::Float,   HOST_PURE},
-    {"MATH_ROUND",         HostKind::Float,   HOST_PURE},
-    {"MATH_PI",            HostKind::Float,   HOST_PURE},
-    {"MATH_E",             HostKind::Float,   HOST_PURE},
-    // fs — dosya içeriği her zaman byte[] olarak taşınır
-    {"FS_READ_FILE",       HostKind::Ref,     HOST_NEEDS_HEAP | HOST_CAN_FAIL},
-    {"FS_WRITE_FILE",      HostKind::Void,    HOST_CAN_FAIL},
-    {"FS_APPEND",          HostKind::Void,    HOST_CAN_FAIL},
-    {"FS_EXISTS",          HostKind::Int,     0},
-    {"FS_REMOVE",          HostKind::Void,    HOST_CAN_FAIL},
-    // sys / fs — determinizmi bozan / dış-durum-okuyan aile. JIT'in HostEnv'i
-    // VM'inkinden ayrı bir durum taşıdığı için bu aile JIT dışında kalır.
-    {"SYS_RANDOM",         HostKind::Float,   0},
-    {"SYS_RANDOM_INT",     HostKind::Int,     HOST_CAN_FAIL},
-    {"SYS_ENV",            HostKind::Str,     0},
-    {"SYS_SLEEP",          HostKind::Void,    0},
-    {"SYS_ARGS",           HostKind::Ref,     HOST_NEEDS_HEAP | HOST_NEEDS_ARGS},
-    // date — saf hesap (date_calc.hpp), epoch-ms üzerinde
-    {"DATE_NOW",           HostKind::Date,    HOST_PURE},
-    {"DATE_FROM_EPOCH_MS", HostKind::Date,    HOST_PURE},
-    {"DATE_TO_EPOCH_MS",   HostKind::LongInt, HOST_PURE},
-    {"DATE_ADD_DAYS",      HostKind::Date,    HOST_PURE},
-    {"DATE_ADD_HOURS",     HostKind::Date,    HOST_PURE},
-    {"DATE_ADD_MINUTES",   HostKind::Date,    HOST_PURE},
-    {"DATE_ADD_SECONDS",   HostKind::Date,    HOST_PURE},
-    {"DATE_YEAR",          HostKind::Int,     HOST_PURE},
-    {"DATE_MONTH",         HostKind::Int,     HOST_PURE},
-    {"DATE_DAY",           HostKind::Int,     HOST_PURE},
-    {"DATE_HOUR",          HostKind::Int,     HOST_PURE},
-    {"DATE_MINUTE",        HostKind::Int,     HOST_PURE},
-    {"DATE_SECOND",        HostKind::Int,     HOST_PURE},
-    {"DATE_DIFF_MS",       HostKind::LongInt, HOST_PURE},
-    // parse başarısızlıkta null döner (date?) — hata DEĞİL, ADR-021
-    {"DATE_PARSE",         HostKind::Date,    HOST_PURE},
-    {"DATE_FORMAT",        HostKind::Str,     HOST_PURE},
-};
-
-const HostMeta* findMeta(const char* symbolicId) {
-    for (const auto& m : kHostMeta)
-        if (std::strcmp(m.symbolicId, symbolicId) == 0) return &m;
-    return nullptr;
-}
-
-uint8_t hostFlagsFor(const char* symbolicId) {
-    const HostMeta* m = findMeta(symbolicId);
-    // Metadata eksikse KORUMACI davran: env gerekebilir + hata verebilir.
-    // Yanlış yönde hata yapmak (gereksiz safepoint) sessiz bozulmadan iyidir.
-    return m ? m->flags
-             : (uint8_t)(HOST_NEEDS_HEAP | HOST_NEEDS_ARGS | HOST_CAN_FAIL);
-}
-
-HostKind hostRetKindFor(const char* symbolicId) {
-    const HostMeta* m = findMeta(symbolicId);
-    return m ? m->retKind : HostKind::Void;
-}
-
-}  // namespace
-
-// ── Tablo ────────────────────────────────────────────────────────────────────
+// Yerleşim sırası: hostFnTable (0..25) ardından date (26..40) — blok içi
+// düzen korunur; tüm çözümler semboliktir (hostEntryIndex), elle sayı yok.
 
 const std::vector<HostEntry>& hostRegistry() {
     static const std::vector<HostEntry> table = [] {
         std::vector<HostEntry> t;
         t.resize(static_cast<size_t>(kCoreBase) + 8, HostEntry{nullptr, 0, 0, HostKind::Void, nullptr});
 
-        // Blok 1: gömülü host fonksiyonları. Adım 2'de eski tablodan
-        // TÜRETİLİR — sembolik ad ve arite oradan gelir, gövde sarmalanır.
-        // Böylece iki tablo arasında drift imkânsız (tek kaynak korunur).
-        const auto& legacy = hostFnTable();
-        for (size_t i = 0; i < legacy.size(); ++i) {
+        // Blok 1: gömülü host fonksiyonları — tek kaynak, tam kayıt.
+        const auto& fns = hostFnTable();
+        for (size_t i = 0; i < fns.size(); ++i) {
             HostEntry e;
-            e.symbolicId = legacy[i].symbolicId;
-            e.arity      = static_cast<int8_t>(legacy[i].arity);
-            e.flags      = hostFlagsFor(legacy[i].symbolicId);
-            e.retKind    = hostRetKindFor(legacy[i].symbolicId);
-            e.thunk = legacy[i].thunk;
-            // #225: date'in saf fonksiyonları src/data/date.cpp'de. Eski
-            // tabloda thunk == nullptr bırakılmıştır (sembolik id ve arite
-            // tek kaynak olarak orada kalsın, indeksler kaymasın diye);
-            // gövde buradan bağlanır.
-            if (!e.thunk)
-                for (const auto& d : dataDateFunctions())
-                    if (std::strcmp(d.symbolicId, legacy[i].symbolicId) == 0) {
-                        e.thunk = d.thunk;
-                        break;
-                    }
+            e.symbolicId = fns[i].symbolicId;
+            e.arity      = static_cast<int8_t>(fns[i].arity);
+            e.flags      = fns[i].flags;
+            e.retKind    = fns[i].retKind;
+            e.thunk      = fns[i].thunk;
             t[kHostFnBase + i] = e;
+        }
+        // date: src/data/date.cpp — thunk'ının yanında tam kayıt.
+        const auto& dates = dataDateFunctions();
+        for (size_t i = 0; i < dates.size(); ++i) {
+            HostEntry e;
+            e.symbolicId = dates[i].symbolicId;
+            e.arity      = static_cast<int8_t>(dates[i].arity);
+            e.flags      = dates[i].flags;
+            e.retKind    = dates[i].retKind;
+            e.thunk      = dates[i].thunk;
+            t[kHostFnBase + fns.size() + i] = e;
         }
 
         // Blok 2: built-in metodlar (#223). Kayıtlar src/data/ modüllerinden
@@ -159,17 +75,16 @@ const std::vector<HostEntry>& hostRegistry() {
     return table;
 }
 
-std::vector<std::string> hostEntriesMissingMetadata() {
-    std::vector<std::string> missing;
-    for (const auto& fn : hostFnTable())
-        if (!findMeta(fn.symbolicId)) missing.push_back(fn.symbolicId);
-    return missing;
-}
-
 int32_t hostEntryIndex(const std::string& symbolicId) {
-    // Gömülü ffi blokları için eski çözümü kullan — root.sqt ↔ C++ tek kaynak.
-    int legacy = hostFnIndex(symbolicId);
-    if (legacy >= 0) return kHostFnBase + legacy;
+    // TEK lookup: birleşik registry'nin blok-1 aralığında (0..kBuiltinBase)
+    // sembolik adı ara. Bulunan kaydın indeksi kHostFnBase + sıradır —
+    // root.sqt sembolik ad kullandığı için yerleşim serbesttir.
+    const auto& t = hostRegistry();
+    const int32_t limit = std::min<int32_t>(kBuiltinBase, (int32_t)t.size());
+    for (int32_t i = 0; i < limit; ++i)
+        if (t[static_cast<size_t>(i)].symbolicId &&
+            symbolicId == t[static_cast<size_t>(i)].symbolicId)
+            return i;
     return kHostIdInvalid;
 }
 
@@ -194,6 +109,6 @@ extern "C" int rt_host_call(int32_t entryId, HostCallFrame* f) {
     }
 
     // Bağlı olmayan bir id sessizce yanlış fonksiyona gitmez — açık hata döner.
-    f->err.set("host entry bagli degil: " + std::to_string(entryId), "E_FFI");
+    f->err.set("host entry bagli degil: " + std::to_string(entryId), "E_HOST");
     return 1;
 }

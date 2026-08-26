@@ -21,7 +21,7 @@
 #include "parser/nodes/binary_expr.hpp"
 #include "parser/nodes/identifier.hpp"
 #include "ffi/ffi_catalog.hpp"
-#include "ffi/host_functions.hpp"
+#include "ffi/host_registry.hpp"
 #include "core/module_registry.hpp"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,6 +146,20 @@ void SymbolCollector::pass1aRegisterNames(ASTNode* program, int moduleId) {
             auto& layout = table_.enumLayouts[en->name];
             for (auto& m : en->members)
                 layout.push_back({m.name, m.value});
+            break;
+        }
+
+        case ASTKind::FfiDecl: {
+            // #229: requires grameri parse edilir (ADR-043 enforcement yok);
+            // kullanılırsa DERLEME ZAMANI uyarısı — capability'ler kaldırıldı,
+            // gereksinim yok sayılır. Runtime uyarısı yok (stdout kirlenmez).
+            auto* fd = static_cast<FfiDeclNode*>(child);
+            if (!fd->requiresCap.empty()) {
+                diag_.report("W007", fd->loc,
+                             "requires '" + fd->requiresCap +
+                                 "' is ignored — capabilities were removed (ADR-043)",
+                             "remove 'requires " + fd->requiresCap + "' from the declaration");
+            }
             break;
         }
 
@@ -282,8 +296,11 @@ void SymbolCollector::validateImports(ModuleGraph& graph) {
             // graph'ında aranmaz — FfiCatalog'a yönlendir.
             if (imp->isModuleName) {
                 resolveFfiImport(imp);
-                moduleImports_[unit.moduleId].insert(imp->importedNames.begin(),
-                                                      imp->importedNames.end());
+                // moduleImports_: BU BİRİMDE görünen (yerel) adlar — rename
+                // import sonrası kaynak ad değil, local kullanılır.
+                for (const auto& n : imp->importedNames)
+                    moduleImports_[unit.moduleId].insert(
+                        n.local.empty() ? n.source : n.local);
                 continue;
             }
 
@@ -316,8 +333,12 @@ void SymbolCollector::validateImports(ModuleGraph& graph) {
                 continue;
             }
 
-            // Her import edilen isim için doğrula
-            for (const auto& name : imp->importedNames) {
+            // Her import edilen isim için doğrula. Rename import: `name` yerine
+            // `n.source` (kaynak modülde export'u aranan ad), ekleme n.source
+            // ürünü yerel ad (n.local).
+            for (const auto& n : imp->importedNames) {
+                const std::string& name = n.source;
+                const std::string  localName = n.local.empty() ? n.source : n.local;
                 Symbol* sym = table_.resolve(name);
 
                 if (!sym) {
@@ -381,7 +402,8 @@ void SymbolCollector::validateImports(ModuleGraph& graph) {
                 }
 
                 // Başarılı: bu ismi import eden modülün erişim listesine ekle
-                moduleImports_[unit.moduleId].insert(name);
+                // (yerel ad — rename import ile source farklı olabilir).
+                moduleImports_[unit.moduleId].insert(localName);
             }
         }
     }
@@ -403,15 +425,19 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
         return;
     }
 
-    for (const auto& name : imp->importedNames) {
-        const FfiDeclNode* decl = catalog.lookup(imp->sourcePath, name);
+    for (const auto& en : imp->importedNames) {
+        // Rename import: kaynak ad katalogda aranır, yerel ad (boşsa kaynak)
+        // bu birimde görünecek semboldür.
+        const std::string& source = en.source;
+        std::string        local  = en.local.empty() ? en.source : en.local;
+        const FfiDeclNode* decl = catalog.lookup(imp->sourcePath, source);
         if (!decl) {
             diag_.report("E_IMPORT_UNKNOWN", imp->loc,
-                "'" + name + "' not found in module '" + imp->sourcePath + "'");
+                "'" + source + "' not found in module '" + imp->sourcePath + "'");
             continue;
         }
 
-        int hostId = hostFnIndex(decl->hostId);
+        int32_t hostId = hostEntryIndex(decl->hostId);
         if (hostId < 0) {
             // root.sqt ↔ host_functions.cpp drift — geliştirici hatası.
             diag_.report("E_IMPORT_UNKNOWN", imp->loc,
@@ -419,7 +445,7 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
             continue;
         }
 
-        if (table_.resolve(name)) continue; // zaten tanımlı (tekrar import vb.)
+        if (table_.resolve(local)) continue; // zaten tanımlı (tekrar import vb.)
 
         std::vector<Type> paramTypes;
         std::vector<std::string> paramNames;
@@ -429,7 +455,7 @@ void SymbolCollector::resolveFfiImport(ImportDeclNode* imp) {
         }
         Type retType = typeFromName(decl->returnType, decl->loc);
 
-        Symbol* s = table_.define(name, SymbolKind::Function,
+        Symbol* s = table_.define(local, SymbolKind::Function,
                                   Type::function(retType, paramTypes),
                                   decl->loc, ModuleRegistry::BUILTIN_ID);
         if (!s) continue;

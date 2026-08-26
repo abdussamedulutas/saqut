@@ -96,11 +96,11 @@ static int math_E(HostCallFrame* f) {
 static int fs_readFile(HostCallFrame* fr) {
     const std::string& path = hostAsString(fr->args[0]);
     std::ifstream f(path, std::ios::in | std::ios::binary);
-    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "'", "E_FFI"); return 1; }
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "'", "E_HOST"); return 1; }
     std::ostringstream ss;
     ss << f.rdbuf();
     if (!fr->env || !fr->env->heap) {
-        fr->err.set("readFile: heap yok", "E_FFI");
+        fr->err.set("readFile: heap yok", "E_HOST");
         return 1;
     }
     const std::string bytes = ss.str();
@@ -114,14 +114,14 @@ static int fs_readFile(HostCallFrame* fr) {
 static int fs_writeFile(HostCallFrame* fr) {
     const std::string& path = hostAsString(fr->args[0]);
     std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::trunc);
-    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_HOST"); return 1; }
     if (fr->args[1].kind != HostKind::Ref || !fr->args[1].p) {
-        fr->err.set("writeFile: expected byte[]", "E_FFI");
+        fr->err.set("writeFile: expected byte[]", "E_HOST");
         return 1;
     }
     auto* arr = static_cast<ArrayObject*>(fr->args[1].p);
     if (arr->elemKind != ArrayElemKind::Byte) {
-        fr->err.set("writeFile: expected byte[]", "E_FFI");
+        fr->err.set("writeFile: expected byte[]", "E_HOST");
         return 1;
     }
     f.write(reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size());
@@ -132,14 +132,14 @@ static int fs_writeFile(HostCallFrame* fr) {
 static int fs_append(HostCallFrame* fr) {
     const std::string& path = hostAsString(fr->args[0]);
     std::ofstream f(path, std::ios::out | std::ios::binary | std::ios::app);
-    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_FFI"); return 1; }
+    if (!f.is_open()) { fr->err.set("cannot open file '" + path + "' for writing", "E_HOST"); return 1; }
     if (fr->args[1].kind != HostKind::Ref || !fr->args[1].p) {
-        fr->err.set("append: expected byte[]", "E_FFI");
+        fr->err.set("append: expected byte[]", "E_HOST");
         return 1;
     }
     auto* arr = static_cast<ArrayObject*>(fr->args[1].p);
     if (arr->elemKind != ArrayElemKind::Byte) {
-        fr->err.set("append: expected byte[]", "E_FFI");
+        fr->err.set("append: expected byte[]", "E_HOST");
         return 1;
     }
     f.write(reinterpret_cast<const char*>(arr->bytes.data()), arr->bytes.size());
@@ -156,9 +156,74 @@ static int fs_remove(HostCallFrame* f) {
     const std::string& path = hostAsString(f->args[0]);
     std::error_code ec;
     bool removed = std::filesystem::remove(path, ec);
-    if (ec)       { f->err.set("cannot remove '" + path + "': " + ec.message(), "E_FFI"); return 1; }
-    if (!removed) { f->err.set("file not found: '" + path + "'", "E_FFI"); return 1; }
+    if (ec)       { f->err.set("cannot remove '" + path + "': " + ec.message(), "E_HOST"); return 1; }
+    if (!removed) { f->err.set("file not found: '" + path + "'", "E_HOST"); return 1; }
     f->ret = HostSlot::voidVal();
+    return 0;
+}
+
+// ── yeni fs işlemleri (ürün kararı 2026-08-25, #115) ─────────────────────────
+// copy/rename/create/isEmpty/isDirectory/fileSize — std::filesystem üzerinden.
+// Failsam E_HOST (try-catch ile yakalanır); dizin/yokluk sorguları fail ETMEZ
+// (bool döner).
+
+static int fs_createFile(HostCallFrame* f) {
+    const std::string& path = hostAsString(f->args[0]);
+    std::ofstream out(path, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) { f->err.set("cannot create file '" + path + "'", "E_HOST"); return 1; }
+    f->ret = HostSlot::voidVal();
+    return 0;
+}
+
+static int fs_copyFile(HostCallFrame* f) {
+    const std::string& src = hostAsString(f->args[0]);
+    const std::string& dst = hostAsString(f->args[1]);
+    std::error_code ec;
+    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
+    if (ec) { f->err.set("cannot copy '" + src + "' to '" + dst + "': " + ec.message(), "E_HOST"); return 1; }
+    f->ret = HostSlot::voidVal();
+    return 0;
+}
+
+static int fs_renameFile(HostCallFrame* f) {
+    const std::string& from = hostAsString(f->args[0]);
+    const std::string& to   = hostAsString(f->args[1]);
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (ec) { f->err.set("cannot rename '" + from + "' to '" + to + "': " + ec.message(), "E_HOST"); return 1; }
+    f->ret = HostSlot::voidVal();
+    return 0;
+}
+
+static int fs_isEmpty(HostCallFrame* f) {
+    // Var olmayan yol → boş sayılmaz (false); hata değil.
+    const std::string& path = hostAsString(f->args[0]);
+    std::error_code ec;
+    bool empty = false;
+    if (std::filesystem::exists(path, ec)) {
+        if (std::filesystem::is_directory(path, ec))
+            empty = std::filesystem::directory_iterator(path, ec) == std::filesystem::directory_iterator{};
+        else if (std::filesystem::exists(path, ec))
+            empty = std::filesystem::file_size(path, ec) == 0;
+    }
+    f->ret = HostSlot::fromInt(empty ? 1 : 0);
+    return 0;
+}
+
+static int fs_isDirectory(HostCallFrame* f) {
+    const std::string& path = hostAsString(f->args[0]);
+    std::error_code ec;
+    bool isDir = std::filesystem::is_directory(path, ec);
+    f->ret = HostSlot::fromInt(isDir ? 1 : 0);
+    return 0;
+}
+
+static int fs_fileSize(HostCallFrame* f) {
+    const std::string& path = hostAsString(f->args[0]);
+    std::error_code ec;
+    uintmax_t sz = std::filesystem::file_size(path, ec);
+    if (ec) { f->err.set("cannot stat '" + path + "': " + ec.message(), "E_HOST"); return 1; }
+    f->ret = HostSlot::fromLong(static_cast<int64_t>(sz));
     return 0;
 }
 
@@ -173,9 +238,9 @@ static int sys_random(HostCallFrame* f) {
     // Eski davranış Value::fromFloat (double) — root.sqt `float` yazsa da
     // gözlemlenen çıktı double biçimidir, birebir korunur.
     //
-    // NOT (#227): bildirim ile gövde arasındaki bu uyumsuzluk gerçektir ve
-    // JIT'te MIR tip hatasına yol açar ('dge': Got float, expected double).
-    // Bugün SYS_RANDOM zaten JIT dışında; düzeltilirse birlikte ele alınmalı.
+    // NOT (#227): bildirim (`float`) ile gövde (double) arasındaki bu
+    // uyumsuzluk kayıtlıdır; JIT bu çağrıyı VM ile aynı çıktıyı vererek
+    // çalıştırır (ölçüldü). Tip düzeltmesi ayrı iş — burada yalnız kayıt.
     f->ret = HostSlot::fromFloat(dist(gen));
     return 0;
 }
@@ -184,7 +249,7 @@ static int sys_randomInt(HostCallFrame* f) {
     int lo = (int)hostAsI64(f->args[0]), hi = (int)hostAsI64(f->args[1]);
     if (lo >= hi) {
         f->err.set("randomInt: invalid range [" + std::to_string(lo) +
-                   ", " + std::to_string(hi) + ")", "E_FFI");
+                   ", " + std::to_string(hi) + ")", "E_HOST");
         return 1;
     }
     static std::random_device rd;
@@ -209,7 +274,7 @@ static int sys_sleep(HostCallFrame* f) {
 }
 
 static int sys_args(HostCallFrame* f) {
-    if (!f->env || !f->env->heap) { f->err.set("args: heap yok", "E_FFI"); return 1; }
+    if (!f->env || !f->env->heap) { f->err.set("args: heap yok", "E_HOST"); return 1; }
     // Eski kod burada `ctx.programArgs ? *ctx.programArgs : std::vector{}`
     // yazıyordu — programArgs null iken GEÇİCİ bir vector'e referans bağlayan
     // sarkan referanstı. Boş tablo doğrudan ele alınır.
@@ -268,68 +333,51 @@ static int core_version(HostCallFrame* f) {
 }
 
 // ── Tablo (index = sayısal host id) ──────────────────────────────────────────
-// Sıra değişebilir; root.sqt sembolik ad kullandığı için etkilenmez.
+// Sıra değişebilir; root.sqt sembolik ad kullandığı için etkilenmez. #229:
+// kayıtlar TAM HostEntry'dir — retKind/flags thunk'ının yanında (kHostMeta
+// çapraz tablosu kalktı). Date fonksiyonları (15) src/data/date.cpp'de aynı
+// tamlıkta; bu tablo yalnız now()'u tutar.
 
 const std::vector<HostFn>& hostFnTable() {
     static const std::vector<HostFn> table = {
-        // #222: math ailesi natif thunk'a taşındı (hostNativeThunks). Eski
-        // tabloda impl == nullptr olarak DURUR — sembolik id ve arite tek
-        // kaynak olarak burada kalsın, indeksler kaymasın diye. Dispatch
-        // rt_host_call'da natif tabloya gider.
-        { "MATH_ABS", 1, math_abs },
-        { "MATH_ABSF", 1, math_absf },
-        { "MATH_MIN", 2, math_min },
-        { "MATH_MAX", 2, math_max },
-        { "MATH_MINF", 2, math_minf },
-        { "MATH_MAXF", 2, math_maxf },
-        { "MATH_SQRT", 1, math_sqrt },
-        { "MATH_POW", 2, math_pow },
-        { "MATH_FLOOR", 1, math_floor },
-        { "MATH_CEIL", 1, math_ceil },
-        { "MATH_ROUND", 1, math_round },
-        { "MATH_PI", 0, math_PI },
-        { "MATH_E", 0, math_E },
-        { "FS_READ_FILE", 1, fs_readFile },
-        { "FS_WRITE_FILE", 2, fs_writeFile },
-        { "FS_APPEND", 2, fs_append },
-        { "FS_EXISTS", 1, fs_exists },
-        { "FS_REMOVE", 1, fs_remove },
-        { "SYS_RANDOM", 0, sys_random },
-        { "SYS_RANDOM_INT", 2, sys_randomInt },
-        { "SYS_ENV", 1, sys_env },
-        { "SYS_SLEEP", 1, sys_sleep },
-        { "SYS_ARGS", 0, sys_args },
-        { "DATE_NOW", 0, date_now },
-        { "DATE_FROM_EPOCH_MS", 1, nullptr },
-        { "DATE_TO_EPOCH_MS", 1, nullptr },
-        { "DATE_ADD_DAYS", 2, nullptr },
-        { "DATE_ADD_HOURS", 2, nullptr },
-        { "DATE_ADD_MINUTES", 2, nullptr },
-        { "DATE_ADD_SECONDS", 2, nullptr },
-        { "DATE_YEAR", 1, nullptr },
-        { "DATE_MONTH", 1, nullptr },
-        { "DATE_DAY", 1, nullptr },
-        { "DATE_HOUR", 1, nullptr },
-        { "DATE_MINUTE", 1, nullptr },
-        { "DATE_SECOND", 1, nullptr },
-        { "DATE_DIFF_MS", 2, nullptr },
-        { "DATE_PARSE", 1, nullptr },
-        { "DATE_FORMAT", 2, nullptr },
-        { "CORE_VERSION", 0, core_version },
-        { "CORE_PRINT",   1, core_print   },
+        // math — tamamı saf hesap (HOST_PURE; #89: IEEE754 korunur, throw yok)
+        { "MATH_ABS", 1, HOST_PURE, HostKind::Int, math_abs },
+        { "MATH_ABSF", 1, HOST_PURE, HostKind::Float, math_absf },
+        { "MATH_MIN", 2, HOST_PURE, HostKind::Int, math_min },
+        { "MATH_MAX", 2, HOST_PURE, HostKind::Int, math_max },
+        { "MATH_MINF", 2, HOST_PURE, HostKind::Float, math_minf },
+        { "MATH_MAXF", 2, HOST_PURE, HostKind::Float, math_maxf },
+        { "MATH_SQRT", 1, HOST_PURE, HostKind::Float, math_sqrt },
+        { "MATH_POW", 2, HOST_PURE, HostKind::Float, math_pow },
+        { "MATH_FLOOR", 1, HOST_PURE, HostKind::Float, math_floor },
+        { "MATH_CEIL", 1, HOST_PURE, HostKind::Float, math_ceil },
+        { "MATH_ROUND", 1, HOST_PURE, HostKind::Float, math_round },
+        { "MATH_PI", 0, HOST_PURE, HostKind::Float, math_PI },
+        { "MATH_E", 0, HOST_PURE, HostKind::Float, math_E },
+        // fs — dosya içeriği her zaman byte[] olarak taşınır
+        { "FS_READ_FILE", 1, HOST_NEEDS_HEAP | HOST_CAN_FAIL, HostKind::Ref, fs_readFile },
+        { "FS_WRITE_FILE", 2, HOST_CAN_FAIL, HostKind::Void, fs_writeFile },
+        { "FS_APPEND", 2, HOST_CAN_FAIL, HostKind::Void, fs_append },
+        { "FS_EXISTS",     1, 0, HostKind::Int, fs_exists },
+        { "FS_REMOVE", 1, HOST_CAN_FAIL, HostKind::Void, fs_remove },
+        { "FS_CREATE_FILE", 1, HOST_CAN_FAIL, HostKind::Void, fs_createFile },
+        { "FS_COPY_FILE", 2, HOST_CAN_FAIL, HostKind::Void, fs_copyFile },
+        { "FS_RENAME_FILE", 2, HOST_CAN_FAIL, HostKind::Void, fs_renameFile },
+        { "FS_IS_EMPTY",     1, 0, HostKind::Int, fs_isEmpty },
+        { "FS_IS_DIRECTORY", 1, 0, HostKind::Int, fs_isDirectory },
+        { "FS_FILE_SIZE",    1, HOST_CAN_FAIL, HostKind::LongInt, fs_fileSize },
+        // sys — dış-durum-okuyan aile
+        { "SYS_RANDOM",     0, 0, HostKind::Float, sys_random },
+        { "SYS_RANDOM_INT", 2, HOST_CAN_FAIL, HostKind::Int, sys_randomInt },
+        { "SYS_ENV",        1, 0, HostKind::Str, sys_env },
+        { "SYS_SLEEP",      1, 0, HostKind::Void, sys_sleep },
+        { "SYS_ARGS", 0, HOST_NEEDS_HEAP | HOST_NEEDS_ARGS, HostKind::Ref, sys_args },
+        // date — yalnız now() burada (#225); kalan 15 saf fonksiyon
+        // src/data/date.cpp'de (aynı tam HostEntry biçimi).
+        { "DATE_NOW", 0, HOST_PURE, HostKind::Date, date_now },
+        // core — blok 1 sonunda (CORE_VERSION/CORE_PRINT; kCoreBase boş kalır)
+        { "CORE_VERSION", 0, HOST_PURE, HostKind::Str, core_version },
+        { "CORE_PRINT", 1, HOST_PURE, HostKind::Void, core_print },
     };
     return table;
-}
-
-
-
-int hostFnIndex(const std::string& symbolicId) {
-    static const std::unordered_map<std::string, int> index = [] {
-        std::unordered_map<std::string, int> m;
-        const auto& t = hostFnTable();
-        for (int i = 0; i < (int)t.size(); ++i) m[t[i].symbolicId] = i;
-        return m;
-    }();
-    auto it = index.find(symbolicId);
-    return it != index.end() ? it->second : -1;
 }

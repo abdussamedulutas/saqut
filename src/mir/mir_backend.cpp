@@ -443,9 +443,10 @@ extern "C" void rt_jit_field_set_p(void* o, int64_t idx, void* v) {
 // ── #227: birleşik host çağrı trampolini ────────────────────────────────────
 //
 // JIT'in host çağrıları için bilmesi gereken TEK köprü. Öncesinde yalnızca
-// print destekleniyordu; 44 host fonksiyonu + 26 built-in metodu açmak 70
-// ayrı trampolin demekti. Artık yeni host fonksiyonu eklemek JIT'e hiç
-// dokunmaz.
+// print destekleniyordu; host fonksiyonları + built-in metodları açmak 70
+// ayrı trampolin demekti (kesin sayılar değişkendir — yoruma yazılmaz).
+// Artık yeni host fonksiyonu eklemek JIT'e hiç dokunmaz (#229: kayıt
+// birliği — hostRegistry tek tablo).
 //
 // Argümanlar MIR'den tek tek geçirilemez (değişken arite), bu yüzden sabit bir
 // tampona yazılır. Tek iş parçacığı varsayımı (MIRPLAN §9), string
@@ -504,7 +505,7 @@ extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
     g_jitHostFrame.retOwner = &g_jitHostRetOwner;
     if (rt_host_call((int32_t)entryId, &g_jitHostFrame) != 0) {
         jitSetError(g_jitHostFrame.err.message,
-                    g_jitHostFrame.err.code.empty() ? "E_FFI" : g_jitHostFrame.err.code);
+                    g_jitHostFrame.err.code.empty() ? "E_HOST" : g_jitHostFrame.err.code);
         g_jitHostFrame.ret = HostSlot::null();
         return 0;
     }

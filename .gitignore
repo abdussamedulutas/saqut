@@ -54,5 +54,15 @@ src/mir/vendor/c2mir/*.d
 src/mir/vendor/mir-utils/*.o
 src/mir/vendor/mir-utils/*.d
 
-# Release build dizini (debug build/ takip edilir, release ayrı)
-build-rel/*
+# Build klasörleri — yalnız aktif `build/` kullanılır (Release, build-release.sh);
+# diğer build profilleri (asan/o3/miro2/rel) üretilmiş çıktıdır, izlenmez.
+build-asan/
+build-o3/
+build-miro2/
+build-rel/
+.codewhale
+.ruff_cache
+
+systemcalls
+systemcalls/*
+systemcalls/**

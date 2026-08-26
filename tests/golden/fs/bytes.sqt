@@ -1,4 +1,4 @@
-import {writeFile, readFile, remove} from fs;
+import {writeFile, readFile, removeFile} from fs;
 
 void main() {
     byte[] data = [72, 73, 33];
@@ -12,5 +12,5 @@ void main() {
     byte[] invalid = [195, 40];
     print(invalid.toString());
     print("\n");
-    remove(path);
+    removeFile(path);
 }

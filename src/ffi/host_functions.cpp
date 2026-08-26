@@ -162,6 +162,71 @@ static int fs_remove(HostCallFrame* f) {
     return 0;
 }
 
+// ── yeni fs işlemleri (ürün kararı 2026-08-25, #115) ─────────────────────────
+// copy/rename/create/isEmpty/isDirectory/fileSize — std::filesystem üzerinden.
+// Failsam E_HOST (try-catch ile yakalanır); dizin/yokluk sorguları fail ETMEZ
+// (bool döner).
+
+static int fs_createFile(HostCallFrame* f) {
+    const std::string& path = hostAsString(f->args[0]);
+    std::ofstream out(path, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) { f->err.set("cannot create file '" + path + "'", "E_HOST"); return 1; }
+    f->ret = HostSlot::voidVal();
+    return 0;
+}
+
+static int fs_copyFile(HostCallFrame* f) {
+    const std::string& src = hostAsString(f->args[0]);
+    const std::string& dst = hostAsString(f->args[1]);
+    std::error_code ec;
+    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing, ec);
+    if (ec) { f->err.set("cannot copy '" + src + "' to '" + dst + "': " + ec.message(), "E_HOST"); return 1; }
+    f->ret = HostSlot::voidVal();
+    return 0;
+}
+
+static int fs_renameFile(HostCallFrame* f) {
+    const std::string& from = hostAsString(f->args[0]);
+    const std::string& to   = hostAsString(f->args[1]);
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (ec) { f->err.set("cannot rename '" + from + "' to '" + to + "': " + ec.message(), "E_HOST"); return 1; }
+    f->ret = HostSlot::voidVal();
+    return 0;
+}
+
+static int fs_isEmpty(HostCallFrame* f) {
+    // Var olmayan yol → boş sayılmaz (false); hata değil.
+    const std::string& path = hostAsString(f->args[0]);
+    std::error_code ec;
+    bool empty = false;
+    if (std::filesystem::exists(path, ec)) {
+        if (std::filesystem::is_directory(path, ec))
+            empty = std::filesystem::directory_iterator(path, ec) == std::filesystem::directory_iterator{};
+        else if (std::filesystem::exists(path, ec))
+            empty = std::filesystem::file_size(path, ec) == 0;
+    }
+    f->ret = HostSlot::fromInt(empty ? 1 : 0);
+    return 0;
+}
+
+static int fs_isDirectory(HostCallFrame* f) {
+    const std::string& path = hostAsString(f->args[0]);
+    std::error_code ec;
+    bool isDir = std::filesystem::is_directory(path, ec);
+    f->ret = HostSlot::fromInt(isDir ? 1 : 0);
+    return 0;
+}
+
+static int fs_fileSize(HostCallFrame* f) {
+    const std::string& path = hostAsString(f->args[0]);
+    std::error_code ec;
+    uintmax_t sz = std::filesystem::file_size(path, ec);
+    if (ec) { f->err.set("cannot stat '" + path + "': " + ec.message(), "E_HOST"); return 1; }
+    f->ret = HostSlot::fromLong(static_cast<int64_t>(sz));
+    return 0;
+}
+
 // ── sys implementasyonları (#90) ────────────────────────────────────────────
 // Non-deterministik/dış-durum-okuyan. Kaynak: OS CSPRNG
 // (std::random_device), rand() DEĞİL.
@@ -295,6 +360,12 @@ const std::vector<HostFn>& hostFnTable() {
         { "FS_APPEND", 2, HOST_CAN_FAIL, HostKind::Void, fs_append },
         { "FS_EXISTS",     1, 0, HostKind::Int, fs_exists },
         { "FS_REMOVE", 1, HOST_CAN_FAIL, HostKind::Void, fs_remove },
+        { "FS_CREATE_FILE", 1, HOST_CAN_FAIL, HostKind::Void, fs_createFile },
+        { "FS_COPY_FILE", 2, HOST_CAN_FAIL, HostKind::Void, fs_copyFile },
+        { "FS_RENAME_FILE", 2, HOST_CAN_FAIL, HostKind::Void, fs_renameFile },
+        { "FS_IS_EMPTY",     1, 0, HostKind::Int, fs_isEmpty },
+        { "FS_IS_DIRECTORY", 1, 0, HostKind::Int, fs_isDirectory },
+        { "FS_FILE_SIZE",    1, HOST_CAN_FAIL, HostKind::LongInt, fs_fileSize },
         // sys — dış-durum-okuyan aile
         { "SYS_RANDOM",     0, 0, HostKind::Float, sys_random },
         { "SYS_RANDOM_INT", 2, HOST_CAN_FAIL, HostKind::Int, sys_randomInt },

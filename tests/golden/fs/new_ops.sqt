@@ -1,0 +1,42 @@
+// #115 ürün kararı (2026-08-25): yeni fs isim yüzeyi — createFile/copyFile/
+// renameFile/isEmpty/isDirectory/fileSize + rename import (`as`).
+// Deterministic: sabit bayt içeriği ve /tmp temp dosyaları.
+import {createFile, writeFile, readFile, existsFile, isEmpty, fileSize, copyFile, renameFile, isDirectory, removeFile} from fs;
+import {existsFile as varMi} from fs;
+
+void report(bool b) { if (b) { print(1); } else { print(0); } }
+
+void main() {
+    string p1 = "/tmp/saqut_fs_ops_a.txt";
+    string p2 = "/tmp/saqut_fs_ops_b.txt";
+    string p3 = "/tmp/saqut_fs_ops_c.txt";
+    if (existsFile(p1)) { removeFile(p1); }
+    if (existsFile(p2)) { removeFile(p2); }
+    if (existsFile(p3)) { removeFile(p3); }
+
+    createFile(p1);
+    report(existsFile(p1));   // 1
+    report(isEmpty(p1));      // 1
+    print(fileSize(p1));      // 0
+
+    writeFile(p1, [72, 73, 33]); // "HI!"
+    print(fileSize(p1));      // 3
+    print(readFile(p1).length()); // 3
+
+    renameFile(p1, p2);
+    report(!existsFile(p1));  // 1 (eski gitti)
+    report(existsFile(p2));   // 1
+
+    copyFile(p2, p3);
+    report(!isEmpty(p2));     // 1 (dolu)
+    print(fileSize(p2));      // 3
+    print(fileSize(p3));      // 3
+
+    report(isDirectory("/tmp")); // 1
+    report(!isDirectory(p3));    // 1 (dosya)
+
+    report(varMi(p3));        // 1 (rename import)
+
+    removeFile(p2);
+    removeFile(p3);
+}

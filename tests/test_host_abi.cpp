@@ -224,10 +224,10 @@ int main() {
             }
             ++checked;
         }
-        // 41 host fonksiyonu (math 13 + fs 5 + sys 5 + date 16 + core 2) +
+        // 47 host fonksiyonu (math 13 + fs 11 + sys 5 + date 16 + core 2) +
         // 28 builtin metod (array 12 + string 14 + struct 2).
-        assert(checked == 41 + 28);
-        std::printf("kayit tamligi: %d kayit (41 host + 28 builtin)\n", checked);
+        assert(checked == 47 + 28);
+        std::printf("kayit tamligi: %d kayit (47 host + 28 builtin)\n", checked);
     }
 
     std::printf("test_host_abi: TUM TESTLER GECTI\n");

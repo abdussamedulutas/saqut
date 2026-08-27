@@ -100,6 +100,22 @@ IR/CFG seviyesinde pass yok.
 - jitData/moving-GC kısıtının kaderi (mekanizma mı ilan mı).
 - globalSlots_ sahipliği (K2'ye bağlı).
 
+## C. Faz durumu (2026-08-27 sonu)
+
+- 0 CFG sağlamlaştırma — YAPILDI (8f9616b): exception kenarı, JMP sonrası lider,
+  unreachable temizliği, dominance (CHK), natural loop; --cfg exc/loop etiketleri.
+- 1 liveness + canlı-slot kökleme — YAPILDI (4390056 VM, fbd7bb8 JIT shadow).
+- 2 Value daraltma + tek string modeli — YAPILDI (4ec9c2e, 2862123): Value
+  112→24 bayt, düz-kopyalanır; string GC'li StringObject (VM≡JIT ortak).
+- 3 Object başlığı — YAPILDI (b7610e3): marked kalktı, çift bağ O(1) unlink,
+  vptr→tip-switch; String-çocuk kökleme bug'ı düzeltildi + regresyon fixture.
+- 4 global state — JIT bağlamı YAPILDI (94882ee: JitRuntime/rt + shadow stack
+  thread_local); sys_random thread_local YAPILDI; FileRegistry sınır kaydı
+  yerinde (derleme-zamanı tek-parçacık, yorum satırı yeterli — değişiklik gerekmedi);
+  globalSlots_ sahipliği K2 ürün kararına bağlı (bilinçli açık).
+- 5 allocator seam — SIRADA (arena/freelist; ADR-022 taşımsız olduğundan
+  hareketlilik/jitData invariant'ı sorunu yok — view sabit kalır).
+
 ## C. Önerilen altyapı sırası (kanıt temelli, gözlemlenen sözleşme korunur)
 
 0. **CFG sağlamlaştırma:** pipeline'da kanonik kurulum (dump-only'dan çıkarma),

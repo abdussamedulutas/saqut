@@ -14,13 +14,20 @@
 #include "ffi/host_functions.hpp"
 #include "ffi/host_bridge.hpp"
 
+// RNG durumu thread_local: mt19937_64 sırayı korumaz, iki thread ayni
+// anda çekerse yarış olur ve seri bozulur. thread_local ile her is
+// parcacigi kendi üretecini kurar — tek thread'de davranış birebir aynı
+// (tohum random_device'ten, çağrı başına değil üretim başına alınır).
+static std::mt19937_64& sysRng() {
+    thread_local std::mt19937_64 gen(std::random_device{}());
+    return gen;
+}
+
 static int sys_random(HostCallFrame* f) {
-    static std::random_device rd;
-    static std::mt19937_64 gen(rd());
     std::uniform_real_distribution<double> dist(0.0, 1.0);
     // Eski davranış Value::fromFloat (double) — root.sqt `float` yazsa da
     // gözlemlenen çıktı double biçimidir, birebir korunur.
-    f->ret = HostSlot::fromFloat(dist(gen));
+    f->ret = HostSlot::fromFloat(dist(sysRng()));
     return 0;
 }
 
@@ -31,10 +38,8 @@ static int sys_randomInt(HostCallFrame* f) {
                    ", " + std::to_string(hi) + ")", "E_HOST");
         return 1;
     }
-    static std::random_device rd;
-    static std::mt19937_64 gen(rd());
     std::uniform_int_distribution<int> dist(lo, hi - 1);
-    f->ret = HostSlot::fromInt(dist(gen));
+    f->ret = HostSlot::fromInt(dist(sysRng()));
     return 0;
 }
 

@@ -34,7 +34,10 @@
 //   "yanlışlıkla canlı" nesneler bırakır ve toplama zamanı programa göre
 //   değişir.
 //
-// TEK İŞ PARÇACIĞI: MIRPLAN §9 varsayımı. İleride thread-local olur.
+// TEK İŞ PARÇACIĞI varsayımı kaldırıldı: depo thread_local'dır (bkz.
+// shadow_stack.cpp). Her iş parçacığı kendi JIT kök dizisini tutar; JIT
+// çalışma bağlamının geri kalanı mir_backend.cpp içindeki JitRuntime/rt()
+// altında toplanmıştır — oradaki THREAD NOTU ile aynı model.
 // ============================================================================
 
 #ifndef SAQUT_VM_SHADOW_STACK

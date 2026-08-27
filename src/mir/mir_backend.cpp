@@ -53,20 +53,95 @@ namespace mir_backend {
 
 namespace {
 
-namespace {
-Heap* g_jitHeap = nullptr;
-int   g_jitGcThreshold = 1024;
-StructObject* g_jitPendingError = nullptr;
-int64_t g_jitErrorLine = 0;
-int64_t g_jitErrorCol = 0;
-std::vector<int64_t> g_jitGlobalI;
-std::vector<double> g_jitGlobalD;
-std::vector<void*> g_jitGlobalP;
-int64_t g_jitCallNullArgs[64]{};
-int64_t g_jitCallRetNull = 0;
+// ── JIT çalışma bağlamı (runtime context) ───────────────────────────────────
+//
+// JIT'in ÇALIŞMA ZAMANI durumunun tamamı bu tek yapıda toplanır (refactor,
+// davranış değişikliği yok). Öncesinde bu alanlar dosyaya dağınık
+// g_jit* global'leri olarak yayılmıştı — her biri ayrı sahiplik noktası
+// olduğundan çok-thread'li çalışmanın önünde engeldi.
+//
+// Bugün süreç-ömrü TEK örnek vardır ve rt() ile erişilir. Thread desteği
+// geldiğinde tek değişiklik rt()'nin deposunu thread_local yapmak olur;
+// çağıran taraf değişmez. (MIRPLAN §9: MIR_context paylaşımı ve shadow
+// stack ile aynı model.)
+//
+// Derleme-zamanı tablolar (intern edilmiş string havuzu, shadow-stack
+// kodgen kararları) burada DEĞİLDİR — bunlar MIR context'ine ve üretilen
+// koda gömülüdür; çalışma zamanında mutasyonları yoktur.
 
-// Bench profil sayaçları — nullptr ise sayaç artırılmaz (sıfır ek yük).
-JitCallCounters* g_jitBenchCounters = nullptr;
+// ADR-025 deterministik stacktrace çerçevesi (yalnızca try'lı fonksiyonlar).
+struct JitTraceFrame {
+    std::string name;
+    std::string file;
+    int         line = 0;
+    int         col  = 0;
+};
+
+// STRUCT_NEW metadata'sı: VM fieldNames + ADR-021 nullable zero-init
+// maskesi. Derleme sırasında doldurulur, çalışmada salt okunur.
+struct JitStructMeta {
+    std::shared_ptr<std::vector<std::string>> names;
+    std::vector<bool>                         nullableMask;
+};
+
+struct JitRuntime {
+    // GC: JIT nesneleri VM heap'inde yaşar (jitSetHeap ile bağlanır);
+    // eşik jitMaybeCollect'te kullanılır.
+    Heap* heap        = nullptr;
+    int   gcThreshold = 1024;
+
+    // Hata yayılımı (#110): VM'in pendingThrow_ karşılığı — hata tek
+    // bayrakta durur, kodgen her hata-üretebilen talimattan sonra kontrol
+    // eder. errorLine/Col: jitSetError defaults için son hata konumu.
+    StructObject* pendingError = nullptr;
+    int64_t       errorLine    = 0;
+    int64_t       errorCol     = 0;
+
+    // Global slot'ların JIT tarafı görünümü (VM globalSlots_ ile aynı
+    // değerler, ham register temsillerinde) + nullable çağrı kanalı.
+    std::vector<int64_t> globalI;
+    std::vector<double>   globalD;
+    std::vector<void*>    globalP;
+    int64_t               callNullArgs[64]{};
+    int64_t               callRetNull = 0;
+
+    // Bench profil sayaçları — nullptr ise sayaç artırılmaz (sıfır ek yük).
+    JitCallCounters* benchCounters = nullptr;
+
+    // Deterministik iz yığını (ADR-025) — yalnızca try'lı fonksiyonlar.
+    std::vector<JitTraceFrame> traceStack;
+
+    // STRUCT_NEW talimat başına bir kayıt (derleme sırasında dolar).
+    std::vector<JitStructMeta> structMeta;
+
+    // Host çağrı ABI'si (#222): çağrılar arasında yeniden kullanılan
+    // scratch/owner — çağrı başına tahsis yapmamanın yolu. Argümanlar
+    // MIR'den tek tek geçirilemez (değişken arite), bu yüzden sabit bir
+    // tampona yazılır (tek iş parçacığı varsayımı, MIRPLAN §9).
+    static constexpr int kMaxHostArgs = 8;
+    HostSlot      hostArgs[JitRuntime::kMaxHostArgs];
+    HostRetOwner  hostRetOwner;
+    HostCallFrame hostFrame;
+    HostEnv*      hostEnv = nullptr;
+
+    // Fallible cast null kanalı: cast_begin nullable-mod bayrağını tutar,
+    // null sonucu cast_null_check'e taşır.
+    bool    castNullable = false;
+    int64_t castNull     = 0;
+
+    // jitNewString/jitBoxDecimal'in heap bağlı değilken (test/izole
+    // kullanım) sızdırmadan çalışması için yedek havuzlar — normal yol
+    // heap->allocString/allocDecimal'dir.
+    std::vector<std::unique_ptr<StringObject>>  stringFallback;
+    std::vector<std::unique_ptr<DecimalObject>> decimalFallback;
+};
+
+// Tek erişim noktası. THREAD NOTU: bugün süreç-ömrü tek örnek; thread
+// desteğinde `static` → `thread_local` yapılır (MIRPLAN §9 modeli).
+JitRuntime& rt() {
+    static JitRuntime instance;
+    return instance;
+}
 
 StringObject*  jitNewString(std::string v);
 DecimalObject* jitBoxDecimal(const DecimalValue& v);
@@ -82,7 +157,7 @@ DecimalObject* jitBoxDecimal(const DecimalValue& v);
 // denemesiyle de SEGFAULT üretti (catch gövdesi fonksiyon prolog'u olmadan
 // ortadan girilip RETURN'de bozuk kareye döner). Ölçülen kanıt geridedir.
 //
-// g_jitPendingError VM'in pendingThrow_ karşılığıdır: hata tek bayrakta
+// rt().pendingError VM'in pendingThrow_ karşılığıdır: hata tek bayrakta
 // durur. JIT codegen her hata-üretebilen / CALL instruction'ından SONRA
 // rt_jit_error_pending kontrol eder; doluysa ya yerel handler'a (catch) JMP
 // eder ya da propagateLabel üzerinden çağırana döner (hata bayrakta kalır).
@@ -90,20 +165,13 @@ DecimalObject* jitBoxDecimal(const DecimalValue& v);
 //
 // İz (trace) yığını ADR-025 deterministik stacktrace içindir; yalnızca try
 // içeren fonksiyonlarda tutulur (MIRPLAN §7.1: try'sız yollar sıfır ek yük).
-namespace {
-struct JitTraceFrame {
-    std::string name;
-    std::string file;
-    int         line = 0;
-    int         col  = 0;
-};
-std::vector<JitTraceFrame> g_jitTraceStack;
+// Depolama: rt().traceStack (JitRuntime).
 
 // En içten dışa (VM Interpreter::buildTrace ile aynı sıra ve biçim).
 std::string jitBuildTrace() {
     std::string result;
-    for (int i = (int)g_jitTraceStack.size() - 1; i >= 0; --i) {
-        const auto& f = g_jitTraceStack[i];
+    for (int i = (int)rt().traceStack.size() - 1; i >= 0; --i) {
+        const auto& f = rt().traceStack[i];
         if (f.line > 0) {
             result += f.name + " (" + f.file + ":" + std::to_string(f.line) +
                       ":" + std::to_string(f.col) + ")\n";
@@ -115,23 +183,27 @@ std::string jitBuildTrace() {
 }
 }  // namespace
 
+// Trampolin/runtime yardımcı bölgesi — yukarıdaki bağlam tanımlarının
+// (JitRuntime/rt) kullanıldığı iç-bağlantım (anonymous) bloğu.
+namespace {
+
 extern "C" void rt_jit_trace_enter(const char* name, const char* file) {
-    g_jitTraceStack.push_back(JitTraceFrame{ name ? name : "", file ? file : "", 0, 0 });
+    rt().traceStack.push_back(JitTraceFrame{ name ? name : "", file ? file : "", 0, 0 });
 }
 extern "C" void rt_jit_trace_leave() {
-    if (!g_jitTraceStack.empty()) g_jitTraceStack.pop_back();
+    if (!rt().traceStack.empty()) rt().traceStack.pop_back();
 }
 extern "C" void rt_jit_trace_line(int64_t line, int64_t col) {
-    if (!g_jitTraceStack.empty()) {
-        g_jitTraceStack.back().line = (int)line;
-        g_jitTraceStack.back().col  = (int)col;
+    if (!rt().traceStack.empty()) {
+        rt().traceStack.back().line = (int)line;
+        rt().traceStack.back().col  = (int)col;
     }
 }
 
 static StructObject* jitMakeError(std::string message, std::string code,
                                   int64_t line, int64_t col) {
-    if (!g_jitHeap) return nullptr;
-    auto* err = g_jitHeap->allocStruct(5);
+    if (!rt().heap) return nullptr;
+    auto* err = rt().heap->allocStruct(5);
     err->fields[0] = Value::fromInt((int)line);
     err->fields[1] = Value::fromInt((int)col);
     err->fields[2] = Value::fromString(std::move(message));
@@ -140,33 +212,33 @@ static StructObject* jitMakeError(std::string message, std::string code,
     return err;
 }
 
-// Hatayı g_jitPendingError'a bağlar (ilk hata kazanır — VM pendingThrow_
+// Hatayı rt().pendingError'a bağlar (ilk hata kazanır — VM pendingThrow_
 // üzerine yazmaz) ve trace alanını doldurur. Yakalama/catch codegen'in
 // per-instruction kontrolünde gerçekleşir; burada longjmp YOKTUR.
 static void jitSetError(std::string message, std::string code,
                         int64_t line = 0, int64_t col = 0) {
-    if (line == 0) line = g_jitErrorLine;
-    if (col == 0) col = g_jitErrorCol;
-    if (!g_jitPendingError) {
+    if (line == 0) line = rt().errorLine;
+    if (col == 0) col = rt().errorCol;
+    if (!rt().pendingError) {
         auto* err = jitMakeError(std::move(message), std::move(code), line, col);
         if (err)
             err->fields[3] = Value::fromString(jitBuildTrace());
-        g_jitPendingError = err;
+        rt().pendingError = err;
     }
 }
 
 extern "C" void rt_jit_error_location(int64_t line, int64_t col) {
-    g_jitErrorLine = line;
-    g_jitErrorCol = col;
+    rt().errorLine = line;
+    rt().errorCol = col;
 }
 
 extern "C" int64_t rt_jit_error_pending() {
-    return g_jitPendingError ? 1 : 0;
+    return rt().pendingError ? 1 : 0;
 }
 
 extern "C" int64_t rt_jit_error_take() {
-    auto* err = g_jitPendingError;
-    g_jitPendingError = nullptr;
+    auto* err = rt().pendingError;
+    rt().pendingError = nullptr;
     return reinterpret_cast<int64_t>(err);
 }
 
@@ -178,7 +250,7 @@ extern "C" void rt_jit_throw_p(void* value, int64_t kind,
         auto* err = static_cast<StructObject*>(value);
         if (err && err->fields.size() >= 4)
             err->fields[3] = Value::fromString(jitBuildTrace());
-        g_jitPendingError = err;
+        rt().pendingError = err;
         return;
     }
     if ((SlotType)kind == SlotType::Str) {
@@ -190,49 +262,49 @@ extern "C" void rt_jit_throw_p(void* value, int64_t kind,
 }
 
 extern "C" void rt_jit_call_arg_null_set(int64_t index, int64_t value) {
-    if (index >= 0 && index < 64) g_jitCallNullArgs[index] = value;
+    if (index >= 0 && index < 64) rt().callNullArgs[index] = value;
 }
 
 extern "C" int64_t rt_jit_call_arg_null_get(int64_t index) {
-    return index >= 0 && index < 64 ? g_jitCallNullArgs[index] : 0;
+    return index >= 0 && index < 64 ? rt().callNullArgs[index] : 0;
 }
 
 extern "C" void rt_jit_call_ret_null_set(int64_t value) {
-    g_jitCallRetNull = value;
+    rt().callRetNull = value;
 }
 
 extern "C" int64_t rt_jit_call_ret_null_get() {
-    return g_jitCallRetNull;
+    return rt().callRetNull;
 }
 
 extern "C" int64_t rt_jit_global_load_i(int64_t index) {
-    if (index < 0 || index >= (int64_t)g_jitGlobalI.size()) return 0;
-    return g_jitGlobalI[(size_t)index];
+    if (index < 0 || index >= (int64_t)rt().globalI.size()) return 0;
+    return rt().globalI[(size_t)index];
 }
 
 extern "C" void rt_jit_global_store_i(int64_t index, int64_t value) {
-    if (index >= 0 && index < (int64_t)g_jitGlobalI.size())
-        g_jitGlobalI[(size_t)index] = value;
+    if (index >= 0 && index < (int64_t)rt().globalI.size())
+        rt().globalI[(size_t)index] = value;
 }
 
 extern "C" double rt_jit_global_load_d(int64_t index) {
-    if (index < 0 || index >= (int64_t)g_jitGlobalD.size()) return 0.0;
-    return g_jitGlobalD[(size_t)index];
+    if (index < 0 || index >= (int64_t)rt().globalD.size()) return 0.0;
+    return rt().globalD[(size_t)index];
 }
 
 extern "C" void rt_jit_global_store_d(int64_t index, double value) {
-    if (index >= 0 && index < (int64_t)g_jitGlobalD.size())
-        g_jitGlobalD[(size_t)index] = value;
+    if (index >= 0 && index < (int64_t)rt().globalD.size())
+        rt().globalD[(size_t)index] = value;
 }
 
 extern "C" int64_t rt_jit_global_load_p(int64_t index) {
-    if (index < 0 || index >= (int64_t)g_jitGlobalP.size()) return 0;
-    return reinterpret_cast<int64_t>(g_jitGlobalP[(size_t)index]);
+    if (index < 0 || index >= (int64_t)rt().globalP.size()) return 0;
+    return reinterpret_cast<int64_t>(rt().globalP[(size_t)index]);
 }
 
 extern "C" void rt_jit_global_store_p(int64_t index, int64_t value) {
-    if (index >= 0 && index < (int64_t)g_jitGlobalP.size())
-        g_jitGlobalP[(size_t)index] = reinterpret_cast<void*>(value);
+    if (index >= 0 && index < (int64_t)rt().globalP.size())
+        rt().globalP[(size_t)index] = reinterpret_cast<void*>(value);
 }
 
 // #228: JIT safepoint'i. VM'de toplama talimat döngüsündeki maybeCollect ile
@@ -244,17 +316,16 @@ extern "C" void rt_jit_global_store_p(int64_t index, int64_t value) {
 // Stop-the-world ve tam döngü: incremental adım JIT'te anlamsız çünkü
 // tahsisler arasında geri dönülecek bir yorumlayıcı döngüsü yok.
 void jitMaybeCollect() {
-    if (!g_jitHeap || g_jitHeap->allocCount < g_jitGcThreshold) return;
+    if (!rt().heap || rt().heap->allocCount < rt().gcThreshold) return;
     for (Object* o : jitShadowStack().slots)
-        if (o) g_jitHeap->markValue(Value::fromRef(o));
-    for (void* p : g_jitGlobalP)
-        if (p) g_jitHeap->markValue(Value::fromRef(static_cast<Object*>(p)));
-    if (g_jitPendingError)
-        g_jitHeap->markValue(Value::fromRef(g_jitPendingError));
-    while (drainGrey(g_jitHeap, 4096) > 0) {}
-    g_jitHeap->sweep();
-    g_jitGcThreshold = std::max(1024, g_jitHeap->allocCount * 2);
-}
+        if (o) rt().heap->markValue(Value::fromRef(o));
+    for (void* p : rt().globalP)
+        if (p) rt().heap->markValue(Value::fromRef(static_cast<Object*>(p)));
+    if (rt().pendingError)
+        rt().heap->markValue(Value::fromRef(rt().pendingError));
+    while (drainGrey(rt().heap, 4096) > 0) {}
+    rt().heap->sweep();
+    rt().gcThreshold = std::max(1024, rt().heap->allocCount * 2);
 }
 
 // ── #228: Ref opcode trampolinleri ──────────────────────────────────────────
@@ -276,10 +347,10 @@ extern "C" int64_t rt_jit_shadow_enter() { return jitShadowStack().enter(); }
 extern "C" void rt_jit_shadow_leave(int64_t base) { jitShadowStack().leave((int)base); }
 
 extern "C" void* rt_jit_array_new(int64_t capacity, int64_t elemKind) {
-    if (!g_jitHeap) return nullptr;
+    if (!rt().heap) return nullptr;
     jitMaybeCollect();
     auto ek  = (ArrayElemKind)elemKind;
-    auto* arr = g_jitHeap->allocArray((int)capacity, ek);
+    auto* arr = rt().heap->allocArray((int)capacity, ek);
     switch (ek) {
         case ArrayElemKind::Ref:     arr->elements.resize((size_t)capacity, Value::fromInt(0)); break;
         case ArrayElemKind::Byte:    arr->bytes.resize((size_t)capacity, 0);    break;
@@ -387,21 +458,14 @@ extern "C" void rt_jit_array_set_p(void* a, int64_t idx, void* v) {
 
 // STRUCT_NEW metadata'sı: VM fieldNames'i ve ADR-021 nullable zero-init
 // maskesini IRFunction'dan okur. JIT'te talimat başına bir kayıt indeksi
-// geçirilir; tablo derleme sırasında doldurulur.
-namespace {
-struct JitStructMeta {
-    std::shared_ptr<std::vector<std::string>> names;
-    std::vector<bool>                         nullableMask;
-};
-std::vector<JitStructMeta> g_jitStructMeta;
-}
+// geçirilir; tablo derleme sırasında doldurulur. Depolama: rt().structMeta.
 
 extern "C" void* rt_jit_struct_new(int64_t fieldCount, int64_t metaId) {
-    if (!g_jitHeap) return nullptr;
+    if (!rt().heap) return nullptr;
     jitMaybeCollect();
-    auto* obj = g_jitHeap->allocStruct((int)fieldCount);
-    if (metaId >= 0 && metaId < (int64_t)g_jitStructMeta.size()) {
-        const auto& m = g_jitStructMeta[(size_t)metaId];
+    auto* obj = rt().heap->allocStruct((int)fieldCount);
+    if (metaId >= 0 && metaId < (int64_t)rt().structMeta.size()) {
+        const auto& m = rt().structMeta[(size_t)metaId];
         obj->fieldNames = m.names;
         size_t n = std::min(m.nullableMask.size(), obj->fields.size());
         for (size_t i = 0; i < n; ++i)
@@ -448,30 +512,21 @@ extern "C" void rt_jit_field_set_p(void* o, int64_t idx, void* v) {
 // ayrı trampolin demekti (kesin sayılar değişkendir — yoruma yazılmaz).
 // Artık yeni host fonksiyonu eklemek JIT'e hiç dokunmaz (#229: kayıt
 // birliği — hostRegistry tek tablo).
-//
-// Argümanlar MIR'den tek tek geçirilemez (değişken arite), bu yüzden sabit bir
-// tampona yazılır. Tek iş parçacığı varsayımı (MIRPLAN §9), string
-// trampolinleriyle aynı kısıt.
-constexpr int kMaxHostArgs = 8;
-namespace {
-HostSlot      g_jitHostArgs[kMaxHostArgs];
-HostRetOwner  g_jitHostRetOwner;
-HostCallFrame g_jitHostFrame;
-HostEnv*      g_jitHostEnv = nullptr;
-}  // namespace
-
-void jitSetHostEnv(HostEnv* env) { g_jitHostEnv = env; }
+// Argüman tamponu rt().hostArgs'tadır (JitRuntime); JitRuntime::kMaxHostArgs sabiti de
+// oradadır. Tek iş parçacığı varsayımı (MIRPLAN §9), string trampolinleriyle
+// aynı kısıt.
+void jitSetHostEnv(HostEnv* env) { rt().hostEnv = env; }
 
 extern "C" void rt_jit_host_arg_i(int64_t idx, int64_t kind, int64_t v) {
-    if (idx < 0 || idx >= kMaxHostArgs) return;
-    g_jitHostArgs[idx].kind = (HostKind)kind;
-    g_jitHostArgs[idx].i    = v;
+    if (idx < 0 || idx >= JitRuntime::kMaxHostArgs) return;
+    rt().hostArgs[idx].kind = (HostKind)kind;
+    rt().hostArgs[idx].i    = v;
 }
 
 extern "C" void rt_jit_host_arg_d(int64_t idx, int64_t kind, double v) {
-    if (idx < 0 || idx >= kMaxHostArgs) return;
-    g_jitHostArgs[idx].kind = (HostKind)kind;
-    g_jitHostArgs[idx].d    = v;
+    if (idx < 0 || idx >= JitRuntime::kMaxHostArgs) return;
+    rt().hostArgs[idx].kind = (HostKind)kind;
+    rt().hostArgs[idx].d    = v;
 }
 
 extern "C" void rt_jit_host_arg_nullable_i(int64_t idx, int64_t kind,
@@ -491,50 +546,50 @@ extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
     //   [0..256)    FFI        → ffi++
     //   [256..512)  Builtin    → builtin++
     //   [512..)     Çekirdek   → (ffi/builtin dışı)
-    if (g_jitBenchCounters) {
-        if (g_jitBenchCounters->callhost) ++(*g_jitBenchCounters->callhost);
+    if (rt().benchCounters) {
+        if (rt().benchCounters->callhost) ++(*rt().benchCounters->callhost);
         if (entryId < kBuiltinBase) {
-            if (g_jitBenchCounters->ffi) ++(*g_jitBenchCounters->ffi);
+            if (rt().benchCounters->ffi) ++(*rt().benchCounters->ffi);
         } else if (entryId < kCoreBase) {
-            if (g_jitBenchCounters->builtin) ++(*g_jitBenchCounters->builtin);
+            if (rt().benchCounters->builtin) ++(*rt().benchCounters->builtin);
         }
     }
-    g_jitHostFrame.reset();
-    g_jitHostFrame.args     = g_jitHostArgs;
-    g_jitHostFrame.argc     = (int32_t)argc;
-    g_jitHostFrame.env      = g_jitHostEnv;
-    g_jitHostFrame.retOwner = &g_jitHostRetOwner;
-    if (rt_host_call((int32_t)entryId, &g_jitHostFrame) != 0) {
-        jitSetError(g_jitHostFrame.err.message,
-                    g_jitHostFrame.err.code.empty() ? "E_HOST" : g_jitHostFrame.err.code);
-        g_jitHostFrame.ret = HostSlot::null();
+    rt().hostFrame.reset();
+    rt().hostFrame.args     = rt().hostArgs;
+    rt().hostFrame.argc     = (int32_t)argc;
+    rt().hostFrame.env      = rt().hostEnv;
+    rt().hostFrame.retOwner = &rt().hostRetOwner;
+    if (rt_host_call((int32_t)entryId, &rt().hostFrame) != 0) {
+        jitSetError(rt().hostFrame.err.message,
+                    rt().hostFrame.err.code.empty() ? "E_HOST" : rt().hostFrame.err.code);
+        rt().hostFrame.ret = HostSlot::null();
         return 0;
     }
-    if (g_jitHostFrame.ret.kind == HostKind::Str) {
-        auto* s = static_cast<StringObject*>(g_jitHostFrame.ret.p);
-        g_jitHostFrame.ret = HostSlot::fromStr(jitNewString(s ? s->data : std::string{}));
-    } else if (g_jitHostFrame.ret.kind == HostKind::Decimal) {
-        auto* d = static_cast<DecimalObject*>(g_jitHostFrame.ret.p);
-        g_jitHostFrame.ret = HostSlot::fromDecimal(
+    if (rt().hostFrame.ret.kind == HostKind::Str) {
+        auto* s = static_cast<StringObject*>(rt().hostFrame.ret.p);
+        rt().hostFrame.ret = HostSlot::fromStr(jitNewString(s ? s->data : std::string{}));
+    } else if (rt().hostFrame.ret.kind == HostKind::Decimal) {
+        auto* d = static_cast<DecimalObject*>(rt().hostFrame.ret.p);
+        rt().hostFrame.ret = HostSlot::fromDecimal(
             jitBoxDecimal(d ? d->val : DecimalValue{}));
-    } else if (g_jitHostFrame.ret.kind == HostKind::Ref) {
+    } else if (rt().hostFrame.ret.kind == HostKind::Ref) {
         // Ref (array/byte[] vb.) host dönüşü: host gövdesi zaten JIT heap'inde
         // (jitEnv.heap) tahsis etti — pointer'ı register'a ilet. Kirli bir int
         // yorumu yerine net Ref taşıma; GC kökü için markValue ile işaretle.
-        auto* o = static_cast<Object*>(g_jitHostFrame.ret.p);
-        if (o && g_jitHeap) g_jitHeap->markValue(Value::fromRef(o));
-        g_jitHostFrame.ret = HostSlot::fromRef(g_jitHostFrame.ret.p);
+        auto* o = static_cast<Object*>(rt().hostFrame.ret.p);
+        if (o && rt().heap) rt().heap->markValue(Value::fromRef(o));
+        rt().hostFrame.ret = HostSlot::fromRef(rt().hostFrame.ret.p);
     }
-    return g_jitHostFrame.ret.i;
+    return rt().hostFrame.ret.i;
 }
 
 extern "C" double rt_jit_host_call_d(int64_t entryId, int64_t argc) {
     (void)rt_jit_host_call(entryId, argc);
-    return g_jitHostFrame.ret.d;
+    return rt().hostFrame.ret.d;
 }
 
 extern "C" int64_t rt_jit_host_ret_is_null() {
-    return g_jitHostFrame.ret.kind == HostKind::Null ? 1 : 0;
+    return rt().hostFrame.ret.kind == HostKind::Null ? 1 : 0;
 }
 
 // ── print(int) trampoline'i — VM'in Value::toString()'iyle birebir (ADR-024).
@@ -577,17 +632,15 @@ extern "C" void rt_jit_print_str(void* strObj) {
 // #228: JIT nesneleri artık VM heap'inde ve GC'ye görünür (shadow stack).
 // Öncesinde unique_ptr havuzunda süresiz birikiyorlardı — 200k concat'te
 // JIT 21,8 MB / VM 6,8 MB (ölçüldü).
-namespace {
 StringObject* jitNewString(std::string v) {
-    if (g_jitHeap) { jitMaybeCollect(); return g_jitHeap->allocString(std::move(v)); }
+    if (rt().heap) { jitMaybeCollect(); return rt().heap->allocString(std::move(v)); }
     // Heap bağlı değilse (test/izole kullanım) sızdırmadan çalış.
-    static std::vector<std::unique_ptr<StringObject>> fallback;
+    auto& fallback = rt().stringFallback;
     fallback.push_back(std::make_unique<StringObject>(std::move(v)));
     return fallback.back().get();
 }
-}
 
-void jitSetHeap(Heap* h) { g_jitHeap = h; }
+void jitSetHeap(Heap* h) { rt().heap = h; }
 
 // ── STRING_CONCAT trampolini — yeni (immutable, ADR-024) string üretir. ──────
 extern "C" void* rt_jit_string_concat(void* a, void* b) {
@@ -606,17 +659,15 @@ extern "C" int64_t rt_jit_string_eq(void* a, void* b) {
 // kSoftwareError (70) döndürür; JIT aynı sözleşmeye uymalıdır (VM normatif).
 // Daha önce burada hard-coded 1 vardı — merkezi 0/64/65/70 sınıfı dışıydı.
 constexpr int kJitRuntimeErrorExit = saqut::exit_code::kSoftwareError;
-bool g_jitCastNullable = false;
-int64_t g_jitCastNull = 0;
 
 extern "C" void rt_jit_cast_begin(int64_t nullableMode) {
-    g_jitCastNullable = nullableMode != 0;
-    g_jitCastNull = 0;
+    rt().castNullable = nullableMode != 0;
+    rt().castNull = 0;
 }
 
 extern "C" int64_t rt_jit_cast_ret_is_null() {
-    int64_t result = g_jitCastNull;
-    g_jitCastNullable = false;
+    int64_t result = rt().castNull;
+    rt().castNullable = false;
     return result;
 }
 
@@ -624,8 +675,8 @@ extern "C" int64_t rt_jit_cast_ret_is_null() {
 // uncaught (try/catch JIT'te yok) → rt_jit_cast_error, VM'in uncaught-throw
 // mesaj gövdesiyle birebir (interpreter.cpp CAST_* dalları). ──────────────────
 extern "C" void rt_jit_cast_error(const char* what) {
-    if (g_jitCastNullable) {
-        g_jitCastNull = 1;
+    if (rt().castNullable) {
+        rt().castNull = 1;
         return;
     }
     jitSetError(what, "E_CAST");
@@ -730,16 +781,14 @@ extern "C" int64_t rt_jit_float_to_long_checked(double fv) {
 }
 
 // ── Decimal trampolinleri (Dilim 3, ADR-037: decimal her zaman kutulu). Değerler
-// g_jitDecimals havuzunda (program sonunda toplu silinir). Hata mesajları VM'in
-// D* / CAST_*_DECIMAL dallarıyla birebir. ────────────────────────────────────
-namespace {
+// VM heap'inde (rt().heap->allocDecimal; shadow stack ile GC'ye görünür). Hata
+// mesajları VM'in D* / CAST_*_DECIMAL dallarıyla birebir. ────────────────────
 DecimalValue& jitDV(void* p) { return static_cast<DecimalObject*>(p)->val; }
 DecimalObject* jitBoxDecimal(const DecimalValue& v) {
-    if (g_jitHeap) return g_jitHeap->allocDecimal(v);
-    static std::vector<std::unique_ptr<DecimalObject>> fallback;
+    if (rt().heap) return rt().heap->allocDecimal(v);
+    auto& fallback = rt().decimalFallback;
     fallback.push_back(std::make_unique<DecimalObject>(v));
     return fallback.back().get();
-}
 }
 extern "C" void* rt_jit_decimal_add(void* a, void* b) {
     auto r = DecimalValue::add(jitDV(a), jitDV(b));
@@ -855,7 +904,7 @@ SlotType slotKindOf(const IRFunction& fn, int slot) {
 }
 
 bool isSupportedCallhost(const Instruction& instr, const std::vector<bool>&) {
-    if ((int)instr.argSlots.size() > kMaxHostArgs) return false;
+    if ((int)instr.argSlots.size() > JitRuntime::kMaxHostArgs) return false;
     const HostEntry* he = hostEntryAt(instr.intValue);
     if (!he || !he->thunk) return false;
     // Capability (HOST_NEEDS_CAPS) host çağrılarını JIT'te ARTIK reddetmeyiz:
@@ -1066,34 +1115,34 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     // çalışmasında bile istenebilir; nullptr ise trampoline'lar atlar).
     struct BenchCountersGuard {
         JitCallCounters* prev;
-        ~BenchCountersGuard() { g_jitBenchCounters = prev; }
-    } benchGuard{ g_jitBenchCounters };
-    g_jitBenchCounters = counters;
+        ~BenchCountersGuard() { rt().benchCounters = prev; }
+    } benchGuard{ rt().benchCounters };
+    rt().benchCounters = counters;
 
     // Host çağrılarının ortamı. Heap YOK: heap gerektiren kayıtlar
     // wholeProgramSupported'da zaten reddedilir.
     // #228: JIT'in kendi heap'i. VM çalışmadığı için onun heap'i kullanılamaz;
     // GC görünürlüğü shadow stack üzerinden sağlanır (jitShadowStack).
     static Heap                     jitHeap;
-    g_jitGcThreshold = 1024;
+    rt().gcThreshold = 1024;
     static HostEnv                  jitEnv;
     jitEnv.programArgs = &programArgs;
     jitEnv.heap        = &jitHeap;
     jitSetHostEnv(&jitEnv);
     jitSetHeap(&jitHeap);
-    g_jitGlobalI.assign((size_t)program.globalCount, 0);
-    g_jitGlobalD.assign((size_t)program.globalCount, 0.0);
-    g_jitGlobalP.assign((size_t)program.globalCount, nullptr);
-    std::fill(std::begin(g_jitCallNullArgs), std::end(g_jitCallNullArgs), 0);
-    g_jitCallRetNull = 0;
-    g_jitCastNullable = false;
-    g_jitCastNull = 0;
-    g_jitPendingError = nullptr;
-    g_jitErrorLine = 0;
-    g_jitErrorCol = 0;
+    rt().globalI.assign((size_t)program.globalCount, 0);
+    rt().globalD.assign((size_t)program.globalCount, 0.0);
+    rt().globalP.assign((size_t)program.globalCount, nullptr);
+    std::fill(std::begin(rt().callNullArgs), std::end(rt().callNullArgs), 0);
+    rt().callRetNull = 0;
+    rt().castNullable = false;
+    rt().castNull = 0;
+    rt().pendingError = nullptr;
+    rt().errorLine = 0;
+    rt().errorCol = 0;
     jitShadowStack().clear();
-    g_jitStructMeta.clear();
-    g_jitTraceStack.clear();
+    rt().structMeta.clear();
+    rt().traceStack.clear();
 
     if (program.findFunction("main") == nullptr) {
         outReason.functionName = "main";
@@ -1722,7 +1771,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             const Instruction& instr = fn.instructions[i];
 
             // Hata konumu: yakalanabilir hata üretebilen opcode'dan ÖNCE
-            // g_jitErrorLine/Col'u doldur — jitSetError defaults olarak bu
+            // rt().errorLine/Col'u doldur — jitSetError defaults olarak bu
             // değerleri kullanır (VM'in instr.sourceLine/sourceCol kullanımıyla
             // birebir, ADR-025). Bir önceki instruction'ın konumu sızmasın.
             switch (instr.opcode) {
@@ -2416,8 +2465,8 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         if (nullIt != fn.structFieldNullable.end())
                             m.nullableMask = nullIt->second;
                         if (m.names || !m.nullableMask.empty()) {
-                            metaId = (int64_t)g_jitStructMeta.size();
-                            g_jitStructMeta.push_back(std::move(m));
+                            metaId = (int64_t)rt().structMeta.size();
+                            rt().structMeta.push_back(std::move(m));
                         }
                     }
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
@@ -2622,7 +2671,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 }
             }
             // #110: hata yayılımı — (RETURN dışı) talimatın ardından
-            // g_jitPendingError kontrolü. YALNIZCA bu fonksiyon hata taşıyabilir
+            // rt().pendingError kontrolü. YALNIZCA bu fonksiyon hata taşıyabilir
             // (canRaise) veya talimat bir try içindeyse (handlerTarget>=0) emit
             // edilir; salt-skaler try'sız sıcak yollar (§7.1) sıfır ek yük taşır.
             if (instr.opcode != Opcode::RETURN &&
@@ -2796,12 +2845,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     }
 
     std::string uncaughtMessage;
-    if (g_jitPendingError) {
-        if (g_jitPendingError->fields.size() > 2 &&
-            g_jitPendingError->fields[2].kind == ValueKind::String)
-            uncaughtMessage = g_jitPendingError->fields[2].stringValue;
+    if (rt().pendingError) {
+        if (rt().pendingError->fields.size() > 2 &&
+            rt().pendingError->fields[2].kind == ValueKind::String)
+            uncaughtMessage = rt().pendingError->fields[2].stringValue;
         if (uncaughtMessage.empty()) uncaughtMessage = "uncaught error";
-        g_jitPendingError = nullptr;
+        rt().pendingError = nullptr;
     }
 
     MIR_gen_finish(ctx);

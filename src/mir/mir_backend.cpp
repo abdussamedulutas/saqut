@@ -23,6 +23,7 @@
 #include "ffi/host_bridge.hpp"
 #include "ffi/host_registry.hpp"
 #include "vm/shadow_stack.hpp"
+#include "ir/ir_liveness.hpp"
 #include "data/array.hpp"
 
 #include <climits>
@@ -1496,6 +1497,13 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                 break;
             }
         }
+        // Slot canlılık analizi (ir_liveness) — shadow-stack kök daraltma:
+        // bir talimattan SONRA bir daha okunmayacak slot'un değeri köklenmez;
+        // nesneyi başka hiçbir yol tutmuyorsa toplanması doğrudur. VM tarafının
+        // (maybeCollect) aynı bilgidir — iki backend aynı analizi paylaşır.
+        // try içeren fonksiyonlarda analiz muhafazakârdır (exact=false) ve
+        // tüm emitler eskisi gibi yapılır.
+        const SlotLiveness slotLive = computeSlotLiveness(fn);
         MIR_reg_t ssBaseReg = 0;
         if (needsShadowFrame) {
             ssBaseReg = MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, "ssbase");
@@ -1657,8 +1665,16 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
         // #228: bir slot'taki referansı GC'ye görünür kıl. İndeks TABAN+slot
         // olarak yazılır — düz slot indeksi recursive çağrıda çerçeveler
         // arası çakışır, üst çerçevenin kökleri ezilir (use-after-free).
-        auto emitShadowSet = [&](int slot) {
+        // nextIp: sıradaki talimatın indeksi (i+1). Slot orada artık canlı
+        // değilse kök yazımı atlanır (liveness daraltması) — değeri bir daha
+        // okunmayacak nesnenin köklenmesi yalnızca gereksiz canlılık üretir.
+        // Eski kök girdisi yerinde kalırsa sonuç muhafazakârdır (eski nesne
+        // fazla yaşamak dışında zarar vermez).
+        auto emitShadowSet = [&](int slot, int nextIp) {
             if (slot < 0 || !needsShadowFrame) return;
+            if (nextIp >= 0 && slotLive.exact &&
+                !slotLive.isLiveBefore(nextIp, slot))
+                return;
             MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
                 MIR_new_ref_op(ctx, ssProto), MIR_new_ref_op(ctx, ssImport),
                 MIR_new_reg_op(ctx, ssBaseReg), MIR_new_int_op(ctx, (int64_t)slot), R(slot)));
@@ -2214,7 +2230,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                             MIR_new_reg_op(ctx, nullFlagRegs[static_cast<size_t>(instr.dest)])));
                     SlotType rt = slotKindOf(fn, instr.dest);
                     if (rt == SlotType::Str || rt == SlotType::Decimal || rt == SlotType::Ref)
-                        emitShadowSet(instr.dest);
+                        emitShadowSet(instr.dest, (int)i + 1);
                     break;
                 }
                 case Opcode::ARRAY_NEW: {
@@ -2223,7 +2239,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         R(instr.dest),
                         MIR_new_int_op(ctx, instr.intValue),
                         MIR_new_int_op(ctx, (int64_t)instr.arrayElemKind)));
-                    emitShadowSet(instr.dest);
+                    emitShadowSet(instr.dest, (int)i + 1);
                     break;
                 }
                 case Opcode::ARRAY_LEN:
@@ -2240,7 +2256,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_ref_op(ctx, isD ? globalLoadDProto : (isP ? globalLoadPProto : globalLoadIProto)),
                         MIR_new_ref_op(ctx, isD ? globalLoadDImport : (isP ? globalLoadPImport : globalLoadIImport)),
                         R(instr.dest), MIR_new_int_op(ctx, instr.intValue)));
-                    if (isP) emitShadowSet(instr.dest);
+                    if (isP) emitShadowSet(instr.dest, (int)i + 1);
                     break;
                 }
                 case Opcode::STORE_GLOBAL: {
@@ -2322,7 +2338,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_ref_op(ctx, isD ? agetDProto : (isP ? agetPProto : agetIProto)),
                         MIR_new_ref_op(ctx, isD ? agetDImport : (isP ? agetPImport : agetIImport)),
                         R(instr.dest), R(instr.left), R(instr.right)));
-                    if (isP) emitShadowSet(instr.dest);
+                    if (isP) emitShadowSet(instr.dest, (int)i + 1);
                     break;
                 }
                 case Opcode::ARRAY_SET: {
@@ -2408,7 +2424,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_ref_op(ctx, snewProto), MIR_new_ref_op(ctx, snewImport),
                         R(instr.dest), MIR_new_int_op(ctx, instr.intValue),
                         MIR_new_int_op(ctx, metaId)));
-                    emitShadowSet(instr.dest);
+                    emitShadowSet(instr.dest, (int)i + 1);
                     break;
                 }
                 case Opcode::FIELD_GET: {
@@ -2421,7 +2437,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                         MIR_new_ref_op(ctx, isD ? fgetDImport : (isP ? fgetPImport : fgetIImport)),
                         R(instr.dest), R(instr.src),
                         MIR_new_int_op(ctx, instr.intValue)));
-                    if (isP) emitShadowSet(instr.dest);
+                    if (isP) emitShadowSet(instr.dest, (int)i + 1);
                     if (isNullableSlot(instr.dest))
                         MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 5,
                             MIR_new_ref_op(ctx, fgetNullProto),
@@ -2541,7 +2557,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     if (instr.dest >= 0 &&
                         (rk == HostKind::Str || rk == HostKind::Ref ||
                          rk == HostKind::Decimal))
-                        emitShadowSet(instr.dest);
+                        emitShadowSet(instr.dest, (int)i + 1);
                     break;
                 }
                 case Opcode::LOAD_NULL:
@@ -2624,7 +2640,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,
                         MIR_new_ref_op(ctx, errTakeProto),
                         MIR_new_ref_op(ctx, errTakeImport), R(errorSlot)));
-                    emitShadowSet(errorSlot);
+                    emitShadowSet(errorSlot, (int)i + 1);
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
                         MIR_new_label_op(ctx, labelAt[static_cast<size_t>(handlerTarget[i])])));
                 } else {

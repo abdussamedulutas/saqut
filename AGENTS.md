@@ -280,3 +280,54 @@ edilmez.
 Şunlar bu iki sürüme gizlice eklenemez: stabil JIT, AOT, concurrency, sandbox,
 WASM, record/replay, production Redis/SQLite uyumluluğu, generic native library
 loading, kapsamlı optimizer veya 500+ self-hosted stdlib migrasyonu.
+
+## 10. Kod yazma standardı
+
+Bu bölüm uygulayıcı (AI veya insan) için bağlayıcı kod kurallarıdır. Hedef
+profil: performans odaklı, okunabilir, derin C/C++ uzmanlığı gerektirmeyen
+kod.
+
+**Karmaşıklık tavanı:** bir çözüm uzman düzeyinde C++ bilgisi gerektiriyorsa
+(template metaprogramming, SFINAE, lock-free senkronizasyon, custom
+allocator, standart dışı/UB-kenarı numaralar) o çözüm uygulanmaz; rapora
+gerekçeyle yazılır ve karar mimara/ürün sahibine bırakılır. Akıllı değil
+öngörülebilir olan tercih edilir; anlaşılması için açıklama gereken kod,
+açıklamaya ihtiyaç duymayan koda yenik sayılır.
+
+### 10.1 Yorum disiplini
+
+- Dokunulan dosyanın BAŞLIK yorumu da güncellenir; yalnız iç satırlar
+  değildir. Silinen sembol/fonksiyona atıf yapan hiçbir yorum kalmaz.
+- Başlık yorumu geçmiş süreci değil MİMARİYİ anlatır ("adım 2'de şunu
+  yapacağız" değil, "bu katman şunu yapar"). Süreç anlatısı commit mesajına
+  aittir, dosya başlığına değil.
+- Yorum bir kısıtı anlatır (neden böyle, neyin değişmeyeceği); kodun bir
+  sonraki satırını tekrar etmez.
+
+### 10.2 Tek tanım ve dürüst adlar
+
+- Aynı veri iki yapıda tutulmaz: alan-kopyası struct yerine alias
+  (`using X = Y`) veya tek struct kullanılır.
+- Ad dürüst olur: bir yapının içeriği/nitelendişi değiştiyse eski ad veya
+  eski sıfat ("legacy", "eski tablo", "geçici") düzeltilir; ad koddaki
+  gerçeği yalan söylemez.
+- Elle senkron gereken çapraz tablo eklenmez; tek kaynak + türetme ilkesi
+  geçerlidir (kayıt birliği, #229, bu ilkenin uygulamasıdır).
+
+### 10.3 Performans kuralları (basit ve öngörülebilir tercih)
+
+- Sıcak yolda (talimat işleyici, dispatch, çağrı köprüsü): çağrı başına
+  heap tahsisi yok; yeniden kullanılan scratch/tampon; string
+  karşılaştırmasıyla dispatch yok — indeks/enum ile çözülür.
+- Değişmeyen tablolar bir kez kurulur (statik init) ve `const&` ile döner.
+- Erken return, düz döngü, bitişik veri tercih edilir. Mikro-optimizasyon
+  ölçüm ister (§4.1); ölçülmeden karmaşıklık eklenmez.
+
+### 10.4 Rapor dürüstlüğü
+
+- Görev tanımındaki bir şart yerine getirilemiyorsa veya farklı
+  karşılanıyorsa raporda AÇIKÇA yazılır; sessiz yarı-karşılanma olmaz.
+- Doğrulanamayan her davranış "doğrulanamadı" olarak listelenir (§4.1.12
+  zaten bunu ister; bu madde uygulayıcıya hatırlatmadır).
+- Uygulayıcı kendi işini "Test Edildi" ilan edemez (§5); kanıtı sunar,
+  kabulü mimar/ürün sahibi verir.

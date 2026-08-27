@@ -347,10 +347,12 @@ void Interpreter::maybeCollect() {
         for (int s = 0; s < (int)frame.slots.size(); ++s) {
             if (lv.isLiveBefore(frame.instructionPointer, s)) {
                 heap_.markValue(frame.slots[(size_t)s]);
-            } else if (frame.slots[(size_t)s].kind == ValueKind::Ref) {
-                // Ölü ref slot'u temizle: nesne bu turda toplanırsa slot'ta
-                // sarkmış (dangling) işaretçi kalmasın — frame'i sonradan
-                // okuyan araçlar (DAP değişken görünümü) güvenli kalsın.
+            } else if (frame.slots[(size_t)s].kind == ValueKind::Ref ||
+                       frame.slots[(size_t)s].kind == ValueKind::String) {
+                // Ölü ref/string slot'u temizle: nesne bu turda toplanırsa
+                // slot'ta sarkmış (dangling) işaretçi kalmasın — frame'i
+                // sonradan okuyan araçlar (DAP görünümü) güvenli kalsın.
+                // (String de artık heap nesnesine işaret eder.)
                 frame.slots[(size_t)s] = Value::null();
             }
         }
@@ -1431,6 +1433,10 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
 void Interpreter::initForDebug() {
     if (vmInitialized_) return;
 
+    // Tek-string-modeli: Value::fromString bu koşuda Interpreter'ın
+    // heap'ine tahsis etsin (globaller kurulumu string üretebilir).
+    setValueStringHeap(&heap_);
+
     // Globalleri sıfırla — tek flat dizi (bkz. globalSlots_ yorum notu, #3)
     globalSlots_.assign(program_.globalCount, Value::fromInt(0));
 
@@ -1454,6 +1460,10 @@ int Interpreter::run() {
         runUntilEvent(-1, -1);
         return lastReturnValue_;
     }
+
+    // Tek-string-modeli: Value::fromString bu koşuda Interpreter'ın
+    // heap'ine tahsis etsin (her run kendi heap'ini bağlar — thread hazır).
+    setValueStringHeap(&heap_);
 
     {
         profiling::StageTimer::ScopedStage _prof(stageProfiler_, "vm-warmup");

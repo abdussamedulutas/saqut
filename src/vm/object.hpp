@@ -290,4 +290,9 @@ void writeBarrier(Object* target, Object* newRef);
 // #217: incremental marking step — Grey queue'dan budget kadar işle
 int drainGrey(Heap* heap, int budget);
 
+// Tek-string-modeli: Value::fromString'in tahsis yapacağı aktif heap'i
+// bağla/çöz (Interpreter ve JIT çalışma başında bağlar). Ayrıntı:
+// object.cpp içindeki Value string tahsis kancası bölümü.
+void setValueStringHeap(Heap* h);
+
 #endif // SAQUT_VM_OBJECT

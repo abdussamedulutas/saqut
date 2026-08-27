@@ -10,21 +10,23 @@
 //   tek bir Value struct'ında birleştirir. VM'in tüm veri alışverişi Value
 //   üzerinden yapılır.
 //
-// TEMSİL (altyapı denetimi, docs/gc-threading-altyapi-denetimi.md A1.2):
+// TEMSİL (altyapı denetimi, docs/gc-threading-altyapi-denetimi.md A1.1/A1.2):
 //   Payload tek UNYONDA durur — öncesinde kind+int+double+Decimal+string+ref
-//   yan yana yaşıyordu (~112 bayt; her kopya tüm alanları taşıyordu). Şimdi
-//   Value 40 bayt: kind + en büyük üye (std::string). Kopya/atanma/yıkım
-//   kind'a göre yönetilir (yalnız std::string gerçek ömür ister; DecimalValue
-//   düz iki skalerdir, skalerlerle aynı yoldan geçer).
+//   yan yana yaşıyordu (~112 bayt; her kopya tüm alanları taşıyordu).
 //
-//   Okuyucular eski alan adlarını METOT olarak kullanır (v.intValue okuma
-//   sözdizimi değişmez); yazmak yalnız fabrikalarla (fromInt/fromString/...)
-//   olur — kod tabanında dışarıdan alan yazan yoktur, bu sözleşme korunur.
+//   TEK STRING MODELİ: String artık Value içinde inline std::string DEĞİL,
+//   heap'te yaşayan GC'li bir StringObject'e Object* referansıdır (aynı
+//   model JIT tarafında zaten böyleydi — ADR-037; iki backend artık aynı
+//   temsili paylaşır). Sonuçlar:
+//     - Value 24 bayt ve TAMAMEN düz-kopyalanır (string kopya/yıkım kodu
+//       yok; string paylaşımı güvenlidir çünkü string immutable — ADR-024)
+//     - markValue String'i Ref gibi kökler; string'ler artık TOPLANABİLİR
+//     - fromString tahsisi allocValueString kanca fonksiyonuyla yapar:
+//       aktif Heap bağlıysa GC'li yola, değilse (test/izole kullanım)
+//       süresiz-tutulan yedek havuza (object.cpp). Kanca thread_local'dır.
 //
-//   String hâlâ Value içinde INLINE std::string'dir (JIT tarafı StringObject
-//   ile kutular — ADR-037). Tek-string-modeli (string'in de GC'li heap
-//   nesnesi olması) ayrı bir aşamadır; bu dosya o aşamaya taşınabilir
-//   temsille hazırlanmıştır.
+//   Yazmak yalnız fabrikalarla (fromInt/fromString/...) olur — kod tabanında
+//   dışarıdan alan yazan yoktur, bu sözleşme korunur.
 // ============================================================================
 
 #ifndef SAQUT_VM_VALUE
@@ -40,6 +42,11 @@
 
 // Forward — Object tam tanımı object.hpp'de; Value onu pointer olarak taşır.
 struct Object;
+// String'in heap temsili (tek-string-modeli) ve tahsis kancası —
+// gerçeklemede object.cpp. Kanca, aktif Heap'e (yoksa yedek havuza) tahsis
+// eder; Value bu başlıktan object.hpp'ye bağımlı olmadan çağırabilir.
+struct StringObject;   // tanım object.hpp’te (yalnız ileri bildirim yeter)
+Object* allocValueString(std::string s);  // kanca: GC’li heap / yedek havuz
 
 // ADR-020: Primitive (int/bool) = değer; bileşik (array/struct/string) = referans.
 // ADR-021: Null = nullable referansların null değeri (saQut'ta `null` anahtar sözcüğü).
@@ -62,62 +69,22 @@ private:
     //   i   → Int (alt 32 bit), LongInt, Date
     //   d   → Float, Float32
     //   dec → Decimal
-    //   str → String (tek ömürlü üye; kur/yık aşağıda)
-    //   r   → Ref
+    //   r   → Ref (array/struct) VE String (StringObject) — tek string
+    //         modeli: string de GC'li heap nesnesine işaret eder
+    // Bütün üyeler düz-kopyalanabilir olduğundan Value'nun özel ömür
+    // yönetimi YOKTUR (string artık unyonda değil).
     union Payload {
         long long    i;
         double       d;
         DecimalValue dec;
-        std::string  str;
         Object*      r;
         Payload() : i(0) {}
-        ~Payload() {}  // üyeyi Value'nun yıkıcısı kind'a göre yıkar
     } p;
 
 public:
     ValueKind kind = ValueKind::Int;
 
     Value() = default;
-
-    // ── Ömür yönetimi: String dışındaki üyeler düz bayttır ──────────────────
-    Value(const Value& o) { copyFrom(o); }
-    Value(Value&& o) noexcept { moveFrom(o); }
-    Value& operator=(const Value& o) {
-        if (this != &o) { destroy(); copyFrom(o); }
-        return *this;
-    }
-    Value& operator=(Value&& o) noexcept {
-        if (this != &o) { destroy(); moveFrom(o); }
-        return *this;
-    }
-    ~Value() { destroy(); }
-
-private:
-    void destroy() {
-        if (kind == ValueKind::String) p.str.~basic_string();
-    }
-    void copyFrom(const Value& o) {
-        kind = o.kind;
-        switch (kind) {
-            case ValueKind::String:   new (&p.str) std::string(o.p.str); break;
-            case ValueKind::Decimal:  p.dec = o.p.dec; break;
-            case ValueKind::Float:
-            case ValueKind::Float32:  p.d = o.p.d; break;
-            default:                  p.i = o.p.i; break;  // Int/LongInt/Date/Ref/Null
-        }
-    }
-    void moveFrom(Value& o) noexcept {
-        kind = o.kind;
-        switch (kind) {
-            case ValueKind::String:  new (&p.str) std::string(std::move(o.p.str)); break;
-            case ValueKind::Decimal: p.dec = o.p.dec; break;
-            case ValueKind::Float:
-            case ValueKind::Float32: p.d = o.p.d; break;
-            default:                 p.i = o.p.i; break;
-        }
-    }
-
-public:
     // ── Fabrikalar: Value'ya alan yazmanın TEK yolu ─────────────────────────
     static Value fromInt(int n) {
         Value v; v.kind = ValueKind::Int; v.p.i = n; return v;
@@ -140,7 +107,7 @@ public:
     }
     static Value fromString(std::string s) {
         Value v; v.kind = ValueKind::String;
-        new (&v.p.str) std::string(std::move(s));
+        v.p.r = allocValueString(std::move(s));
         return v;
     }
     static Value fromRef(Object* obj) {
@@ -155,7 +122,9 @@ public:
     long long         int64Value()   const { return p.i; }
     double            floatValue()   const { return p.d; }
     const DecimalValue& decimalValue() const { return p.dec; }
-    const std::string&  stringValue()  const { return p.str; }
+    // Tek string modeli: String kind'ı r üyesindeki StringObject'e işaret
+    // eder. Yalnız kind==String iken çağrılmalı (tüm çağıranlar böyle).
+    const std::string&  stringValue()  const;  // gövde object.cpp'te (StringObject tam tipi)
     Object*           ref()          const { return p.r; }
 
     // ADR-040: sayısal karşılaştırma için ortak erişim. Int/LongInt tamsayı
@@ -179,7 +148,7 @@ public:
             case ValueKind::Float:   return p.d != 0.0;
             case ValueKind::Float32: return p.d != 0.0;
             case ValueKind::Decimal: return p.dec.isTruthy();
-            case ValueKind::String:  return !p.str.empty();
+            case ValueKind::String:  return !stringValue().empty();
             case ValueKind::Ref:     return p.r != nullptr;
             case ValueKind::Null:    return false;
             case ValueKind::Date:    return true; // her zaman geçerli bir andı temsil eder
@@ -199,7 +168,7 @@ public:
                     ? formatFloat32Print(p.d)
                     : formatDoublePrint(p.d);
             }
-            case ValueKind::String: return p.str;
+            case ValueKind::String: return stringValue();
             case ValueKind::Ref:   return "<ref>";
             case ValueKind::Null:  return "null";
             case ValueKind::Date:  return std::to_string(p.i);
@@ -225,6 +194,6 @@ public:
 
 // Temsil sözleşmesi: Value kompakt kalmalıdır. Bu eşik aşılırsa (unyona büyük
 // üye eklendiyse) kopyaların maliyeti sessizce büyür — derleme zamanı uyarır.
-static_assert(sizeof(Value) <= 40, "Value unyon temsili 40 baytı aşmamalı");
+static_assert(sizeof(Value) <= 24, "Value unyon temsili 24 baytı aşmamalı");
 
 #endif // SAQUT_VM_VALUE

@@ -89,7 +89,7 @@ inline constexpr ValueRepRow kValueRepTable[] = {
      "VM inline vs JIT kutulu — BİLİNÇLİ fark, ADR-037 kayıtlı; "
      "mir_value_abi (toMir/fromMir) Dilim 3'te gelecek."},
     {"String",
-     "Value::stringValue() — Value İÇİNDE inline std::string (ADR-024; tek-string-modeli ayrı aşama borcu)",
+     "Value::stringValue() — GC’li StringObject* (unyon r üyesi; VM≡JIT tek model)",
      "pointer (StringObject kutulu)",
      "tasarim",
      "\\\"...\\\" (escaped)",

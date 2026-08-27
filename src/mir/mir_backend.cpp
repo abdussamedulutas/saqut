@@ -1130,6 +1130,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     jitEnv.heap        = &jitHeap;
     jitSetHostEnv(&jitEnv);
     jitSetHeap(&jitHeap);
+    // Tek-string-modeli: JIT koşusunda Value::fromString da aynı heap'e
+    // tahsis etsin (VM ve JIT aynı string dünyasını paylaşır).
+    setValueStringHeap(&jitHeap);
     rt().globalI.assign((size_t)program.globalCount, 0);
     rt().globalD.assign((size_t)program.globalCount, 0.0);
     rt().globalP.assign((size_t)program.globalCount, nullptr);

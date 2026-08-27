@@ -31,10 +31,39 @@ int drainGrey(Heap* heap, int budget) {
     return processed;
 }
 
+// ── Value string tahsis kancası (tek-string-modeli) ─────────────────────────
+//
+// Value::fromString bu fonksiyonla tahsis eder. Aktif Heap bağlıysa string
+// GC'li yolda yaşar (Interpreter/JIT çalışma başında bağlar); bağlı değilse
+// (birim testleri, izole kullanım) yedek havuzda süresiz tutulur — eskiden
+// inline string de otomatik yaşardı, davranış eşdeğerdir. Kanca
+// thread_local'dır: her iş parçacığı kendi heap'ini bağlar (JitRuntime/rt()
+// modeliyle aynı karar).
+namespace {
+thread_local Heap* t_valueStringHeap = nullptr;
+}
+
+void setValueStringHeap(Heap* h) { t_valueStringHeap = h; }
+
+// Value::stringValue gövdesi burada: StringObject'un tam tanımı yalnızca
+// bu katmanda mevcuttur (value.hpp yalnız ileri bildirim taşır).
+const std::string& Value::stringValue() const {
+    return static_cast<StringObject*>(p.r)->data;
+}
+
+Object* allocValueString(std::string s) {
+    if (t_valueStringHeap) return t_valueStringHeap->allocString(std::move(s));
+    static thread_local std::vector<std::unique_ptr<StringObject>> fallback;
+    fallback.push_back(std::make_unique<StringObject>(std::move(s)));
+    return fallback.back().get();
+}
+
 // ── Heap::markValue ──────────────────────────────────────────────────────────
 
 void Heap::markValue(const Value& v) {
-    if (v.kind == ValueKind::Ref)
+    // String de heap nesnesidir (tek-string-modeli): Ref gibi köklenir.
+    // StringObject::markChildren no-op'tur — string'in ref çocuğu yoktur.
+    if (v.kind == ValueKind::Ref || v.kind == ValueKind::String)
         markObject(v.ref());
 }
 

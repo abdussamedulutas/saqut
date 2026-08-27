@@ -39,6 +39,18 @@ static std::vector<int> findLeaders(const std::vector<Instruction>& insns) {
                 leaderSet.insert(i + 1);
         }
 
+        // JMP sonrası da lider: JMP'ten sonra gelen, başka hiçbir kenarla
+        // hedeflenmemiş talimatlar ölü koddur ve KENDİ bloğunda durmalıdır
+        // (yoksa removeUnreachableBlocks onları blokla birlikte korurdu).
+        if (ins.opcode == Opcode::JMP) {
+            if (i + 1 < (int)insns.size())
+                leaderSet.insert(i + 1);
+        }
+
+        // ENTER_TRY'nin catch hedefi lider: exception kenarının ucu.
+        if (ins.opcode == Opcode::ENTER_TRY && ins.jumpTarget >= 0)
+            leaderSet.insert(ins.jumpTarget);
+
         if (isJump(ins.opcode) && ins.jumpTarget >= 0) {
             leaderSet.insert(ins.jumpTarget);
         }
@@ -92,6 +104,23 @@ CFG buildCFG(const std::vector<Instruction>& instructions) {
         }
     };
     for (auto& block : cfg.blocks) {
+        // Exception kenarları: ENTER_TRY taşıyan blok → catch bloğu. Bloğun
+        // ortasından çıkan kenar olduğundan successors listesine eklenir ama
+        // terminator'i değiştirmez (akış blok içinde devam eder). Hedef
+        // exceptionTargets'a talimat sırasıyla kaydedilir — linearize()
+        // ENTER_TRY'nin jumpTarget'ını buradan yazar.
+        for (const auto& ins : block.instructions) {
+            if (ins.opcode != Opcode::ENTER_TRY || ins.jumpTarget < 0) continue;
+            for (auto& target : cfg.blocks) {
+                if (target.startIndex == ins.jumpTarget) {
+                    block.successors.push_back(target.id);
+                    target.predecessors.push_back(block.id);
+                    block.exceptionTargets.push_back(target.id);
+                    break;
+                }
+            }
+        }
+
         if (block.terminator == Opcode::JMP) {
             resolveTarget(block, block.jumpTarget);
         } else if (block.terminator == Opcode::JIF_FALSE ||
@@ -115,4 +144,169 @@ CFG buildCFG(const std::vector<Instruction>& instructions) {
     }
 
     return cfg;
+}
+
+// ── Erişilemez blok temizliği ────────────────────────────────────────────────
+// Blok 0'dan successors üzerinden (exception kenarları dahil) BFS. Ulaşıla-
+// mayanlar silinir; kalan bloklar yeniden numaralanır ve kenarlar/id alanları
+// yeni ID'lere çevrilir. startIndex/endIndex orijinal flat düzene referans
+// kalır (yalnızca kurulum sırasında anlamlıdır); linearize blok sırasını
+// kullanır, bu alanları değil.
+int CFG::removeUnreachableBlocks() {
+    if (blocks.empty()) return 0;
+
+    std::vector<char> reachable(blocks.size(), 0);
+    std::vector<int> work{0};
+    reachable[0] = 1;
+    while (!work.empty()) {
+        int b = work.back(); work.pop_back();
+        for (int s : blocks[(size_t)b].successors) {
+            if (!reachable[(size_t)s]) {
+                reachable[(size_t)s] = 1;
+                work.push_back(s);
+            }
+        }
+    }
+
+    int removed = 0;
+    for (char r : reachable) if (!r) ++removed;
+    if (removed == 0) return 0;
+
+    // Eski ID → yeni ID eşlemesi; silinenler -1.
+    std::vector<int> newId(blocks.size(), -1);
+    std::vector<BasicBlock> kept;
+    kept.reserve(blocks.size() - (size_t)removed);
+    for (size_t i = 0; i < blocks.size(); ++i) {
+        if (!reachable[i]) continue;
+        newId[i] = (int)kept.size();
+        kept.push_back(std::move(blocks[i]));
+    }
+
+    auto remap = [&](std::vector<int>& v) {
+        std::vector<int> out;
+        out.reserve(v.size());
+        for (int x : v)
+            if (x >= 0 && newId[(size_t)x] >= 0) out.push_back(newId[(size_t)x]);
+        v = std::move(out);
+    };
+
+    for (auto& b : kept) {
+        b.id = newId[(size_t)b.id];
+        if (b.jumpTarget >= 0) b.jumpTarget = newId[(size_t)b.jumpTarget];
+        remap(b.predecessors);
+        remap(b.successors);
+        remap(b.exceptionTargets);
+    }
+
+    blocks = std::move(kept);
+    idom.clear(); rpo.clear(); loops.clear();  // ID'ler değişti — yeniden hesap
+    return removed;
+}
+
+// ── Dominance (Cooper-Harvey-Kennedy) ────────────────────────────────────────
+// RPO üzerinden iteratif intersect; yakın-doğrusal pratik performans. Tüm
+// bloklar erişilebilir varsayar (önce removeUnreachableBlocks).
+void CFG::computeDominance() {
+    const int n = (int)blocks.size();
+    idom.assign((size_t)n, -1);
+    rpo.clear();
+    if (n == 0) return;
+
+    // RPO: DFS postorder'ın tersi. Successor'lar blok sırasıyla gezilir —
+    // deterministik sonuç (ADR-038 gereği analiz de tekrarlanabilir olmalı).
+    std::vector<char> visited((size_t)n, 0);
+    std::vector<int> post;
+    std::vector<std::pair<int, size_t>> stack;  // (blok, sonraki succ indeksi)
+    visited[0] = 1;
+    stack.emplace_back(0, 0);
+    while (!stack.empty()) {
+        auto& [b, si] = stack.back();
+        if (si < blocks[(size_t)b].successors.size()) {
+            int s = blocks[(size_t)b].successors[si++];
+            if (!visited[(size_t)s]) {
+                visited[(size_t)s] = 1;
+                stack.emplace_back(s, 0);
+            }
+        } else {
+            post.push_back(b);
+            stack.pop_back();
+        }
+    }
+    rpo.assign(post.rbegin(), post.rend());
+
+    auto intersect = [&](int b, int p) {
+        while (b != p) {
+            while (b > p) b = idom[(size_t)b];
+            while (p > b) p = idom[(size_t)p];
+        }
+        return b;
+    };
+
+    idom[0] = 0;  // giriş: kendisi (kök işareti; -1 yerine döngüsüz intersect)
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (int b : rpo) {
+            if (b == 0) continue;
+            int newIdom = -1;
+            for (int p : blocks[(size_t)b].predecessors) {
+                if (idom[(size_t)p] < 0) continue;  // henüz işlenmemiş
+                newIdom = (newIdom < 0) ? p : intersect(p, newIdom);
+            }
+            if (newIdom >= 0 && idom[(size_t)b] != newIdom) {
+                idom[(size_t)b] = newIdom;
+                changed = true;
+            }
+        }
+    }
+    idom[0] = -1;  // kökün dominatörü yoktur
+}
+
+bool cfgDominates(const CFG& cfg, int a, int b) {
+    // a, b'yi dominate ediyor mu: b'den idom zinciri yukarı çık, a'ya uğra.
+    if (a < 0 || b < 0 || a >= (int)cfg.idom.size() || b >= (int)cfg.idom.size())
+        return false;
+    int cur = b;
+    while (cur >= 0) {
+        if (cur == a) return true;
+        cur = cfg.idom[(size_t)cur];
+    }
+    return false;
+}
+
+// ── Natural loop tespiti ─────────────────────────────────────────────────────
+// Geri kenar u→h (h, u'yu dominate eder). Gövde: u'dan pred'ler üzerinden
+// geriye yürü, h'ye ulaşınca dur (h dahil).
+void CFG::computeLoops() {
+    loops.clear();
+    if (idom.empty()) computeDominance();
+    if (blocks.empty()) return;
+
+    for (int u = 0; u < (int)blocks.size(); ++u) {
+        for (int h : blocks[(size_t)u].successors) {
+            if (!cfgDominates(*this, h, u)) continue;  // ileri kenar
+
+            NaturalLoop loop;
+            loop.header = h;
+            std::vector<char> inLoop(blocks.size(), 0);
+            inLoop[(size_t)h] = 1;
+            std::vector<int> work;
+            if (u != h) {  // kendine kenar: gövde yalnızca h, pred yürünmez
+                inLoop[(size_t)u] = 1;
+                work.push_back(u);
+            }
+            while (!work.empty()) {
+                int b = work.back(); work.pop_back();
+                for (int p : blocks[(size_t)b].predecessors) {
+                    if (!inLoop[(size_t)p]) {
+                        inLoop[(size_t)p] = 1;
+                        work.push_back(p);
+                    }
+                }
+            }
+            for (size_t b = 0; b < blocks.size(); ++b)
+                if (inLoop[b]) loop.body.push_back((int)b);
+            loops.push_back(std::move(loop));
+        }
+    }
 }

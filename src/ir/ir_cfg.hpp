@@ -10,6 +10,14 @@
 //   VM ve backend'ler CFG'yi GÖRMEZ — yalnızca linearize edilmiş flat
 //   instruction list'ini alır. (#218, ADR-039)
 //
+// ANALİZ YÜZEYİ (GC/threading altyapı denetimi, docs/gc-threading-altyapi-
+// denetimi.md): CFG optimizasyon sırasında kanonik temsildir; flat liste
+// depolama/yürütme sözleşmesidir. Bu katman sağlar: exception kenarları
+// (ENTER_TRY → catch), erişilemez blok temizliği, dominance tree (CHK
+// algoritması) ve natural loop tespiti. Pass'ler blok yapısına bağlı yazılır,
+// talimat indeksine değil — böylece ileride SSA'ya geçiş flat sözleşmeyi
+// bozmaz.
+//
 // ============================================================================
 
 #ifndef SAQUT_IR_CFG
@@ -32,6 +40,14 @@ struct BasicBlock {
     int jumpTarget = -1;       // block hedefi (block ID)
     std::vector<int> predecessors;
     std::vector<int> successors;
+    // Exception kenarları (block ID): blok içindeki ENTER_TRY'lerin catch
+    // hedefleri, talimat sırasına göre. Normal successors'tan AYRI tutulur
+    // çünkü kenar blok sonundan değil, talimatın kendisinden çıkar; kenar
+    // listesine (predecessors/successors) DAHİL EDİLİR — erişilebilirlik
+    // ve dataflow catch bloğunu görmek zorundadır. linearize() sıradaki
+    // ENTER_TRY'nin jumpTarget'ını bu listeden yeniden yazar (blok silinse
+    // bile flat indeks doğru kalır).
+    std::vector<int> exceptionTargets;
 
     std::string dump() const {
         // TTY-aware renk: gerçek terminalde renkli, redirect/pipe'ta düz.
@@ -75,8 +91,20 @@ struct BasicBlock {
     }
 };
 
+// Natural loop: geri kenar (u→h, h u'yu dominate eder) başına bir kayıt.
+// body artan blok ID sırasındadır; header = girişte döngünün başı.
+struct NaturalLoop {
+    int header = -1;
+    std::vector<int> body;
+};
+
 struct CFG {
     std::vector<BasicBlock> blocks;
+
+    // ── Analiz sonuçları (compute* çağrılana kadar boş) ─────────────────────
+    std::vector<int> idom;  // blok → ani-dominatör (girişin ki -1); CHK
+    std::vector<int> rpo;   // reverse postorder (dominance yürüyüş sırası)
+    std::vector<NaturalLoop> loops;
 
     bool isValid() const {
         if (blocks.empty()) return false;
@@ -86,31 +114,56 @@ struct CFG {
         return true;
     }
 
+    // Erişilemez blokları (blok 0'dan successors üzerinden ulaşılamayanlar)
+    // siler, kalanları yeniden numaralar, kenarları/analiz alanlarını tazeler.
+    // Exception kenarları dahil olduğundan catch blokları asla silinmez.
+    // Dönüş: silinen blok sayısı. Blok ID'leri değiştiğinden idom/rpo/loops
+    // temizlenir — yeniden compute* çağrılmalı.
+    int removeUnreachableBlocks();
+
+    // Dominance tree (Cooper-Harvey-Kennedy). Tüm bloklar erişilebilir
+    // olmalı (önce removeUnreachableBlocks). idom/rpo doldurur.
+    void computeDominance();
+
+    // Natural loop'lar; computeDominance sonrası çağrılmalı. loops doldurur.
+    void computeLoops();
+
     // CFG → flat instruction list
     // VM bu listeyi alır, CFG'yi görmez.
+    //
+    // Jump hedefleri blok silinse/dizi değişse bile doğru kalır: blockID →
+    // flat indeks çevirimi burada yapılır. İki talimat sınıfı yeniden yazılır:
+    //   1. Blok terminator'ü JMP/JIF_* → block.jumpTarget (blok ID) üzerinden
+    //   2. ENTER_TRY → block.exceptionTargets (blok ID), talimat sırasıyla
     std::vector<Instruction> linearize() const {
         std::vector<Instruction> result;
-        // Blokları sırayla dolaş, instruction'ları ekle
-        // Jump target'ları BLOCK ID → instruction index'e çevir.
-        // KAYNAK block.jumpTarget'tır (buildCFG'de çözümlenmiş blok ID);
-        // instruction'ın kendi jumpTarget'ı orijinal TALİMAT İNDEKSİNİ taşır
-        // ve flat listedeki sıra korunduğundan DOKUNULMADAN kalmalıdır.
+        std::vector<int> blockFlatStart(blocks.size() + 1, 0);
+        for (size_t b = 0; b < blocks.size(); ++b)
+            blockFlatStart[b + 1] = blockFlatStart[b] + (int)blocks[b].instructions.size();
+
+        auto flatIndexOf = [&](int blockId) -> int {
+            if (blockId >= 0 && blockId < (int)blocks.size())
+                return blockFlatStart[(size_t)blockId];
+            return -1;
+        };
+
         for (const auto& block : blocks) {
-            for (const auto& ins : block.instructions)
+            size_t enterTrySeen = 0;
+            for (const auto& ins : block.instructions) {
                 result.push_back(ins);
+                Instruction& out = result.back();
+                if (out.opcode == Opcode::ENTER_TRY &&
+                    enterTrySeen < block.exceptionTargets.size()) {
+                    out.jumpTarget = flatIndexOf(block.exceptionTargets[enterTrySeen++]);
+                }
+            }
 
             if (!result.empty()) {
                 Instruction& last = result.back();
                 if ((last.opcode == Opcode::JMP ||
                      last.opcode == Opcode::JIF_FALSE ||
                      last.opcode == Opcode::JIF_TRUE) && block.jumpTarget >= 0) {
-                    int targetBlock = block.jumpTarget;
-                    if (targetBlock >= 0 && targetBlock < (int)blocks.size()) {
-                        int targetIndex = 0;
-                        for (int b = 0; b < targetBlock; ++b)
-                            targetIndex += (int)blocks[b].instructions.size();
-                        last.jumpTarget = targetIndex;
-                    }
+                    last.jumpTarget = flatIndexOf(block.jumpTarget);
                 }
             }
         }
@@ -132,5 +185,8 @@ struct CFG {
 // buildCFG(instructions) → CFG
 // implementasyon ir_cfg.cpp'de
 CFG buildCFG(const std::vector<Instruction>& instructions);
+
+// a, b'yi dominate ediyor mu? (computeDominance çağrılmış olmalı)
+bool cfgDominates(const CFG& cfg, int a, int b);
 
 #endif

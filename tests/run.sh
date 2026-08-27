@@ -16,7 +16,10 @@ for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg 
     # test_host_abi StringObject/Heap gerçeklemesini (object.cpp) gerektirir —
     # sınır temsili string'i pointer olarak taşır (#222).
     extra=""
-    [ "$t" = "test_cfg" ] && extra="$ROOT/src/ir/ir_cfg.cpp"
+    # test_cfg buildCFG/liveness gerçeklemesini (ir_cfg.cpp + ir_liveness.cpp)
+    # da derler — hata sınıfı testi için implementasyon gerekli (#218 + altyapı
+    # denetimi: exception kenarı, unreachable temizliği, dominance, liveness).
+    [ "$t" = "test_cfg" ] && extra="$ROOT/src/ir/ir_cfg.cpp $ROOT/src/ir/ir_liveness.cpp"
     # test_host_abi gerçek registry'yi çağırır (rt_host_call) — host gövdeleri
     # ve object.cpp gerekir. SAQUT_VERSION normalde CMake'ten gelir.
     # #223: registry built-in metodları src/data/ modüllerinden alır.

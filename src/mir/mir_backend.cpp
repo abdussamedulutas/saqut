@@ -410,9 +410,9 @@ extern "C" void* rt_jit_array_get_p(void* a, int64_t idx) {
     Value v = dataArrayElemAt(arr, (int)idx);
     // VM string'i Value içinde INLINE tutar; JIT sınırında pointer gerekir.
     // Kutulama GC-yönetimli heap'e yapılır (shadow stack ile görünür).
-    if (v.kind == ValueKind::String)  return jitNewString(v.stringValue);
-    if (v.kind == ValueKind::Decimal) return jitBoxDecimal(v.decimalValue);
-    return v.ref;
+    if (v.kind == ValueKind::String)  return jitNewString(v.stringValue());
+    if (v.kind == ValueKind::Decimal) return jitBoxDecimal(v.decimalValue());
+    return v.ref();
 }
 
 static void jitArraySet(ArrayObject* arr, int64_t idx, const Value& v) {
@@ -427,7 +427,7 @@ static void jitArraySet(ArrayObject* arr, int64_t idx, const Value& v) {
         case ArrayElemKind::LongInt: arr->longs[i]    = v.asI64(); break;
         case ArrayElemKind::Float32: arr->f32s[i]     = (float)v.asDouble(); break;
         case ArrayElemKind::Float64: arr->f64s[i]     = v.asDouble(); break;
-        case ArrayElemKind::Decimal: arr->decimals[i] = v.decimalValue; break;
+        case ArrayElemKind::Decimal: arr->decimals[i] = v.decimalValue(); break;
     }
 }
 
@@ -487,9 +487,9 @@ extern "C" int64_t rt_jit_field_get_i(void* o, int64_t idx) { return jitFieldAt(
 extern "C" double  rt_jit_field_get_d(void* o, int64_t idx) { return jitFieldAt(o, idx)->asDouble(); }
 extern "C" void*   rt_jit_field_get_p(void* o, int64_t idx) {
     Value* v = jitFieldAt(o, idx);
-    if (v->kind == ValueKind::String)  return jitNewString(v->stringValue);
-    if (v->kind == ValueKind::Decimal) return jitBoxDecimal(v->decimalValue);
-    return v->ref;
+    if (v->kind == ValueKind::String)  return jitNewString(v->stringValue());
+    if (v->kind == ValueKind::Decimal) return jitBoxDecimal(v->decimalValue());
+    return v->ref();
 }
 extern "C" int64_t rt_jit_field_is_null(void* o, int64_t idx) {
     return jitFieldAt(o, idx)->kind == ValueKind::Null ? 1 : 0;
@@ -2848,7 +2848,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     if (rt().pendingError) {
         if (rt().pendingError->fields.size() > 2 &&
             rt().pendingError->fields[2].kind == ValueKind::String)
-            uncaughtMessage = rt().pendingError->fields[2].stringValue;
+            uncaughtMessage = rt().pendingError->fields[2].stringValue();
         if (uncaughtMessage.empty()) uncaughtMessage = "uncaught error";
         rt().pendingError = nullptr;
     }

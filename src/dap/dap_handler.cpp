@@ -67,22 +67,22 @@ void DapHandler::sendEvent(const std::string& event,
 
 std::string DapHandler::valueToString(const Value& v, int depth) const {
     switch (v.kind) {
-        case ValueKind::Int:     return std::to_string(v.intValue);
-        case ValueKind::LongInt: return std::to_string(v.int64Value);
+        case ValueKind::Int:     return std::to_string(v.intValue());
+        case ValueKind::LongInt: return std::to_string(v.int64Value());
         case ValueKind::Float:
         case ValueKind::Float32: {
             std::ostringstream ss;
-            ss << v.floatValue;
+            ss << v.floatValue();
             return ss.str();
         }
-        case ValueKind::Decimal: return v.decimalValue.toString();
-        case ValueKind::String:  return "\"" + v.stringValue + "\"";
+        case ValueKind::Decimal: return v.decimalValue().toString();
+        case ValueKind::String:  return "\"" + v.stringValue() + "\"";
         case ValueKind::Null:    return "null";
-        case ValueKind::Date:    return std::to_string(v.int64Value);
+        case ValueKind::Date:    return std::to_string(v.int64Value());
         case ValueKind::Ref: {
-            if (!v.ref) return "null";
-            if (v.ref->type == ObjectType::Struct) {
-                auto* s = static_cast<StructObject*>(v.ref);
+            if (!v.ref()) return "null";
+            if (v.ref()->type == ObjectType::Struct) {
+                auto* s = static_cast<StructObject*>(v.ref());
                 if (depth > 0) return "{…}";
                 std::string out = "{";
                 size_t shown = std::min(s->fields.size(), (size_t)6);
@@ -96,7 +96,7 @@ std::string DapHandler::valueToString(const Value& v, int depth) const {
                 if (s->fields.size() > shown) out += ", …";
                 return out + "}";
             }
-            auto* a = static_cast<ArrayObject*>(v.ref);
+            auto* a = static_cast<ArrayObject*>(v.ref());
             if (depth > 0) return "[…]";
             std::string out = "[";
             int aLen = 0;
@@ -138,7 +138,7 @@ std::string DapHandler::valueToString(const Value& v, int depth) const {
 // eski numaralar DAP spec'i gereği geçersizleşir → invalidateVarRefs.
 
 int DapHandler::registerVarRef(const Value& v) {
-    if (v.kind != ValueKind::Ref || !v.ref) return 0;
+    if (v.kind != ValueKind::Ref || !v.ref()) return 0;
     int id = nextVarRef_++;
     varRefs_[id] = v;
     return id;
@@ -155,10 +155,10 @@ void DapHandler::invalidateVarRefs() {
 
 nlohmann::json DapHandler::buildChildVariables(const Value& v) {
     nlohmann::json vars = nlohmann::json::array();
-    if (v.kind != ValueKind::Ref || !v.ref) return vars;
+    if (v.kind != ValueKind::Ref || !v.ref()) return vars;
 
-    if (v.ref->type == ObjectType::Struct) {
-        auto* s = static_cast<StructObject*>(v.ref);
+    if (v.ref()->type == ObjectType::Struct) {
+        auto* s = static_cast<StructObject*>(v.ref());
         for (size_t i = 0; i < s->fields.size(); ++i) {
             const Value& fv = s->fields[i];
             const auto& fn = s->fieldNames ? *s->fieldNames : std::vector<std::string>();
@@ -171,8 +171,8 @@ nlohmann::json DapHandler::buildChildVariables(const Value& v) {
                 {"variablesReference", registerVarRef(fv)}
             });
         }
-    } else if (v.ref->type == ObjectType::Array) {
-        auto* a = static_cast<ArrayObject*>(v.ref);
+    } else if (v.ref()->type == ObjectType::Array) {
+        auto* a = static_cast<ArrayObject*>(v.ref());
         int aLen = 0;
         switch (a->elemKind) {
             case ArrayElemKind::Ref:     aLen = (int)a->elements.size(); break;
@@ -710,9 +710,9 @@ bool DapHandler::resolveExpression(const std::string& expr, int frameId,
             while (i < n && isIdent(expr[i])) ++i;
             if (i == fs) return false;
             std::string field = expr.substr(fs, i - fs);
-            if (out.kind != ValueKind::Ref || !out.ref ||
-                out.ref->type != ObjectType::Struct) return false;
-            auto* s = static_cast<StructObject*>(out.ref);
+            if (out.kind != ValueKind::Ref || !out.ref() ||
+                out.ref()->type != ObjectType::Struct) return false;
+            auto* s = static_cast<StructObject*>(out.ref());
             bool hit = false;
             if (s->fieldNames) {
                 auto& fn = *s->fieldNames;
@@ -730,9 +730,9 @@ bool DapHandler::resolveExpression(const std::string& expr, int frameId,
             skipWs();
             if (i >= n || expr[i] != ']') return false;
             ++i;
-            if (out.kind != ValueKind::Ref || !out.ref ||
-                out.ref->type != ObjectType::Array) return false;
-            auto* a = static_cast<ArrayObject*>(out.ref);
+            if (out.kind != ValueKind::Ref || !out.ref() ||
+                out.ref()->type != ObjectType::Array) return false;
+            auto* a = static_cast<ArrayObject*>(out.ref());
             if (idx < 0 || idx >= (int)a->elements.size()) return false;
             out = a->elements[idx];
         } else {

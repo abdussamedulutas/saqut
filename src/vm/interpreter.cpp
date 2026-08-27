@@ -514,52 +514,52 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         // İstisna: sıfıra bölme gerçek bir çalışma zamanı koşuludur, kontrol edilir.
         case Opcode::ADD:
             frame.slots[instr.dest] = Value::fromInt(
-                wrapAddI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
+                wrapAddI32(frame.slots[instr.left].intValue(), frame.slots[instr.right].intValue()));
             break;
         case Opcode::SUB:
             frame.slots[instr.dest] = Value::fromInt(
-                wrapSubI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
+                wrapSubI32(frame.slots[instr.left].intValue(), frame.slots[instr.right].intValue()));
             break;
         case Opcode::MUL:
             frame.slots[instr.dest] = Value::fromInt(
-                wrapMulI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
+                wrapMulI32(frame.slots[instr.left].intValue(), frame.slots[instr.right].intValue()));
             break;
         case Opcode::DIV: {
-            int d = frame.slots[instr.right].intValue;
+            int d = frame.slots[instr.right].intValue();
             if (d == 0) { pendingThrow_ = makeErrorValue("division by zero", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
-            frame.slots[instr.dest] = Value::fromInt(wrapDivI32(frame.slots[instr.left].intValue, d));
+            frame.slots[instr.dest] = Value::fromInt(wrapDivI32(frame.slots[instr.left].intValue(), d));
             break;
         }
         case Opcode::MOD: {
-            int d = frame.slots[instr.right].intValue;
+            int d = frame.slots[instr.right].intValue();
             if (d == 0) { pendingThrow_ = makeErrorValue("sıfıra bölme (mod)", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
-            frame.slots[instr.dest] = Value::fromInt(wrapModI32(frame.slots[instr.left].intValue, d));
+            frame.slots[instr.dest] = Value::fromInt(wrapModI32(frame.slots[instr.left].intValue(), d));
             break;
         }
 
         // ── Bitsel ────────────────────────────────────────────────────────
         case Opcode::BAND:
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue & frame.slots[instr.right].intValue);
+                frame.slots[instr.left].intValue() & frame.slots[instr.right].intValue());
             break;
         case Opcode::BOR:
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue | frame.slots[instr.right].intValue);
+                frame.slots[instr.left].intValue() | frame.slots[instr.right].intValue());
             break;
         case Opcode::BXOR:
             frame.slots[instr.dest] = Value::fromInt(
-                frame.slots[instr.left].intValue ^ frame.slots[instr.right].intValue);
+                frame.slots[instr.left].intValue() ^ frame.slots[instr.right].intValue());
             break;
         case Opcode::SHL:
             frame.slots[instr.dest] = Value::fromInt(
-                wrapShlI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
+                wrapShlI32(frame.slots[instr.left].intValue(), frame.slots[instr.right].intValue()));
             break;
         case Opcode::SHR:
             frame.slots[instr.dest] = Value::fromInt(
-                wrapShrI32(frame.slots[instr.left].intValue, frame.slots[instr.right].intValue));
+                wrapShrI32(frame.slots[instr.left].intValue(), frame.slots[instr.right].intValue()));
             break;
         case Opcode::BNOT:
-            frame.slots[instr.dest] = Value::fromInt(~frame.slots[instr.src].intValue);
+            frame.slots[instr.dest] = Value::fromInt(~frame.slots[instr.src].intValue());
             break;
 
         // ── Global değişken erişimi ────────────────────────────────────────
@@ -579,9 +579,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
             if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
-                r = (lv.int64Value < rv.int64Value ? 1 : 0);
+                r = (lv.int64Value() < rv.int64Value() ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
-                r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) < 0 ? 1 : 0;
+                r = DecimalValue::compare(lv.decimalValue(), rv.decimalValue()) < 0 ? 1 : 0;
             else if (lv.isFloaty() || rv.isFloaty())
                 r = (lv.asDouble() < rv.asDouble() ? 1 : 0);
             else r = (lv.asI64() < rv.asI64() ? 1 : 0);
@@ -592,9 +592,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
             if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
-                r = (lv.int64Value <= rv.int64Value ? 1 : 0);
+                r = (lv.int64Value() <= rv.int64Value() ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
-                r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) <= 0 ? 1 : 0;
+                r = DecimalValue::compare(lv.decimalValue(), rv.decimalValue()) <= 0 ? 1 : 0;
             else if (lv.isFloaty() || rv.isFloaty())
                 r = (lv.asDouble() <= rv.asDouble() ? 1 : 0);
             else r = (lv.asI64() <= rv.asI64() ? 1 : 0);
@@ -605,9 +605,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
             if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
-                r = (lv.int64Value > rv.int64Value ? 1 : 0);
+                r = (lv.int64Value() > rv.int64Value() ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
-                r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) > 0 ? 1 : 0;
+                r = DecimalValue::compare(lv.decimalValue(), rv.decimalValue()) > 0 ? 1 : 0;
             else if (lv.isFloaty() || rv.isFloaty())
                 r = (lv.asDouble() > rv.asDouble() ? 1 : 0);
             else r = (lv.asI64() > rv.asI64() ? 1 : 0);
@@ -618,9 +618,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             auto& lv = frame.slots[instr.left]; auto& rv = frame.slots[instr.right];
             int r;
             if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
-                r = (lv.int64Value >= rv.int64Value ? 1 : 0);
+                r = (lv.int64Value() >= rv.int64Value() ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
-                r = DecimalValue::compare(lv.decimalValue, rv.decimalValue) >= 0 ? 1 : 0;
+                r = DecimalValue::compare(lv.decimalValue(), rv.decimalValue()) >= 0 ? 1 : 0;
             else if (lv.isFloaty() || rv.isFloaty())
                 r = (lv.asDouble() >= rv.asDouble() ? 1 : 0);
             else r = (lv.asI64() >= rv.asI64() ? 1 : 0);
@@ -636,13 +636,13 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             else if (lv.kind == ValueKind::Null || rv.kind == ValueKind::Null)
                 r = 0;
             else if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
-                r = (lv.ref == rv.ref ? 1 : 0); // ADR-023: array/struct kimlik
+                r = (lv.ref() == rv.ref() ? 1 : 0); // ADR-023: array/struct kimlik
             else if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
-                r = (lv.int64Value == rv.int64Value ? 1 : 0);
+                r = (lv.int64Value() == rv.int64Value() ? 1 : 0);
             else if (lv.kind == ValueKind::String)
-                r = (lv.stringValue == rv.stringValue ? 1 : 0);
+                r = (lv.stringValue() == rv.stringValue() ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
-                r = (lv.decimalValue == rv.decimalValue ? 1 : 0);
+                r = (lv.decimalValue() == rv.decimalValue() ? 1 : 0);
             else if (lv.isFloaty() || rv.isFloaty())
                 r = (lv.asDouble() == rv.asDouble() ? 1 : 0);
             else
@@ -658,13 +658,13 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             else if (lv.kind == ValueKind::Null || rv.kind == ValueKind::Null)
                 r = 1;
             else if (lv.kind == ValueKind::Ref || rv.kind == ValueKind::Ref)
-                r = (lv.ref != rv.ref ? 1 : 0);
+                r = (lv.ref() != rv.ref() ? 1 : 0);
             else if (lv.kind == ValueKind::Date && rv.kind == ValueKind::Date)
-                r = (lv.int64Value != rv.int64Value ? 1 : 0);
+                r = (lv.int64Value() != rv.int64Value() ? 1 : 0);
             else if (lv.kind == ValueKind::String)
-                r = (lv.stringValue != rv.stringValue ? 1 : 0);
+                r = (lv.stringValue() != rv.stringValue() ? 1 : 0);
             else if (lv.kind == ValueKind::Decimal || rv.kind == ValueKind::Decimal)
-                r = (lv.decimalValue != rv.decimalValue ? 1 : 0);
+                r = (lv.decimalValue() != rv.decimalValue() ? 1 : 0);
             else if (lv.isFloaty() || rv.isFloaty())
                 r = (lv.asDouble() != rv.asDouble() ? 1 : 0);
             else
@@ -723,7 +723,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
                 callStack_.back().slots[returnDestSlot] = returnValue;
 
             if (callStack_.empty()) {
-                lastReturnValue_ = returnValue.intValue;
+                lastReturnValue_ = returnValue.intValue();
                 state_ = RunState::Finished;
                 return RunReason::Finished;
             }
@@ -743,30 +743,30 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         case Opcode::FADD:
             frame.slots[instr.dest] = Value::fromFloat(
-                frame.slots[instr.left].floatValue + frame.slots[instr.right].floatValue);
+                frame.slots[instr.left].floatValue() + frame.slots[instr.right].floatValue());
             break;
         case Opcode::FSUB:
             frame.slots[instr.dest] = Value::fromFloat(
-                frame.slots[instr.left].floatValue - frame.slots[instr.right].floatValue);
+                frame.slots[instr.left].floatValue() - frame.slots[instr.right].floatValue());
             break;
         case Opcode::FMUL:
             frame.slots[instr.dest] = Value::fromFloat(
-                frame.slots[instr.left].floatValue * frame.slots[instr.right].floatValue);
+                frame.slots[instr.left].floatValue() * frame.slots[instr.right].floatValue());
             break;
         case Opcode::FDIV: {
-            double r = frame.slots[instr.right].floatValue;
+            double r = frame.slots[instr.right].floatValue();
             if (r == 0.0) { pendingThrow_ = makeErrorValue("float division by zero", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
-            frame.slots[instr.dest] = Value::fromFloat(frame.slots[instr.left].floatValue / r);
+            frame.slots[instr.dest] = Value::fromFloat(frame.slots[instr.left].floatValue() / r);
             break;
         }
         case Opcode::FNEG:
-            frame.slots[instr.dest] = Value::fromFloat(-frame.slots[instr.src].floatValue);
+            frame.slots[instr.dest] = Value::fromFloat(-frame.slots[instr.src].floatValue());
             break;
         case Opcode::INT_TO_FLOAT:
-            frame.slots[instr.dest] = Value::fromFloat((double)frame.slots[instr.src].intValue);
+            frame.slots[instr.dest] = Value::fromFloat((double)frame.slots[instr.src].intValue());
             break;
         case Opcode::FLOAT_TO_INT:
-            frame.slots[instr.dest] = Value::fromInt((int)frame.slots[instr.src].floatValue);
+            frame.slots[instr.dest] = Value::fromInt((int)frame.slots[instr.src].floatValue());
             break;
 
         // ── float32 aritmetiği (ADR-040) — gerçek `float` hassasiyetiyle
@@ -778,30 +778,30 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         case Opcode::F32ADD:
             frame.slots[instr.dest] = Value::fromFloat32((double)(
-                (float)frame.slots[instr.left].floatValue + (float)frame.slots[instr.right].floatValue));
+                (float)frame.slots[instr.left].floatValue() + (float)frame.slots[instr.right].floatValue()));
             break;
         case Opcode::F32SUB:
             frame.slots[instr.dest] = Value::fromFloat32((double)(
-                (float)frame.slots[instr.left].floatValue - (float)frame.slots[instr.right].floatValue));
+                (float)frame.slots[instr.left].floatValue() - (float)frame.slots[instr.right].floatValue()));
             break;
         case Opcode::F32MUL:
             frame.slots[instr.dest] = Value::fromFloat32((double)(
-                (float)frame.slots[instr.left].floatValue * (float)frame.slots[instr.right].floatValue));
+                (float)frame.slots[instr.left].floatValue() * (float)frame.slots[instr.right].floatValue()));
             break;
         case Opcode::F32DIV: {
-            float r = (float)frame.slots[instr.right].floatValue;
+            float r = (float)frame.slots[instr.right].floatValue();
             if (r == 0.0f) { pendingThrow_ = makeErrorValue("float division by zero", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
-            frame.slots[instr.dest] = Value::fromFloat32((double)((float)frame.slots[instr.left].floatValue / r));
+            frame.slots[instr.dest] = Value::fromFloat32((double)((float)frame.slots[instr.left].floatValue() / r));
             break;
         }
         case Opcode::F32NEG:
-            frame.slots[instr.dest] = Value::fromFloat32((double)(-(float)frame.slots[instr.src].floatValue));
+            frame.slots[instr.dest] = Value::fromFloat32((double)(-(float)frame.slots[instr.src].floatValue()));
             break;
         case Opcode::INT_TO_FLOAT32:
-            frame.slots[instr.dest] = Value::fromFloat32((double)frame.slots[instr.src].intValue);
+            frame.slots[instr.dest] = Value::fromFloat32((double)frame.slots[instr.src].intValue());
             break;
         case Opcode::FLOAT32_TO_INT: {
-            float fv = (float)frame.slots[instr.src].floatValue;
+            float fv = (float)frame.slots[instr.src].floatValue();
             if (!std::isfinite(fv) || fv < (float)INT_MIN || fv > (float)INT_MAX) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
@@ -814,11 +814,11 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         }
         case Opcode::FLOAT_TO_FLOAT32:
             // double → float: veri kaybı gerçekleşir (E003 derleme zamanında uyardı).
-            frame.slots[instr.dest] = Value::fromFloat32(frame.slots[instr.src].floatValue);
+            frame.slots[instr.dest] = Value::fromFloat32(frame.slots[instr.src].floatValue());
             break;
         case Opcode::FLOAT32_TO_FLOAT:
             // float → double: kayıpsız genişletme, kind değişir (Float32 → Float).
-            frame.slots[instr.dest] = Value::fromFloat(frame.slots[instr.src].floatValue);
+            frame.slots[instr.dest] = Value::fromFloat(frame.slots[instr.src].floatValue());
             break;
 
         // ── longint aritmetiği (ADR-040) — 64-bit, rank kulesi dışında izole ──
@@ -827,62 +827,62 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         case Opcode::LADD:
             frame.slots[instr.dest] = Value::fromLongInt(
-                wrapAddI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+                wrapAddI64(frame.slots[instr.left].int64Value(), frame.slots[instr.right].int64Value()));
             break;
         case Opcode::LSUB:
             frame.slots[instr.dest] = Value::fromLongInt(
-                wrapSubI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+                wrapSubI64(frame.slots[instr.left].int64Value(), frame.slots[instr.right].int64Value()));
             break;
         case Opcode::LMUL:
             frame.slots[instr.dest] = Value::fromLongInt(
-                wrapMulI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+                wrapMulI64(frame.slots[instr.left].int64Value(), frame.slots[instr.right].int64Value()));
             break;
         case Opcode::LDIV: {
-            long long d = frame.slots[instr.right].int64Value;
+            long long d = frame.slots[instr.right].int64Value();
             if (d == 0) { pendingThrow_ = makeErrorValue("division by zero", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
             frame.slots[instr.dest] = Value::fromLongInt(
-                wrapDivI64(frame.slots[instr.left].int64Value, d));
+                wrapDivI64(frame.slots[instr.left].int64Value(), d));
             break;
         }
         case Opcode::LMOD: {
-            long long d = frame.slots[instr.right].int64Value;
+            long long d = frame.slots[instr.right].int64Value();
             if (d == 0) { pendingThrow_ = makeErrorValue("sıfıra bölme (mod)", "E_DIVZERO", instr.sourceLine, instr.sourceCol); break; }
             frame.slots[instr.dest] = Value::fromLongInt(
-                wrapModI64(frame.slots[instr.left].int64Value, d));
+                wrapModI64(frame.slots[instr.left].int64Value(), d));
             break;
         }
         case Opcode::LNEG:
-            frame.slots[instr.dest] = Value::fromLongInt(wrapNegI64(frame.slots[instr.src].int64Value));
+            frame.slots[instr.dest] = Value::fromLongInt(wrapNegI64(frame.slots[instr.src].int64Value()));
             break;
         case Opcode::LBAND:
             frame.slots[instr.dest] = Value::fromLongInt(
-                frame.slots[instr.left].int64Value & frame.slots[instr.right].int64Value);
+                frame.slots[instr.left].int64Value() & frame.slots[instr.right].int64Value());
             break;
         case Opcode::LBOR:
             frame.slots[instr.dest] = Value::fromLongInt(
-                frame.slots[instr.left].int64Value | frame.slots[instr.right].int64Value);
+                frame.slots[instr.left].int64Value() | frame.slots[instr.right].int64Value());
             break;
         case Opcode::LBXOR:
             frame.slots[instr.dest] = Value::fromLongInt(
-                frame.slots[instr.left].int64Value ^ frame.slots[instr.right].int64Value);
+                frame.slots[instr.left].int64Value() ^ frame.slots[instr.right].int64Value());
             break;
         case Opcode::LSHL:
             frame.slots[instr.dest] = Value::fromLongInt(
-                wrapShlI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+                wrapShlI64(frame.slots[instr.left].int64Value(), frame.slots[instr.right].int64Value()));
             break;
         case Opcode::LSHR:
             frame.slots[instr.dest] = Value::fromLongInt(
-                wrapShrI64(frame.slots[instr.left].int64Value, frame.slots[instr.right].int64Value));
+                wrapShrI64(frame.slots[instr.left].int64Value(), frame.slots[instr.right].int64Value()));
             break;
         case Opcode::LBNOT:
-            frame.slots[instr.dest] = Value::fromLongInt(~frame.slots[instr.src].int64Value);
+            frame.slots[instr.dest] = Value::fromLongInt(~frame.slots[instr.src].int64Value());
             break;
         case Opcode::INT_TO_LONG:
             // int → longint: kayıpsız genişletme, işaret uzatılır (32→64 bit).
-            frame.slots[instr.dest] = Value::fromLongInt((long long)frame.slots[instr.src].intValue);
+            frame.slots[instr.dest] = Value::fromLongInt((long long)frame.slots[instr.src].intValue());
             break;
         case Opcode::LONG_TO_INT_CHECKED: {
-            long long lv = frame.slots[instr.src].int64Value;
+            long long lv = frame.slots[instr.src].int64Value();
             if (lv < INT_MIN || lv > INT_MAX) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
@@ -932,9 +932,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         }
         case Opcode::FIELD_GET: {
             Value& objVal = frame.slots[instr.src];
-            if (objVal.kind != ValueKind::Ref || !objVal.ref)
+            if (objVal.kind != ValueKind::Ref || !objVal.ref())
                 throw std::runtime_error("not a struct");
-            auto* obj = (StructObject*)objVal.ref;
+            auto* obj = (StructObject*)objVal.ref();
             int idx = instr.intValue;
             if (idx < 0 || idx >= (int)obj->fields.size())
                 throw std::runtime_error("invalid struct field index " + std::to_string(idx));
@@ -943,17 +943,17 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         }
         case Opcode::FIELD_SET: {
             Value& objVal = frame.slots[instr.dest];
-            if (objVal.kind != ValueKind::Ref || !objVal.ref)
+            if (objVal.kind != ValueKind::Ref || !objVal.ref())
                 throw std::runtime_error("not a struct");
-            auto* obj = (StructObject*)objVal.ref;
+            auto* obj = (StructObject*)objVal.ref();
             int idx = instr.intValue;
             if (idx < 0 || idx >= (int)obj->fields.size())
                 throw std::runtime_error("invalid struct field index " + std::to_string(idx));
             {
                 // #217: write barrier — FIELD_SET
                 const Value& newVal = frame.slots[instr.right];
-                if (newVal.kind == ValueKind::Ref && newVal.ref)
-                    writeBarrier(obj, newVal.ref);
+                if (newVal.kind == ValueKind::Ref && newVal.ref())
+                    writeBarrier(obj, newVal.ref());
                 obj->fields[idx] = newVal;
             }
             break;
@@ -978,11 +978,11 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         }
         case Opcode::ARRAY_GET: {
             Value& arrVal = frame.slots[instr.left];
-            if (arrVal.kind != ValueKind::Ref || !arrVal.ref) {
+            if (arrVal.kind != ValueKind::Ref || !arrVal.ref()) {
                 pendingThrow_ = makeErrorValue("expected array, got different type", "E_TYPE", instr.sourceLine, instr.sourceCol); break;
             }
-            auto* arr = (ArrayObject*)arrVal.ref;
-            int idx = frame.slots[instr.right].intValue;
+            auto* arr = (ArrayObject*)arrVal.ref();
+            int idx = frame.slots[instr.right].intValue();
             // #206: elemKind'a göre doğru buffer'ın size'ını kontrol et
             int len = 0;
             switch (arr->elemKind) {
@@ -1015,11 +1015,11 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         }
         case Opcode::ARRAY_SET: {
             Value& arrVal = frame.slots[instr.dest];
-            if (arrVal.kind != ValueKind::Ref || !arrVal.ref) {
+            if (arrVal.kind != ValueKind::Ref || !arrVal.ref()) {
                 pendingThrow_ = makeErrorValue("expected array, got different type", "E_TYPE", instr.sourceLine, instr.sourceCol); break;
             }
-            auto* arr = (ArrayObject*)arrVal.ref;
-            int idx = frame.slots[instr.left].intValue;
+            auto* arr = (ArrayObject*)arrVal.ref();
+            int idx = frame.slots[instr.left].intValue();
             // #206: elemKind'a göre doğru buffer'ın size'ını kontrol et
             int len = 0;
             switch (arr->elemKind) {
@@ -1043,25 +1043,25 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             switch (arr->elemKind) {
                 case ArrayElemKind::Ref:     {
                     // #217: write barrier — ARRAY_SET
-                    if (val.kind == ValueKind::Ref && val.ref)
-                        writeBarrier(arr, val.ref);
+                    if (val.kind == ValueKind::Ref && val.ref())
+                        writeBarrier(arr, val.ref());
                     arr->elements[idx] = val;
                     break;
                 }
-                case ArrayElemKind::Byte:    arr->bytes[idx] = (uint8_t)val.intValue; break;
-                case ArrayElemKind::Int:     arr->ints[idx] = val.intValue; break;
+                case ArrayElemKind::Byte:    arr->bytes[idx] = (uint8_t)val.intValue(); break;
+                case ArrayElemKind::Int:     arr->ints[idx] = val.intValue(); break;
                 case ArrayElemKind::LongInt: arr->longs[idx] = val.asI64(); break;
                 case ArrayElemKind::Float32: arr->f32s[idx] = (float)val.asDouble(); break;
                 case ArrayElemKind::Float64: arr->f64s[idx] = val.asDouble(); break;
-                case ArrayElemKind::Decimal: arr->decimals[idx] = val.decimalValue; break;
+                case ArrayElemKind::Decimal: arr->decimals[idx] = val.decimalValue(); break;
             }
             break;
         }
         case Opcode::ARRAY_LEN: {
             Value& arrVal = frame.slots[instr.src];
-            if (arrVal.kind != ValueKind::Ref || !arrVal.ref)
+            if (arrVal.kind != ValueKind::Ref || !arrVal.ref())
                 throw std::runtime_error("not an array");
-            auto* arr = (ArrayObject*)arrVal.ref;
+            auto* arr = (ArrayObject*)arrVal.ref();
             // #206: elemKind'a göre doğru buffer'ın size'ını döndür
             int len = 0;
             switch (arr->elemKind) {
@@ -1080,23 +1080,23 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         // ── Tip dönüşümleri (ADR-026: as operatörü) ─────────────────────
         case Opcode::CAST_INT_TO_STR: {
             frame.slots[instr.dest] = Value::fromString(
-                std::to_string(frame.slots[instr.src].intValue));
+                std::to_string(frame.slots[instr.src].intValue()));
             break;
         }
         case Opcode::CAST_FLOAT_TO_STR: {
             std::ostringstream oss;
-            double fv = frame.slots[instr.src].floatValue;
+            double fv = frame.slots[instr.src].floatValue();
             oss << fv;
             frame.slots[instr.dest] = Value::fromString(oss.str());
             break;
         }
         case Opcode::CAST_BOOL_TO_STR:
             frame.slots[instr.dest] = Value::fromString(
-                frame.slots[instr.src].intValue ? "true" : "false");
+                frame.slots[instr.src].intValue() ? "true" : "false");
             break;
 
         case Opcode::CAST_STR_TO_INT: {
-            const std::string& s = frame.slots[instr.src].stringValue;
+            const std::string& s = frame.slots[instr.src].stringValue();
             try {
                 size_t pos;
                 long long v = std::stoll(s, &pos);
@@ -1112,7 +1112,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         }
         case Opcode::CAST_STR_TO_FLOAT: {
-            const std::string& s = frame.slots[instr.src].stringValue;
+            const std::string& s = frame.slots[instr.src].stringValue();
             try {
                 size_t pos;
                 double v = std::stod(s, &pos);
@@ -1127,7 +1127,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         }
         case Opcode::CAST_FLOAT_TO_INT_CHECKED: {
-            double fv = frame.slots[instr.src].floatValue;
+            double fv = frame.slots[instr.src].floatValue();
             if (!std::isfinite(fv) || fv < (double)INT_MIN || fv > (double)INT_MAX) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
@@ -1140,11 +1140,11 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         }
         case Opcode::CAST_LONG_TO_STR: {
             frame.slots[instr.dest] = Value::fromString(
-                std::to_string(frame.slots[instr.src].int64Value));
+                std::to_string(frame.slots[instr.src].int64Value()));
             break;
         }
         case Opcode::CAST_STR_TO_LONG: {
-            const std::string& s = frame.slots[instr.src].stringValue;
+            const std::string& s = frame.slots[instr.src].stringValue();
             try {
                 size_t pos;
                 long long v = std::stoll(s, &pos);
@@ -1161,12 +1161,12 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::CAST_FLOAT32_TO_STR: {
             // MIR rt_jit_float32_to_str ile birebir (setprecision(9), gerçek float).
             std::ostringstream oss;
-            oss << std::setprecision(9) << (float)frame.slots[instr.src].floatValue;
+            oss << std::setprecision(9) << (float)frame.slots[instr.src].floatValue();
             frame.slots[instr.dest] = Value::fromString(oss.str());
             break;
         }
         case Opcode::CAST_STR_TO_FLOAT32: {
-            const std::string& s = frame.slots[instr.src].stringValue;
+            const std::string& s = frame.slots[instr.src].stringValue();
             try {
                 size_t pos;
                 float v = std::stof(s, &pos);
@@ -1181,7 +1181,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         }
         case Opcode::CAST_FLOAT_TO_LONG_CHECKED: {
-            double fv = frame.slots[instr.src].floatValue;
+            double fv = frame.slots[instr.src].floatValue();
             if (!std::isfinite(fv) || fv < -9223372036854775808.0 || fv >= 9223372036854775808.0) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
@@ -1194,7 +1194,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         }
         case Opcode::CAST_INT_TO_BYTE_CHECKED: {
             // #86: int → byte, 0-255 dışı sessiz kırpılmaz — fallible
-            int iv = frame.slots[instr.src].intValue;
+            int iv = frame.slots[instr.src].intValue();
             if (iv < 0 || iv > 255) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
                 else pendingThrow_ = makeErrorValue(
@@ -1211,8 +1211,8 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             frame.slots[instr.dest] = Value::fromDecimal(instr.decimalValue);
             break;
         case Opcode::DADD: {
-            auto r = DecimalValue::add(frame.slots[instr.left].decimalValue,
-                                       frame.slots[instr.right].decimalValue);
+            auto r = DecimalValue::add(frame.slots[instr.left].decimalValue(),
+                                       frame.slots[instr.right].decimalValue());
             if (r.isOverflow()) {
                 pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
                                                instr.sourceLine, instr.sourceCol); break;
@@ -1221,8 +1221,8 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         }
         case Opcode::DSUB: {
-            auto r = DecimalValue::sub(frame.slots[instr.left].decimalValue,
-                                       frame.slots[instr.right].decimalValue);
+            auto r = DecimalValue::sub(frame.slots[instr.left].decimalValue(),
+                                       frame.slots[instr.right].decimalValue());
             if (r.isOverflow()) {
                 pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
                                                instr.sourceLine, instr.sourceCol); break;
@@ -1231,8 +1231,8 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         }
         case Opcode::DMUL: {
-            auto r = DecimalValue::mul(frame.slots[instr.left].decimalValue,
-                                       frame.slots[instr.right].decimalValue);
+            auto r = DecimalValue::mul(frame.slots[instr.left].decimalValue(),
+                                       frame.slots[instr.right].decimalValue());
             if (r.isOverflow()) {
                 pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
                                                instr.sourceLine, instr.sourceCol); break;
@@ -1241,12 +1241,12 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         }
         case Opcode::DDIV: {
-            const DecimalValue& divisor = frame.slots[instr.right].decimalValue;
+            const DecimalValue& divisor = frame.slots[instr.right].decimalValue();
             if (divisor.coeff == 0) {
                 pendingThrow_ = makeErrorValue("decimal division by zero", "E_DECIMAL_DIVZERO",
                                                instr.sourceLine, instr.sourceCol); break;
             }
-            auto r = DecimalValue::div(frame.slots[instr.left].decimalValue, divisor);
+            auto r = DecimalValue::div(frame.slots[instr.left].decimalValue(), divisor);
             if (r.isOverflow()) {
                 pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
                                                instr.sourceLine, instr.sourceCol); break;
@@ -1255,12 +1255,12 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         }
         case Opcode::DMOD: {
-            const DecimalValue& divisor = frame.slots[instr.right].decimalValue;
+            const DecimalValue& divisor = frame.slots[instr.right].decimalValue();
             if (divisor.coeff == 0) {
                 pendingThrow_ = makeErrorValue("decimal modulo by zero", "E_DECIMAL_DIVZERO",
                                                instr.sourceLine, instr.sourceCol); break;
             }
-            auto r = DecimalValue::mod(frame.slots[instr.left].decimalValue, divisor);
+            auto r = DecimalValue::mod(frame.slots[instr.left].decimalValue(), divisor);
             if (r.isOverflow()) {
                 pendingThrow_ = makeErrorValue("decimal overflow", "E_DECIMAL_OVERFLOW",
                                                instr.sourceLine, instr.sourceCol); break;
@@ -1270,26 +1270,26 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         }
         case Opcode::DNEG:
             frame.slots[instr.dest] = Value::fromDecimal(
-                DecimalValue::neg(frame.slots[instr.src].decimalValue));
+                DecimalValue::neg(frame.slots[instr.src].decimalValue()));
             break;
         case Opcode::INT_TO_DECIMAL:
             frame.slots[instr.dest] = Value::fromDecimal(
-                DecimalValue::fromInt(frame.slots[instr.src].intValue));
+                DecimalValue::fromInt(frame.slots[instr.src].intValue()));
             break;
         case Opcode::FLOAT_TO_DECIMAL:
             frame.slots[instr.dest] = Value::fromDecimal(
-                DecimalValue::fromDouble(frame.slots[instr.src].floatValue));
+                DecimalValue::fromDouble(frame.slots[instr.src].floatValue()));
             break;
         case Opcode::CAST_DECIMAL_TO_STR:
             frame.slots[instr.dest] = Value::fromString(
-                frame.slots[instr.src].decimalValue.toString());
+                frame.slots[instr.src].decimalValue().toString());
             break;
         case Opcode::CAST_DECIMAL_TO_FLOAT:
             frame.slots[instr.dest] = Value::fromFloat(
-                frame.slots[instr.src].decimalValue.toDouble());
+                frame.slots[instr.src].decimalValue().toDouble());
             break;
         case Opcode::CAST_DECIMAL_TO_INT: {
-            const DecimalValue& dv = frame.slots[instr.src].decimalValue;
+            const DecimalValue& dv = frame.slots[instr.src].decimalValue();
             DecimalValue trunc = DecimalValue::truncate(dv);
             if (trunc.coeff < INT_MIN || trunc.coeff > INT_MAX) {
                 if (instr.left == 1) frame.slots[instr.dest] = Value::null();
@@ -1302,7 +1302,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             break;
         }
         case Opcode::CAST_STR_TO_DECIMAL: {
-            const std::string& s = frame.slots[instr.src].stringValue;
+            const std::string& s = frame.slots[instr.src].stringValue();
             try {
                 DecimalValue dv = DecimalValue::fromString(s);
                 frame.slots[instr.dest] = Value::fromDecimal(dv);
@@ -1318,8 +1318,8 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         // ── String (ADR-024: immutable değer-tipi, içerik ==) ────────────
         case Opcode::STRING_CONCAT:
             frame.slots[instr.dest] = Value::fromString(
-                frame.slots[instr.left].stringValue +
-                frame.slots[instr.right].stringValue);
+                frame.slots[instr.left].stringValue() +
+                frame.slots[instr.right].stringValue());
             break;
 
         // ── Hata yönetimi (ADR-025) ──────────────────────────────────────
@@ -1334,9 +1334,9 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
         case Opcode::THROW: {
             Value errVal = frame.slots[instr.src];
             // If user throws Error struct, fill trace field (fields[3])
-            if (errVal.kind == ValueKind::Ref && errVal.ref &&
-                errVal.ref->type == ObjectType::Struct) {
-                auto* errObj = static_cast<StructObject*>(errVal.ref);
+            if (errVal.kind == ValueKind::Ref && errVal.ref() &&
+                errVal.ref()->type == ObjectType::Struct) {
+                auto* errObj = static_cast<StructObject*>(errVal.ref());
                 if ((int)errObj->fields.size() >= 4)
                     errObj->fields[3] = Value::fromString(buildTrace());
             } else {
@@ -1407,13 +1407,13 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             } else {
                 // Uncaught error — extract message and raise as C++ exception
                 std::string msg = "uncaught error";
-                if (errVal.kind == ValueKind::Ref && errVal.ref) {
-                    auto* s = static_cast<StructObject*>(errVal.ref);
+                if (errVal.kind == ValueKind::Ref && errVal.ref()) {
+                    auto* s = static_cast<StructObject*>(errVal.ref());
                     if ((int)s->fields.size() > 2 &&
                         s->fields[2].kind == ValueKind::String)
-                        msg = s->fields[2].stringValue;
+                        msg = s->fields[2].stringValue();
                 } else if (errVal.kind == ValueKind::String) {
-                    msg = errVal.stringValue;
+                    msg = errVal.stringValue();
                 }
                 throw std::runtime_error(msg);
             }

@@ -24,8 +24,8 @@ static int path_join(HostCallFrame* f) {
     std::filesystem::path p;
     for (const auto& v : arr->elements) {
         if (v.kind != ValueKind::String) continue;
-        if (v.stringValue.empty()) continue;
-        p /= v.stringValue;
+        if (v.stringValue().empty()) continue;
+        p /= v.stringValue();
     }
     hostSetRetString(*f, p.lexically_normal().string());
     return 0;

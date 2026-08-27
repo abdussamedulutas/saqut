@@ -35,7 +35,7 @@ int drainGrey(Heap* heap, int budget) {
 
 void Heap::markValue(const Value& v) {
     if (v.kind == ValueKind::Ref)
-        markObject(v.ref);
+        markObject(v.ref());
 }
 
 // ── Heap::markSlots ──────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ void ArrayObject::markChildren() {
     if (elemKind != ArrayElemKind::Ref) return;
     for (const Value& v : elements)
         if (v.kind == ValueKind::Ref)
-            markObject(v.ref);
+            markObject(v.ref());
 }
 
 void writeBarrier(Object* target, Object* newRef) {
@@ -107,5 +107,5 @@ void writeBarrier(Object* target, Object* newRef) {
 void StructObject::markChildren() {
     for (const Value& v : fields)
         if (v.kind == ValueKind::Ref)
-            markObject(v.ref);
+            markObject(v.ref());
 }

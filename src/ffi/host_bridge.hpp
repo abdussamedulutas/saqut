@@ -95,14 +95,14 @@ inline void hostSetRetDecimal(HostCallFrame& f, const DecimalValue& d) {
 // kopyalar, skalerleri doğrudan yazar. Adım 2 sarmalayıcısı bunu kullanır.
 inline void hostSetRetValue(HostCallFrame& f, const Value& v) {
     switch (v.kind) {
-        case ValueKind::String:  hostSetRetString(f, v.stringValue); return;
-        case ValueKind::Decimal: hostSetRetDecimal(f, v.decimalValue); return;
-        case ValueKind::Int:     f.ret = HostSlot::fromInt(v.intValue); return;
-        case ValueKind::LongInt: f.ret = HostSlot::fromLong(v.int64Value); return;
-        case ValueKind::Date:    f.ret = HostSlot::fromDate(v.int64Value); return;
-        case ValueKind::Float:   f.ret = HostSlot::fromFloat(v.floatValue); return;
-        case ValueKind::Float32: f.ret = HostSlot::fromFloat32(v.floatValue); return;
-        case ValueKind::Ref:     f.ret = HostSlot::fromRef(v.ref); return;
+        case ValueKind::String:  hostSetRetString(f, v.stringValue()); return;
+        case ValueKind::Decimal: hostSetRetDecimal(f, v.decimalValue()); return;
+        case ValueKind::Int:     f.ret = HostSlot::fromInt(v.intValue()); return;
+        case ValueKind::LongInt: f.ret = HostSlot::fromLong(v.int64Value()); return;
+        case ValueKind::Date:    f.ret = HostSlot::fromDate(v.int64Value()); return;
+        case ValueKind::Float:   f.ret = HostSlot::fromFloat(v.floatValue()); return;
+        case ValueKind::Float32: f.ret = HostSlot::fromFloat32(v.floatValue()); return;
+        case ValueKind::Ref:     f.ret = HostSlot::fromRef(v.ref()); return;
         case ValueKind::Null:    f.ret = HostSlot::null(); return;
     }
     f.ret = HostSlot::null();
@@ -116,19 +116,19 @@ inline void hostSetRetValue(HostCallFrame& f, const Value& v) {
 // ----------------------------------------------------------------------------
 inline HostSlot toHostSlot(const Value& v, HostCallScratch& scratch) {
     switch (v.kind) {
-        case ValueKind::Int:     return HostSlot::fromInt(v.intValue);
-        case ValueKind::LongInt: return HostSlot::fromLong(v.int64Value);
-        case ValueKind::Date:    return HostSlot::fromDate(v.int64Value);
-        case ValueKind::Float:   return HostSlot::fromFloat(v.floatValue);
-        case ValueKind::Float32: return HostSlot::fromFloat32(v.floatValue);
+        case ValueKind::Int:     return HostSlot::fromInt(v.intValue());
+        case ValueKind::LongInt: return HostSlot::fromLong(v.int64Value());
+        case ValueKind::Date:    return HostSlot::fromDate(v.int64Value());
+        case ValueKind::Float:   return HostSlot::fromFloat(v.floatValue());
+        case ValueKind::Float32: return HostSlot::fromFloat32(v.floatValue());
         case ValueKind::Null:    return HostSlot::null();
-        case ValueKind::Ref:     return HostSlot::fromRef(v.ref);
+        case ValueKind::Ref:     return HostSlot::fromRef(v.ref());
         case ValueKind::String: {
-            scratch.strings.push_back(std::make_unique<StringObject>(v.stringValue));
+            scratch.strings.push_back(std::make_unique<StringObject>(v.stringValue()));
             return HostSlot::fromStr(scratch.strings.back().get());
         }
         case ValueKind::Decimal: {
-            scratch.decimals.push_back(std::make_unique<DecimalObject>(v.decimalValue));
+            scratch.decimals.push_back(std::make_unique<DecimalObject>(v.decimalValue()));
             return HostSlot::fromDecimal(scratch.decimals.back().get());
         }
     }
@@ -168,7 +168,7 @@ inline Value fromHostSlot(const HostSlot& s) {
 // ----------------------------------------------------------------------------
 // Thunk gövdelerinin okuma yardımcıları.
 //
-// Host fonksiyonları bugün `args[0].intValue` gibi doğrudan Value alanına
+// Host fonksiyonları bugün `args[0].intValue()` gibi doğrudan Value alanına
 // erişiyor. Yeni imzada aynı kolaylığı sağlar, ayrıca sayısal genişletmeyi
 // tek yerde toplar (Value::asI64/asDouble ile aynı kurallar — ADR-040).
 // ----------------------------------------------------------------------------

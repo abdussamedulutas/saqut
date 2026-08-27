@@ -101,12 +101,12 @@ namespace {
 void pushElem(ArrayObject* arr, const Value& v) {
     switch (arr->elemKind) {
         case ArrayElemKind::Ref:     arr->elements.push_back(v); break;
-        case ArrayElemKind::Byte:    arr->bytes.push_back((uint8_t)v.intValue); break;
-        case ArrayElemKind::Int:     arr->ints.push_back(v.intValue); break;
+        case ArrayElemKind::Byte:    arr->bytes.push_back((uint8_t)v.intValue()); break;
+        case ArrayElemKind::Int:     arr->ints.push_back(v.intValue()); break;
         case ArrayElemKind::LongInt: arr->longs.push_back(v.asI64()); break;
         case ArrayElemKind::Float32: arr->f32s.push_back((float)v.asDouble()); break;
         case ArrayElemKind::Float64: arr->f64s.push_back(v.asDouble()); break;
-        case ArrayElemKind::Decimal: arr->decimals.push_back(v.decimalValue); break;
+        case ArrayElemKind::Decimal: arr->decimals.push_back(v.decimalValue()); break;
     }
     // push_back reallocation yapabilir → JIT view pointer'ı eskimiş olabilir.
     arr->syncJitView();
@@ -115,12 +115,12 @@ void pushElem(ArrayObject* arr, const Value& v) {
 void insertElem(ArrayObject* arr, int idx, const Value& v) {
     switch (arr->elemKind) {
         case ArrayElemKind::Ref:     arr->elements.insert(arr->elements.begin() + idx, v); break;
-        case ArrayElemKind::Byte:    arr->bytes.insert(arr->bytes.begin() + idx, (uint8_t)v.intValue); break;
-        case ArrayElemKind::Int:     arr->ints.insert(arr->ints.begin() + idx, v.intValue); break;
+        case ArrayElemKind::Byte:    arr->bytes.insert(arr->bytes.begin() + idx, (uint8_t)v.intValue()); break;
+        case ArrayElemKind::Int:     arr->ints.insert(arr->ints.begin() + idx, v.intValue()); break;
         case ArrayElemKind::LongInt: arr->longs.insert(arr->longs.begin() + idx, v.asI64()); break;
         case ArrayElemKind::Float32: arr->f32s.insert(arr->f32s.begin() + idx, (float)v.asDouble()); break;
         case ArrayElemKind::Float64: arr->f64s.insert(arr->f64s.begin() + idx, v.asDouble()); break;
-        case ArrayElemKind::Decimal: arr->decimals.insert(arr->decimals.begin() + idx, v.decimalValue); break;
+        case ArrayElemKind::Decimal: arr->decimals.insert(arr->decimals.begin() + idx, v.decimalValue()); break;
     }
     arr->syncJitView();
 }
@@ -166,15 +166,15 @@ void clearElems(ArrayObject* arr) {
 bool valueEqual(const Value& a, const Value& b) {
     if (a.kind != b.kind) return false;
     switch (a.kind) {
-        case ValueKind::Int:     return a.intValue   == b.intValue;
-        case ValueKind::LongInt: return a.int64Value == b.int64Value;
+        case ValueKind::Int:     return a.intValue()   == b.intValue();
+        case ValueKind::LongInt: return a.int64Value() == b.int64Value();
         case ValueKind::Float:
-        case ValueKind::Float32: return a.floatValue == b.floatValue;
-        case ValueKind::Decimal: return a.decimalValue.toString() == b.decimalValue.toString();
-        case ValueKind::String:  return a.stringValue == b.stringValue;
-        case ValueKind::Ref:     return a.ref == b.ref;   // kimlik
+        case ValueKind::Float32: return a.floatValue() == b.floatValue();
+        case ValueKind::Decimal: return a.decimalValue().toString() == b.decimalValue().toString();
+        case ValueKind::String:  return a.stringValue() == b.stringValue();
+        case ValueKind::Ref:     return a.ref() == b.ref();   // kimlik
         case ValueKind::Null:    return true;
-        case ValueKind::Date:    return a.int64Value == b.int64Value;
+        case ValueKind::Date:    return a.int64Value() == b.int64Value();
     }
     return false;
 }

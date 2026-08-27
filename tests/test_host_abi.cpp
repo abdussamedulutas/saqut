@@ -34,24 +34,24 @@ int main() {
     {
         Value v = Value::fromInt(-42);
         Value b = fromHostSlot(toHostSlot(v, scratch));
-        assert(b.kind == ValueKind::Int && b.intValue == -42);
+        assert(b.kind == ValueKind::Int && b.intValue() == -42);
     }
     {
         // ADR-040: longint tam 64-bit; sınırda daralma OLMAMALI.
         Value v = Value::fromLongInt(9223372036854775807LL);
         Value b = fromHostSlot(toHostSlot(v, scratch));
         assert(b.kind == ValueKind::LongInt);
-        assert(b.int64Value == 9223372036854775807LL);
+        assert(b.int64Value() == 9223372036854775807LL);
     }
     {
         Value v = Value::fromLongInt(-9223372036854775807LL - 1);
         Value b = fromHostSlot(toHostSlot(v, scratch));
-        assert(b.int64Value == -9223372036854775807LL - 1);
+        assert(b.int64Value() == -9223372036854775807LL - 1);
     }
     {
         Value v = Value::fromFloat(3.141592653589793);
         Value b = fromHostSlot(toHostSlot(v, scratch));
-        assert(b.kind == ValueKind::Float && b.floatValue == 3.141592653589793);
+        assert(b.kind == ValueKind::Float && b.floatValue() == 3.141592653589793);
     }
     {
         // Float32: (float) truncate ADR-040 gereği KORUNMALI — sınırdan
@@ -59,12 +59,12 @@ int main() {
         Value v = Value::fromFloat32(0.1);
         Value b = fromHostSlot(toHostSlot(v, scratch));
         assert(b.kind == ValueKind::Float32);
-        assert(b.floatValue == (double)(float)0.1);
+        assert(b.floatValue() == (double)(float)0.1);
     }
     {
         Value v = Value::fromDate(1700000000000LL);
         Value b = fromHostSlot(toHostSlot(v, scratch));
-        assert(b.kind == ValueKind::Date && b.int64Value == 1700000000000LL);
+        assert(b.kind == ValueKind::Date && b.int64Value() == 1700000000000LL);
     }
     {
         Value v = Value::null();
@@ -79,7 +79,7 @@ int main() {
         assert(s.kind == HostKind::Str && s.p != nullptr);
         assert(hostAsString(s) == "merhaba dünya");
         Value b = fromHostSlot(s);
-        assert(b.kind == ValueKind::String && b.stringValue == "merhaba dünya");
+        assert(b.kind == ValueKind::String && b.stringValue() == "merhaba dünya");
     }
     {
         // Boş string null DEĞİLDİR — ayrım korunmalı.
@@ -87,7 +87,7 @@ int main() {
         HostSlot s = toHostSlot(v, scratch);
         assert(s.kind == HostKind::Str);
         assert(!s.isNull());
-        assert(fromHostSlot(s).stringValue.empty());
+        assert(fromHostSlot(s).stringValue().empty());
     }
 
     // 4) Decimal — kutulu geçiş değeri bozmamalı (ADR-028).
@@ -97,7 +97,7 @@ int main() {
         assert(s.kind == HostKind::Decimal && s.p != nullptr);
         Value b = fromHostSlot(s);
         assert(b.kind == ValueKind::Decimal);
-        assert(b.decimalValue.toString() == "123.456");
+        assert(b.decimalValue().toString() == "123.456");
     }
 
     // 5) Sayısal okuma yardımcıları — ADR-040 genişletme kuralları.
@@ -145,7 +145,7 @@ int main() {
         f.args = a; f.argc = 1;
         assert(rt_host_call(id, &f) == 0);
         assert(!f.err.failed());
-        assert(fromHostSlot(f.ret).intValue == 5);
+        assert(fromHostSlot(f.ret).intValue() == 5);
 
         // MATH_SQRT(9.0) → 3.0  (float yolu)
         f.reset();
@@ -153,7 +153,7 @@ int main() {
         HostSlot b[1] = { HostSlot::fromFloat(9.0) };
         f.args = b; f.argc = 1;
         assert(rt_host_call(id, &f) == 0);
-        assert(fromHostSlot(f.ret).floatValue == 3.0);
+        assert(fromHostSlot(f.ret).floatValue() == 3.0);
 
         // CORE_VERSION() → string dönüşü; ömür sahibi üzerinden geçmeli
         f.reset();

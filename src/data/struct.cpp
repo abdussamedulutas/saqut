@@ -69,24 +69,24 @@ std::string jsonEscape(const std::string& in) {
 
 std::string valueToJson(const Value& v) {
     switch (v.kind) {
-        case ValueKind::Int:     return std::to_string(v.intValue);
-        case ValueKind::LongInt: return std::to_string(v.int64Value);
+        case ValueKind::Int:     return std::to_string(v.intValue());
+        case ValueKind::LongInt: return std::to_string(v.int64Value());
         case ValueKind::Float:
         case ValueKind::Float32: {
-            std::ostringstream os; os << v.floatValue; return os.str();
+            std::ostringstream os; os << v.floatValue(); return os.str();
         }
-        case ValueKind::Decimal: return v.decimalValue.toString();
-        case ValueKind::String:  return jsonEscape(v.stringValue);
+        case ValueKind::Decimal: return v.decimalValue().toString();
+        case ValueKind::String:  return jsonEscape(v.stringValue());
         case ValueKind::Null:    return "null";
-        case ValueKind::Date:    return std::to_string(v.int64Value);
+        case ValueKind::Date:    return std::to_string(v.int64Value());
         case ValueKind::Ref: {
-            if (!v.ref) return "null";
-            if (v.ref->type == ObjectType::Struct)
-                return structToJson(static_cast<StructObject*>(v.ref));
+            if (!v.ref()) return "null";
+            if (v.ref()->type == ObjectType::Struct)
+                return structToJson(static_cast<StructObject*>(v.ref()));
             // Array: packed eleman erişimi array modülünden gelir — bu dosya
             // eleman tiplerini bilmez (eski kod burada 7-dallı switch'i iki kez
             // daha tekrarlıyordu).
-            const auto* arr = static_cast<const ArrayObject*>(v.ref);
+            const auto* arr = static_cast<const ArrayObject*>(v.ref());
             int n = dataArraySize(arr);
             std::string s = "[";
             for (int i = 0; i < n; ++i) {

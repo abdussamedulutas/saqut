@@ -113,25 +113,32 @@ IR/CFG seviyesinde pass yok.
   thread_local); sys_random thread_local YAPILDI; FileRegistry sınır kaydı
   yerinde (derleme-zamanı tek-parçacık, yorum satırı yeterli — değişiklik gerekmedi);
   globalSlots_ sahipliği K2 ürün kararına bağlı (bilinçli açık).
-- 5 allocator seam — SIRADA (arena/freelist; ADR-022 taşımsız olduğundan
-  hareketlilik/jitData invariant'ı sorunu yok — view sabit kalır).
+- 5 GC ÇEKİRDEĞİ — YAPILDI (ADR-022, dal issue-112-gc-cekirdek):
+  toplayıcı `src/gc/` altına taşındı (backend-bağımsız katman); VM ve JIT
+  AYNI Heap'i paylaşır (`static Heap jitHeap` kalktı, ömür koşuya bağlandı);
+  kök kaydı ters çevrildi (RootSource — A1.3'ün istediği declaratif kök
+  listesi); tempo canlı BAYTA bağlandı (A4 darboğazı: 20k canlı kayıtta
+  2115ms → 72ms, ölçek süper-lineerden düze); #217 incremental KALDIRILDI
+  (yarım kalmıştı: allocate-black yok, barrier String'i kapsamıyor, ve
+  ölçümde hiç yayılmıyordu); mark özyinelemesiz (300k derinlik doğrulandı);
+  `Object::prev` kalktı (tek çağıranı sweep'ti, ona gerek yok).
+  Bulunan+düzeltilen hata: nesne üreten opcode'ların bir kısmı (string
+  cast'leri, STRING_CONCAT, decimal aritmetiği) JIT'te shadow stack'e
+  yansıtılmıyordu → sessiz use-after-free. Toplu kökleme + agresif-eşik
+  gate'i eklendi.
+- 6 allocator seam — SIRADA (arena/freelist). NOT: faz 5 ölçümü gösterdi ki
+  asıl darboğaz tahsis maliyeti değil TOPLAMA SIKLIĞIydı; allocator bunu
+  çözmez, tahsis yolunu ucuzlatır. Sıra bilinçli olarak tempodan sonraya
+  alındı.
 
-## C. Önerilen altyapı sırası (kanıt temelli, gözlemlenen sözleşme korunur)
+## D. Kapsam dışı bırakılanlar (kayıt)
 
-0. **CFG sağlamlaştırma:** pipeline'da kanonik kurulum (dump-only'dan çıkarma),
-   unreachable-block temizliği, dominance + natural loop tespiti. (A5)
-1. **IR liveness analizi + canlı-slot kökleme** — "kullanılmayan değişken
-   netliği"; gc_collect/agc/nogc'nin ortak temeli. (A2.1)
-2. **Value daraltma + tek string modeli** — GC ve perf'in 1 numaralı
-   önkoşulu; 1.0'dan önce yapılırsa dil-görünür kırılma yok. (A1.1, A1.2)
-3. **Object başlığı temizliği:** marked/markState tekilleştir, prev (O(1)
-   çıkarma), vptr→type-switch. (A1.4, A1.6, A4.3)
-4. **Global state kapatma:** jitShadowStack→thread_local, g_jit*→context,
-   sys_random. (A3)
-5. **Allocator seam:** new/delete → heap-ait arena/freelist; jitData
-   invariant'ıyla birlikte. (A1.5, A1.6)
-
-Uygulama detayı uyarıları (taşınırken): nogc çıkışında gcThreshold_
-yeniden hesaplanmalı; `gcCycleActive_` turu yarıdayken girilen nogc turu
-dondurur, gc_collect sıfırdan tam tur atar; unwind (pendingThrow_) yolunda
-bastırma sayacı düşmelidir.
+- `nogc` / `agc`: ürün sahibi kararı — "nogc uygulamak için zaten mükemmel
+  bir GC'ye ihtiyacımız var; en sona bırak" (2026-08-28). Çekirdek bastırma
+  sayacına hazır bırakıldı, sayaç yazılmadı.
+- #193 (string kopya baskısı) ve #206 (array/GC süper-lineer): bu turda
+  ölçüldü, KAPANMADI. #193'ün darboğazı string birleştirmenin kendisinde
+  (O(n²) kopya), GC'de değil — eski/yeni çekirdek arasında fark yok (96ms
+  vs 98ms). #206'da fark küçük (64ms vs 53ms); o senaryonun asıl tetikleyicisi
+  büyük canlı kümedir ve orada kazanç büyüktür, ama issue'nun kendi
+  fixture'ı bunu göstermiyor.

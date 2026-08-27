@@ -2,8 +2,8 @@
 // saQut — JIT Shadow Stack (GC kök görünürlüğü)
 // ============================================================================
 //
-// DİZİN:   src/vm/shadow_stack.hpp
-// KATMAN:  VM — GC ile JIT arasındaki kök köprüsü
+// DİZİN:   src/gc/shadow_stack.hpp
+// KATMAN:  GC — JIT register'larının GC'ye görünen yansıması
 //
 // SORUN (#228):
 //   GC canlılığı KÖKLERDEN tarar. Kökler bugün iki yerde: globalSlots_ ve
@@ -76,8 +76,9 @@ struct ShadowStack {
     bool empty() const { return slots.empty(); }
 };
 
-// Süreç ömrü boyunca tek örnek — JIT ve GC aynı diziyi görmeli.
-// Interpreter::maybeCollect bunu kök olarak tarar; JIT codegen buraya yazar.
+// İş parçacığı başına tek örnek (depo thread_local — shadow_stack.cpp).
+// JIT codegen buraya yazar; JitRootSource (mir_backend.cpp) toplama sırasında
+// bunu kök olarak Heap'e bildirir.
 ShadowStack& jitShadowStack();
 
 #endif // SAQUT_VM_SHADOW_STACK

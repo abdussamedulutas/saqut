@@ -1,4 +1,4 @@
-#include "vm/shadow_stack.hpp"
+#include "gc/shadow_stack.hpp"
 
 // THREAD NOTU (JIT çalışma bağlamı refactor'ünün tamamlayıcısı): depo
 // artık thread_local — her iş parçacığı kendi shadow stack'ini görür.

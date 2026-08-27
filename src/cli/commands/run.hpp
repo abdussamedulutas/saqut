@@ -119,6 +119,9 @@ inline int cmdRun(const CliArgs& args) {
     if (diag.warningCount() > 0 && !diag.hasErrors())
         diag.printAll(std::cerr);
     if (args.useJit) {
+        // --gc-threshold iki backend'de de geçerlidir: aynı bayrak, aynı anlam.
+        if (args.gcThreshold != 0)
+            mir_backend::setGcThresholdForNextRun(args.gcThreshold);
         int                             jitResult = 0;
         mir_backend::UnsupportedReason  reason;
         // profilerPtr dogrudan iceri gecirilir — "jit-warmup" (IR->MIR ceviri
@@ -129,6 +132,9 @@ inline int cmdRun(const CliArgs& args) {
             program, jitResult, reason, args.programArgs, profilerPtr);
         if (jitOk) {
             if (args.verbose) std::cerr << "[jit] program bastan sona JIT'lendi (VM calismadi)\n";
+            // --gc-stats: VM ve JIT AYNI formatta raporlar — iki backend aynı
+            // GC çekirdeğini kullandığı için sayaçlar karşılaştırılabilirdir.
+            if (args.gcStats) printGcStats(std::cerr, mir_backend::lastRunGcStats());
             if (args.profile) stageTimer.printReport(std::cerr);
             return jitResult;
         }
@@ -147,7 +153,7 @@ inline int cmdRun(const CliArgs& args) {
     int exitCode = 0;
     try {
         Interpreter vm(program);
-        // GC (#77): --gc-threshold=N eşiği ezer (negatif = otomatik GC kapalı)
+        // --gc-threshold=N: toplama eşiğini (bayt) ezer; negatif = toplama kapalı
         if (args.gcThreshold != 0) vm.setGCThreshold(args.gcThreshold);
         vm.setProgramArgs(args.programArgs);
         // "vm-warmup" (initForDebug — frame/global kurulumu) ve "vm-exec"
@@ -155,12 +161,7 @@ inline int cmdRun(const CliArgs& args) {
         // raporlanır — burada sarmalamaya gerek yok.
         vm.setStageProfiler(profilerPtr);
         exitCode = vm.run();
-        // --gc-stats: golden testlerin stdout karşılaştırmasını bozmamak
-        // için stderr'e yazılır
-        if (args.gcStats)
-            std::cerr << "gc: runs=" << vm.gcRuns()
-                      << " freed=" << vm.gcFreedTotal()
-                      << " live=" << vm.heapAllocCount() << "\n";
+        if (args.gcStats) printGcStats(std::cerr, vm.gcStats());
     } catch (const std::exception& e) {
         std::cerr << "runtime error: " << e.what() << "\n";
         exitCode = saqut::exit_code::kSoftwareError;

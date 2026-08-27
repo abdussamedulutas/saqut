@@ -17,7 +17,7 @@
 //     JIT     → StringObject* (MIR_T_I64 register'da pointer)
 //
 //   Gözlemlenen davranış her üçünde aynıdır (#92); iç temsil backend'e göre
-//   değişir. StringObject tanımı vm/object.hpp'dedir çünkü GC nesne ailesine
+//   değişir. StringObject tanımı gc/gc_object.hpp'dedir çünkü GC nesne ailesine
 //   aittir — GC işaretleme/süpürme bu modülün kapsamı DIŞINDADIR.
 //
 // ============================================================================

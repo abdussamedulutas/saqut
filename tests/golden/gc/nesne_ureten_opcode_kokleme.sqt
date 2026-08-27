@@ -1,0 +1,38 @@
+// Regresyon: nesne üreten HER opcode sonucu GC'ye görünür olmalı.
+//
+// Hata sınıfı — sessiz use-after-free: string üreten cast'ler
+// (CAST_*_TO_STR), STRING_CONCAT ve decimal aritmetiği JIT'te nesne tahsis
+// ettikleri halde shadow stack'e yansıtılmıyordu. Sonraki tahsis toplamayı
+// tetiklediğinde bu nesneler köksüz kalıp süpürülüyor, ardından okundukları
+// yerde serbest bırakılmış bellek okunuyordu.
+//
+// Test şekli: her tur yeni nesne üreten cast/concat zinciri + hemen ardından
+// başka bir tahsis (toplama tetikleyicisi). Düşük --gc-threshold ile
+// koşulduğunda kökleme kırıksa çıktı bozulur veya süreç çöker.
+int main() {
+    int i = 0;
+    string birikim = "";
+    while (i < 500) {
+        longint buyuk = 100;
+        float kesirli = 1.5;
+
+        // Nesne üreten cast'ler — her biri yeni StringObject tahsis eder
+        string s1 = buyuk as string;
+        string s2 = kesirli as string;
+        string s3 = i as string;
+
+        // STRING_CONCAT — yine yeni nesne
+        string birlesik = s1 + s2 + s3;
+
+        // Tahsis: yukarıdakiler henüz okunmadan toplama tetiklenebilir
+        int[] tetikleyici = [i, i + 1, i + 2];
+
+        // Okuma: kökleme kırıksa burada serbest bırakılmış bellek okunur
+        if (i == 499) {
+            birikim = birlesik;
+        }
+        i = i + 1;
+    }
+    print(birikim);
+    return 0;
+}

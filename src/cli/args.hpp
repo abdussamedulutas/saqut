@@ -41,7 +41,7 @@ struct CliArgs {
     int  benchRuns   = 5;      // --runs=N: benchmark tekrar sayısı
     bool compileOnly = false;  // --compile-only: VM çalıştırmasını atla
     bool verbose     = false;  // --verbose: her aşamanın bitişini canlı yaz
-    int  gcThreshold = 0;      // --gc-threshold=N: GC eşiği (0 = VM varsayılanı, negatif = GC kapalı)
+    int  gcThreshold = 0;      // --gc-threshold=N: toplama eşiği BAYT (0 = varsayılan, negatif = toplama kapalı)
     bool gcStats     = false;  // --gc-stats: koşu sonunda GC istatistiklerini stderr'e yaz
 
     // #80/MIRPLAN.md: --jit — Dilim 0 kapsamındaki fonksiyonlar için MIR

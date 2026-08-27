@@ -24,10 +24,10 @@
 
 // ADR-022: Taşımasız, stop-the-world, deterministik mark-sweep GC.
 //
-// Her heap nesnesinde üç alan:
-//   type   — ArrayObject / StructObject ayırımı için
-//   marked — mark aşamasında işaretlenir; sweep aşamasında sıfırlanır
-//   next   — Heap'in tuttuğu "tüm nesneler" intrusive listesinin bağı
+// Her heap nesnesinde dört alan:
+//   type      — Array/Struct/String/Decimal ayırımı (işaretleme/silme switch'i)
+//   markState — tricolor canlılık durumu (#217); TEK canlılık kaynağı
+//   next/prev — Heap'in "tüm nesneler" ÇİFT YÖNLÜ intrusive listesi (O(1) çıkarma)
 //
 // Toplama fonksiyon dönüşünde tetiklenir (deterministik safepoint).
 // Nesne modeli bir daha değiştirilmez — collect() lokal bir eklemedir.
@@ -45,15 +45,18 @@ enum class MarkState : uint8_t {
 
 struct Object {
     ObjectType type;
-    bool       marked = false;
-    MarkState  markState = MarkState::White;  // #217: incremental marking
+    MarkState  markState = MarkState::White;  // #217: tricolor; tek canlılık kaynağı
+    // ÇİFT YÖNLÜ intrusive liste (faz 3): listeden O(1) çıkarma — tekil
+    // nesne silme (agc/devir/yapılacak move) ve sweep için. Önceden yalnız
+    // `next` vardı; çıkarmak için listede O(n) tarama gerekiyordu.
     Object*    next   = nullptr;
+    Object*    prev   = nullptr;
 
-    // Mark aşaması: bu nesneden ulaşılabilen tüm referansları işaretle.
-    // Alt sınıflar kendi fields/elements'larını bildiğinden sanal metot.
-    virtual void markChildren() = 0;
-
-    virtual ~Object() = default;
+    // NOT: sanal markChildren/yıkıcı KALDIRILDI (faz 3). İşaretleme ve silme
+    // tip etiketi (type) üzerinden switch ile object.cpp'te tek yerde yapılır
+    // — nesne başına vptr (8 bayt + sanal çağrı) kalkar. Yeni ObjectType
+    // eklendiğinde markObjectChildren/deleteObject switch'lerine case girme
+    // zorunluluğu -Wswitch=… ile korunamaz; iki switch yan yana ve yorumlu.
 };
 
 // ── ArrayObject (ADR-020: referans semantiği, #206: packed type-tagged array) ──
@@ -122,7 +125,6 @@ struct ArrayObject : Object {
         }
     }
 
-    void markChildren() override;
 };
 
 // ── StructObject (ADR-037, #206) ─────────────────────────────────────────────
@@ -140,7 +142,6 @@ struct StructObject : Object {
         fields.resize(fieldCount);
     }
 
-    void markChildren() override;
 };
 
 // ── StringObject (JIT sınırı, ADR-037) ──────────────────────────────────────
@@ -165,7 +166,7 @@ struct StringObject : Object {
         type = ObjectType::String;
     }
 
-    void markChildren() override {}  // string'in ref çocuğu yok
+    // string'in ref çocuğu yok — markObjectChildren'da case yok
 };
 
 // ── DecimalObject (JIT sınırı, ADR-037) ──────────────────────────────────────
@@ -179,7 +180,7 @@ struct DecimalObject : Object {
         type = ObjectType::Decimal;
     }
 
-    void markChildren() override {}
+    // decimal'in ref çocuğu yok — markObjectChildren'da case yok
 };
 
 // ── Heap ─────────────────────────────────────────────────────────────────────
@@ -192,7 +193,7 @@ struct DecimalObject : Object {
 //
 // Çocuk kaynakları:
 //   - ArrayObject::elements, StructObject::fields içindeki Ref değerleri
-//   (markChildren() bunları kurgular)
+//   (markObjectChildren bunları kurgular — object.cpp)
 
 struct Heap {
     Object*   head       = nullptr;
@@ -200,59 +201,38 @@ struct Heap {
     int       gcRuns     = 0;   // toplam sweep sayısı (istatistik)
     long long freedTotal = 0;   // toplam serbest bırakılan nesne (istatistik)
 
-    ArrayObject* allocArray(int capacity = 0, ArrayElemKind k = ArrayElemKind::Ref) {
-        auto* obj = new ArrayObject(capacity, k);
+    // Liste bağlama: öne ekle, ÇİFT bağla (sweep/O(1) çıkarma prev ister).
+    // Tek yer — yeni tahsis türü eklenirse bu yardımcı kullanılır.
+private:
+    template <typename T>
+    T* linkFront(T* obj) {
         obj->next = head;
-        head      = obj;
+        obj->prev = nullptr;
+        if (head) head->prev = obj;
+        head = obj;
         ++allocCount;
         return obj;
     }
 
-    // #222: GC-yönetimli string tahsisi.
-    //
-    // VM string'i Value::stringValue içinde INLINE tutar ve buraya hiç
-    // uğramaz — bu yol yalnızca SINIR temsili içindir (JIT register'ı ve
-    // host ABI'si string'i pointer olarak taşır, bkz. host_abi.hpp).
-    //
-    // Bugün JIT ürettiği string'leri g_jitRuntimeStrings'te süresiz tutuyor:
-    // 200k concat'te JIT 21,8 MB / VM 6,8 MB (ölçüldü). Bu sızıntının çözümü
-    // burasıdır — AMA HENÜZ BAĞLANAMAZ:
-    //
-    //   GC kökleri yalnızca globalSlots_ ve VM callStack_ frame'leridir
-    //   (Interpreter::maybeCollect). JIT'in string'leri hiçbir Value'da
-    //   yaşamaz, yalnızca MIR register'ında — yani kök gösterilemezler.
-    //   Şimdi bağlarsak GC onları CANLIYKEN siler: sızıntı use-after-free'ye
-    //   dönüşür, ki bu kesinlikle daha kötüdür.
-    //
-    // Önkoşul: JIT register'larındaki referansları GC'ye görünür kılan shadow
-    // stack (Ref dilimi). O geldiğinde JIT string'leri ve host thunk'larının
-    // dönüş string'leri buraya taşınır. TODO(#222/Ref dilimi).
-    //
-    // Bugün kullanan: VM tarafında host ABI dönüş string'leri (kök: çağıran
-    // frame'in slot'u — maybeCollect zaten tarar).
+public:
+    ArrayObject* allocArray(int capacity = 0, ArrayElemKind k = ArrayElemKind::Ref) {
+        return linkFront(new ArrayObject(capacity, k));
+    }
+
+    // Tek-string-modeli: VM ve JIT string'leri ARTIK burada yaşar — Value
+    // inline string taşımaz (value.hpp). (Eski "JIT sızıntısı / #222 önkoşul"
+    // notu: shadow stack geldi (#228) ve string'ler köklendi — kapandı.)
     StringObject* allocString(std::string s = "") {
-        auto* obj = new StringObject(std::move(s));
-        obj->next = head;
-        head      = obj;
-        ++allocCount;
-        return obj;
+        return linkFront(new StringObject(std::move(s)));
     }
 
     // #228: JIT decimal kutulaması da GC'ye girer (shadow stack ile görünür).
     DecimalObject* allocDecimal(const DecimalValue& v) {
-        auto* obj = new DecimalObject(v);
-        obj->next = head;
-        head      = obj;
-        ++allocCount;
-        return obj;
+        return linkFront(new DecimalObject(v));
     }
 
     StructObject* allocStruct(int fieldCount) {
-        auto* obj = new StructObject(fieldCount);
-        obj->next = head;
-        head      = obj;
-        ++allocCount;
-        return obj;
+        return linkFront(new StructObject(fieldCount));
     }
 
     // ── Mark ─────────────────────────────────────────────────────────────────
@@ -265,19 +245,18 @@ struct Heap {
 
     // ── Sweep ────────────────────────────────────────────────────────────────
 
-    // İşaretlenmemiş nesneleri sil; işaretlenenlerin bitini sıfırla.
-    // Dönüş: bu turda serbest bırakılan nesne sayısı.
+    // İşaretlenmemiş (White) nesneleri O(1) listeden çıkarıp sil;
+    // canlıların markState'ini sıfırla. Dönüş: serbest bırakılan nesne sayısı.
     int sweep();
 
-    // Program sonunda kalan her şeyi temizle.
-    ~Heap() {
-        Object* cur = head;
-        while (cur) {
-            Object* nxt = cur->next;
-            delete cur;
-            cur = nxt;
-        }
-    }
+    // Nesneyi intrusive listeden O(1)'e çıkar (silmeksizin) — tekil nesne
+    // taşıma/devir (yapılacak move/agc) için de tek nokta.
+    void unlink(Object* obj);
+
+    // Program sonunda kalan her şeyi temizle. Silme tip etiketiyle
+    // deleteObject'te (object.cpp) — vptr kalktığı için taban işaretçiden
+    // `delete` yapılamaz.
+    ~Heap();
 
     Heap()                       = default;
     Heap(const Heap&)            = delete;

@@ -1,0 +1,19 @@
+// Tek-string-modeli + faz 3 regresyonu: struct ALANINDA taşınan string,
+// arka planda binlerce tahsis/GC turu yapılsa da CANLI kalmalı.
+// Hata sınıfı: markChildren'in String çocukları köklememesi (string heap
+// nesnesi olduktan sonra ortaya çıktı — süpürülüp sarkmış işaretçi kalırdı).
+struct Kayit { string ad; int n; }
+
+int main() {
+    Kayit k;
+    k.ad = "canli";
+    k.n = 7;
+    int i = 0;
+    while (i < 3000) {
+        string cop = "copkopru" + "uzuncop";
+        i = i + 1;
+    }
+    print(k.ad);
+    print(k.n);
+    return 0;
+}

@@ -307,6 +307,13 @@ bool Interpreter::shouldStop() {
 // Write barrier (object.cpp:writeBarrier): FIELD_SET/ARRAY_SET'te Siyah
 // nesneye Beyaz referans yazılırsa Siyah'ı Grey'e çevir.
 
+const SlotLiveness& Interpreter::livenessFor(const IRFunction* fn) {
+    auto it = livenessCache_.find(fn);
+    if (it == livenessCache_.end())
+        it = livenessCache_.emplace(fn, computeSlotLiveness(*fn)).first;
+    return it->second;
+}
+
 void Interpreter::maybeCollect() {
     if (gcThreshold_ <= 0 || heap_.allocCount < gcThreshold_) {
         // Cycle yoksa veya threshold aşılmadıysa, incremental step yap
@@ -327,8 +334,27 @@ void Interpreter::maybeCollect() {
     // 1. Tüm nesneleri White yap (sweep'te yapılır, ama ilk cycle'da gerekli)
     // 2. Kökleri Grey yap
     heap_.markSlots(globalSlots_);
-    for (const CallFrame& frame : callStack_)
-        heap_.markSlots(frame.slots);
+    for (CallFrame& frame : callStack_) {
+        const SlotLiveness& lv = livenessFor(frame.function);
+        if (!lv.exact) {
+            // Muhafazakâr mod (try içeren fonksiyon): her slot kök.
+            heap_.markSlots(frame.slots);
+            continue;
+        }
+        // Kök daraltma: yalnızca bu talimat noktasında CANLI olan slot'lar
+        // kök sayılır. Ölü slot'a bağlı nesne artık hiçbir yol tarafından
+        // okunamayacağı için güvenle toplanabilir.
+        for (int s = 0; s < (int)frame.slots.size(); ++s) {
+            if (lv.isLiveBefore(frame.instructionPointer, s)) {
+                heap_.markValue(frame.slots[(size_t)s]);
+            } else if (frame.slots[(size_t)s].kind == ValueKind::Ref) {
+                // Ölü ref slot'u temizle: nesne bu turda toplanırsa slot'ta
+                // sarkmış (dangling) işaretçi kalmasın — frame'i sonradan
+                // okuyan araçlar (DAP değişken görünümü) güvenli kalsın.
+                frame.slots[(size_t)s] = Value::null();
+            }
+        }
+    }
     if (pendingThrow_)
         heap_.markValue(*pendingThrow_);
     // #228: JIT register'larındaki referanslar. VM callStack'i JIT çalışırken

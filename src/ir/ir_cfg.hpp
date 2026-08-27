@@ -68,6 +68,14 @@ struct BasicBlock {
             if (i) os << ",";
             os << IrColor::SoftGri() << "BB_" << successors[i] << IrColor::Reset();
         }
+        if (!exceptionTargets.empty()) {
+            os << IrColor::KoyuSari() << "} exc:{" << IrColor::Reset();
+            for (size_t i = 0; i < exceptionTargets.size(); ++i) {
+                if (i) os << ",";
+                os << IrColor::SoftGri() << "BB_" << exceptionTargets[i]
+                   << IrColor::Reset();
+            }
+        }
         os << IrColor::KoyuSari() << "} term=" << IrColor::Reset()
            << IrColor::KoyuSari() << opcodeName(terminator) << IrColor::Reset();
         if (jumpTarget >= 0)
@@ -175,6 +183,19 @@ struct CFG {
         os << IrColor::SoftGri() << "CFG: " << IrColor::Reset()
            << IrColor::SoftTuruncu() << blocks.size() << IrColor::Reset()
            << " blocks\n";
+        // Doğal döngüler (computeLoops çağrılmışsa): her döngü başlığı ve
+        // gövdesi tek satırda. Gövdedeki bloklar aynı zamanda dominatör
+        // ağacında başlığın altındadır — geri kenarın tanımı gereği.
+        for (const auto& loop : loops) {
+            os << IrColor::SoftGri() << "loop: header=BB_" << loop.header
+               << " body={" << IrColor::Reset();
+            for (size_t i = 0; i < loop.body.size(); ++i) {
+                if (i) os << ",";
+                os << IrColor::SoftGri() << "BB_" << loop.body[i]
+                   << IrColor::Reset();
+            }
+            os << IrColor::SoftGri() << "}" << IrColor::Reset() << "\n";
+        }
         for (const auto& b : blocks)
             os << b.dump();
         return os.str();

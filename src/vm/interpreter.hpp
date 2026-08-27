@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <utility>
 #include "ir/ir_program.hpp"
+#include "ir/ir_liveness.hpp"
 #include "core/module_registry.hpp"
 #include "vm/call_frame.hpp"
 #include "vm/object.hpp"
@@ -152,6 +153,14 @@ private:
     // pendingThrow_) işaretleyip sweep koşar. YALNIZCA instruction sınırında
     // çağrılmalı — opcode ortasında slot'a bağlanmamış nesne toplanabilir.
     void maybeCollect();
+
+    // Kök daraltma: frame'in SADECE o anki talimat noktasında canlı olan
+    // slot'larını kök sayar (ir_liveness). ENTER_TRY içeren fonksiyonlar
+    // muhafazakârdır (exact=false) — tüm slot'lar kök kalır. Sonuç fonksiyon
+    // başına bir kez hesaplanıp önbelleklenir; talimat listesi koşu sırasında
+    // değişmez.
+    const SlotLiveness& livenessFor(const IRFunction* fn);
+    std::unordered_map<const IRFunction*, SlotLiveness> livenessCache_;
 
     static constexpr int kGCDefaultThreshold = 1024;
     static constexpr int kGCBudgetPerStep = 128;  // #217: incremental step'te işlenecek max nesne

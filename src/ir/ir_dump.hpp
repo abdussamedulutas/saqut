@@ -134,6 +134,26 @@ inline std::string nullableTag(const Instruction& ins, const Palette& p) {
          + (ins.left ? "[null]" : "[throw]") + p.reset();
 }
 
+// String sabitini dump satırında TEK satırda tutar: satır sonu/sekme gibi
+// denetim karakterleri kaçış dizisine çevrilir. IR'yi satır-satır işleyen
+// araçlar (grep, fixture karşılaştırma) çok satırlı literal yüzünden
+// şaşırtılmasın.
+inline std::string escapeForDump(const std::string& raw) {
+    std::string out;
+    out.reserve(raw.size());
+    for (char c : raw) {
+        switch (c) {
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            case '\\': out += "\\\\"; break;
+            case '"':  out += "\\\""; break;
+            default:   out += c; break;
+        }
+    }
+    return out;
+}
+
 // Bir talimatın opcode'undan SONRAKI operand kısmını üretir (renkli).
 // switch default İÇERMEZ — yeni opcode eklenirse -Wswitch/-Werror bunu kırar.
 inline std::string operands(const Instruction& ins, const Palette& p = kFlatPalette) {
@@ -156,7 +176,7 @@ inline std::string operands(const Instruction& ins, const Palette& p = kFlatPale
             break;
         case Opcode::LOAD_STRING:
             os << s(ins.dest) << " " << L("=") << " \""
-               << p.str() << ins.stringValue << reset << "\"";
+               << p.str() << escapeForDump(ins.stringValue) << reset << "\"";
             break;
         case Opcode::LOAD_NULL:
             os << s(ins.dest) << " " << L("=") << " " << p.tag() << "null" << reset;
@@ -192,6 +212,17 @@ inline std::string operands(const Instruction& ins, const Palette& p = kFlatPale
                 if (ins.dest >= 0)
                     os << s(ins.dest) << " " << L("=") << " ";
                 os << L("builtin::") << p.fn() << methodLabel << reset << L("(");
+            } else if (ins.functionName == "__ffi__") {
+                // FFI çağrısının gerçeği intValue'daki birleşik registry
+                // indeksidir (#227/#229); functionName yalnızca yer tutucu.
+                // Dispatch indeksle yaptığı için dump da ismi indeksten
+                // çözer — tablo dışı indeks hâlâ görünebilir kalır.
+                const HostEntry* he = hostEntryAt(ins.intValue);
+                if (ins.dest >= 0)
+                    os << s(ins.dest) << " " << L("=") << " ";
+                os << L("ffi::") << p.fn()
+                   << (he ? he->symbolicId : std::string("id") + std::to_string(ins.intValue))
+                   << reset << L("(");
             } else {
                 os << p.fn() << ins.functionName << reset << L("(");
             }

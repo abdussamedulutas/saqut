@@ -147,11 +147,15 @@ CFG buildCFG(const std::vector<Instruction>& instructions) {
 }
 
 // ── Erişilemez blok temizliği ────────────────────────────────────────────────
-// Blok 0'dan successors üzerinden (exception kenarları dahil) BFS. Ulaşıla-
-// mayanlar silinir; kalan bloklar yeniden numaralanır ve kenarlar/id alanları
-// yeni ID'lere çevrilir. startIndex/endIndex orijinal flat düzene referans
-// kalır (yalnızca kurulum sırasında anlamlıdır); linearize blok sırasını
-// kullanır, bu alanları değil.
+// NE YAPIYOR: Programın 1. bloğundan yola çıkıp bloklar arası geçişleri
+// (dallanmalar ve exception kenarları dahil) takip ederek ulaşılabilecek tüm
+// blokları işaretler; işaretlenmeyenleri siler. Yani: "hiçbir yol bu koda
+// çıkmıyorsa, bu kod hiç çalışmayacak demektir — kaldır."
+// Silme sonrası blok numaraları değiştiğinden kalan bloklar yeniden
+// numaralanır ve tüm kenarlar yeni numaralara çevrilir. Bağımlı analiz
+// sonuçları (dominatör, döngü) eski numaralara göre olduğundan temizlenir.
+// Not: startIndex/endIndex alanları silme ÖNCESİ düz liste konumunu gösterir;
+// linearize() bu alanları değil blokların sırasını kullanır.
 int CFG::removeUnreachableBlocks() {
     if (blocks.empty()) return 0;
 
@@ -204,16 +208,32 @@ int CFG::removeUnreachableBlocks() {
 }
 
 // ── Dominance (Cooper-Harvey-Kennedy) ────────────────────────────────────────
-// RPO üzerinden iteratif intersect; yakın-doğrusal pratik performans. Tüm
-// bloklar erişilebilir varsayar (önce removeUnreachableBlocks).
+// KAVRAM: "A bloğu, B bloğunu YÖNETİYOR (dominate) demek = programa hangi
+// yoldan girersen gir, B'ye ulaşmak için mutlaka A'dan geçmek zorundasın."
+// Örnek: döngü başındaki koşul bloğu, döngü gövdesini yönetir — gövdeye
+// giden tek yol koşul bloğundan geçer.
+//
+// Bu fonksiyon her blok için "en yakın yöneticisi"ni (ani-dominatör) bulur:
+// onu yöneten bloklar arasından en yakınındaki. Sonuç bir ağaçtır: her bloğun
+// tek bir üst yöneticisi vardır ve kökü giriş bloğudur (idom[0] = -1).
+//
+// YÖNTEM (CHK algoritması): Blokları "ters son-ziyaret sırası"nda (RPO)
+// gezer — bu, dallanmalarin çoğunlukla ileriye baktığı bir sıradır, sayesinde
+// hesap birkaç turda oturur. Kural: bir bloğun en yakın yöneticisi, ona gelen
+// yolların ORTAK zorunlu noktasıdır; gelen blokların yöneticileri ağaçta
+// yukarı taşınıp ortak atada buluşturulur (intersect). Bir turda hiçbir sonuç
+// değişmeyince hesap tamamlanmıştır (sabit nokta).
+//
+// ÖNKOŞUL: Tüm bloklar erişilebilir olmalı — önce removeUnreachableBlocks().
 void CFG::computeDominance() {
     const int n = (int)blocks.size();
     idom.assign((size_t)n, -1);
     rpo.clear();
     if (n == 0) return;
 
-    // RPO: DFS postorder'ın tersi. Successor'lar blok sırasıyla gezilir —
-    // deterministik sonuç (ADR-038 gereği analiz de tekrarlanabilir olmalı).
+    // Ters son-ziyaret sırası (RPO): derinlik-öncesi aramada bloklardan
+    // ÇIKIŞ sırasının tersi. Successor'lar blok sırasıyla gezilir — sonuç
+    // deterministiktir (aynı girdi her zaman aynı sırayı verir).
     std::vector<char> visited((size_t)n, 0);
     std::vector<int> post;
     std::vector<std::pair<int, size_t>> stack;  // (blok, sonraki succ indeksi)
@@ -234,6 +254,11 @@ void CFG::computeDominance() {
     }
     rpo.assign(post.rbegin(), post.rend());
 
+    // İki bloğun yönetim ağacındaki EN YAKIN ORTAK ATASINI bulur. Fikir:
+    // her bloğun yöneticisi kendisinden daha erken ziyaret edilir (daha
+    // küçük RPO konumundadır); iki göstergeyi sırayla yukarı taşıyınca
+    // eninde sonunda aynı blokta buluşurlar — o blok, ikisini birden
+    // yöneten en yakın bloktur.
     auto intersect = [&](int b, int p) {
         while (b != p) {
             while (b > p) b = idom[(size_t)b];
@@ -242,7 +267,7 @@ void CFG::computeDominance() {
         return b;
     };
 
-    idom[0] = 0;  // giriş: kendisi (kök işareti; -1 yerine döngüsüz intersect)
+    idom[0] = 0;  // giriş bloğu kendisini yönetir (kök işareti; döngüsüz yukarı taşıma)
     bool changed = true;
     while (changed) {
         changed = false;
@@ -262,8 +287,10 @@ void CFG::computeDominance() {
     idom[0] = -1;  // kökün dominatörü yoktur
 }
 
+// a bloğu, b bloğunu yönetiyor mu? (computeDominance çağrılmış olmalı)
+// Yöntem: b'den yönetici zincirini (idom) yukarı doğru köke kadar yürüt;
+// yolda a'ya rastlanırsa evet. Zincide her adım bir üst yöneticiye çıkar.
 bool cfgDominates(const CFG& cfg, int a, int b) {
-    // a, b'yi dominate ediyor mu: b'den idom zinciri yukarı çık, a'ya uğra.
     if (a < 0 || b < 0 || a >= (int)cfg.idom.size() || b >= (int)cfg.idom.size())
         return false;
     int cur = b;
@@ -275,8 +302,22 @@ bool cfgDominates(const CFG& cfg, int a, int b) {
 }
 
 // ── Natural loop tespiti ─────────────────────────────────────────────────────
-// Geri kenar u→h (h, u'yu dominate eder). Gövde: u'dan pred'ler üzerinden
-// geriye yürü, h'ye ulaşınca dur (h dahil).
+// KAVRAM: "Doğal döngü", programa geriye DÖNEN bir dallanma (geri kenar)
+// yarattığı döngüdür. Geri kenar şu şekilde tanınır: u bloğundan h bloğuna
+// bir geçiş var VE h, u'yu yönetiyorsa (yani u'ya giden her yol h'den
+// geçiyorsa) bu geçiş bir döngü başına geri dönüş demektir.
+//
+// NE YAPIYOR: Tüm geçişleri tarar, geri kenarları bulur; her biri için
+// döngünün gövdesini toplar. Gövde toplama: geri kenarın kaynağından (u)
+// "bu bloğa kimler geliyor?" diye GERİYE doğru yürünür; döngünün başına
+// (h) ulaşınca durulur — çünkü döngü öncesi bloklar döngünün parçası
+// değildir (h önceden işaretlendiği için onun geçmişleri asla taralanmaz).
+// Örnek: init → koşul ↔ gövde yapısında gövde→koşul geri kenarıdır ve
+// gövde = {koşul, gövde}; init bloğu dışarıda kalır.
+//
+// NEDEN ÖNEMLİ: döngüdeki değerlerin akıbetini (canlılığı, ileride döngü
+// optimizasyonlarını) bilmek isteyen her analiz önce döngünün nerede
+// bittiğini bilmek zorundadır.
 void CFG::computeLoops() {
     loops.clear();
     if (idom.empty()) computeDominance();

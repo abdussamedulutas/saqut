@@ -54,10 +54,14 @@ inline int cmdIr(const CliArgs& args) {
 
     // #218: --cfg — flat liste yerine CFG (BasicBlock + kenarlar) bas.
     // buildCFG gerçek implementasyondur; VM yine flat listeyi kullanır.
+    // Dominatör/döngü analizi dump'ın parçası: gözlenebilirlik (cam kutu) —
+    // analiz sonuçları yalnızca içte değil çıktıda da görünür.
     if (args.showCfg) {
         for (const std::string& name : program.functionOrder) {
             IRFunction& fn = program.functions.at(name);
             CFG cfg = buildCFG(fn.instructions);
+            cfg.computeDominance();
+            cfg.computeLoops();
             std::cout << IrColor::SoftYesil() << name << IrColor::Reset() << "\n";
             std::cout << cfg.dump();
         }

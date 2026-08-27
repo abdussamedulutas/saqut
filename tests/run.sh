@@ -224,6 +224,21 @@ if ! echo "$gcoff" | grep -q "runs=0"; then
 fi
 echo "  3 geçti, 0 başarısız"
 
+# ── GC kök daraltma (liveness) ───────────────────────────────────────────────
+# narrow_proof.sqt: erken kullanılıp ÖLEN (üzerine yazılmayan) 5 array +
+# 3000 turluk tahsis döngüsü. Liveness tabanlı kök daraltma etkinse ölü
+# array'ler toplanır (freed >= 2046); daraltma kırılırsa hepsi sona kadar
+# kök kalır ve sayaç 2036'ya düşer — hata sınıfı: ölü slot'un nesneyi
+# gereksiz canlı tutması.
+echo "=== gc kok daraltma ==="
+NARROW_SQT="$ROOT/tests/golden/gc/narrow_proof.sqt"
+nout=$("$SAQUT" run --gc-stats "$NARROW_SQT" 2>&1 >/dev/null)
+nfreed=$(echo "$nout" | grep -oE "freed=[0-9]+" | head -1 | cut -d= -f2)
+if [ -z "$nfreed" ] || [ "$nfreed" -lt 2046 ]; then
+    echo "  FAIL: kök daraltma etkin değil (freed=${nfreed:-yok}, beklenen >= 2046)"; exit 1
+fi
+echo "  1 geçti, 0 başarısız (freed=$nfreed)"
+
 # ── Builtin sözdizimi testleri (ADR-033, #85) ────────────────────────────────
 # 1) Eski ElemTip::metod sözdizimi W006 uyarısı verir ama çalışır (exit 0)
 # 2) Struct alanı builtin'i gölgeler: k.length() alan varken derleme hatası

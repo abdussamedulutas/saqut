@@ -12,9 +12,12 @@
 //   veri kaynağıdır.
 //
 // YÖNTEM:
-//   Blok-bazlı geriye veri akışı (gen/kill + fixpoint), sonra blok içinde
-//   talimat talimat geriye yürüyüş. Slot temsili SSA değil — slot-bazlı
-//   bytecode'da standart yaklaşımdır (yorumlayıcı JIT'lerinin liveness'ı).
+//   Önce her blok için "blokta yazılmadan okunanlar" ve "blokta yazılanlar"
+//   özeti çıkarılır; sonra bu özetler blokların sonundan başına doğru
+//   birleştirilir (art arda turlarla, sonuç değişmeyene dek) ve son olarak
+//   her blok içinde talimat talimat geriye yürünerek "bu talimat çalışmadan
+//   önce hangi slotlar canlı" kümesi üretilir. Slot temsili SSA değil —
+//   slot-bazlı talimat listelerinde standart yaklaşımdır.
 //
 // GÜVENLİK SINIRI (exact=false):
 //   Fonksiyon ENTER_TRY içeriyorsa analiz MUHAFAZAKÂR moda düşer: her slot

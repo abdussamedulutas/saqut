@@ -76,7 +76,7 @@ typedef std::vector<Token*> TokenList;
 //      - Seviye 1:   DOT, ARROW, LBRACKET, RBRACKET, LPAREN, RPAREN
 //      - Seviye 2:   PLUS_PLUS, MINUS_MINUS (postfix)
 //      - Seviye 3:   PLUS, MINUS, BANG, TILDE (unary prefix)
-//      - Seviye 4:   STAR_STAR, CARET (üs)
+//      - Seviye 4:   STAR_STAR (üs; ^ artık XOR, Level 8)
 //      - Seviye 5:   STAR, SLASH, PERCENT (çarpma/bölme)
 //      - Seviye 6-16: devamı...
 //   4. Diğer: LBRACE, RBRACE, SEMICOLON, COMMA, COLON_COLON
@@ -237,7 +237,7 @@ enum class TokenType : uint16_t {
      * Seviye 11:             İlişkisel < <= > >=
      * Seviye 10:             Eşitlik == !=
      * Seviye 9:              Bitsel VE &
-     * Seviye 8:              Bitsel XOR ^ (CARET üs olarak 15'te)
+     * Seviye 8:              Bitsel XOR ^ (#230; C/Python ile hizalı)
      * Seviye 7:              Bitsel VEYA |
      * Seviye 6:              Mantıksal VE &&
      * Seviye 5:              Mantıksal VEYA ||
@@ -288,9 +288,9 @@ enum class TokenType : uint16_t {
     STAR_STAR,       // ** (üs alma) — a ** b = a^b
                      //   Python tarzı. Öncelik 15. Sağ birleşmeli.
                      //   2 ** 3 ** 2 = 2 ** (3 ** 2) = 512
-    CARET,           // ^ (üs alma veya bitsel XOR)
-                     //   saQut'ta varsayılan: üs alma (öncelik 15).
-                     //   C/C++'da XOR (öncelik 8) — bağlama göre değişebilir.
+    CARET,           // ^ (bitsel XOR)
+                     //   Öncelik 8 (Level 8). Sol birleşmeli. #230 kararı.
+                     //   Üs yalnız ** (STAR_STAR) iledir.
 
     // Seviye 14: Çarpma/Bölme — Sol birleşmeli
     STAR,            // * (çarpma) — a * b
@@ -327,9 +327,7 @@ enum class TokenType : uint16_t {
     AMPERSAND,       // & (bitsel VE) — a & b
                      //   Bitwise AND. Öncelik 9.
 
-    // Seviye 8: Bitsel XOR
-    //   ^ (CARET) yukarıda (üs olarak seviye 15'te).
-    //   Gelecekte XOR için ayrı token eklenebilir.
+    // Seviye 8: Bitsel XOR — CARET, &  (9) ile | (7) arasındadır (#230)
 
     // Seviye 7: Bitsel VEYA
     PIPE,            // | (bitsel VEYA) — a | b
@@ -746,7 +744,7 @@ inline const std::unordered_map<TokenType, std::string_view> OPERATOR_MAP_STRREV
 //   11: İlişkisel         < <= > >=
 //   10: Eşitlik           == !=
 //    9: Bitsel VE         &
-//    8: Bitsel XOR        ^ (şu anda üs olarak 15'te)
+//    8: Bitsel XOR        ^ (Level 8; üs yalnız ** , #230)
 //    7: Bitsel VEYA       |
 //    6: Mantıksal VE      &&
 //    5: Mantıksal VEYA    ||
@@ -756,15 +754,13 @@ inline const std::unordered_map<TokenType, std::string_view> OPERATOR_MAP_STRREV
 //    1: Virgül            ,
 //    0: Önceliksiz        (değerler, EOF, bilinmeyen)
 //
-// KARAR: Neden ^ (CARET) seviye 15 (üs) olarak ayarlı?
-//   - C/C++'da ^ bitsel XOR'tur (seviye 8).
-//   - Python'da ** üs, ^ XOR'tur.
-//   - saQut'ta ^ varsayılan olarak üs alma olarak kullanılır.
-//   - Gelecekte XOR için ayrı token (CARET_CARET ^^) eklenebilir.
-//
-// BUG FIX (commit 438bc0e):
-//   Seviye 8'de CARET için ölü kod (case olmadan return 8) vardı.
-//   Temizlendi. CARET zaten seviye 15'te STAR_STAR ile birlikte işleniyor.
+// KARAR (#230, ürün sahibi): ^ (CARET) bitsel XOR'tur ve Level 8'dedir;
+// üs alma yalnız ** (STAR_STAR, Level 15) ile yapılır. C/C++/Python ile
+// hizalıdır: & (9) ile | (7) arasına düşer, unary '-'den (13) gevşektir.
+// Geçmişte CARET, STAR_STAR ile birlikte "üs" diye Level 15'e konmuştu; IR
+// yine de BXOR üretiyordu. Bu uyumsuzluk, unary '-'nin CARET'ten gevşek
+// bağlanıp `-a ^ b`'yi `-(a ^ b)` diye parse etmesine yol açtı (bug #230).
+// Seviye 8'e inince `-a ^ b` doğru şekilde `(-a) ^ b` olur.
 //
 inline uint16_t TokenPrecedence(TokenType type) {
     switch (type) {
@@ -786,8 +782,7 @@ inline uint16_t TokenPrecedence(TokenType type) {
             return 16;
 
         // Level 15: Exponentiation
-        case TokenType::STAR_STAR: // **
-        case TokenType::CARET:     // ^ (Python tarzı üs)
+        case TokenType::STAR_STAR: // ** (tek üs operatörü; ^ XOR'dur, #230)
             return 15;
 
         // Level 14: Multiplicative
@@ -823,7 +818,9 @@ inline uint16_t TokenPrecedence(TokenType type) {
         case TokenType::AMPERSAND: // &
             return 9;
 
-        // Level 8: Bitwise XOR — şu anda CARET seviye 15'te (üs)
+        // Level 8: Bitwise XOR
+        case TokenType::CARET:     // ^ bitsel XOR (#230; C/Python ile hizalı)
+            return 8;
         // Level 7: Bitwise OR
         case TokenType::PIPE:      // |
             return 7;
@@ -879,7 +876,6 @@ inline uint16_t TokenPrecedence(TokenType type) {
 // Sağ birleşmeli operatörler (a OP b OP c = a OP (b OP c)):
 //   - STAR_STAR (üs alma): 2 ** 3 ** 2 = 2 ** (3 ** 2) = 2^9 = 512
 //     (matematiksel kural: üs sağdan sola birleşir)
-//   - CARET (üs alma): 2 ^ 3 ^ 2 = 2 ^ (3 ^ 2) = 512
 //   - EQUAL (atama): a = b = 5 → a = (b = 5)
 //     (önce b = 5 çalışır, sonra a = b)
 //   - +=, -=, *=, vb. (birleşik atama): a += b += 5 → a += (b += 5)
@@ -887,13 +883,15 @@ inline uint16_t TokenPrecedence(TokenType type) {
 //     (iç içe ternary'lerde sağdan sola)
 //
 // Sol birleşmeli operatörler (a OP b OP c = (a OP b) OP c):
-//   - Tüm diğerleri: +, -, *, /, ==, &&, ||, vb.
+//   - Tüm diğerleri: +, -, *, /, ^ (XOR), ==, &&, ||, vb.
 //     (a + b + c = (a + b) + c, yani önce a+b, sonuç + c)
+//
+// NOT (#230): CARET artık sağ birleşimli üs değil, bitsel XOR'dur — sol
+// birleşimlidir. Üs birleşim yönü yalnız STAR_STAR'a aittir.
 //
 inline bool RightAssociative(TokenType type) {
     switch (type) {
         case TokenType::STAR_STAR:  // ** (üs)
-        case TokenType::CARET:      // ^ (üs)
         case TokenType::EQUAL:      // =
         case TokenType::PLUS_EQUAL: // +=
         case TokenType::MINUS_EQUAL:// -=

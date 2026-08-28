@@ -908,16 +908,20 @@ extern "C" void rt_jit_print_decimal(void* d) { std::cout << jitDV(d).toString()
 //     f/f  → "runtime error: float division by zero"  exit 70
 // Önceki gerçekleme mod mesajını ASCII'ye düşürüyor ("sifira bolme") ve
 // üçünde de exit 1 döndürüyordu — merkezi kSoftwareError (70) sınıfı ihlali.
-extern "C" void rt_jit_div_zero() {
-    jitSetError("division by zero", "E_DIVZERO");
+// Sıfıra bölme hataları. Konum PARAMETRE olarak gelir; eskiden her bölme
+// talimatından ÖNCE koşulsuz bir rt_jit_error_location çağrısı emit ediliyordu
+// ve hata olmasa bile tur başına bir çağrı ödeniyordu. Bölme kodgen'i zaten
+// inline sıfır kontrolü yapıyor — konumu yalnız hata DALINDA yazmak yeterli.
+extern "C" void rt_jit_div_zero(int64_t line, int64_t col) {
+    jitSetError("division by zero", "E_DIVZERO", line, col);
 }
 
-extern "C" void rt_jit_mod_zero() {
-    jitSetError("sıfıra bölme (mod)", "E_DIVZERO");
+extern "C" void rt_jit_mod_zero(int64_t line, int64_t col) {
+    jitSetError("sıfıra bölme (mod)", "E_DIVZERO", line, col);
 }
 
-extern "C" void rt_jit_fdiv_zero() {
-    jitSetError("float division by zero", "E_DIVZERO");
+extern "C" void rt_jit_fdiv_zero(int64_t line, int64_t col) {
+    jitSetError("float division by zero", "E_DIVZERO", line, col);
 }
 
 // SlotType → MIR register tipi (MIRPLAN §3; ADR-040 genişletmesi).
@@ -1401,11 +1405,12 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
 
     MIR_item_t printDProto     = MIR_new_proto(ctx, "print_d_proto", 0, nullptr, 1, MIR_T_I64, "v");
     MIR_item_t printDImport    = MIR_new_import(ctx, "rt_jit_print_decimal");
-    MIR_item_t divZeroProto    = MIR_new_proto(ctx, "divzero_proto", 0, nullptr, 0);
+    MIR_var_t  zeroErrVars[2]  = {{MIR_T_I64, "line", 0}, {MIR_T_I64, "col", 0}};
+    MIR_item_t divZeroProto    = MIR_new_proto_arr(ctx, "divzero_proto", 0, nullptr, 2, zeroErrVars);
     MIR_item_t divZeroImport   = MIR_new_import(ctx, "rt_jit_div_zero");
-    MIR_item_t modZeroProto    = MIR_new_proto(ctx, "modzero_proto", 0, nullptr, 0);
+    MIR_item_t modZeroProto    = MIR_new_proto_arr(ctx, "modzero_proto", 0, nullptr, 2, zeroErrVars);
     MIR_item_t modZeroImport   = MIR_new_import(ctx, "rt_jit_mod_zero");
-    MIR_item_t fdivZeroProto   = MIR_new_proto(ctx, "fdivzero_proto", 0, nullptr, 0);
+    MIR_item_t fdivZeroProto   = MIR_new_proto_arr(ctx, "fdivzero_proto", 0, nullptr, 2, zeroErrVars);
     MIR_item_t fdivZeroImport  = MIR_new_import(ctx, "rt_jit_fdiv_zero");
     MIR_item_t errPendingProto = MIR_new_proto_arr(ctx, "err_pending_proto", 1, &i64Ret, 0, nullptr);
     MIR_item_t errPendingImport = MIR_new_import(ctx, "rt_jit_error_pending");
@@ -1857,12 +1862,16 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
             // değerleri kullanır (VM'in instr.sourceLine/sourceCol kullanımıyla
             // birebir, ADR-025). Bir önceki instruction'ın konumu sızmasın.
             switch (instr.opcode) {
-                case Opcode::DIV:
-                case Opcode::MOD:
-                case Opcode::FDIV:
-                case Opcode::LDIV:
-                case Opcode::LMOD:
-                case Opcode::F32DIV:
+                // NOT: int/long/float sıfıra bölme (DIV/MOD/FDIV/LDIV/LMOD/
+                // F32DIV) bu listede DEĞİLDİR. Onların kodgen'i sıfır
+                // kontrolünü inline yapar ve konumu hata DALINDA, trampoline
+                // parametre olarak geçirir. Buraya koymak, hata olmasa bile
+                // tur başına bir rt_jit_error_location çağrısı demekti —
+                // sıcak bölme döngülerinde ölçülebilir maliyet.
+                //
+                // DDIV/DMOD (decimal) listede KALIR: onların hata yolu
+                // trampolinin içindedir (rt_jit_decimal_div), konumu dışarıdan
+                // geçirilemez.
                 case Opcode::DDIV:
                 case Opcode::DMOD:
                 case Opcode::ARRAY_GET:
@@ -2115,7 +2124,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func,
                         MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_int_op(ctx, 0)));
                     MIR_append_insn(ctx, func,
-                        MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, divZeroProto), MIR_new_ref_op(ctx, divZeroImport)));
+                        MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, divZeroProto), MIR_new_ref_op(ctx, divZeroImport), MIR_new_int_op(ctx, instr.sourceLine), MIR_new_int_op(ctx, instr.sourceCol)));
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
                     MIR_append_insn(ctx, func, okLabel);
                     // INT_MIN / -1 donanımda tuzak (#DE) → 2's-complement sonucu INT_MIN
@@ -2138,7 +2147,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func,
                         MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_int_op(ctx, 0)));
                     MIR_append_insn(ctx, func,
-                        MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, modZeroProto), MIR_new_ref_op(ctx, modZeroImport)));
+                        MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, modZeroProto), MIR_new_ref_op(ctx, modZeroImport), MIR_new_int_op(ctx, instr.sourceLine), MIR_new_int_op(ctx, instr.sourceCol)));
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
                     MIR_append_insn(ctx, func, okLabel);
                     // INT_MIN % -1 → tuzak → 2's-complement sonucu 0
@@ -2172,7 +2181,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func,
                         MIR_new_insn(ctx, MIR_DBNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_double_op(ctx, 0.0)));
                     MIR_append_insn(ctx, func,
-                        MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, fdivZeroProto), MIR_new_ref_op(ctx, fdivZeroImport)));
+                        MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, fdivZeroProto), MIR_new_ref_op(ctx, fdivZeroImport), MIR_new_int_op(ctx, instr.sourceLine), MIR_new_int_op(ctx, instr.sourceCol)));
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
                     MIR_append_insn(ctx, func, okLabel);
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_DDIV, R(instr.dest), R(instr.left), R(instr.right)));
@@ -2206,7 +2215,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_label_t doDiv = MIR_new_label(ctx);
                     MIR_label_t doneLabel = MIR_new_label(ctx);
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_int_op(ctx, 0)));
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, divZeroProto), MIR_new_ref_op(ctx, divZeroImport)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, divZeroProto), MIR_new_ref_op(ctx, divZeroImport), MIR_new_int_op(ctx, instr.sourceLine), MIR_new_int_op(ctx, instr.sourceCol)));
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
                     MIR_append_insn(ctx, func, okLabel);
                     // INT64_MIN / -1 → tuzak → 2's-complement sonucu INT64_MIN
@@ -2224,7 +2233,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_label_t doMod = MIR_new_label(ctx);
                     MIR_label_t doneLabel = MIR_new_label(ctx);
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_int_op(ctx, 0)));
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, modZeroProto), MIR_new_ref_op(ctx, modZeroImport)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, modZeroProto), MIR_new_ref_op(ctx, modZeroImport), MIR_new_int_op(ctx, instr.sourceLine), MIR_new_int_op(ctx, instr.sourceCol)));
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
                     MIR_append_insn(ctx, func, okLabel);
                     // INT64_MIN % -1 → tuzak → 0
@@ -2279,7 +2288,7 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_label_t okLabel = MIR_new_label(ctx);
                     MIR_label_t doneLabel = MIR_new_label(ctx);
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_FBNE, MIR_new_label_op(ctx, okLabel), R(instr.right), MIR_new_float_op(ctx, 0.0f)));
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 2, MIR_new_ref_op(ctx, fdivZeroProto), MIR_new_ref_op(ctx, fdivZeroImport)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, fdivZeroProto), MIR_new_ref_op(ctx, fdivZeroImport), MIR_new_int_op(ctx, instr.sourceLine), MIR_new_int_op(ctx, instr.sourceCol)));
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, doneLabel)));
                     MIR_append_insn(ctx, func, okLabel);
                     MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_FDIV, R(instr.dest), R(instr.left), R(instr.right)));

@@ -316,8 +316,43 @@ for gf in "$ROOT"/tests/golden/gc/*.sqt "$ROOT"/tests/golden/ir/wide_cast_operan
         fi
     done
 done
-[ "$agfail" -gt 0 ] && exit 1
+if [ "$agfail" -gt 0 ]; then exit 1; fi
 echo "  $agpass geçti, 0 başarısız"
+
+# ── Optimizasyon sonucu DEĞİŞTİRMEZ (ADR-038) ────────────────────────────────
+# Production ortamında --optimized açık çalışacaktır. Optimizasyonun gözlenen
+# çıktıyı değiştirmemesi bir performans meselesi değil, DOĞRULUK sözleşmesidir:
+# "aynı program, backend ve optimizasyon ne olursa olsun aynı sonuç".
+#
+# Bu gate gerçek bir ayrışma yakaladı: sabit katlama && / || için 1/0
+# üretirken IRGenerator operandın değerini döndürüyordu (`5 && 3` → katlamada
+# 1, VM'de 3). ADR-008 C modeline göre revize edildi; gate kalıcı korumadır.
+#
+# stdout karşılaştırılır — stderr değil: --optimized ek tanı üretebilir
+# (W002 sıfıra bölme, W003 ulaşılamayan kod) ve bu KASITLIDIR.
+echo "=== optimizasyon sonucu degistirmiyor ==="
+optpass=0; optfail=0
+while IFS= read -r f; do
+    for backend in "" "--jit"; do
+        # JIT desteklemiyorsa o backend'de atla
+        if [ -n "$backend" ] && "$SAQUT" run --jit "$f" </dev/null 2>&1 | grep -q "tam olarak derleyemiyor"; then
+            continue
+        fi
+        # Kasten hata veren fixture'lar sıfırdan farklı exit döndürür
+        # (mod_by_zero, cast hataları...). Karşılaştırdığımız şey stdout;
+        # `|| true` olmadan set -e bu fixture'da script'i sonlandırır.
+        plain=$("$SAQUT" run $backend "$f" </dev/null 2>/dev/null || true)
+        opt=$("$SAQUT" run $backend --optimized "$f" </dev/null 2>/dev/null || true)
+        if [ "$plain" != "$opt" ]; then
+            echo "  FAIL: $(basename "$f") ${backend:-vm} — --optimized stdout'u degistirdi"
+            optfail=$((optfail+1))
+        else
+            optpass=$((optpass+1))
+        fi
+    done
+done < <(find "$ROOT/tests/golden" -name '*.sqt' | sort)
+if [ "$optfail" -gt 0 ]; then exit 1; fi
+echo "  $optpass geçti, 0 başarısız"
 
 # ── Builtin sözdizimi testleri (ADR-033, #85) ────────────────────────────────
 # 1) Eski ElemTip::metod sözdizimi W006 uyarısı verir ama çalışır (exit 0)

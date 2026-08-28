@@ -1,0 +1,42 @@
+// ADR-008 (revize): && ve || — kısa devre VAR, sonuç 1/0'dır (C modeli).
+//
+// İki ayrı sözleşme birlikte test edilir:
+//
+//   1. SONUÇ 1/0: operandın kendisi değil, doğruluk değeri döner.
+//      Regresyon: eskiden `5 && 3` → 3, `0 || 33` → 33 dönüyordu
+//      (Python/JS tarzı "operandı döndür"). Daha kötüsü, sabit katlama
+//      1/0 üretiyordu — yani `--optimized` ile sonuç DEĞİŞİYORDU.
+//      Bu fixture her iki modda da aynı çıktıyı vermek zorundadır.
+//
+//   2. KISA DEVRE: sonucu belirleyen taraf yeterse diğeri HİÇ
+//      çalıştırılmaz. Yan etkili çağrıyla gözlemlenir.
+
+int sayac = 0;
+
+int artir() {
+    sayac = sayac + 1;
+    return 1;
+}
+
+int main() {
+    // ── Sözleşme 1: sonuç 1/0 ──
+    print(5 && 3);          // 1  (operand değeri 3 DEĞİL)
+    print(4 || 8);          // 1
+    print(0 && 9);          // 0
+    print(0 || 33);         // 1  (operand değeri 33 DEĞİL)
+    print(-1000000 && 7);   // 1  (negatif de truthy)
+    print(0 || 0);          // 0
+
+    // ── Sözleşme 2: kısa devre ──
+    bool r1 = 0 && artir();
+    print(sayac);           // 0 — sağ taraf atlandı
+    bool r2 = 1 && artir();
+    print(sayac);           // 1 — sağ taraf çalıştı
+    bool r3 = 1 || artir();
+    print(sayac);           // 1 — sağ taraf atlandı
+    bool r4 = 0 || artir();
+    print(sayac);           // 2 — sağ taraf çalıştı
+
+    print(r1); print(r2); print(r3); print(r4);
+    return 0;
+}

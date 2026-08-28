@@ -1928,11 +1928,49 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2IProto), MIR_new_ref_op(ctx, castF2IImport), R(instr.dest), asDoubleOperand(instr.src)));
                     emitCastNull(instr);
                     break;
-                case Opcode::CAST_INT_TO_BYTE_CHECKED:
+                case Opcode::CAST_INT_TO_BYTE_CHECKED: {
+                    // INLINE aralık kontrolü — başarı yolunda çağrı YOK.
+                    //
+                    // Kontrolün kendisi iki karşılaştırmadır; onu bir native
+                    // çağrının arkasına koymak (eski hal: cast_begin + cast +
+                    // cast_ret_is_null) ölçülebilir maliyet üretiyordu:
+                    // 5M turluk byte döngüsünde JIT 188ms → 254ms (%35).
+                    // Fazladan opcode'un kendisi bedavaydı (188→189ms), yani
+                    // maliyetin tamamı çağrı köprüsündendi.
+                    //
+                    // Şema: aralık içindeyse doğrudan kopyala; dışındaysa
+                    // yalnız O DALDA trampoline sap (hata mesajı string kurar,
+                    // nullable modunda null bayrağı yazar — ikisi de sıcak
+                    // yolda değil).
+                    MIR_label_t failLabel = MIR_new_label(ctx);
+                    MIR_label_t doneLabel = MIR_new_label(ctx);
+                    MIR_reg_t   src       = regs[static_cast<size_t>(instr.src)];
+
+                    // src < 0 || src > 255 → fail
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BLT,
+                        MIR_new_label_op(ctx, failLabel), MIR_new_reg_op(ctx, src),
+                        MIR_new_int_op(ctx, 0)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BGT,
+                        MIR_new_label_op(ctx, failLabel), MIR_new_reg_op(ctx, src),
+                        MIR_new_int_op(ctx, 255)));
+                    // Başarı: değeri taşı, null bayrağını temizle.
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                        R(instr.dest), MIR_new_reg_op(ctx, src)));
+                    if (isNullableSlot(instr.dest)) setNullFlag(instr.dest, 0);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
+                        MIR_new_label_op(ctx, doneLabel)));
+                    // Hata dalı: VM ile aynı mesaj/nullable davranışı için
+                    // mevcut trampolin kullanılır (cast_begin nullable modunu
+                    // kurar, cast_error ya hata yayar ya null bayrağı yazar).
+                    MIR_append_insn(ctx, func, failLabel);
                     emitCastBegin(instr);
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castI2BProto), MIR_new_ref_op(ctx, castI2BImport), R(instr.dest), R(instr.src)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                        MIR_new_ref_op(ctx, castI2BProto), MIR_new_ref_op(ctx, castI2BImport),
+                        R(instr.dest), MIR_new_reg_op(ctx, src)));
                     emitCastNull(instr);
+                    MIR_append_insn(ctx, func, doneLabel);
                     break;
+                }
                 case Opcode::CAST_STR_TO_LONG:
                     emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2LProto), MIR_new_ref_op(ctx, castS2LImport), R(instr.dest), R(instr.src)));
@@ -1943,11 +1981,33 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2F32Proto), MIR_new_ref_op(ctx, castS2F32Import), R(instr.dest), R(instr.src)));
                     emitCastNull(instr);
                     break;
-                case Opcode::LONG_TO_INT_CHECKED:
+                case Opcode::LONG_TO_INT_CHECKED: {
+                    // INLINE aralık kontrolü — gerekçe CAST_INT_TO_BYTE_CHECKED'te.
+                    MIR_label_t failLabel = MIR_new_label(ctx);
+                    MIR_label_t doneLabel = MIR_new_label(ctx);
+                    MIR_reg_t   src       = regs[static_cast<size_t>(instr.src)];
+
+                    // src < INT_MIN || src > INT_MAX → fail
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BLT,
+                        MIR_new_label_op(ctx, failLabel), MIR_new_reg_op(ctx, src),
+                        MIR_new_int_op(ctx, INT_MIN)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BGT,
+                        MIR_new_label_op(ctx, failLabel), MIR_new_reg_op(ctx, src),
+                        MIR_new_int_op(ctx, INT_MAX)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                        R(instr.dest), MIR_new_reg_op(ctx, src)));
+                    if (isNullableSlot(instr.dest)) setNullFlag(instr.dest, 0);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
+                        MIR_new_label_op(ctx, doneLabel)));
+                    MIR_append_insn(ctx, func, failLabel);
                     emitCastBegin(instr);
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castL2IProto), MIR_new_ref_op(ctx, castL2IImport), R(instr.dest), R(instr.src)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                        MIR_new_ref_op(ctx, castL2IProto), MIR_new_ref_op(ctx, castL2IImport),
+                        R(instr.dest), MIR_new_reg_op(ctx, src)));
                     emitCastNull(instr);
+                    MIR_append_insn(ctx, func, doneLabel);
                     break;
+                }
                 case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
                     emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2LProto), MIR_new_ref_op(ctx, castF2LImport), R(instr.dest), asDoubleOperand(instr.src)));

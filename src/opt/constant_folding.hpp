@@ -9,6 +9,7 @@
 #ifndef SAQUT_OPT_CONSTANT_FOLDING
 #define SAQUT_OPT_CONSTANT_FOLDING
 
+#include "core/int_arithmetic.hpp"
 #include "diagnostic/diagnostic_engine.hpp"
 #include "opt/optimization_pass.hpp"
 #include "parser/nodes/binary_expr.hpp"
@@ -119,7 +120,8 @@ private:
         case TokenType::TILDE:
             return ~v;
         case TokenType::MINUS:
-            return -v;
+            // -INT_MIN taşar; VM ile aynı tanımlı sonucu vermek için wrap.
+            return saqut::intmath::wrapNegI32(v);
         case TokenType::PLUS:
             return v;
         default:
@@ -153,18 +155,25 @@ private:
         }
     }
 
+    // Aritmetik core/int_arithmetic.hpp'den gelir — VM ile AYNI fonksiyonlar.
+    //
+    // Neden düz `l + r` yazılamaz: C++'ta signed overflow UB'dir, saQut'ta ise
+    // tanımlı wrap'tir (ADR-040). Düz yazım, katlanmış ifadeyi katlanmamış
+    // olandan ayırabilir — ve optimizasyon artık VARSAYILAN AÇIK olduğundan
+    // bu ayrışma doğrudan kullanıcıya ulaşırdı. Aynı gerekçe INT_MIN/-1
+    // (donanım tuzağı) ve kaydırma maskelemesi için de geçerlidir.
     static int computeOp(TokenType op, int l, int r) {
         switch (op) {
         case TokenType::PLUS:
-            return l + r;
+            return saqut::intmath::wrapAddI32(l, r);
         case TokenType::MINUS:
-            return l - r;
+            return saqut::intmath::wrapSubI32(l, r);
         case TokenType::STAR:
-            return l * r;
+            return saqut::intmath::wrapMulI32(l, r);
         case TokenType::SLASH:
-            return l / r;
+            return saqut::intmath::wrapDivI32(l, r);  // b == 0 çağrandan önce elenir (W002)
         case TokenType::PERCENT:
-            return l % r;
+            return saqut::intmath::wrapModI32(l, r);  // b == 0 çağrandan önce elenir (W002)
         case TokenType::EQUAL_EQUAL:
             return l == r ? 1 : 0;
         case TokenType::BANG_EQUAL:
@@ -182,9 +191,9 @@ private:
         case TokenType::PIPE:
             return l | r;
         case TokenType::LSHIFT:
-            return l << r;
+            return saqut::intmath::wrapShlI32(l, r);
         case TokenType::RSHIFT:
-            return l >> r;
+            return saqut::intmath::wrapShrI32(l, r);
         case TokenType::AMPERSAND_AMPERSAND:
             return (l && r) ? 1 : 0;
         case TokenType::PIPE_PIPE:

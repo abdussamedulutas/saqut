@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include "vm/interpreter.hpp"
+#include "core/int_arithmetic.hpp"
 #include "gc/gc_object.hpp"
 #include "data/data_registry.hpp"
 #include "bench/profile.hpp"
@@ -27,32 +28,11 @@
 #include <climits>
 #include <cstdint>
 
-// int32 aritmetiği: taşma TANIMLI 2's-complement wrap (#113/ADR-040). saQut `int`
-// 32-bit; iki backend (VM/JIT) birebir aynı sonucu vermek zorunda (ADR-032/038).
-// C++ signed overflow UB olduğundan toplama/çıkarma/çarpma uint32 üzerinden yapılır;
-// INT_MIN/-1 bölme/mod donanımda tuzak (x86 #DE) → elle 2's-complement sonucu verilir.
-namespace {
-inline int wrapAddI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b)); }
-inline int wrapSubI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) - static_cast<uint32_t>(b)); }
-inline int wrapMulI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) * static_cast<uint32_t>(b)); }
-inline int wrapDivI32(int a, int b) { return (a == INT_MIN && b == -1) ? INT_MIN : a / b; }
-inline int wrapModI32(int a, int b) { return (a == INT_MIN && b == -1) ? 0 : a % b; }
-// Kaydırma miktarı 5-bit maskelenir (x86/MIR native davranışı; b&31), sonuç 32-bit.
-inline int wrapShlI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) << (b & 31)); }
-inline int wrapShrI32(int a, int b) { return a >> (b & 31); }
-
-// longint (64-bit) aritmetiği: aynı gerekçeyle tanımlı 2's-complement wrap
-// (ADR-040) — MIR backend'in native 64-bit MIR_ADD/SUB/MUL/LSH/RSH'siyle
-// birebir (mir_backend.cpp). INT64_MIN/-1 x86'da yine tuzak, elle ele alınır.
-inline long long wrapAddI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) + static_cast<uint64_t>(b)); }
-inline long long wrapSubI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) - static_cast<uint64_t>(b)); }
-inline long long wrapMulI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) * static_cast<uint64_t>(b)); }
-inline long long wrapDivI64(long long a, long long b) { return (a == INT64_MIN && b == -1) ? INT64_MIN : a / b; }
-inline long long wrapModI64(long long a, long long b) { return (a == INT64_MIN && b == -1) ? 0 : a % b; }
-inline long long wrapShlI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) << (b & 63)); }
-inline long long wrapShrI64(long long a, long long b) { return a >> (b & 63); }
-inline long long wrapNegI64(long long a) { return static_cast<int64_t>(0ULL - static_cast<uint64_t>(a)); }
-} // namespace
+// int32/int64 aritmetiği tek kaynaktan gelir: core/int_arithmetic.hpp.
+// Taşma davranışı (tanımlı 2's-complement wrap, ADR-040) dilin gözlemlenebilir
+// sözleşmesidir; VM ve sabit katlama aynı fonksiyonları çağırmak zorundadır —
+// ayrı kopyalar sessizce ayrışır. Gerekçelerin tamamı o başlıktadır.
+using namespace saqut::intmath;
 
 // ── buildTrace ─────────────────────────────────────────────────────────────────
 // Mevcut callStack_'i en içten dışa gezerek stacktrace string'i üretir.

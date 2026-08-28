@@ -1,7 +1,8 @@
 // ============================================================================
 // saQut CLI — ast komutu (JSON formatında AST hiyerarşisi + analiz)
 //
-// --optimized: sabit katlama + ölü kod eleme uygulandıktan sonra AST göster.
+// Optimizasyon (sabit katlama + ölü kod eleme) varsayılan olarak uygulanır;
+// --dont-optimize ham AST'yi gösterir.
 //              Orijinal AST dokunulmaz; optimize edilmiş klon gösterilir.
 // ============================================================================
 
@@ -36,7 +37,7 @@ inline int cmdAst(const CliArgs& args) {
     // panic-mode kurtarma ile devam ediyor, `!ast` hiç true olmuyordu (aynı
     // sınıf hata #134'te exec için tespit edildi). Üstüne semantic
     // hatalar (SymbolCollector/TypeChecker/StructuralValidator) HİÇ
-    // kontrol edilmiyordu — `ast` her zaman 0 dönüyordu, `--optimized`
+    // kontrol edilmiyordu — `ast` her zaman 0 dönüyordu, optimizasyon
     // verilmediği sürece diagnostic hiç basılmıyordu.
     DiagnosticEngine diag;
     Parser           parser(&diag);
@@ -49,7 +50,7 @@ inline int cmdAst(const CliArgs& args) {
         return saqut::exit_code::kDataError;
     }
 
-    // ── Symbol + type analysis (required for --optimized; optional for plain ast) ──
+    // ── Symbol + type analysis (optimizasyon için gerekli; ham AST için değil) ──
     SymbolTable symbolTable;
     SymbolCollector(symbolTable, diag).collect(ast);
     TypeChecker(symbolTable, diag).check(ast);
@@ -65,7 +66,7 @@ inline int cmdAst(const CliArgs& args) {
     ASTNode* displayAst = ast; // gösterilecek ağaç (orijinal veya klon)
     ASTNode* clonedAst  = nullptr;
 
-    if (args.optimized) {
+    if (args.optimize) {
         CompilerConfig   cfg;
         OptimizationManager mgr(cfg, diag);
         clonedAst  = mgr.optimize(ast, &symbolTable);
@@ -73,7 +74,7 @@ inline int cmdAst(const CliArgs& args) {
     }
 
     if (diag.hasErrors()) {
-        // --optimized aşaması yeni hata ekledi (önceki geçitte yoktu).
+        // optimizasyon aşaması yeni hata ekledi (önceki geçitte yoktu).
         diag.printAll(std::cerr);
         if (clonedAst) delete clonedAst;
         delete ast;
@@ -103,7 +104,7 @@ inline int cmdAst(const CliArgs& args) {
     }
 
     // Kalan uyarılar (W002 optimizasyon uyarıları dahil, hata yok) her
-    // zaman basılır — yalnız --optimized modunda değil.
+    // zaman basılır — yalnız optimizasyon açıkken değil.
     if (diag.warningCount() > 0) diag.printAll(std::cerr);
 
     if (clonedAst) delete clonedAst;

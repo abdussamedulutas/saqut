@@ -34,7 +34,13 @@ struct CliArgs {
     bool showHelp    = false;
     bool stdinMode   = false;
     bool compact     = false;  // --compact: boşluksuz JSON
-    bool optimized   = false;  // --optimized: sabit katlama + ölü kod eleme
+    // Optimizasyon VARSAYILAN OLARAK AÇIKTIR (sabit katlama + ölü kod eleme).
+    // --dont-optimize kapatır. Gerekçe: production koşuları optimize edilmiş
+    // derlemeyi kullanır; varsayılanın onunla aynı olması, geliştirmede
+    // görülen davranışın dağıtılan davranış olmasını garantiler. (Optimizasyon
+    // gözlenen çıktıyı değiştirmez — ADR-038; tests/run.sh "optimizasyon
+    // sonucu degistirmiyor" gate'i bunu her fixture'da doğrular.)
+    bool optimize    = true;   // --dont-optimize ile false olur
     bool jsonOutput  = false;  // --json: JSON çıktı üret (varsayılan: düz metin)
     bool jsonlOutput = false;  // --jsonl: canonical JSONL çıktı (SQ-100 ailesi, #145)
     bool showCfg     = false;  // --cfg: saqut ir — flat liste yerine CFG (BasicBlock + kenar) bas
@@ -109,8 +115,13 @@ inline CliArgs parseArgs(int argc, char* argv[]) {
             args.showCfg = true;
             continue;
         }
+        if (arg == "--dont-optimize") {
+            args.optimize = false;
+            continue;
+        }
+        // --optimized artık varsayılan davranıştır; bayrak no-op olarak
+        // kabul edilir ki mevcut betikler/komut geçmişi kırılmasın.
         if (arg == "--optimized") {
-            args.optimized = true;
             continue;
         }
         if (arg == "--compile-only") {

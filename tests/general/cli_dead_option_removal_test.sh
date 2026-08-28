@@ -108,7 +108,8 @@ run_live() {
 }
 run_live symbols --compact
 run_live symbols --jsonl
-run_live run --optimized
+run_live run --dont-optimize
+run_live run --optimized   # geriye uyum: no-op ama usage error vermemeli
 run_live run --jit
 run_live run --profile
 run_live run --allow-fs

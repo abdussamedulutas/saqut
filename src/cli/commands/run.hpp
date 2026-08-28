@@ -75,7 +75,7 @@ inline int cmdRun(const CliArgs& args) {
     }
 
     // ── Aşama 4 (opsiyonel): Optimizasyon ────────────────────────────────
-    if (args.optimized) {
+    if (args.optimize) {
         profiling::StageTimer::ScopedStage _prof(profilerPtr, "optimizasyon");
         CompilerConfig   cfg;
         DiagnosticEngine optDiag;

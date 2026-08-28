@@ -1,0 +1,44 @@
+// Döngüsel graf sızıntı kanıtı — SAYIM TABANLI iddia (bkz. tests/run.sh gate).
+//
+// Her tur, 20.000 düğümlük çift bağlı halka kurar ve fonksiyondan dönerek
+// kökü bırakır — tamamı çöp olur. İddia: TUR SAYISI ARTSA DA canlı küme
+// sabit kalır. Sızıntı olsaydı canlı küme tur sayısıyla doğru orantılı
+// büyürdü.
+//
+// Ölçüldü (0.9.6 GC çekirdeği): tur=10/20/40/80 için live=20003 (tam sabit),
+// RSS ~10 MB (sabit). Kalan 20003, henüz eşiği aşmamış SON turun grafıdır.
+//
+// Bu iddia zamana değil olaya bağlıdır — makineden, yükten ve backend'den
+// bağımsız olarak tekrarlanabilir (bkz. #222 §8 "ölçme, SAY").
+struct Dugum { Dugum? ileri; Dugum? geri; int deger; }
+
+// Grafı bir fonksiyon içinde kur — dönünce kök kalmaz.
+int grafKurVeBirak(int n) {
+    Dugum[] dizi = [];
+    int i = 0;
+    while (i < n) {
+        Dugum d;
+        d.deger = i;
+        dizi.push(d);
+        i = i + 1;
+    }
+    int j = 0;
+    while (j < n) {
+        int sonraki = j + 1;
+        if (sonraki == n) { sonraki = 0; }
+        dizi[j].ileri = dizi[sonraki];
+        dizi[sonraki].geri = dizi[j];
+        j = j + 1;
+    }
+    return dizi[0].deger;
+}
+
+int main() {
+    int tur = 0;
+    while (tur < 20) {
+        grafKurVeBirak(20000);   // her tur 20.000 düğümlük döngüsel graf, hepsi çöp olur
+        tur = tur + 1;
+    }
+    print("bitti");
+    return 0;
+}

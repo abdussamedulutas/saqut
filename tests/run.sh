@@ -256,6 +256,40 @@ if [ -z "$nlive" ] || [ "$nlive" -gt 64 ]; then
 fi
 echo "  1 geçti, 0 başarısız (freed=$nfreed live=$nlive)"
 
+# ── Döngüsel referans: sızıntı YOK, yanlış toplama YOK ───────────────────────
+# Mark-sweep'in ref-count'a göre asıl üstünlüğü: erişilebilirlik tabanlı
+# olduğu için döngü özel bir durum değildir.
+#
+# SAYIM TABANLI iddia: aynı programı farklı TUR sayılarıyla koştuğumuzda
+# canlı küme SABİT kalmalı. Sızıntı olsaydı tur sayısıyla orantılı büyürdü.
+# Zamana değil olaya bağlı olduğu için makineden bağımsız tekrarlanabilir.
+echo "=== gc dongusel referans ==="
+CYC_SQT="$ROOT/tests/golden/gc/dongusel_sizinti.sqt"
+prev_live=""
+for tur in 5 10 20; do
+    sed "s/tur < 20/tur < $tur/" "$CYC_SQT" > "$ROOT/tests/golden/gc/.dongu_tmp.sqt"
+    live=$("$SAQUT" run --gc-stats "$ROOT/tests/golden/gc/.dongu_tmp.sqt" 2>&1 >/dev/null \
+           | grep -oE "live=[0-9]+" | head -1 | cut -d= -f2)
+    if [ -z "$live" ]; then
+        echo "  FAIL: canlı küme okunamadı (tur=$tur)"; exit 1
+    fi
+    if [ -n "$prev_live" ] && [ "$live" != "$prev_live" ]; then
+        echo "  FAIL: döngüsel graf sızıyor — tur=$tur'de live=$live, öncekinde $prev_live"
+        rm -f "$ROOT/tests/golden/gc/.dongu_tmp.sqt"; exit 1
+    fi
+    prev_live="$live"
+done
+rm -f "$ROOT/tests/golden/gc/.dongu_tmp.sqt"
+# Canlı döngü YANLIŞLIKLA toplanmamalı: iki backend de doğru çıktı vermeli
+cycexp=$(cat "$ROOT/tests/golden/gc/dongusel_referans.expected")
+for backend in "" "--jit"; do
+    got=$("$SAQUT" run $backend --gc-threshold=1 "$ROOT/tests/golden/gc/dongusel_referans.sqt" 2>/dev/null)
+    if [ "$got" != "$cycexp" ]; then
+        echo "  FAIL: canlı döngü ${backend:-vm} agresif eşikte bozuldu (beklenen '$cycexp', gelen '$got')"; exit 1
+    fi
+done
+echo "  2 geçti, 0 başarısız (canlı küme sabit: $prev_live)"
+
 # ── GC agresif eşik: nesne üreten opcode köklemesi ───────────────────────────
 # --gc-threshold=1 ile HER tahsis bir toplama tetikler. Bu, "nesne üretti ama
 # GC'ye görünür kılmadı" sınıfını açığa çıkaran en dar penceredir: köklenmemiş

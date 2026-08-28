@@ -1474,10 +1474,25 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     // (fibonacci gibi: yalnız ADD/SUB/CMP/CALL(kendine)/RETURN) canRaise=false
     // kalır → MIRPLAN §7.1 gereği ZERO ek talimat taşır.
     std::unordered_map<std::string, bool> canRaise;
+    // Bir opcode ÇALIŞMA ZAMANINDA hata yayabilir mi (rt().pendingError'a
+    // yazabilir mi)? Liste, hata üreten trampolinlerin çağrıldığı opcode'lardan
+    // türetilmiştir; EKSİK bırakmak hatanın sessizce yutulması demektir
+    // (yayılım kontrolü emit edilmez, hata bir sonraki safepoint'e kadar
+    // görülmez). Fazla eklemek yalnız gereksiz kontrol maliyetidir.
+    //
+    // Kaynaklar (mir_backend.cpp):
+    //   div/mod/fdiv sıfır       → rt_jit_div_zero / mod_zero / fdiv_zero
+    //   dizi sınırı              → jitBoundsFail (array_get_*, array_set_*)
+    //   host çağrısı             → rt_jit_host_call (thunk hatası)
+    //   throw                    → rt_jit_throw_*
+    //   decimal taşma/sıfır      → rt_jit_decimal_add/sub/mul/div/mod
+    //                              ("decimal overflow" — DADD/DSUB/DMUL de
+    //                              hata yayar; eskiden listede YOKTU)
     auto errorCapable = [](Opcode op) {
         switch (op) {
             case Opcode::DIV: case Opcode::MOD: case Opcode::FDIV:
             case Opcode::LDIV: case Opcode::LMOD: case Opcode::F32DIV:
+            case Opcode::DADD: case Opcode::DSUB: case Opcode::DMUL:
             case Opcode::DDIV: case Opcode::DMOD:
             case Opcode::ARRAY_GET: case Opcode::ARRAY_SET:
             case Opcode::CALLHOST: case Opcode::THROW:
@@ -2821,12 +2836,35 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     setNullFlag(instr.dest, 0);
                 }
             }
-            // #110: hata yayılımı — (RETURN dışı) talimatın ardından
-            // rt().pendingError kontrolü. YALNIZCA bu fonksiyon hata taşıyabilir
-            // (canRaise) veya talimat bir try içindeyse (handlerTarget>=0) emit
-            // edilir; salt-skaler try'sız sıcak yollar (§7.1) sıfır ek yük taşır.
+            // #110: hata yayılımı — hata ÜRETEBİLEN talimatın ardından
+            // rt().pendingError kontrolü.
+            //
+            // Koşul TALİMAT bazındadır, fonksiyon bazında DEĞİL. Eskiden
+            // `canRaise[name]` idi: fonksiyonda tek bir CALLHOST/DIV/ARRAY_GET
+            // bulunması, o fonksiyondaki HER talimattan sonra bir native çağrı
+            // yayılmasına yol açıyordu — `mov`, `adds`, `lt` dahil, yani hata
+            // üretmesi mümkün olmayanlar dahil.
+            //
+            // Ölçülen etki (50M turluk saf tamsayı döngüsü, Release):
+            //   print YOK  → JIT  30 ms  (VM'in 56 katı hızlı)
+            //   print VAR  → JIT 914 ms  (VM'in 1.9 katı)
+            // Tek fark döngünün DIŞINDA, bir kez çalışan bir print'ti; o tek
+            // CALLHOST bütün fonksiyonu "hata taşıyabilir" ilan edip sıcak
+            // döngüye talimat başına bir çağrı ekliyordu.
+            //
+            // Neden güvenli: rt().pendingError yalnız errorCapable/
+            // fallibleCastOp trampolinleri tarafından yazılır. `adds`'ten sonra
+            // bayrağın set olmuş olması MÜMKÜN DEĞİLDİR; kontrolü oraya koymak
+            // doğruluk sağlamaz, yalnız maliyet üretir.
+            //
+            // CALL dahildir: çağrılan fonksiyon hata yayabilir ve dönüşte
+            // bayrak set olabilir. handlerTarget >= 0 (try bölgesi içi) da
+            // korunur — orada akışın catch'e sapması gerekebilir.
+            const bool mayRaiseHere = errorCapable(instr.opcode) ||
+                                      fallibleCastOp(instr.opcode) ||
+                                      instr.opcode == Opcode::CALL;
             if (instr.opcode != Opcode::RETURN &&
-                (canRaise[name] || handlerTarget[i] >= 0)) {
+                (mayRaiseHere || handlerTarget[i] >= 0)) {
                 MIR_reg_t pending = newTmp("pending");
                 MIR_label_t noError = MIR_new_label(ctx);
                 MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 3,

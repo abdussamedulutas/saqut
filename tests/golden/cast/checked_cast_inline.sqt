@@ -1,0 +1,39 @@
+// Kontrollü cast'lerin JIT'te INLINE edilmesi doğruluğu bozmamalı.
+//
+// CAST_INT_TO_BYTE_CHECKED ve LONG_TO_INT_CHECKED artık aralık kontrolünü
+// inline dallarla yapar; trampoline yalnız HATA dalında sapılır. Bu fixture
+// dört yolu birden sınar, çünkü inline şema üçünü de yeniden kurmak
+// zorundaydı:
+//   1. başarı (aralık içi)          → değer geçer, null bayrağı temizlenir
+//   2. nullable + aralık dışı       → null
+//   3. nullable + aralık içi        → değerin kendisi
+//   4. non-nullable + aralık dışı   → yakalanabilir hata (ayrı fixture)
+//
+// VM ve JIT birebir aynı çıktıyı vermek zorundadır (diferansiyel suite).
+int main() {
+    // int → byte
+    byte a = 200 as byte;
+    print(a);
+    byte sifir = 0 as byte;
+    print(sifir);
+    byte ustSinir = 255 as byte;
+    print(ustSinir);
+    byte? tasan = 300 as byte?;
+    print(tasan);
+    byte? negatif = -1 as byte?;
+    print(negatif);
+    byte? gecerli = 42 as byte?;
+    print(gecerli);
+
+    // longint → int
+    longint buyuk = 5000000000;
+    int? tasanInt = buyuk as int?;
+    print(tasanInt);
+    longint kucuk = 42000;
+    int? gecerliInt = kucuk as int?;
+    print(gecerliInt);
+    longint negBuyuk = -5000000000;
+    int? tasanNeg = negBuyuk as int?;
+    print(tasanNeg);
+    return 0;
+}

@@ -10,7 +10,7 @@
 //   Alanlar Value dizisidir; alan ADLARI örnek başına kopyalanmaz, paylaşılan
 //   bir tabloya (fieldNames) işaret eder.
 //
-//   StructObject tanımı vm/object.hpp'dedir (GC nesne ailesi). GC işaretleme,
+//   StructObject tanımı gc/gc_object.hpp'dedir (GC nesne ailesi). GC işaretleme,
 //   FIELD_GET/FIELD_SET opcode'ları ve zero-init maskesi bu modülün DIŞINDADIR.
 //
 // ============================================================================

@@ -29,6 +29,7 @@
 #include <functional>
 #include "ir/ir_program.hpp"
 #include "profiling/stage_timer.hpp"
+#include "gc/gc_heap.hpp"
 
 namespace mir_backend {
 
@@ -63,6 +64,17 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                               int executionRuns = 1,
                               std::vector<long long>* executionSamplesUs = nullptr,
                               const std::function<void(int, int)>& executionProgress = {});
+
+// Bir sonraki JIT koşusunun GC eşiği (bayt). > 0 → eşik, <= 0 → toplama
+// kapalı, ayarlanmazsa Heap'in varsayılanı geçerlidir. VM'deki
+// Interpreter::setGCThreshold ile aynı sözleşme — --gc-threshold iki
+// backend'de de aynı anlama gelir.
+void setGcThresholdForNextRun(int bytes);
+
+// Son JIT koşusunun GC istatistiği. Koşu heap'i koşu bitince yıkıldığından
+// (ömrü koşuya bağlıdır) sayaçlar yıkımdan hemen önce buraya kopyalanır —
+// --gc-stats bunu okur. Hiç JIT koşusu yapılmadıysa alanlar sıfırdır.
+const GcStats& lastRunGcStats();
 
 }  // namespace mir_backend
 

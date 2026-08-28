@@ -23,7 +23,8 @@
 #include <string>
 #include <vector>
 #include "vm/value.hpp"
-#include "vm/object.hpp"
+#include "gc/gc_object.hpp"
+#include "gc/gc_heap.hpp"
 #include "ffi/host_abi.hpp"
 
 // Tek bir host fonksiyon kaydı — HostEntry'nin (host_abi.hpp) alias'ı.

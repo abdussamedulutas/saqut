@@ -40,7 +40,7 @@ inline int cmdIr(const CliArgs& args) {
         return saqut::exit_code::kDataError;
     }
 
-    if (args.optimized) {
+    if (args.optimize) {
         CompilerConfig   cfg;
         DiagnosticEngine optDiag;
         for (auto& unit : graph.units)

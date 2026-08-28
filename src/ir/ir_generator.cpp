@@ -1075,26 +1075,53 @@ int IRGenerator::generateExpression(ASTNode* node) {
         case TokenType::RSHIFT:
             return generateBinaryArithmetic(Opcode::SHR, bin->Left, bin->Right, L, C);
 
-        // Mantıksal operatörler: kısa devre dallanmasıyla üretilir (ADR-008).
-        // NOT: sıradan ikili işlem değil — b, a'nın değerine göre atlanabilir.
+        // Mantıksal operatörler — ADR-008: kısa devre VAR, sonuç 1/0'dır.
+        //
+        // İki ayrı sözleşme, ikisi de burada karşılanır:
+        //
+        //   1. KISA DEVRE (değerlendirme): `a` sonucu belirliyorsa `b` HİÇ
+        //      çalıştırılmaz. Yan etkili sağ taraf için gözlemlenebilir
+        //      (`f() && g()` → a falsy ise g çağrılmaz) ve null kontrolü
+        //      kalıbının temeli (`x != null && x.alan > 0`).
+        //
+        //   2. SONUÇ 1/0 (değer): operandın kendisi DEĞİL, doğruluk değeri
+        //      döner. `5 && 3` → 1, `0 || 33` → 1. C/Java/Go modeli.
+        //      Python/JS'in "operandı döndür" davranışı statik tipli bir
+        //      dilde tip belirsizliği üretir; `5 && 2` bir bool ifadesidir,
+        //      sayısal bir birleştirme değil.
+        //
+        // Şema (&& için; || simetrik):
+        //   result = 0
+        //   if (a falsy) → DONE            ; kısa devre: b atlanır
+        //   if (b falsy) → DONE            ; b değerlendirildi, sonuç 0 kalır
+        //   result = 1
+        // DONE:
+        //
+        // İkinci JIF'in işlevi 1/0'a indirgemedir: `b`'nin değerini
+        // kopyalamak (eski `LOAD_SLOT result, slotB`) sonucu `b`'nin kendisi
+        // yapardı ve sözleşme (2)'yi ihlal ederdi.
         case TokenType::AMPERSAND_AMPERSAND: {
             int slotA = generateExpression(bin->Left);
             int result = freshSlot();
-            emitLoadConst(result, 0); // varsayılan: false
-            int skipB = emitJumpIfFalse(slotA); // a false → b'yi atla
+            emitLoadConst(result, 0);            // varsayılan: false
+            int skipB = emitJumpIfFalse(slotA);  // a falsy → b'yi atla
             int slotB = generateExpression(bin->Right);
-            emitLoadSlot(result, slotB); // result = b
+            int bFalsy = emitJumpIfFalse(slotB); // b falsy → 0 kalsın
+            emitLoadConst(result, 1);            // ikisi de truthy → 1
             patchJump(skipB);
+            patchJump(bFalsy);
             return result;
         }
         case TokenType::PIPE_PIPE: {
             int slotA = generateExpression(bin->Left);
             int result = freshSlot();
-            emitLoadConst(result, 1); // varsayılan: true
-            int skipB = emitJumpIfTrue(slotA); // a true → b'yi atla
+            emitLoadConst(result, 1);            // varsayılan: true
+            int skipB = emitJumpIfTrue(slotA);   // a truthy → b'yi atla
             int slotB = generateExpression(bin->Right);
-            emitLoadSlot(result, slotB); // result = b
+            int bTruthy = emitJumpIfTrue(slotB); // b truthy → 1 kalsın
+            emitLoadConst(result, 0);            // ikisi de falsy → 0
             patchJump(skipB);
+            patchJump(bTruthy);
             return result;
         }
 

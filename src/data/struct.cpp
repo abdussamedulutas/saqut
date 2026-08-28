@@ -24,7 +24,8 @@
 
 #include "data/array.hpp"
 #include "ffi/host_bridge.hpp"
-#include "vm/object.hpp"
+#include "gc/gc_object.hpp"
+#include "gc/gc_heap.hpp"
 
 namespace {
 

@@ -25,7 +25,8 @@
 #include "diagnostic/diagnostic_engine.hpp"
 #include "ir/ir_generator.hpp"
 #include "vm/value.hpp"
-#include "vm/object.hpp"
+#include "gc/gc_object.hpp"
+#include "gc/gc_heap.hpp"
 #include <sstream>
 #include <climits>
 

@@ -1,5 +1,6 @@
 #!/bin/bash
-# Benchmark runner: her testi --optimized ve --no-opt ile calistirir
+# Benchmark runner: her testi optimizasyonlu (varsayilan) ve
+# --dont-optimize ile calistirir
 # Kullanim: bash tests/bench/perf_runner.sh
 
 BUILD="build-rel"
@@ -22,12 +23,12 @@ run_test() {
     # --no-opt (no optimization)
     echo "--- $label (no-opt) ---" >> "$RESULTS"
     TIMEFORMAT='%3R real  %3U user  %3S sys'
-    { time $SAQUT run "file:$file" 2>/dev/null; } 2>&1 >> "$RESULTS"
+    { time $SAQUT run "file:$file" --dont-optimize 2>/dev/null; } 2>&1 >> "$RESULTS"
     
-    # --optimized (with optimization)
+    # optimizasyonlu (varsayilan)
     echo "--- $label (optimized) ---" >> "$RESULTS"
     TIMEFORMAT='%3R real  %3U user  %3S sys'
-    { time $SAQUT run "file:$file" --optimized 2>/dev/null; } 2>&1 >> "$RESULTS"
+    { time $SAQUT run "file:$file" 2>/dev/null; } 2>&1 >> "$RESULTS"
     
     echo "" >> "$RESULTS"
 }
@@ -63,7 +64,7 @@ TIMEFORMAT='%3R real  %3U user  %3S sys'
 { time $SAQUT run "tests/general/crypto/crypto_stress_64kb.sqt" 2>/dev/null; } 2>&1 >> "$RESULTS"
 echo "--- Crypto (optimized) ---" >> "$RESULTS"
 TIMEFORMAT='%3R real  %3U user  %3S sys'
-{ time $SAQUT run "tests/general/crypto/crypto_stress_64kb.sqt" --optimized 2>/dev/null; } 2>&1 >> "$RESULTS"
+{ time $SAQUT run "tests/general/crypto/crypto_stress_64kb.sqt" 2>/dev/null; } 2>&1 >> "$RESULTS"
 
 echo "" >> "$RESULTS"
 echo "Done: $(date)" >> "$RESULTS"

@@ -30,7 +30,8 @@
 #include <vector>
 
 #include "ffi/host_abi.hpp"
-#include "vm/object.hpp"
+#include "gc/gc_object.hpp"
+#include "gc/gc_heap.hpp"
 #include "vm/value.hpp"
 
 // ----------------------------------------------------------------------------

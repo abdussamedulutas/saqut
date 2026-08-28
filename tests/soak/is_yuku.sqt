@@ -1,0 +1,86 @@
+// Soak iş yükü — GC'nin uzun koşuda kararlı kalıp kalmadığını ölçer.
+//
+// Tek bir turda gerçekçi bir karışım üretilir ve BIRAKILIR:
+//   - kısa ömürlü string'ler (concat + cast)
+//   - struct grafı (döngüsel referans dahil)
+//   - farklı boyutlarda dizi (küçük/orta/büyük)
+//   - uzun ömürlü bir küme (her turda bir eleman değişir)
+//
+// Boyutlar bilerek DEĞİŞKEN: sabit boyutlu tahsis, free-list'i tesadüfen
+// mutlu eden bir desen üretir ve fragmantasyonu gizler.
+//
+// Beklenen: tur sayısı artarken canlı küme ve RSS YATAY kalmalı.
+
+import {args} from sys;
+
+struct Dugum { Dugum? esi; string etiket; int deger; }
+
+int turCalistir(int tur) {
+    // 1) Kısa ömürlü string trafiği
+    string s = "";
+    int i = 0;
+    while (i < 40) {
+        s = "parca-" + (i as string);
+        i = i + 1;
+    }
+
+    // 2) Döngüsel struct grafı — ref-count'un toplayamayacağı çöp
+    Dugum a;
+    Dugum b;
+    a.etiket = "dugum-a-" + (tur as string);
+    b.etiket = "dugum-b-" + (tur as string);
+    a.esi = b;
+    b.esi = a;
+    a.deger = tur;
+
+    // 3) Değişken boyutlu diziler
+    int boyut = 8 + (tur % 120);
+    int[] sayilar = [];
+    int j = 0;
+    while (j < boyut) {
+        sayilar.push(j * 2);
+        j = j + 1;
+    }
+
+    // 4) Bayt tamponu — packed dizi yolu (GC için yaprak)
+    byte[] tampon = [];
+    int k = 0;
+    int tamponBoyut = 64 + (tur % 900);
+    while (k < tamponBoyut) {
+        tampon.push((k % 256) as byte);
+        k = k + 1;
+    }
+
+    return sayilar[0] + a.deger + tampon[0];
+}
+
+int main() {
+    // Uzun ömürlü küme: her turda bir elemanı değişir, boyutu sabit kalır.
+    // Amaç: canlı kümesi olan bir programda tempo politikasının nasıl
+    // yakınsadığını görmek (boş heap'te toplama davranışı gerçekçi değil).
+    string[] kalici = [];
+    int c = 0;
+    while (c < 500) {
+        kalici.push("kalici-" + (c as string));
+        c = c + 1;
+    }
+
+    // Tur sayısı: sys::args()[0] (yoksa 20000). Koşucu bunu uzun soak için
+    // büyütür; aynı program hem hızlı doğrulama hem saatlik koşu içindir.
+    int turSayisi = 20000;
+    string[] argumanlar = args();
+    if (argumanlar.length() > 0) {
+        int? verilen = argumanlar[0] as int?;
+        if (verilen != null) { turSayisi = verilen; }
+    }
+
+    int toplam = 0;
+    int tur = 0;
+    while (tur < turSayisi) {
+        toplam = toplam + turCalistir(tur);
+        tur = tur + 1;
+    }
+    print(toplam);
+    print(kalici[499]);
+    return 0;
+}

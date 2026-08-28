@@ -23,7 +23,8 @@
 #include "ir/ir_liveness.hpp"
 #include "core/module_registry.hpp"
 #include "vm/call_frame.hpp"
-#include "vm/object.hpp"
+#include "gc/gc_object.hpp"
+#include "gc/gc_heap.hpp"
 #include "ffi/host_bridge.hpp"   // #222: HostCallScratch / HostRetOwner
 #include "profiling/stage_timer.hpp"
 
@@ -38,9 +39,15 @@ struct TryFrame {
     int    errorSlot;      // catch değişkeninin slot numarası (catch frame'inde)
 };
 
-class Interpreter {
+// VM, GC'ye kendi köklerini bildiren bir RootSource'tur: modül global'leri,
+// çağrı yığınındaki canlı slot'lar ve uçuştaki throw değeri. Kaydı kurucuda
+// yapılır, yıkıcıda kaldırılır (Heap sağlayıcıyı sahiplenmez).
+class Interpreter : public RootSource {
 public:
-    explicit Interpreter(IRProgram& program) : program_(program) {}
+    explicit Interpreter(IRProgram& program) : program_(program) {
+        heap_.addRootSource(this);
+    }
+    ~Interpreter() override { heap_.removeRootSource(this); }
 
     // "main" fonksiyonunu bul ve çalıştır.
     // Tamamlandığında main'in dönüş değerini (int) döndürür.
@@ -52,7 +59,7 @@ public:
     // Profil hook — bench komutu tarafından set edilir (nullptr = kapalı).
     // Normal run/check/ir komutlarında çağrılmaz, sıfır maliyet.
     void setVMTrace(BenchVMTrace* t) { vmTrace_ = t; }
-    int  heapAllocCount() const { return heap_.allocCount; }
+    long long heapAllocCount() const { return heap_.stats().liveObjects; }
 
     // src/profiling/ (--profile): nullptr = kapalı, sıfır maliyet. Set
     // edilirse "vm-warmup" (initForDebug — frame/global kurulumu) ve
@@ -70,9 +77,12 @@ public:
     // Eşik tabanlı tetikleme: canlı nesne sayısı eşiği aşınca instruction
     // sınırında (safepoint) mark-sweep koşar. n <= 0 → otomatik GC kapalı
     // (yalnızca ~Heap temizler — eski arena davranışı).
-    void      setGCThreshold(int n) { gcInitialThreshold_ = n; gcThreshold_ = n; }
-    int       gcRuns() const       { return heap_.gcRuns; }
-    long long gcFreedTotal() const { return heap_.freedTotal; }
+    // n > 0 → toplama eşiği (canlı ayak izi, bayt); n <= 0 → toplama kapalı.
+    void setGCThreshold(int n) {
+        if (n > 0) heap_.setMinCollectBytes(n);
+        else       heap_.setCollectionEnabled(false);
+    }
+    const GcStats& gcStats() const { return heap_.stats(); }
 
     // #90: `--` sonrası argümanlar — sys::args() ile programa geçirilir.
     void setProgramArgs(std::vector<std::string> a) { programArgs_ = std::move(a); }
@@ -149,10 +159,16 @@ private:
     bool isBreakpoint() const;
     void checkBreakpoint();
 
-    // GC (#77): eşik aşıldıysa kökleri (globalSlots_ + callStack_ +
-    // pendingThrow_) işaretleyip sweep koşar. YALNIZCA instruction sınırında
-    // çağrılmalı — opcode ortasında slot'a bağlanmamış nesne toplanabilir.
-    void maybeCollect();
+    // GC safepoint'i: eşik aşıldıysa toplama koşar. YALNIZCA instruction
+    // sınırında çağrılmalıdır — opcode ortasında henüz hiçbir slot'a
+    // bağlanmamış nesne kök sayılmaz ve süpürülürdü.
+    void maybeCollect() { heap_.collectIfNeeded(); }
+
+public:
+    // RootSource: GC'ye bu VM'in canlı referanslarını bildirir.
+    void collectRoots(RootSink& sink) override;
+
+private:
 
     // Kök daraltma: frame'in SADECE o anki talimat noktasında canlı olan
     // slot'larını kök sayar (ir_liveness). ENTER_TRY içeren fonksiyonlar
@@ -162,11 +178,6 @@ private:
     const SlotLiveness& livenessFor(const IRFunction* fn);
     std::unordered_map<const IRFunction*, SlotLiveness> livenessCache_;
 
-    static constexpr int kGCDefaultThreshold = 1024;
-    static constexpr int kGCBudgetPerStep = 128;  // #217: incremental step'te işlenecek max nesne
-    int gcInitialThreshold_ = kGCDefaultThreshold;
-    bool gcCycleActive_ = false;  // #217: incremental cycle devam ediyor mu?
-    int gcThreshold_        = kGCDefaultThreshold; // bir sonraki tetikleme eşiği
 
     std::vector<std::string> programArgs_; // #90: `--` sonrası argümanlar
 

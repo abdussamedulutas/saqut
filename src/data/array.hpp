@@ -13,7 +13,7 @@
 //   (Ref/Byte/Int/LongInt/Float32/Float64/Decimal). Küçük sayısal dizilerde
 //   eleman başına 80 baytlık Value ödememek içindir.
 //
-//   ArrayObject tanımı vm/object.hpp'dedir çünkü GC nesne ailesine aittir;
+//   ArrayObject tanımı gc/gc_object.hpp'dedir çünkü GC nesne ailesine aittir;
 //   GC işaretleme/süpürme bu modülün kapsamı DIŞINDADIR.
 //
 // ============================================================================

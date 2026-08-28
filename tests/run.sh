@@ -24,7 +24,7 @@ for t in test_type test_diagnostic test_opcode test_value_rep_contract test_cfg 
     # ve object.cpp gerekir. SAQUT_VERSION normalde CMake'ten gelir.
     # #223: registry built-in metodları src/data/ modüllerinden alır.
     # Host gövdeleri src/ffi/functions/ altında bölünmüştür (organizasyon, #115).
-    [ "$t" = "test_host_abi" ] && extra="$ROOT/src/core/utf8.cpp $ROOT/src/vm/object.cpp $ROOT/src/ffi/host_registry.cpp $ROOT/src/ffi/host_functions.cpp $ROOT/src/ffi/functions/math.cpp $ROOT/src/ffi/functions/fs.cpp $ROOT/src/ffi/functions/sys.cpp $ROOT/src/ffi/functions/date.cpp $ROOT/src/ffi/functions/core.cpp $ROOT/src/ffi/functions/process.cpp $ROOT/src/ffi/functions/io.cpp $ROOT/src/ffi/functions/path.cpp $ROOT/src/ffi/functions/utf8.cpp $ROOT/src/ffi/functions/os.cpp $ROOT/src/data/data_registry.cpp $ROOT/src/data/string.cpp $ROOT/src/data/array.cpp $ROOT/src/data/struct.cpp $ROOT/src/data/date.cpp -DSAQUT_VERSION=\"test\""
+    [ "$t" = "test_host_abi" ] && extra="$ROOT/src/core/utf8.cpp $ROOT/src/gc/gc_heap.cpp $ROOT/src/ffi/host_registry.cpp $ROOT/src/ffi/host_functions.cpp $ROOT/src/ffi/functions/math.cpp $ROOT/src/ffi/functions/fs.cpp $ROOT/src/ffi/functions/sys.cpp $ROOT/src/ffi/functions/date.cpp $ROOT/src/ffi/functions/core.cpp $ROOT/src/ffi/functions/process.cpp $ROOT/src/ffi/functions/io.cpp $ROOT/src/ffi/functions/path.cpp $ROOT/src/ffi/functions/utf8.cpp $ROOT/src/ffi/functions/os.cpp $ROOT/src/data/data_registry.cpp $ROOT/src/data/string.cpp $ROOT/src/data/array.cpp $ROOT/src/data/struct.cpp $ROOT/src/data/date.cpp -DSAQUT_VERSION=\"test\""
     "$CXX" "${FLAGS[@]}" "$ROOT/tests/$t.cpp" $extra -o "/tmp/saqut_$t"
     "/tmp/saqut_$t"
 done
@@ -203,41 +203,157 @@ for f in cycle_a self_import; do
 done
 echo "  2 geçti, 0 başarısız"
 
-# ── GC testleri (#77, ADR-022) ───────────────────────────────────────────────
-# 1) Varsayılan eşikle koşuda GC gerçekten tetikleniyor (runs >= 1)
-# 2) Stress modda (--gc-threshold=1) çıktı normal koşuyla aynı (canlılık)
-# 3) --gc-threshold=-1 otomatik GC'yi kapatıyor (runs=0)
+# ── GC testleri (ADR-022) ────────────────────────────────────────────────────
+# Eşik BAYT tabanlıdır: toplama, canlı ayak izi eşiği aşınca tetiklenir.
+# (Nesne SAYISI tabanlı eşik, 10 baytlık string ile 10 MB'lık byte[]'i aynı
+# ağırlıkta saydığı için tempoyu programın şekline göre bozuyordu.)
+#
+# 1) Eşik düşürülünce GC gerçekten tetikleniyor (collections >= 1)
+# 2) Toplama çıktıyı DEĞİŞTİRMEZ — hangi eşikte olursa olsun aynı sonuç
+# 3) --gc-threshold=-1 otomatik toplamayı kapatıyor (collections=0)
+# 4) VM ve JIT aynı GC çekirdeğini kullanır: ikisi de sayaç raporlar
 echo "=== gc ==="
 GC_SQT="$ROOT/tests/golden/gc/liveness.sqt"
-gcout=$("$SAQUT" run --gc-stats "$GC_SQT" 2>&1 >/dev/null)
-if ! echo "$gcout" | grep -Eq "gc: runs=[1-9]"; then
-    echo "  FAIL: varsayılan eşikte GC hiç koşmadı: $gcout"; exit 1
+gcout=$("$SAQUT" run --gc-threshold=4096 --gc-stats "$GC_SQT" 2>&1 >/dev/null)
+if ! echo "$gcout" | grep -Eq "gc: collections=[1-9]"; then
+    echo "  FAIL: düşük eşikte GC hiç koşmadı: $gcout"; exit 1
 fi
-stress=$("$SAQUT" run --gc-threshold=1 "$GC_SQT" 2>/dev/null)
 normal=$("$SAQUT" run "$GC_SQT" 2>/dev/null)
-if [ "$stress" != "$normal" ]; then
-    echo "  FAIL: stress modda (--gc-threshold=1) çıktı farklı"; exit 1
-fi
+for th in 1 4096 65536; do
+    stress=$("$SAQUT" run --gc-threshold=$th "$GC_SQT" 2>/dev/null)
+    if [ "$stress" != "$normal" ]; then
+        echo "  FAIL: --gc-threshold=$th çıktıyı değiştirdi (toplama gözlemlenebilir olmamalı)"; exit 1
+    fi
+done
 gcoff=$("$SAQUT" run --gc-threshold=-1 --gc-stats "$GC_SQT" 2>&1 >/dev/null)
-if ! echo "$gcoff" | grep -q "runs=0"; then
-    echo "  FAIL: --gc-threshold=-1 GC'yi kapatmadı: $gcoff"; exit 1
+if ! echo "$gcoff" | grep -q "collections=0"; then
+    echo "  FAIL: --gc-threshold=-1 toplamayı kapatmadı: $gcoff"; exit 1
 fi
-echo "  3 geçti, 0 başarısız"
+jitgc=$("$SAQUT" run --jit --gc-stats "$GC_SQT" 2>&1 >/dev/null)
+if ! echo "$jitgc" | grep -q "gc: collections="; then
+    echo "  FAIL: JIT yolunda GC sayaçları raporlanmıyor: $jitgc"; exit 1
+fi
+echo "  4 geçti, 0 başarısız"
 
 # ── GC kök daraltma (liveness) ───────────────────────────────────────────────
 # narrow_proof.sqt: erken kullanılıp ÖLEN (üzerine yazılmayan) 5 array +
 # 3000 turluk tahsis döngüsü. Liveness tabanlı kök daraltma etkinse ölü
-# array'ler toplanır (freed >= 2046); daraltma kırılırsa hepsi sona kadar
-# kök kalır ve sayaç 2036'ya düşer — hata sınıfı: ölü slot'un nesneyi
-# gereksiz canlı tutması.
+# array'ler toplanır; daraltma kırılırsa sona kadar kök kalırlar.
+#
+# Sayım tabanlı iddia: koşu sonunda CANLI kalan nesne sayısı, ölü array'ler
+# toplanmadığı durumdan kesin olarak azdır. Zamana değil olaya bağlıdır,
+# dolayısıyla makineden ve backend'den bağımsız tekrarlanabilir.
 echo "=== gc kok daraltma ==="
 NARROW_SQT="$ROOT/tests/golden/gc/narrow_proof.sqt"
-nout=$("$SAQUT" run --gc-stats "$NARROW_SQT" 2>&1 >/dev/null)
+nout=$("$SAQUT" run --gc-threshold=4096 --gc-stats "$NARROW_SQT" 2>&1 >/dev/null)
 nfreed=$(echo "$nout" | grep -oE "freed=[0-9]+" | head -1 | cut -d= -f2)
+nlive=$(echo "$nout" | grep -oE "live=[0-9]+" | head -1 | cut -d= -f2)
 if [ -z "$nfreed" ] || [ "$nfreed" -lt 2046 ]; then
     echo "  FAIL: kök daraltma etkin değil (freed=${nfreed:-yok}, beklenen >= 2046)"; exit 1
 fi
-echo "  1 geçti, 0 başarısız (freed=$nfreed)"
+if [ -z "$nlive" ] || [ "$nlive" -gt 64 ]; then
+    echo "  FAIL: ölü slot'lar canlı tutuluyor (live=${nlive:-yok}, beklenen <= 64)"; exit 1
+fi
+echo "  1 geçti, 0 başarısız (freed=$nfreed live=$nlive)"
+
+# ── Döngüsel referans: sızıntı YOK, yanlış toplama YOK ───────────────────────
+# Mark-sweep'in ref-count'a göre asıl üstünlüğü: erişilebilirlik tabanlı
+# olduğu için döngü özel bir durum değildir.
+#
+# SAYIM TABANLI iddia: aynı programı farklı TUR sayılarıyla koştuğumuzda
+# canlı küme SABİT kalmalı. Sızıntı olsaydı tur sayısıyla orantılı büyürdü.
+# Zamana değil olaya bağlı olduğu için makineden bağımsız tekrarlanabilir.
+echo "=== gc dongusel referans ==="
+CYC_SQT="$ROOT/tests/golden/gc/dongusel_sizinti.sqt"
+prev_live=""
+for tur in 5 10 20; do
+    sed "s/tur < 20/tur < $tur/" "$CYC_SQT" > "$ROOT/tests/golden/gc/.dongu_tmp.sqt"
+    live=$("$SAQUT" run --gc-stats "$ROOT/tests/golden/gc/.dongu_tmp.sqt" 2>&1 >/dev/null \
+           | grep -oE "live=[0-9]+" | head -1 | cut -d= -f2)
+    if [ -z "$live" ]; then
+        echo "  FAIL: canlı küme okunamadı (tur=$tur)"; exit 1
+    fi
+    if [ -n "$prev_live" ] && [ "$live" != "$prev_live" ]; then
+        echo "  FAIL: döngüsel graf sızıyor — tur=$tur'de live=$live, öncekinde $prev_live"
+        rm -f "$ROOT/tests/golden/gc/.dongu_tmp.sqt"; exit 1
+    fi
+    prev_live="$live"
+done
+rm -f "$ROOT/tests/golden/gc/.dongu_tmp.sqt"
+# Canlı döngü YANLIŞLIKLA toplanmamalı: iki backend de doğru çıktı vermeli
+cycexp=$(cat "$ROOT/tests/golden/gc/dongusel_referans.expected")
+for backend in "" "--jit"; do
+    got=$("$SAQUT" run $backend --gc-threshold=1 "$ROOT/tests/golden/gc/dongusel_referans.sqt" 2>/dev/null)
+    if [ "$got" != "$cycexp" ]; then
+        echo "  FAIL: canlı döngü ${backend:-vm} agresif eşikte bozuldu (beklenen '$cycexp', gelen '$got')"; exit 1
+    fi
+done
+echo "  2 geçti, 0 başarısız (canlı küme sabit: $prev_live)"
+
+# ── GC agresif eşik: nesne üreten opcode köklemesi ───────────────────────────
+# --gc-threshold=1 ile HER tahsis bir toplama tetikler. Bu, "nesne üretti ama
+# GC'ye görünür kılmadı" sınıfını açığa çıkaran en dar penceredir: köklenmemiş
+# bir nesne, üretildiği talimat ile okunduğu talimat arasında süpürülür.
+#
+# Varsayılan eşikte bu hata GÖRÜNMEZ — bulunduğunda da öyleydi (CAST_FLOAT32_TO_STR,
+# tests/golden/ir/wide_cast_operands.sqt). Bu yüzden gate agresif eşik kullanır.
+echo "=== gc agresif esik koklemesi ==="
+agpass=0; agfail=0
+for gf in "$ROOT"/tests/golden/gc/*.sqt "$ROOT"/tests/golden/ir/wide_cast_operands.sqt; do
+    [ -f "$gf" ] || continue
+    exp="${gf%.sqt}.expected"
+    [ -f "$exp" ] || continue
+    for backend in "" "--jit"; do
+        got=$("$SAQUT" run $backend --gc-threshold=1 "$gf" 2>/dev/null)
+        # JIT desteklemiyorsa bu fixture o backend'de atlanır
+        if [ -z "$backend" ] || ! "$SAQUT" run --jit "$gf" 2>&1 | grep -q "tam olarak derleyemiyor"; then
+            if [ "$got" != "$(cat "$exp")" ]; then
+                echo "  FAIL: $(basename "$gf") ${backend:-vm} agresif eşikte çıktı bozuldu"
+                agfail=$((agfail+1))
+            else
+                agpass=$((agpass+1))
+            fi
+        fi
+    done
+done
+if [ "$agfail" -gt 0 ]; then exit 1; fi
+echo "  $agpass geçti, 0 başarısız"
+
+# ── Optimizasyon sonucu DEĞİŞTİRMEZ (ADR-038) ────────────────────────────────
+# Optimizasyon VARSAYILAN OLARAK AÇIKTIR; --dont-optimize kapatır. Yani
+# varsayılan koşu = production koşusu. Optimizasyonun gözlenen çıktıyı
+# değiştirmemesi bir performans meselesi değil, DOĞRULUK sözleşmesidir:
+# "aynı program, backend ve optimizasyon ne olursa olsun aynı sonuç".
+#
+# Bu gate gerçek bir ayrışma yakaladı: sabit katlama && / || için 1/0
+# üretirken IRGenerator operandın değerini döndürüyordu (`5 && 3` → katlamada
+# 1, VM'de 3). ADR-008 C modeline göre revize edildi; gate kalıcı korumadır.
+#
+# stdout karşılaştırılır — stderr değil: optimizasyon ek tanı üretebilir
+# (W002 sıfıra bölme, W003 ulaşılamayan kod) ve bu KASITLIDIR.
+echo "=== optimizasyon sonucu degistirmiyor ==="
+optpass=0; optfail=0
+while IFS= read -r f; do
+    for backend in "" "--jit"; do
+        # JIT desteklemiyorsa o backend'de atla
+        if [ -n "$backend" ] && "$SAQUT" run --jit "$f" </dev/null 2>&1 | grep -q "tam olarak derleyemiyor"; then
+            continue
+        fi
+        # Kasten hata veren fixture'lar sıfırdan farklı exit döndürür
+        # (mod_by_zero, cast hataları...). Karşılaştırdığımız şey stdout;
+        # `|| true` olmadan set -e bu fixture'da script'i sonlandırır.
+        optimized=$("$SAQUT" run $backend "$f" </dev/null 2>/dev/null || true)
+        plain=$("$SAQUT" run $backend --dont-optimize "$f" </dev/null 2>/dev/null || true)
+        if [ "$optimized" != "$plain" ]; then
+            echo "  FAIL: $(basename "$f") ${backend:-vm} — optimizasyon stdout'u degistirdi"
+            optfail=$((optfail+1))
+        else
+            optpass=$((optpass+1))
+        fi
+    done
+done < <(find "$ROOT/tests/golden" -name '*.sqt' | sort)
+if [ "$optfail" -gt 0 ]; then exit 1; fi
+echo "  $optpass geçti, 0 başarısız"
 
 # ── Builtin sözdizimi testleri (ADR-033, #85) ────────────────────────────────
 # 1) Eski ElemTip::metod sözdizimi W006 uyarısı verir ama çalışır (exit 0)

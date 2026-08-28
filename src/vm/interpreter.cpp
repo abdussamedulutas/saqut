@@ -12,12 +12,13 @@
 // ============================================================================
 
 #include "vm/interpreter.hpp"
-#include "vm/object.hpp"
+#include "core/int_arithmetic.hpp"
+#include "gc/gc_object.hpp"
 #include "data/data_registry.hpp"
 #include "bench/profile.hpp"
 #include "ffi/host_functions.hpp"
 #include "ffi/host_registry.hpp"
-#include "vm/shadow_stack.hpp"
+#include "gc/shadow_stack.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
@@ -27,32 +28,11 @@
 #include <climits>
 #include <cstdint>
 
-// int32 aritmetiği: taşma TANIMLI 2's-complement wrap (#113/ADR-040). saQut `int`
-// 32-bit; iki backend (VM/JIT) birebir aynı sonucu vermek zorunda (ADR-032/038).
-// C++ signed overflow UB olduğundan toplama/çıkarma/çarpma uint32 üzerinden yapılır;
-// INT_MIN/-1 bölme/mod donanımda tuzak (x86 #DE) → elle 2's-complement sonucu verilir.
-namespace {
-inline int wrapAddI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b)); }
-inline int wrapSubI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) - static_cast<uint32_t>(b)); }
-inline int wrapMulI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) * static_cast<uint32_t>(b)); }
-inline int wrapDivI32(int a, int b) { return (a == INT_MIN && b == -1) ? INT_MIN : a / b; }
-inline int wrapModI32(int a, int b) { return (a == INT_MIN && b == -1) ? 0 : a % b; }
-// Kaydırma miktarı 5-bit maskelenir (x86/MIR native davranışı; b&31), sonuç 32-bit.
-inline int wrapShlI32(int a, int b) { return static_cast<int32_t>(static_cast<uint32_t>(a) << (b & 31)); }
-inline int wrapShrI32(int a, int b) { return a >> (b & 31); }
-
-// longint (64-bit) aritmetiği: aynı gerekçeyle tanımlı 2's-complement wrap
-// (ADR-040) — MIR backend'in native 64-bit MIR_ADD/SUB/MUL/LSH/RSH'siyle
-// birebir (mir_backend.cpp). INT64_MIN/-1 x86'da yine tuzak, elle ele alınır.
-inline long long wrapAddI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) + static_cast<uint64_t>(b)); }
-inline long long wrapSubI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) - static_cast<uint64_t>(b)); }
-inline long long wrapMulI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) * static_cast<uint64_t>(b)); }
-inline long long wrapDivI64(long long a, long long b) { return (a == INT64_MIN && b == -1) ? INT64_MIN : a / b; }
-inline long long wrapModI64(long long a, long long b) { return (a == INT64_MIN && b == -1) ? 0 : a % b; }
-inline long long wrapShlI64(long long a, long long b) { return static_cast<int64_t>(static_cast<uint64_t>(a) << (b & 63)); }
-inline long long wrapShrI64(long long a, long long b) { return a >> (b & 63); }
-inline long long wrapNegI64(long long a) { return static_cast<int64_t>(0ULL - static_cast<uint64_t>(a)); }
-} // namespace
+// int32/int64 aritmetiği tek kaynaktan gelir: core/int_arithmetic.hpp.
+// Taşma davranışı (tanımlı 2's-complement wrap, ADR-040) dilin gözlemlenebilir
+// sözleşmesidir; VM ve sabit katlama aynı fonksiyonları çağırmak zorundadır —
+// ayrı kopyalar sessizce ayrışır. Gerekçelerin tamamı o başlıktadır.
+using namespace saqut::intmath;
 
 // ── buildTrace ─────────────────────────────────────────────────────────────────
 // Mevcut callStack_'i en içten dışa gezerek stacktrace string'i üretir.
@@ -292,20 +272,23 @@ bool Interpreter::shouldStop() {
     return false;
 }
 
-// Faz 5: mevcut durumdan bütçeli/step'li devam et.
 // ─────────────────────────────────────────────────────────────────────────────
-// gcStep — incremental marking step (#217, ADR-022)
+// Interpreter::collectRoots — VM'in GC'ye bildirdiği kökler
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Her instruction boundary'de budget kadar Grey nesneyi Black'e çevir.
-// Grey kalmadığında sweep yap. Eşik adaptive.
+// Üç kaynak: modül global'leri, çağrı yığınındaki frame slot'ları ve
+// uçuştaki throw değeri. (JIT'in shadow stack'i AYRI bir kök sağlayıcıdır —
+// bu VM'in işi değildir.)
 //
-// Kökler: globalSlots_, callStack_, pendingThrow_.
-// Her cycle başında kökleri markObject ile Grey yap, sonra drainGrey ile
-// budget'ı tüket. Kalan Grey'ler bir sonraki instruction boundary'de işlenir.
+// KÖK DARALTMA: bir frame'in tüm slot'ları değil, yalnızca o anki talimat
+// noktasında CANLI olanları bildirilir. Canlı = değeri ileride en az bir kez
+// daha okunacak. Son okumasından sonra slot ölüdür; içindeki nesne başka bir
+// yoldan erişilemiyorsa toplanabilir. Analiz src/ir/ir_liveness.cpp'dedir.
 //
-// Write barrier (object.cpp:writeBarrier): FIELD_SET/ARRAY_SET'te Siyah
-// nesneye Beyaz referans yazılırsa Siyah'ı Grey'e çevir.
+// GÜVENLİ TARAF: ENTER_TRY içeren fonksiyonlarda analiz muhafazakârdır
+// (exact=false) ve tüm slot'lar bildirilir — try bölgesinden catch'e
+// atlandığında hangi slot'un okunacağı henüz bilinmiyor. Fazla bildirim
+// yalnızca gecikmiş toplamadır; eksik bildirim canlı nesnenin süpürülmesi.
 
 const SlotLiveness& Interpreter::livenessFor(const IRFunction* fn) {
     auto it = livenessCache_.find(fn);
@@ -314,66 +297,33 @@ const SlotLiveness& Interpreter::livenessFor(const IRFunction* fn) {
     return it->second;
 }
 
-void Interpreter::maybeCollect() {
-    if (gcThreshold_ <= 0 || heap_.allocCount < gcThreshold_) {
-        // Cycle yoksa veya threshold aşılmadıysa, incremental step yap
-        // (eğer bir cycle devam ediyorsa)
-        if (gcCycleActive_) {
-            int processed = drainGrey(&heap_, kGCBudgetPerStep);
-            if (processed == 0) {
-                // Grey kalmadı → sweep yap
-                heap_.sweep();
-                gcCycleActive_ = false;
-                gcThreshold_ = std::max(gcInitialThreshold_, heap_.allocCount * 2);
-            }
-        }
-        return;
-    }
+void Interpreter::collectRoots(RootSink& sink) {
+    for (const Value& global : globalSlots_) sink.acceptValue(global);
 
-    // Yeni GC cycle başlat
-    // 1. Tüm nesneleri White yap (sweep'te yapılır, ama ilk cycle'da gerekli)
-    // 2. Kökleri Grey yap
-    heap_.markSlots(globalSlots_);
     for (CallFrame& frame : callStack_) {
-        const SlotLiveness& lv = livenessFor(frame.function);
-        if (!lv.exact) {
-            // Muhafazakâr mod (try içeren fonksiyon): her slot kök.
-            heap_.markSlots(frame.slots);
+        const SlotLiveness& liveness = livenessFor(frame.function);
+
+        if (!liveness.exact) {
+            for (const Value& slot : frame.slots) sink.acceptValue(slot);
             continue;
         }
-        // Kök daraltma: yalnızca bu talimat noktasında CANLI olan slot'lar
-        // kök sayılır. Ölü slot'a bağlı nesne artık hiçbir yol tarafından
-        // okunamayacağı için güvenle toplanabilir.
-        for (int s = 0; s < (int)frame.slots.size(); ++s) {
-            if (lv.isLiveBefore(frame.instructionPointer, s)) {
-                heap_.markValue(frame.slots[(size_t)s]);
-            } else if (frame.slots[(size_t)s].kind == ValueKind::Ref ||
-                       frame.slots[(size_t)s].kind == ValueKind::String) {
-                // Ölü ref/string slot'u temizle: nesne bu turda toplanırsa
-                // slot'ta sarkmış (dangling) işaretçi kalmasın — frame'i
-                // sonradan okuyan araçlar (DAP görünümü) güvenli kalsın.
-                // (String de artık heap nesnesine işaret eder.)
-                frame.slots[(size_t)s] = Value::null();
+
+        for (int slotIndex = 0; slotIndex < (int)frame.slots.size(); ++slotIndex) {
+            Value& slot = frame.slots[(size_t)slotIndex];
+            if (liveness.isLiveBefore(frame.instructionPointer, slotIndex)) {
+                sink.acceptValue(slot);
+            } else if (slot.kind == ValueKind::Ref ||
+                       slot.kind == ValueKind::String) {
+                // Ölü slot temizlenir: içindeki nesne bu turda toplanabilir
+                // ve slot'ta serbest bırakılmış adres kalmamalıdır — frame'i
+                // sonradan okuyan araçlar (DAP değişken görünümü) sarkmış
+                // işaretçi görmesin.
+                slot = Value::null();
             }
         }
     }
-    if (pendingThrow_)
-        heap_.markValue(*pendingThrow_);
-    // #228: JIT register'larındaki referanslar. VM callStack'i JIT çalışırken
-    // boştur; bu dizi olmadan JIT'in ürettiği nesneler canlıyken silinirdi.
-    for (Object* o : jitShadowStack().slots)
-        if (o) heap_.markValue(Value::fromRef(o));
 
-    gcCycleActive_ = true;
-
-    // İlk adımda budget kadar işle
-    int processed = drainGrey(&heap_, kGCBudgetPerStep);
-    if (processed == 0) {
-        // Köklerin çocuğu yoksa hemen sweep
-        heap_.sweep();
-        gcCycleActive_ = false;
-        gcThreshold_ = std::max(gcInitialThreshold_, heap_.allocCount * 2);
-    }
+    if (pendingThrow_) sink.acceptValue(*pendingThrow_);
 }
 
 Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
@@ -951,13 +901,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             int idx = instr.intValue;
             if (idx < 0 || idx >= (int)obj->fields.size())
                 throw std::runtime_error("invalid struct field index " + std::to_string(idx));
-            {
-                // #217: write barrier — FIELD_SET
-                const Value& newVal = frame.slots[instr.right];
-                if (newVal.kind == ValueKind::Ref && newVal.ref())
-                    writeBarrier(obj, newVal.ref());
-                obj->fields[idx] = newVal;
-            }
+            obj->fields[idx] = frame.slots[instr.right];
             break;
         }
 
@@ -1043,13 +987,7 @@ Interpreter::RunReason Interpreter::runUntilEvent(int maxInstructions,
             // #206: elemKind'a göre doğru buffer'a yaz
             const Value& val = frame.slots[instr.right];
             switch (arr->elemKind) {
-                case ArrayElemKind::Ref:     {
-                    // #217: write barrier — ARRAY_SET
-                    if (val.kind == ValueKind::Ref && val.ref())
-                        writeBarrier(arr, val.ref());
-                    arr->elements[idx] = val;
-                    break;
-                }
+                case ArrayElemKind::Ref:     arr->elements[idx] = val; break;
                 case ArrayElemKind::Byte:    arr->bytes[idx] = (uint8_t)val.intValue(); break;
                 case ArrayElemKind::Int:     arr->ints[idx] = val.intValue(); break;
                 case ArrayElemKind::LongInt: arr->longs[idx] = val.asI64(); break;

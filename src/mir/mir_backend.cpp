@@ -22,7 +22,7 @@
 
 #include "ffi/host_bridge.hpp"
 #include "ffi/host_registry.hpp"
-#include "vm/shadow_stack.hpp"
+#include "gc/shadow_stack.hpp"
 #include "ir/ir_liveness.hpp"
 #include "data/array.hpp"
 
@@ -46,7 +46,7 @@
 #include "mir/vendor/mir-gen.h"
 #include "mir/vendor/mir.h"
 #include "vm/value.hpp"   // Value tam tanımı — object.hpp'nin vector<Value> üyeleri için
-#include "vm/object.hpp"
+#include "gc/gc_object.hpp"
 #include "core/float_format.hpp"  // StringObject — JIT string kutulama (ADR-037)
 
 namespace mir_backend {
@@ -85,10 +85,10 @@ struct JitStructMeta {
 };
 
 struct JitRuntime {
-    // GC: JIT nesneleri VM heap'inde yaşar (jitSetHeap ile bağlanır);
-    // eşik jitMaybeCollect'te kullanılır.
-    Heap* heap        = nullptr;
-    int   gcThreshold = 1024;
+    // GC: JIT ve VM AYNI Heap'i paylaşır (jitSetHeap ile bağlanır). Toplama
+    // eşiği/politikası Heap'in kendisindedir — backend'ler yalnızca
+    // safepoint'lerinde collectIfNeeded() çağırır.
+    Heap* heap = nullptr;
 
     // Hata yayılımı (#110): VM'in pendingThrow_ karşılığı — hata tek
     // bayrakta durur, kodgen her hata-üretebilen talimattan sonra kontrol
@@ -307,25 +307,66 @@ extern "C" void rt_jit_global_store_p(int64_t index, int64_t value) {
         rt().globalP[(size_t)index] = reinterpret_cast<void*>(value);
 }
 
-// #228: JIT safepoint'i. VM'de toplama talimat döngüsündeki maybeCollect ile
-// tetiklenir; JIT'te o döngü yok, bu yüzden TAHSİS noktasında denenir.
+// ─────────────────────────────────────────────────────────────────────────────
+// JIT'in GC kök sağlayıcısı ve safepoint'i
+// ─────────────────────────────────────────────────────────────────────────────
 //
-// Kökler: shadow stack (JIT register'larındaki referanslar). VM callStack'i
-// JIT çalışırken boştur, dolayısıyla başka kök yoktur.
+// JIT çalışırken VM'in çağrı yığını BOŞTUR — değerler MIR register'larındadır
+// ve GC oraya bakamaz. Shadow stack (gc/shadow_stack.hpp) o register'ların
+// GC'ye görünen yansımasıdır; burada bir RootSource olarak Heap'e kaydedilir.
 //
-// Stop-the-world ve tam döngü: incremental adım JIT'te anlamsız çünkü
-// tahsisler arasında geri dönülecek bir yorumlayıcı döngüsü yok.
+// Kökler: shadow stack + global pointer slot'ları + uçuştaki hata nesnesi.
+struct JitRootSource : RootSource {
+    void collectRoots(RootSink& sink) override {
+        for (Object* object : jitShadowStack().slots) sink.acceptObject(object);
+        for (void* global : rt().globalP)
+            sink.acceptObject(static_cast<Object*>(global));
+        sink.acceptObject(rt().pendingError);
+
+        // Host çağrısı için HAZIRLANMAKTA olan argüman tamponu. Argümanlar
+        // teker teker yazılır (rt_jit_host_arg_*) ve çağrı en sonda yapılır;
+        // bu aralıkta bir tahsis toplama tetiklerse, yazılmış ama henüz
+        // kullanılmamış string/ref argümanı başka hiçbir kökten görünmez.
+        //
+        // Somut hata: print(x as float32) — cast trampolini yeni string
+        // tahsis eder, o tahsis toplamayı tetikler, tamponda bekleyen string
+        // süpürülür ve host thunk'ı serbest bırakılmış belleği okur.
+        for (const HostSlot& argument : rt().hostArgs)
+            if (argument.kind == HostKind::Str ||
+                argument.kind == HostKind::Decimal ||
+                argument.kind == HostKind::Ref)
+                sink.acceptObject(static_cast<Object*>(argument.p));
+
+        // Çağrıdan dönen ama henüz register'a/shadow stack'e yazılmamış değer.
+        if (rt().hostFrame.ret.kind == HostKind::Str ||
+            rt().hostFrame.ret.kind == HostKind::Decimal ||
+            rt().hostFrame.ret.kind == HostKind::Ref)
+            sink.acceptObject(static_cast<Object*>(rt().hostFrame.ret.p));
+    }
+};
+
+JitRootSource& jitRootSource() {
+    static thread_local JitRootSource source;
+    return source;
+}
+
+// JIT safepoint'i. VM'de toplama talimat döngüsünde denenir; JIT'te o döngü
+// olmadığı için TAHSİS noktalarında denenir — tahsisten HEMEN ÖNCE, çünkü
+// yeni nesne henüz shadow stack'e yazılmamıştır ve toplanırdı.
 void jitMaybeCollect() {
-    if (!rt().heap || rt().heap->allocCount < rt().gcThreshold) return;
-    for (Object* o : jitShadowStack().slots)
-        if (o) rt().heap->markValue(Value::fromRef(o));
-    for (void* p : rt().globalP)
-        if (p) rt().heap->markValue(Value::fromRef(static_cast<Object*>(p)));
-    if (rt().pendingError)
-        rt().heap->markValue(Value::fromRef(rt().pendingError));
-    while (drainGrey(rt().heap, 4096) > 0) {}
-    rt().heap->sweep();
-    rt().gcThreshold = std::max(1024, rt().heap->allocCount * 2);
+    if (rt().heap) rt().heap->collectIfNeeded();
+}
+
+// Koşu heap'i koşu sonunda yıkıldığı için sayaçları hayatta tutan depo.
+GcStats& lastRunGcStatsStorage() {
+    static GcStats stats;
+    return stats;
+}
+
+// --gc-threshold'ün JIT karşılığı. 0 = ayarlanmadı (Heap varsayılanı).
+int& gcThresholdForNextRunStorage() {
+    static int bytes = 0;
+    return bytes;
 }
 
 // ── #228: Ref opcode trampolinleri ──────────────────────────────────────────
@@ -573,11 +614,10 @@ extern "C" int64_t rt_jit_host_call(int64_t entryId, int64_t argc) {
         rt().hostFrame.ret = HostSlot::fromDecimal(
             jitBoxDecimal(d ? d->val : DecimalValue{}));
     } else if (rt().hostFrame.ret.kind == HostKind::Ref) {
-        // Ref (array/byte[] vb.) host dönüşü: host gövdesi zaten JIT heap'inde
-        // (jitEnv.heap) tahsis etti — pointer'ı register'a ilet. Kirli bir int
-        // yorumu yerine net Ref taşıma; GC kökü için markValue ile işaretle.
-        auto* o = static_cast<Object*>(rt().hostFrame.ret.p);
-        if (o && rt().heap) rt().heap->markValue(Value::fromRef(o));
+        // Ref (array/byte[] vb.) host dönüşü: host gövdesi nesneyi zaten bu
+        // koşunun heap'inde (jitEnv.heap) tahsis etti — pointer register'a
+        // olduğu gibi iletilir. Köklenmesi kodgen'in işidir: CALLHOST'tan
+        // sonra dest slot'u için emitShadowSet yayılır, nesne oradan görünür.
         rt().hostFrame.ret = HostSlot::fromRef(rt().hostFrame.ret.p);
     }
     return rt().hostFrame.ret.i;
@@ -640,7 +680,13 @@ StringObject* jitNewString(std::string v) {
     return fallback.back().get();
 }
 
-void jitSetHeap(Heap* h) { rt().heap = h; }
+// Heap'i bağlar ve JIT'in kök sağlayıcısını ona kaydeder. nullptr bağlamak
+// kaydı kaldırır — heap'siz koşuda (test/izole kullanım) GC devrede değildir.
+void jitSetHeap(Heap* h) {
+    if (rt().heap) rt().heap->removeRootSource(&jitRootSource());
+    rt().heap = h;
+    if (h) h->addRootSource(&jitRootSource());
+}
 
 // ── STRING_CONCAT trampolini — yeni (immutable, ADR-024) string üretir. ──────
 extern "C" void* rt_jit_string_concat(void* a, void* b) {
@@ -1119,20 +1165,38 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     } benchGuard{ rt().benchCounters };
     rt().benchCounters = counters;
 
-    // Host çağrılarının ortamı. Heap YOK: heap gerektiren kayıtlar
-    // wholeProgramSupported'da zaten reddedilir.
-    // #228: JIT'in kendi heap'i. VM çalışmadığı için onun heap'i kullanılamaz;
-    // GC görünürlüğü shadow stack üzerinden sağlanır (jitShadowStack).
-    static Heap                     jitHeap;
-    rt().gcThreshold = 1024;
-    static HostEnv                  jitEnv;
+    // Bu koşunun heap'i. Ömrü KOŞUYA bağlıdır (süreç ömrüne değil): koşu
+    // bitince yıkılır ve tahsis ettiği her nesne serbest kalır. Aynı süreçte
+    // arka arkaya program çalıştıran gömülü kullanım için bu şarttır.
+    Heap runHeap;
+    if (const int gcThreshold = gcThresholdForNextRunStorage(); gcThreshold != 0) {
+        if (gcThreshold > 0) runHeap.setMinCollectBytes(gcThreshold);
+        else                 runHeap.setCollectionEnabled(false);
+    }
+
+    // Bağlanan her şey koşu sonunda çözülmelidir — heap yığında olduğundan
+    // ona işaret eden global bağlar (kök sağlayıcı kaydı, string kancası,
+    // host ortamı) heap'ten uzun yaşarsa serbest bırakılmış belleğe bakar.
+    struct RunHeapBinding {
+        Heap* heap = nullptr;
+        ~RunHeapBinding() {
+            if (heap) lastRunGcStatsStorage() = heap->stats();
+            jitSetHeap(nullptr);
+            setValueStringHeap(nullptr);
+            jitShadowStack().clear();
+            rt().pendingError = nullptr;
+            rt().globalP.clear();
+        }
+    } runHeapBinding{ &runHeap };
+
+    static HostEnv jitEnv;
     jitEnv.programArgs = &programArgs;
-    jitEnv.heap        = &jitHeap;
+    jitEnv.heap        = &runHeap;
     jitSetHostEnv(&jitEnv);
-    jitSetHeap(&jitHeap);
-    // Tek-string-modeli: JIT koşusunda Value::fromString da aynı heap'e
-    // tahsis etsin (VM ve JIT aynı string dünyasını paylaşır).
-    setValueStringHeap(&jitHeap);
+    jitSetHeap(&runHeap);
+    // Tek string modeli: Value::fromString de aynı heap'e tahsis etsin —
+    // VM ve JIT aynı string dünyasını paylaşır.
+    setValueStringHeap(&runHeap);
     rt().globalI.assign((size_t)program.globalCount, 0);
     rt().globalD.assign((size_t)program.globalCount, 0.0);
     rt().globalP.assign((size_t)program.globalCount, nullptr);
@@ -1864,11 +1928,49 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2IProto), MIR_new_ref_op(ctx, castF2IImport), R(instr.dest), asDoubleOperand(instr.src)));
                     emitCastNull(instr);
                     break;
-                case Opcode::CAST_INT_TO_BYTE_CHECKED:
+                case Opcode::CAST_INT_TO_BYTE_CHECKED: {
+                    // INLINE aralık kontrolü — başarı yolunda çağrı YOK.
+                    //
+                    // Kontrolün kendisi iki karşılaştırmadır; onu bir native
+                    // çağrının arkasına koymak (eski hal: cast_begin + cast +
+                    // cast_ret_is_null) ölçülebilir maliyet üretiyordu:
+                    // 5M turluk byte döngüsünde JIT 188ms → 254ms (%35).
+                    // Fazladan opcode'un kendisi bedavaydı (188→189ms), yani
+                    // maliyetin tamamı çağrı köprüsündendi.
+                    //
+                    // Şema: aralık içindeyse doğrudan kopyala; dışındaysa
+                    // yalnız O DALDA trampoline sap (hata mesajı string kurar,
+                    // nullable modunda null bayrağı yazar — ikisi de sıcak
+                    // yolda değil).
+                    MIR_label_t failLabel = MIR_new_label(ctx);
+                    MIR_label_t doneLabel = MIR_new_label(ctx);
+                    MIR_reg_t   src       = regs[static_cast<size_t>(instr.src)];
+
+                    // src < 0 || src > 255 → fail
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BLT,
+                        MIR_new_label_op(ctx, failLabel), MIR_new_reg_op(ctx, src),
+                        MIR_new_int_op(ctx, 0)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BGT,
+                        MIR_new_label_op(ctx, failLabel), MIR_new_reg_op(ctx, src),
+                        MIR_new_int_op(ctx, 255)));
+                    // Başarı: değeri taşı, null bayrağını temizle.
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                        R(instr.dest), MIR_new_reg_op(ctx, src)));
+                    if (isNullableSlot(instr.dest)) setNullFlag(instr.dest, 0);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
+                        MIR_new_label_op(ctx, doneLabel)));
+                    // Hata dalı: VM ile aynı mesaj/nullable davranışı için
+                    // mevcut trampolin kullanılır (cast_begin nullable modunu
+                    // kurar, cast_error ya hata yayar ya null bayrağı yazar).
+                    MIR_append_insn(ctx, func, failLabel);
                     emitCastBegin(instr);
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castI2BProto), MIR_new_ref_op(ctx, castI2BImport), R(instr.dest), R(instr.src)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                        MIR_new_ref_op(ctx, castI2BProto), MIR_new_ref_op(ctx, castI2BImport),
+                        R(instr.dest), MIR_new_reg_op(ctx, src)));
                     emitCastNull(instr);
+                    MIR_append_insn(ctx, func, doneLabel);
                     break;
+                }
                 case Opcode::CAST_STR_TO_LONG:
                     emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2LProto), MIR_new_ref_op(ctx, castS2LImport), R(instr.dest), R(instr.src)));
@@ -1879,11 +1981,33 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castS2F32Proto), MIR_new_ref_op(ctx, castS2F32Import), R(instr.dest), R(instr.src)));
                     emitCastNull(instr);
                     break;
-                case Opcode::LONG_TO_INT_CHECKED:
+                case Opcode::LONG_TO_INT_CHECKED: {
+                    // INLINE aralık kontrolü — gerekçe CAST_INT_TO_BYTE_CHECKED'te.
+                    MIR_label_t failLabel = MIR_new_label(ctx);
+                    MIR_label_t doneLabel = MIR_new_label(ctx);
+                    MIR_reg_t   src       = regs[static_cast<size_t>(instr.src)];
+
+                    // src < INT_MIN || src > INT_MAX → fail
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BLT,
+                        MIR_new_label_op(ctx, failLabel), MIR_new_reg_op(ctx, src),
+                        MIR_new_int_op(ctx, INT_MIN)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_BGT,
+                        MIR_new_label_op(ctx, failLabel), MIR_new_reg_op(ctx, src),
+                        MIR_new_int_op(ctx, INT_MAX)));
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_MOV,
+                        R(instr.dest), MIR_new_reg_op(ctx, src)));
+                    if (isNullableSlot(instr.dest)) setNullFlag(instr.dest, 0);
+                    MIR_append_insn(ctx, func, MIR_new_insn(ctx, MIR_JMP,
+                        MIR_new_label_op(ctx, doneLabel)));
+                    MIR_append_insn(ctx, func, failLabel);
                     emitCastBegin(instr);
-                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castL2IProto), MIR_new_ref_op(ctx, castL2IImport), R(instr.dest), R(instr.src)));
+                    MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4,
+                        MIR_new_ref_op(ctx, castL2IProto), MIR_new_ref_op(ctx, castL2IImport),
+                        R(instr.dest), MIR_new_reg_op(ctx, src)));
                     emitCastNull(instr);
+                    MIR_append_insn(ctx, func, doneLabel);
                     break;
+                }
                 case Opcode::CAST_FLOAT_TO_LONG_CHECKED:
                     emitCastBegin(instr);
                     MIR_append_insn(ctx, func, MIR_new_call_insn(ctx, 4, MIR_new_ref_op(ctx, castF2LProto), MIR_new_ref_op(ctx, castF2LImport), R(instr.dest), asDoubleOperand(instr.src)));
@@ -2640,6 +2764,30 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
                     break;
             }
 
+            // GC kökleme — TOPLU, opcode başına DEĞİL.
+            //
+            // #221'deki null-bayrağı bakımıyla aynı gerekçe: kökleme her case
+            // içinde elle yapılsaydı, unutulan tek bir opcode SESSİZ bir
+            // use-after-free üretirdi. Nitekim öyle oldu — string üreten
+            // cast'ler (CAST_*_TO_STR), STRING_CONCAT ve decimal aritmetiği
+            // nesne tahsis ettikleri halde köklenmiyordu; ilk agresif-eşik
+            // taramasında CAST_FLOAT32_TO_STR bunu ortaya çıkardı.
+            //
+            // Kural tek yerde ve istisnasız: pointer taşıyan bir dest slot'una
+            // yazan HER talimat, sonucu shadow stack'e yansıtır. Zaten kendi
+            // case'inde yansıtan opcode'lar (CALL, CALLHOST, ARRAY_*, ...)
+            // için bu ikinci yazım zararsızdır — aynı slot aynı değerle
+            // tazelenir.
+            //
+            // Liveness daraltması emitShadowSet içinde yapılır: sonuç bir
+            // sonraki talimatta artık canlı değilse kök yazımı atlanır.
+            if (instr.dest >= 0) {
+                const SlotType destKind = slotKindOf(fn, instr.dest);
+                if (destKind == SlotType::Str || destKind == SlotType::Decimal ||
+                    destKind == SlotType::Ref)
+                    emitShadowSet(instr.dest, (int)i + 1);
+            }
+
             // #221: null bayrağı bakımı — TOPLU, opcode başına DEĞİL.
             //
             // Bu tasarım kasıtlı: bayrağı her case içinde elle ayarlasaydık,
@@ -2871,5 +3019,9 @@ bool tryCompileAndRunProgram(IRProgram& program, int& outExitCode,
     outExitCode = static_cast<int>(nativeResult);
     return true;
 }
+
+const GcStats& lastRunGcStats() { return lastRunGcStatsStorage(); }
+
+void setGcThresholdForNextRun(int bytes) { gcThresholdForNextRunStorage() = bytes; }
 
 }  // namespace mir_backend

@@ -1,0 +1,74 @@
+// Döngüsel referans regresyonu — mark-sweep'in ref-count'a göre asıl üstünlüğü.
+//
+// Ref-count tabanlı bir toplayıcı bu programın ürettiği hiçbir nesneyi
+// serbest bırakamazdı: her nesnenin sayacı en az 1'de kalır. Erişilebilirlik
+// tabanlı mark-sweep için döngü özel bir durum DEĞİLDİR — köklerden
+// ulaşılamayan her şey toplanır.
+//
+// Kapsanan şekiller:
+//   1) kendine referans        (a.esi = a)
+//   2) üç düğümlü halka        (a -> b -> c -> a)
+//   3) CANLI döngü             kök tutuyorsa toplanmamalı (yanlış toplama testi)
+//   4) karşılıklı + kendine    (e.esi = d, e.digeri = e, d.digeri = e)
+//
+// Hata sınıfları: (a) döngüsel çöpün sızması, (b) canlı döngünün yanlışlıkla
+// toplanması — ikincisi use-after-free üretir.
+struct Dugum { Dugum? esi; Dugum? digeri; int deger; }
+struct Kutu { Dugum[] icerik; int n; }
+
+int main() {
+    // 1) kendine referans — çöp
+    int i = 0;
+    while (i < 30000) {
+        Dugum k;
+        k.esi = k;
+        k.deger = i;
+        i = i + 1;
+    }
+
+    // 2) 3'lü halka — çöp
+    int j = 0;
+    while (j < 30000) {
+        Dugum a; Dugum b; Dugum c;
+        a.esi = b; b.esi = c; c.esi = a;
+        a.deger = j;
+        j = j + 1;
+    }
+
+    // 3) CANLI döngü: kök tutuyor, toplanmamalı
+    Dugum canliA;
+    Dugum canliB;
+    canliA.esi = canliB;
+    canliB.esi = canliA;
+    canliA.deger = 111;
+    canliB.deger = 222;
+
+    // 4) struct -> dizi -> struct döngüsü (çöp)
+    int m = 0;
+    while (m < 20000) {
+        Dugum d;
+        d.deger = m;
+        // d'yi kendine dolaylı bağla
+        Dugum e;
+        e.esi = d;
+        e.digeri = e;
+        d.digeri = e;
+        m = m + 1;
+    }
+
+    // Toplamayı zorla
+    int t = 0;
+    while (t < 200000) {
+        string cop = "a" + "b";
+        t = t + 1;
+    }
+
+    // Canlı döngü hâlâ doğru olmalı
+    print(canliA.deger);
+    print(canliB.deger);
+    Dugum? esiA = canliA.esi;
+    Dugum? esiB = canliB.esi;
+    if (esiA != null) { print(esiA.deger); }
+    if (esiB != null) { print(esiB.deger); }
+    return 0;
+}
